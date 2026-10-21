@@ -12,7 +12,7 @@ use super::test_ui::{bag_slot_button, hover, BAG_UI, CHARACTER_UI};
 
 /// Loads the lists merged, each file once, in the production order: loading a file twice
 /// redeclares its frames.
-fn load_once(s: &UiScript, parts: &[&[&str]]) {
+fn load_once(s: &mut UiScript, parts: &[&[&str]]) {
     for f in super::test_ui::production_order(parts) {
         super::test_ui::load_ui_strict(s, f);
     }
@@ -22,7 +22,7 @@ fn load_once(s: &UiScript, parts: &[&[&str]]) {
 fn harness() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_once(&s, &[CHARACTER_UI, &ROUTER_UI]);
+    load_once(&mut s, &[CHARACTER_UI, &ROUTER_UI]);
     s.set_money(0);
     s.set_unit("player", Some(player()));
     s
@@ -54,7 +54,7 @@ fn player() -> UnitState {
 fn harness_with_bags() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_once(&s, &[CHARACTER_UI, BAG_UI, &ROUTER_UI]);
+    load_once(&mut s, &[CHARACTER_UI, BAG_UI, &ROUTER_UI]);
     s.set_money(0);
     s
 }
@@ -214,7 +214,7 @@ fn doll_hover_renders_the_live_instance() {
     // A bag hover first arms a compare, which the doll hover must clear.
     s.run("MainMenuBarBackpackButton:Click()").unwrap();
     s.take_sounds();
-    let btn = bag_slot_button(&s, 0, 1);
+    let btn = bag_slot_button(&mut s, 0, 1);
     hover(&mut s, &btn);
     s.run(r#"ToggleCharacter("PaperDollFrame")"#).unwrap();
     s.take_sounds();
@@ -321,7 +321,7 @@ fn repair_mode_hover_shows_the_items_repair_cost() {
                 .unwrap()
         })
     };
-    let bag = bag_slot_button(&s, 0, 1);
+    let bag = bag_slot_button(&mut s, 0, 1);
 
     hover(&mut s, &bag);
     assert_eq!(repair_line(&s), None, "a bag hover out of repair mode");

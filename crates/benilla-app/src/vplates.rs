@@ -810,10 +810,10 @@ mod tests {
     /// player owner's totem, guardian (creator only) or pet; an NPC's own summons are creatures.
     #[test]
     fn units_sort_by_type_then_player_owner() {
-        use benilla_protocol::types::{Field, FieldLayout};
+        use benilla_protocol::types::Field;
         const PLAYER: u64 = 0x0000_0000_0000_0042;
         const NPC: u64 = 0xF130_0000_1234_0001;
-        let at = |f| FieldLayout::Wrath12340.index_of(f);
+        let at = |f: Field| f.index();
         let fields = |links: &[(Field, u64)]| {
             let pairs: Vec<(u16, u32)> = links
                 .iter()

@@ -6,7 +6,6 @@ use crate::net::SelfPlayer;
 use crate::ui_items::currency::tests::fields;
 use crate::ui_items::currency::*;
 use benilla_protocol::types::Field;
-use benilla_protocol::types::FieldLayout;
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 
@@ -20,13 +19,10 @@ fn real_feed_preserves_optional_native_balances_and_clears_logout() {
         .world_mut()
         .spawn((
             SelfPlayer,
-            ObjectStore(fields(
-                FieldLayout::Wrath12340,
-                &[
-                    (Field::PlayerHonorCurrency, 0, 0),
-                    (Field::PlayerArenaCurrency, 0, u32::MAX),
-                ],
-            )),
+            ObjectStore(fields(&[
+                (Field::PlayerHonorCurrency, 0, 0),
+                (Field::PlayerArenaCurrency, 0, u32::MAX),
+            ])),
         ))
         .id();
     schedule.run(app.world_mut());

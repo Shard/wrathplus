@@ -56,7 +56,7 @@ fn escape_closes_bag_and_panel_releases_loot_and_keeps_the_held_item() {
             "Interface\\FrameXML\\LootFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     s.set_container(0, Some(one_item_backpack()));
@@ -144,7 +144,7 @@ fn escape_is_consumed_by_a_focused_editbox_and_leaves_windows_open() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     s.set_container(0, Some(one_item_backpack()));
@@ -188,7 +188,7 @@ fn escape_closes_an_open_stack_split_frame() {
             "Interface\\FrameXML\\MerchantFrame.xml", // read by the stock bag-slot click
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
 
@@ -227,7 +227,7 @@ fn escape_closes_an_open_stack_split_frame() {
     assert!(bag_open(&s, 0), "the backpack window is up");
 
     // A real shift-click: the stock handler reads `this`, and the buttons number backwards.
-    let slot1 = bag_slot_button(&s, 0, 1);
+    let slot1 = bag_slot_button(&mut s, 0, 1);
     s.set_modifiers(true, false, false);
     click(&mut s, &slot1, "LeftButton");
     s.set_modifiers(false, false, false);
@@ -262,7 +262,7 @@ fn escape_ladder_cast_then_windows_then_target_one_eater_per_press() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     s.set_container(0, Some(one_item_backpack()));
@@ -363,7 +363,7 @@ fn escape_ladder_targeting_rung_after_cast_before_windows() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     s.set_container(0, Some(one_item_backpack()));
@@ -419,16 +419,16 @@ fn an_addon_frame_registered_in_uispecialframes_closes_on_escape() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\GameMenuFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\GameMenuFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
 
     s.run(
         r#"

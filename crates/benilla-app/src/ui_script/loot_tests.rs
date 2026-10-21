@@ -90,10 +90,10 @@ fn shipped_loot_frame_drives_end_to_end() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     for f in super::test_ui::LOOT_UI {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     assert_eq!(
-        load_xml(&s, "Interface\\FrameXML\\LootFrame.xml"),
+        load_xml(&mut s, "Interface\\FrameXML\\LootFrame.xml"),
         34,
         "the STOCK file's own shape: the window, its portrait overlay and Next/Prev art, \
          four LootButton rows each carrying ItemButtonTemplate's sub-frames, the two pagers, the \
@@ -268,7 +268,7 @@ fn loot_empty_roll_plays_the_empty_open_kit() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     s.set_loot(Some(coin_and_two_items()));
@@ -308,7 +308,7 @@ fn fishing_loot_open_plays_the_reel_and_swaps_the_portrait() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     let has_icon = |quads: &[ExtractedQuad], needle: &str| {
         quads.iter().any(|q| {
@@ -360,7 +360,7 @@ fn shipped_loot_frame_pages_five_items() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     let rows: Vec<Option<LootRow>> = (0..5)
@@ -457,7 +457,7 @@ fn shipped_loot_pushed_to_center_by_merchant() {
             "Interface\\FrameXML\\LootFrame.xml",
         ],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     s.set_loot(Some(coin_and_two_items()));
@@ -520,7 +520,7 @@ fn the_loot_window_draws_over_the_party_frames() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     // The party frame first: showing the window later is not what lifts it.
@@ -580,7 +580,7 @@ fn ctrl_and_shift_on_a_loot_row_preview_and_post_without_looting() {
             "Interface\\FrameXML\\DressUpFrame.xml",
         ],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     s.set_loot(Some(LootState {
@@ -704,7 +704,7 @@ fn shipped_loot_frame_hands_a_master_row_to_a_candidate() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     let row = |name: &str, quality: u32| {
@@ -844,7 +844,7 @@ fn the_master_loot_menu_groups_raid_candidates_by_subgroup() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     // A raid: `GetNumRaidMembers() > 0` is the nested arm's whole gate (LootFrame.lua:189).
@@ -925,7 +925,7 @@ fn the_loot_bind_confirm_raises_the_dialog_and_okay_calls_loot_slot() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.set_loot(Some(coin_and_two_items()));
     s.fire_event("LOOT_OPENED", vec![]);
@@ -1012,7 +1012,7 @@ fn a_row_click_takes_rather_than_continues() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.set_loot(Some(coin_and_two_items()));
     s.fire_event("LOOT_OPENED", vec![]);
@@ -1040,7 +1040,7 @@ fn loot_row_awaiting_its_template_opens_clean() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     // One row in flight: the wire gives the icon (by display id) and the count, nothing else.
@@ -1145,7 +1145,7 @@ fn stock_loot_rows_wear_the_item_button_art_and_light_under_the_cursor() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.set_loot(Some(coin_and_two_items()));
     s.fire_event("LOOT_OPENED", vec![]);

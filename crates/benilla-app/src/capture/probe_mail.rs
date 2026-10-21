@@ -23,7 +23,7 @@ use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity, ObjectSt
 use crate::player::Player;
 use crate::ui_mail::MailOpen;
 
-/// The Goldshire mailbox (vmangos `gameobject` guid 2978, entry 142075, map 0).
+/// The Goldshire mailbox (AzerothCore `gameobject` guid 26784, entry 142075, map 0).
 const MAILBOX_AT: [f32; 3] = [-9455.99, 45.82, 56.44];
 /// `GAMEOBJECT_TYPE_MAILBOX`, the type this probe scans for.
 const GO_TYPE_MAILBOX: i32 = 19;

@@ -850,7 +850,7 @@ mod tests {
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
-        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
+        field.index()
     }
 
     const HEARTHSTONE: u32 = 8690;
@@ -1302,10 +1302,10 @@ mod tests {
             let (mut world, rx) = combat_world(false);
             let held = world
                 .run_system_once(move |mut ladder: CastLadder| {
-                    let me = crate::net::ObjectStore(ObjectFields::from_fields(
-                        benilla_protocol::types::FieldLayout::Wrath12340,
-                        &[(benilla_protocol::types::Field::UnitBytes0, class << 8)],
-                    ));
+                    let me = crate::net::ObjectStore(ObjectFields::from_fields(&[(
+                        benilla_protocol::types::Field::UnitBytes0,
+                        class << 8,
+                    )]));
                     let ctx = cast_target::CastContext {
                         rel: cast_target::TargetRelations {
                             self_store: Some(&me),

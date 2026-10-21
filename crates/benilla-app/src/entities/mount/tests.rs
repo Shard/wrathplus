@@ -7,10 +7,10 @@ use benilla_protocol::ObjectFields;
 
 use crate::entities::{BoneAttach, VisualAttached};
 use crate::net::ObjectStore;
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 
 /// `UNIT_FIELD_MOUNTDISPLAYID` (index 133), the wire's one mounted signal.
-const FIELD_MOUNTDISPLAYID: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMountDisplayId);
+const FIELD_MOUNTDISPLAYID: u16 = Field::UnitMountDisplayId.index();
 /// The mount's attachment-0 bone in the fixture mount rig.
 const SEAT_BONE: u16 = 3;
 

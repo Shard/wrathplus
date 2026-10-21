@@ -92,13 +92,13 @@ pub(crate) fn creature_type_word(t: u32) -> Option<&'static str> {
 mod tests {
     use super::*;
     use crate::names::CreatureRecord;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_BYTES_2` (byte 3 the form) and `UNIT_FIELD_BYTES_0`, absolute descriptor indices.
-    const BYTES_2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes2);
-    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
-    const OBJECT_FIELD_ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+    const BYTES_2: u16 = Field::UnitBytes2.index();
+    const BYTES_0: u16 = Field::UnitBytes0.index();
+    const OBJECT_FIELD_ENTRY: u16 = Field::ObjectEntry.index();
 
     fn store(entry: u32, race: u32, form: u32) -> ObjectStore {
         ObjectStore(ObjectFields::from_pairs(&[

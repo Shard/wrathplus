@@ -27,7 +27,7 @@ fn harness(extra: &[&str]) -> UiScript {
         ],
         extra,
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     s

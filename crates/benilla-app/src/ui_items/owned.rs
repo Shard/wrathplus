@@ -117,21 +117,18 @@ fn visit_item(
 mod tests {
     use super::*;
     use crate::net::{GuidIndex, ObjectStore};
-    use benilla_protocol::types::FieldLayout;
     use bevy::{ecs::system::SystemState, prelude::*};
     use std::collections::HashMap;
 
     fn fields(pairs: &[(Field, u32)]) -> ObjectFields {
-        ObjectFields::from_native_pairs(
-            FieldLayout::Wrath12340,
+        ObjectFields::from_pairs(
             &pairs
                 .iter()
-                .map(|(f, v)| (FieldLayout::Wrath12340.resolve(*f).unwrap().index, *v))
+                .map(|(f, v)| ((*f).span().unwrap().index, *v))
                 .collect::<Vec<_>>(),
         )
     }
     fn player() -> ObjectFields {
-        let layout = FieldLayout::Wrath12340;
         // GUID accessors deliberately require low-half presence, including empty slots.
         let bands = [
             (Field::PlayerInvSlotHead, 23),
@@ -143,18 +140,15 @@ mod tests {
         let pairs: Vec<_> = bands
             .into_iter()
             .flat_map(|(field, n)| {
-                let first = layout.resolve(field).unwrap().index;
+                let first = field.span().unwrap().index;
                 (0..n).map(move |i| (first + 2 * i, 0))
             })
             .collect();
-        ObjectFields::from_native_pairs(layout, &pairs)
+        ObjectFields::from_pairs(&pairs)
     }
     fn put(player: &mut ObjectFields, field: Field, slot: u16, guid: u32) {
-        let first = FieldLayout::Wrath12340.resolve(field).unwrap().index;
-        player.merge(ObjectFields::from_native_pairs(
-            FieldLayout::Wrath12340,
-            &[(first + 2 * slot, guid)],
-        ));
+        let first = field.span().unwrap().index;
+        player.merge(ObjectFields::from_pairs(&[(first + 2 * slot, guid)]));
     }
     fn item(entry: u32, stack: u32) -> ObjectFields {
         fields(&[

@@ -515,7 +515,7 @@ impl ScriptCursor<'_, '_> {
 mod tests {
     use super::*;
     use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore, SelfPlayer};
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_ui::script::UiScript;
     use crossbeam_channel::Receiver;
     use std::collections::HashMap;
@@ -575,10 +575,10 @@ mod tests {
         world.insert_resource(spells);
         // `UNIT_FIELD_HEALTH` 100: a store with no health reads dead to `BindTarget`'s gates.
         let live = || {
-            ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitHealth, 100)],
-            ))
+            ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(
+                Field::UnitHealth,
+                100,
+            )]))
         };
         world.spawn((SelfPlayer, Guid(ME), GlobalTransform::default(), live()));
         let ally = world
@@ -732,14 +732,11 @@ mod tests {
         const PET: u64 = 0xF140_0000_0000_0077;
         // `OBJECT_FIELD_TYPE` and `UNIT_FIELD_TARGET`, the latter a 2-field guid.
         let unit = |kind: u32, target: u64| {
-            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                FieldLayout::Wrath12340,
-                &[
-                    (Field::ObjectType, 0, kind),
-                    (Field::UnitTarget, 0, target as u32),
-                    (Field::UnitTarget, 1, (target >> 32) as u32),
-                ],
-            ))
+            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&[
+                (Field::ObjectType, 0, kind),
+                (Field::UnitTarget, 0, target as u32),
+                (Field::UnitTarget, 1, (target >> 32) as u32),
+            ]))
         };
         let seat = |world: &mut World, ally: Entity| {
             // We and our pet target the ally; the ally targets nobody.
@@ -797,15 +794,12 @@ mod tests {
         const PET: u64 = 0xF140_0000_0000_0077;
         // `OBJECT_FIELD_TYPE`, `UNIT_FIELD_HEALTH` and `UNIT_FIELD_TARGET`, the last a 2-field guid.
         let unit = |kind: u32, target: u64| {
-            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                FieldLayout::Wrath12340,
-                &[
-                    (Field::ObjectType, 0, kind),
-                    (Field::UnitHealth, 0, 100),
-                    (Field::UnitTarget, 0, target as u32),
-                    (Field::UnitTarget, 1, (target >> 32) as u32),
-                ],
-            ))
+            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&[
+                (Field::ObjectType, 0, kind),
+                (Field::UnitHealth, 0, 100),
+                (Field::UnitTarget, 0, target as u32),
+                (Field::UnitTarget, 1, (target >> 32) as u32),
+            ]))
         };
         let can = |distance: f32, token: &str| {
             let (mut world, _rx, ally) = unit_world(distance);
@@ -870,10 +864,10 @@ mod tests {
         const SPELL: u32 = 3000;
         /// Absolute descriptor indices: `OBJECT_FIELD_ENTRY`, `UNIT_FIELD_HEALTH`,
         /// `UNIT_FIELD_FLAGS` and `UNIT_DYNAMIC_FLAGS`.
-        const ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
-        const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
-        const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
-        const DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
+        const ENTRY: u16 = Field::ObjectEntry.index();
+        const HEALTH: u16 = Field::UnitHealth.index();
+        const FLAGS: u16 = Field::UnitFlags.index();
+        const DYNAMIC_FLAGS: u16 = Field::UnitDynamicFlags.index();
         const HUMANOID: u32 = 69;
         const BEAST: u32 = 70;
 

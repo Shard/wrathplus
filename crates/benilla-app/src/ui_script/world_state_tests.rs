@@ -21,7 +21,7 @@ pub(crate) fn harness() -> UiScript {
         "Interface\\FrameXML\\StaticPopup.xml",
         "Interface\\FrameXML\\WorldStateFrame.xml",
     ] {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     // The outdoor readout needs `HIDE_OUTDOOR_WORLD_STATE == "0"` (`WorldStateFrame.lua:37`), the
     // stock default (`UIOptionsFrame.lua:120`).

@@ -877,10 +877,10 @@ impl LootStateRows for LootState {
 mod tests {
     use super::*;
     use benilla_protocol::types::loot_type;
+    use benilla_protocol::types::Field;
     use benilla_protocol::types::GroupMemberEntry;
     use benilla_protocol::types::ItemInfo;
     use benilla_protocol::types::ObjectFields;
-    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::EntityKind;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -890,8 +890,8 @@ mod tests {
 
     /// Descriptor field indices the predicate-B table reads.
     /// `GAMEOBJECT_BYTES_1`, the type in byte 1.
-    const F_GO_BYTES_1: u16 = FieldLayout::Wrath12340.index_of(Field::GameobjectBytes1);
-    const F_UNIT_HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+    const F_GO_BYTES_1: u16 = Field::GameobjectBytes1.index();
+    const F_UNIT_HEALTH: u16 = Field::UnitHealth.index();
 
     /// Predicate B's answer for one latched object; `None` latches a guid that does not resolve.
     fn kneels_at(object: Option<(EntityKind, &[(u16, u32)])>) -> bool {
@@ -1062,10 +1062,10 @@ mod tests {
             let kind = if unit { 0x9 } else { 0x21 };
             let e = app
                 .world_mut()
-                .spawn(crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Wrath12340,
-                    &[(Field::ObjectType, kind)],
-                )))
+                .spawn(crate::net::ObjectStore(ObjectFields::from_fields(&[(
+                    Field::ObjectType,
+                    kind,
+                )])))
                 .id();
             app.world_mut()
                 .resource_mut::<crate::net::GuidIndex>()

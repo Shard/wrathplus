@@ -31,17 +31,17 @@ fn shipped_gossip_frame_drives_end_to_end() {
     // `GossipResize` reads `GetTextHeight()` right after `SetText`, so the harness installs the
     // synchronous measurer the app always has; without one a row sizes from last frame's text.
     s.set_text_measurer(Box::new(super::FixedWidthFont(6.0)));
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
     // 43 frames, 32 of them the row pool that quests and options share (`NUMGOSSIPBUTTONS`).
     assert_eq!(
-        load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml"),
+        load_xml(&mut s, "Interface\\FrameXML\\GossipFrame.xml"),
         43,
         "the stock file's own shape — ours materialized 41"
     );
@@ -195,15 +195,15 @@ fn shipped_gossip_frame_renders_quest_rows_above_options() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GossipFrame.xml");
 
     s.set_gossip(Some(GossipMenu {
         greeting: "A word, traveler.".into(),
@@ -316,15 +316,15 @@ fn shipped_gossip_rows_grow_to_their_wrapped_labels() {
     // `GossipResize` reads `GetTextHeight()` right after `SetText`, so the harness installs the
     // synchronous measurer the app always has; without one a row sizes from last frame's text.
     s.set_text_measurer(Box::new(super::FixedWidthFont(6.0)));
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GossipFrame.xml");
 
     // Three options that wrap at the label's 275 px (`GossipFrame.xml:114`).
     let long = |t: &str| GossipOptionView {
@@ -414,15 +414,15 @@ fn gossip_show_hide_plays_open_and_close_kits() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GossipFrame.xml");
 
     assert!(
         s.take_sounds().is_empty(),
@@ -468,7 +468,7 @@ fn shipped_panel_slot_replaces_gossip_with_merchant() {
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     s.set_gossip(Some(GossipMenu {
@@ -552,7 +552,7 @@ fn displacing_an_npc_window_ends_the_displaced_session() {
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     // The vendor holds the left slot; drain what opening it queued.
@@ -602,7 +602,7 @@ fn shipped_panel_slot_pushable_promotes_to_center() {
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     // A new frame starts shown, and `ShowUIPanel` ignores a visible one (`UIParent.lua:650`).
@@ -684,21 +684,21 @@ fn gossip_bank_option_hands_the_left_slot_to_the_bank() {
     let order_first = |bank_first: bool| {
         let mut s = UiScript::new().unwrap();
         s.set_screen_size(1024.0, 768.0);
-        load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-        load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-        load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-        load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-        load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-        load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-        load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
+        load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+        load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+        load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+        load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+        load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+        load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+        load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
         // Before BankFrame: its buttons inherit these templates, and `inherits=` resolves at load.
-        load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-        load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-        load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-        load_xml(&s, "Interface\\FrameXML\\Cooldown.xml");
-        load_xml(&s, "Interface\\FrameXML\\ItemButtonTemplate.xml"); // the bank slots inherit it
-        load_xml(&s, "Interface\\FrameXML\\BankFrame.xml");
-        load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
+        load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+        load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+        load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
+        load_xml(&mut s, "Interface\\FrameXML\\Cooldown.xml");
+        load_xml(&mut s, "Interface\\FrameXML\\ItemButtonTemplate.xml"); // the bank slots inherit it
+        load_xml(&mut s, "Interface\\FrameXML\\BankFrame.xml");
+        load_xml(&mut s, "Interface\\FrameXML\\GossipFrame.xml");
 
         s.set_gossip(Some(GossipMenu {
             greeting: "Welcome to the bank of Ironforge!".into(),
@@ -754,15 +754,15 @@ fn an_addons_own_frame_registered_in_uipanelwindows_takes_the_left_slot() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml"); // UIPanelScrollFrameTemplate
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml"); // UIPanelScrollFrameTemplate
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GossipFrame.xml");
 
     s.run(
         r#"AddonPanel = CreateFrame("Frame", "AddonPanel", UIParent)
@@ -818,15 +818,15 @@ fn an_addons_own_frame_registered_in_uipanelwindows_takes_the_left_slot() {
 #[test]
 fn the_panel_registry_rows_match_the_reference_bytes() {
     let _data = benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
+    let mut s = UiScript::new().unwrap();
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
     for probe in [
         // UIParent.lua:20
         "UIPanelWindows['ItemTextFrame'].area == 'left'",
@@ -858,14 +858,14 @@ fn a_dead_player_opens_only_whiledead_windows() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
     s.set_unit(
         "player",
         Some(benilla_ui::script::UnitState {
@@ -924,14 +924,14 @@ fn a_frame_arriving_at_center_puts_the_child_windows_away() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
 
     // MerchantFrame (pushable 0) holds left; TradeFrame (pushable 1) arrives at center
     // (`UIParent.lua:738-739`).

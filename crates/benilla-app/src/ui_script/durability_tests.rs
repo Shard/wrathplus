@@ -24,7 +24,7 @@ fn harness() -> UiScript {
         "Interface\\FrameXML\\Minimap.xml",
         "Interface\\FrameXML\\DurabilityFrame.xml",
     ] {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     // Deviation: the seat refreshes on every alert recompute, because the stock one goes stale
     // when a side glyph appears while shown and hangs the shield off the screen edge. The layer
@@ -367,7 +367,7 @@ fn the_quest_tracker_stacks_below_the_durability_guy() {
         "Interface\\FrameXML\\QuestLogFrame.xml",
         "Interface\\FrameXML\\DurabilityFrame.xml",
     ] {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     let mut inv: InventorySlots = Default::default();

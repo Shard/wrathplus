@@ -53,7 +53,7 @@ fn state() -> ReputationState {
 
 /// The character window, [`super::test_ui::CHARACTER_UI`], which carries `ReputationFrame.xml`:
 /// `CharacterFrame_ShowSubFrame` hides every page by name, unguarded (CharacterFrame.lua:25-33).
-fn load_page(s: &UiScript) {
+fn load_page(s: &mut UiScript) {
     for file in super::test_ui::CHARACTER_UI {
         super::test_ui::load_ui_strict(s, file);
     }
@@ -77,7 +77,7 @@ fn player(level: u32) -> UnitState {
 fn shown_reputation_page() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_page(&s);
+    load_page(&mut s);
     s.set_unit("player", Some(player(40)));
     s.set_reputation(state());
     s.run(r#"ToggleCharacter("ReputationFrame")"#).unwrap();
@@ -291,7 +291,7 @@ fn the_scroll_offset_rebinds_the_fixed_row_slots() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_page(&s);
+    load_page(&mut s);
     s.set_unit("player", Some(player(40)));
 
     // One header over twenty children: 21 visible rows against 15 slots.
@@ -349,7 +349,7 @@ fn clicking_a_bar_opens_the_detail_popup_on_that_faction() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_page(&s);
+    load_page(&mut s);
     s.set_unit("player", Some(player(40)));
     // Ironforge at war and peace-forced.
     let mut st = state();
@@ -452,7 +452,7 @@ fn the_at_war_box_keeps_its_art_while_it_is_disabled() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_page(&s);
+    load_page(&mut s);
     s.set_unit("player", Some(player(40)));
     let mut st = state();
     for e in &mut st.entries {
@@ -527,7 +527,7 @@ fn the_watch_bar_shows_the_watched_factions_progress_and_swaps_at_max_level() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_page(&s);
+    load_page(&mut s);
     s.set_unit("player", Some(player(40)));
     assert!(
         !shown(&mut s, "ReputationWatchBar"),

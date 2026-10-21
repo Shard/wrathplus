@@ -11,8 +11,8 @@ fn basic_controls() -> UiScript {
     // 3.3.5's `_ERRORMESSAGE` shows `BasicScriptErrors` only with `scriptErrors` on (its default is
     // "0") and `Blizzard_DebugTools` not loaded, as here.
     s.run("SetCVar('scriptErrors', '1')").unwrap();
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, "Interface\\FrameXML\\BasicControls.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BasicControls.xml");
     s.set_screen_size(1024.0, 768.0);
     s.resolve();
     s

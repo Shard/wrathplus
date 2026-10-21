@@ -553,6 +553,29 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
    `ui_macro::identity`, `creature_anim::disarmed_hand`); `LetterTexts`, `LoginIntent`; the 38
    inherent impls; the test-support feature.
 
+**Re-run (Wire B, 2026-10-21, wrath-hud 333bcecb, with Native UI's lookup rows 5bd416f8).** Same
+moves, with the layer reassignment (core: the 14 modules of the table above; net: `net`,
+`realmlist` and the six wire-query caches), counted as distinct `cargo check --lib --tests` error
+sites. Raw: core 27, core+net 65. After `canonical-paths.py --apply` (2610 paths in 443 files; the
+rewritten tree builds, warnings being the re-exports it leaves unused): **core 13, core+net 20.**
+The script now also follows a relative re-export (`pub(crate) use cooldowns::Cooldowns`,
+`use ring::{…, Factions}`) into a chain; before that, 12 more core+net sites (3 of them core) (`spell::Cooldowns`,
+`ui_action::{Spells, UiError, UiErrorKeys, FillArg}`, `target::Factions`, `player::Player`,
+`creature_anim::move_flags`, `entities::CollisionHeight`) failed only because a chain stopped at a
+relative hop.
+
+| Cause | Sites | What | Owner |
+|---|---|---|---|
+| Core calls an extension-trait method | 4 | `GossipState::resolve_greeting` → `GossipGreeting::draw_greeting`, `Realms::highlight_current` → `RealmsSelect::rows` (and their `use` lines) | Wire B: the callers join their traits |
+| `Default` impl left in an upper layer | 2 | `CollisionHeight` (`entities::collision_height`), `ui_flags::Sort` (`realm_select`) | Wire B: the impls move with their types (the inherent-impl matcher did not look at trait impls) |
+| Core → spell | 3 | `Spells`' cast-time helpers take `spell::SpellModifiers` and `OP_CAST_TIME` (`app_core::state`) | Wire B: an extension trait beside `spell::mods` |
+| Core → ui_items | 1 | `app_core::state`'s `Key(ui_items::ItemUse)` | `ItemUse` moves down if pure |
+| Core → net | 1 (core alone only) | `app_core::interaction` reads `names::NameCache` | The method leaves core, or takes the name as an argument |
+| `cfg(test)` helper | 1 | `app_core::vm_memo` tests use the root's `test_support::{fn_parameter_lists, rust_files}` | The test moves to the root, or the helpers to a core `test_support` |
+| `launch_plan` unassigned | 1 + 2 | `run_mode` (core) and `realmlist` (net) read `launch_plan::plan()` (bad7aa42) | Table edit: `launch_plan` (process arguments and environment) is core |
+| `net` drains UI state | 4 | `ui_party::net::{member_deactivated, roster_deactivated}` (3), `combat_log::chat::faction_standing` | App Migration's groups (unchanged) |
+| Root module alias | 2 | `names` reaches `NativePetNamePackets` through the root's `use net::{wrath_pet_name_capture as ui_native_pet_name}` | Mechanical: name `net::wrath_pet_name_capture` |
+
 `ConsoleCommandApp` and `capture::ProbeAuctionPlugin` are not net-side. The console trait is used by
 `experience`, `video` (world) and `ui_script`. The probe plugin is named only by `dev` (tools) and in a
 plain-text `ui_auction` comment. They stay with the world → ui rows.

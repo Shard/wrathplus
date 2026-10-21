@@ -14,7 +14,7 @@ use crate::player::Player;
 use crate::poi_marker::PoiMarker;
 use crate::ui_gossip::GossipState;
 
-/// A Stormwind City Guard's spawn (vmangos `creature` guid 79664, entry 68, map 0); the guard is
+/// A Stormwind City Guard's spawn (AzerothCore `creature` guid 79664, entry 68, map 0); the guard is
 /// then found in the streamed world by his gossip flag.
 const GUARD_AT: [f32; 3] = [-8854.14, 541.299, 105.984];
 /// The option clicked, matched by label: gossip menu 435's "Weapons Trainer", `action_poi_id` 808.

@@ -1,6 +1,6 @@
 use super::*;
 use benilla_formats::glyphs::{GlyphProperty, GlyphSlot};
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 
 const MAJOR: u32 = 0;
 const MINOR: u32 = 1;
@@ -39,14 +39,11 @@ fn glyph_spell(glyph: i32) -> SpellDisplay {
 
 /// Socket 0 offers major slot 21; `held` is socket 0's glyph.
 fn player(enabled: u32, held: u32) -> ObjectFields {
-    ObjectFields::from_fields(
-        FieldLayout::Wrath12340,
-        &[
-            (Field::PlayerGlyphsEnabled, enabled),
-            (Field::PlayerGlyphSlots1, 21),
-            (Field::PlayerGlyphs1, held),
-        ],
-    )
+    ObjectFields::from_fields(&[
+        (Field::PlayerGlyphsEnabled, enabled),
+        (Field::PlayerGlyphSlots1, 21),
+        (Field::PlayerGlyphs1, held),
+    ])
 }
 
 #[test]

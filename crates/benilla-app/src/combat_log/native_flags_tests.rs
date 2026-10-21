@@ -1,5 +1,5 @@
 use super::*;
-use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
+use benilla_protocol::types::{Field, ObjectFields};
 use benilla_protocol::wrath_group::{Member, Roster};
 use std::collections::HashMap;
 
@@ -10,17 +10,13 @@ const MOB: u64 = 0xf130_0000_0000_0009;
 const CHEST: u64 = 0xf110_0000_0000_0003;
 
 fn unit(player: bool, created_by: u64, summoned_by: u64) -> ObjectStore {
-    let layout = FieldLayout::Wrath12340;
-    ObjectStore(ObjectFields::from_field_slots(
-        layout,
-        &[
-            (Field::ObjectType, 0, if player { 0x19 } else { 9 }),
-            (Field::UnitCreatedby, 0, created_by as u32),
-            (Field::UnitCreatedby, 1, (created_by >> 32) as u32),
-            (Field::UnitSummonedby, 0, summoned_by as u32),
-            (Field::UnitSummonedby, 1, (summoned_by >> 32) as u32),
-        ],
-    ))
+    ObjectStore(ObjectFields::from_field_slots(&[
+        (Field::ObjectType, 0, if player { 0x19 } else { 9 }),
+        (Field::UnitCreatedby, 0, created_by as u32),
+        (Field::UnitCreatedby, 1, (created_by >> 32) as u32),
+        (Field::UnitSummonedby, 0, summoned_by as u32),
+        (Field::UnitSummonedby, 1, (summoned_by >> 32) as u32),
+    ]))
 }
 
 fn group(raid: bool) -> GroupState {

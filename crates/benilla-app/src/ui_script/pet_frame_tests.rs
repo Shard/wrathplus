@@ -8,30 +8,30 @@ use benilla_ui::script::{
 };
 
 use super::test_ui::load_ui as load_xml;
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 
 /// The pet frame's load chain, with a player seated: `PetFrame` is a child of `PlayerFrame`
 /// (PetFrame.xml:4), and `UnitFrame_Update` hides a frame whose unit does not exist.
 fn load_pet_frame() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, "Interface\\FrameXML\\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&s, "Interface\\FrameXML\\TextStatusBar.lua");
-    load_xml(&s, "Interface\\FrameXML\\TextStatusBar.xml");
-    load_xml(&s, "Interface\\FrameXML\\BuffFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\CombatFeedback.xml");
-    load_xml(&s, "Interface\\FrameXML\\UnitPopup.xml");
-    load_xml(&s, "Interface\\FrameXML\\UnitFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\PlayerFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\PartyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\TargetFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\PetFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\TextStatusBar.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\TextStatusBar.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BuffFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\CombatFeedback.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UnitPopup.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UnitFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\PlayerFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\PartyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\TargetFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\PetFrame.xml");
     s.set_unit(
         "player",
         Some(UnitState {
@@ -56,12 +56,12 @@ fn load_pet_frame() -> UiScript {
 fn pet(name: &str, health: u32, power: u32, max_power: u32, power_type: u8) -> UnitState {
     // `UNIT_FIELD_` HEALTH, POWER1, MAXHEALTH, MAXPOWER1, LEVEL, BYTES_0 (the power type is its
     // byte 3), the power pair at its type's slot.
-    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
-    const POWER1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPower);
-    const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
-    const MAXPOWER1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxPower);
-    const LEVEL: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
-    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
+    const HEALTH: u16 = Field::UnitHealth.index();
+    const POWER1: u16 = Field::UnitPower.index();
+    const MAXHEALTH: u16 = Field::UnitMaxHealth.index();
+    const MAXPOWER1: u16 = Field::UnitMaxPower.index();
+    const LEVEL: u16 = Field::UnitLevel.index();
+    const BYTES_0: u16 = Field::UnitBytes0.index();
     let slot = u16::from(power_type);
     let store = crate::net::ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
         (HEALTH, health),

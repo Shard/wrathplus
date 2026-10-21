@@ -102,23 +102,36 @@ impl WorldCursor {
     }
 }
 
-/// `UNIT_NPC_FLAGS` bits, 1.12 values (vmangos `UnitDefines.h`); REPAIR (`0x4000`) is left out
-/// because the ladder never tests it.
+/// `UNIT_NPC_FLAGS` bits, build 12340's values (AzerothCore `NPCFlags`), the raw word
+/// [`benilla_protocol::types::NpcFlags`] reads; the ladder never tests REPAIR (`0x1000`). The live
+/// code reads services through `NpcFlags`; outside the tests only the registrar's pair is used.
 pub(crate) mod npc_flags {
+    #[cfg(test)]
     pub const GOSSIP: u32 = 0x1;
+    #[cfg(test)]
     pub const QUESTGIVER: u32 = 0x2;
-    pub const VENDOR: u32 = 0x4;
-    pub const FLIGHTMASTER: u32 = 0x8;
+    #[cfg(test)]
     pub const TRAINER: u32 = 0x10;
-    pub const SPIRITHEALER: u32 = 0x20;
-    pub const SPIRITGUIDE: u32 = 0x40;
-    pub const INNKEEPER: u32 = 0x80;
-    pub const BANKER: u32 = 0x100;
-    pub const PETITIONER: u32 = 0x200;
-    pub const TABARDDESIGNER: u32 = 0x400;
-    pub const BATTLEMASTER: u32 = 0x800;
-    pub const AUCTIONEER: u32 = 0x1000;
-    pub const STABLEMASTER: u32 = 0x2000;
+    #[cfg(test)]
+    pub const VENDOR: u32 = 0x80;
+    #[cfg(test)]
+    pub const FLIGHTMASTER: u32 = 0x2000;
+    #[cfg(test)]
+    pub const SPIRITHEALER: u32 = 0x4000;
+    #[cfg(test)]
+    pub const SPIRITGUIDE: u32 = 0x8000;
+    #[cfg(test)]
+    pub const INNKEEPER: u32 = 0x1_0000;
+    #[cfg(test)]
+    pub const BANKER: u32 = 0x2_0000;
+    pub const PETITIONER: u32 = 0x4_0000;
+    pub const TABARDDESIGNER: u32 = 0x8_0000;
+    #[cfg(test)]
+    pub const BATTLEMASTER: u32 = 0x10_0000;
+    #[cfg(test)]
+    pub const AUCTIONEER: u32 = 0x20_0000;
+    #[cfg(test)]
+    pub const STABLEMASTER: u32 = 0x40_0000;
 }
 
 pub(super) const UNIT_FLAG_SKINNABLE: u32 = 0x0400_0000;
@@ -701,11 +714,9 @@ pub(super) fn classify(
             reputations,
             Some(self_store),
         ) {
-            let status = hovered.guid.and_then(|g| match store.0.layout() {
-                benilla_protocol::types::FieldLayout::Wrath12340 => {
-                    quest.wrath_statuses().get(&g).copied()
-                }
-            });
+            let status = hovered
+                .guid
+                .and_then(|g| quest.wrath_statuses().get(&g).copied());
             // No matching bit clears the cursor (`je 0x4826cb`) without reaching the attack leg:
             // Point, never the sword.
             return service_cursor_native(store.0.unit_npc_services(), status)
@@ -761,7 +772,7 @@ mod tests {
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
-        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
+        field.index()
     }
 
     /// `CanLootNow 0x5ec110` skips its range under `CanAutoInteract` (`0x5ec11b`), so the click
@@ -769,7 +780,7 @@ mod tests {
     #[test]
     fn wrath_cursor_priority_is_not_the_click_priority() {
         use super::super::click::{service_arm_native, ServiceArm};
-        use benilla_protocol::types::{FieldLayout, NpcFlags};
+        use benilla_protocol::types::NpcFlags;
         for (bits, click, cursor) in [
             (
                 0x2080,
@@ -787,7 +798,7 @@ mod tests {
             (0x100, None, None), // Vendor specialization is not the base-bit branch.
             (0x20, None, None),  // Neither is a trainer specialization.
         ] {
-            let flags = NpcFlags::from_bits(FieldLayout::Wrath12340, bits);
+            let flags = NpcFlags::from_bits(bits);
             assert_eq!(service_arm_native(flags, None), click, "click {bits:#x}");
             assert_eq!(
                 service_cursor_native(flags, None),
@@ -795,7 +806,7 @@ mod tests {
                 "cursor {bits:#x}"
             );
         }
-        let vendor = NpcFlags::from_bits(FieldLayout::Wrath12340, 0x80);
+        let vendor = NpcFlags::from_bits(0x80);
         // Native quest cursor precedes services without requiring the QuestGiver bit.
         for status in 2..=10 {
             assert_eq!(
@@ -807,7 +818,7 @@ mod tests {
             service_cursor_native(vendor, Some(11)),
             Some(CursorKind::Pickup)
         );
-        let quest = NpcFlags::from_bits(FieldLayout::Wrath12340, 0x1082);
+        let quest = NpcFlags::from_bits(0x1082);
         assert_eq!(
             service_cursor_native(quest, Some(8)),
             Some(CursorKind::Speak)
@@ -825,7 +836,7 @@ mod tests {
     #[test]
     fn native_wrath_services_never_use_vanilla_bit_positions() {
         use super::super::click::{service_arm_native, ServiceArm};
-        use benilla_protocol::types::{Field, FieldLayout};
+        use benilla_protocol::types::Field;
         for (bits, arm, cursor) in [
             (0x80, Some(ServiceArm::Vendor), Some(CursorKind::Pickup)),
             (
@@ -842,10 +853,8 @@ mod tests {
             ),
             (0x20000, Some(ServiceArm::Banker), Some(CursorKind::Buy)),
         ] {
-            let layout = FieldLayout::Wrath12340;
-            let index = layout.resolve(Field::UnitNpcFlags).unwrap().index;
-            let fields =
-                benilla_protocol::ObjectFields::from_native_pairs(layout, &[(index, bits)]);
+            let index = Field::UnitNpcFlags.span().unwrap().index;
+            let fields = benilla_protocol::ObjectFields::from_pairs(&[(index, bits)]);
             let flags = fields.unit_npc_services();
             assert_eq!(service_arm_native(flags, None), arm, "native {bits:#x}");
             assert_eq!(
