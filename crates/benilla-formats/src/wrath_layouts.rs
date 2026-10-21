@@ -22,10 +22,6 @@ pub(crate) fn columns(
                 .loc(19, 35)
                 .run(28, 52, 1);
         }),
-        // Five (not four) fidgets: shift custom attacks and the remaining voice kits by one.
-        "CreatureSoundData" => (30, 38, |m| {
-            m.same(0, 18).run(18, 19, 12);
-        }),
         "CreatureModelData" => (16, 28, |m| {
             m.same(0, 16);
         }),
@@ -33,7 +29,7 @@ pub(crate) fn columns(
         "PetPersonality" => (19, 24, |m| {
             m.same(0, 1).loc(1, 1).run(10, 18, 6);
         }),
-        "Spell" => (188, 234, spell),
+        "Spell" => (190, 234, spell),
         "SpellDispelType" => (12, 21, spell_dispel_type),
         "SkillLine" => (32, 56, skill_line),
         "TalentTab" => (16, 24, talent_tab),
@@ -84,10 +80,6 @@ pub(crate) fn columns(
         "SpellVisualKit" => (35, 38, |m| {
             m.same(0, 1).same(2, 10).run(12, 14, 23);
         }),
-        // Min and max allowed scale appended.
-        "SpellVisualEffectName" => (5, 7, |m| {
-            m.same(0, 5);
-        }),
         // Four doodad weights between the doodads and the density.
         "GroundEffectTexture" => (7, 11, |m| {
             m.same(0, 5).run(5, 9, 2);
@@ -130,8 +122,8 @@ impl Map {
 
 /// `Spell.dbc` 173 → 234. 1.12's `School` (1) is an index; 3.3.5 keeps a `SchoolMask` (225),
 /// which the spell loader converts. `CastUI` (3) and the per-effect dice (67-72) are gone. Slots
-/// 173-182 are the loader's 3.3.5-only columns: the family mask's third word and the per-effect
-/// class masks.
+/// 173-189 are the loader's 3.3.5-only columns: the family mask's third word, the per-effect
+/// class masks, `EffectMiscValueB`, `AttributesEx5`, `AttributesEx7`, `RuneCostID` and `PowerDisplayId`.
 fn spell(m: &mut Map) {
     m.run(0, 0, 1)
         .run(1, 225, 1)
@@ -159,7 +151,9 @@ fn spell(m: &mut Map) {
         .run(174, 122, 9) // EffectSpellClassMask[3], flag96 each
         .run(183, 113, 3) // EffectMiscValueB[3]
         .run(186, 9, 1) // AttributesEx5
-        .run(187, 11, 1); // AttributesEx7
+        .run(187, 11, 1) // AttributesEx7
+        .run(188, 226, 1) // RuneCostID
+        .run(189, 228, 1); // PowerDisplayId
 }
 
 /// `SpellDispelType.dbc` 12 → 21: id, name, then ImmunityPossible (the aura name gate), not DispelMask,
@@ -293,10 +287,9 @@ mod tests {
     /// Every mapped table: name, 1.12 schema slots, build-12340 file fields.
     const MAPPED: &[(&str, usize, usize)] = &[
         ("AreaPOI", 29, 54),
-        ("CreatureSoundData", 30, 38),
         ("CreatureModelData", 16, 28),
         ("PetPersonality", 19, 24),
-        ("Spell", 188, 234),
+        ("Spell", 190, 234),
         ("SpellDispelType", 12, 21),
         ("SkillLine", 32, 56),
         ("TalentTab", 16, 24),
@@ -320,7 +313,6 @@ mod tests {
         ("SpellVisual", 16, 32),
         ("GroundEffectTexture", 7, 11),
         ("SpellVisualKit", 35, 38),
-        ("SpellVisualEffectName", 5, 7),
     ];
 
     #[test]
@@ -333,12 +325,12 @@ mod tests {
                 assert!(seen.insert(*c), "{table}: column {c} mapped twice");
             }
         }
-        assert!(columns("Spell.dbc", 188, 234).is_some());
+        assert!(columns("Spell.dbc", 190, 234).is_some());
         assert!(
             columns("Spell.dbc", 173, 234).is_none(),
             "the 3.3.5-only slots are required"
         );
-        assert!(columns("Spell", 188, 188).is_none());
+        assert!(columns("Spell", 190, 190).is_none());
     }
 
     #[test]
@@ -387,10 +379,6 @@ mod tests {
         assert_eq!(poi[18], Some(34)); // name locale flags
         assert_eq!(poi[19], Some(35)); // description enUS
         assert_eq!(poi[28], Some(52)); // world-state
-        let sound = columns("CreatureSoundData", 30, 38).unwrap();
-        assert_eq!(sound[17], Some(17));
-        assert_eq!(sound[18], Some(19)); // skip fifth fidget, retain custom attack 0
-        assert_eq!(sound[29], Some(30)); // pet dismiss
         let pet = columns("PetPersonality", 19, 24).unwrap();
         assert_eq!(pet[9], Some(17)); // widened localized name flags
         assert_eq!(&pet[10..13], &[Some(18), Some(19), Some(20)]);
@@ -400,7 +388,7 @@ mod tests {
 
     #[test]
     fn spell_columns_land_on_the_build_12340_fields() {
-        let m = columns("Spell", 188, 234).unwrap();
+        let m = columns("Spell", 190, 234).unwrap();
         for (vanilla, wrath) in [
             (18, 28),   // CastingTimeIndex
             (36, 46),   // rangeIndex
@@ -418,6 +406,8 @@ mod tests {
             (183, 113), // EffectMiscValueB[0]
             (186, 9),   // AttributesEx5
             (187, 11),  // AttributesEx7
+            (188, 226), // RuneCostID
+            (189, 228), // PowerDisplayId
             (185, 115), // EffectMiscValueB[2]
         ] {
             assert_eq!(m[vanilla], Some(wrath), "slot {vanilla}");
