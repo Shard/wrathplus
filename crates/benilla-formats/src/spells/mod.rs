@@ -51,7 +51,7 @@ const SPELL: &str = "DBFilesClient\\Spell.dbc";
 
 /// The 1.12 record's 173 fields plus slots for the 3.3.5-only columns the build-12340 layout
 /// maps in (`wrath_layouts::spell`); a 1.12 file no longer parses.
-const SPELL_FIELDS: usize = 187;
+const SPELL_FIELDS: usize = 188;
 /// `SpellFamilyFlags[2]`, family bits 64-95 (3.3.5 column 211; AzerothCore `flag96
 /// SpellFamilyFlags`, 209-211).
 const COL_SPELL_FAMILY_FLAGS_2: usize = 173;
@@ -61,6 +61,9 @@ const COL_EFFECT_SPELL_CLASS_MASK_1: usize = 174;
 /// `AttributesEx5` (3.3.5 column 9, `+0x24`): the usable-while-stunned/feared/confused bits the
 /// pet bar's slot predicate reads (`0x5d3fd0`).
 const COL_ATTRIBUTES_EX5: usize = 186;
+/// `AttributesEx7` (3.3.5 column 11, `+0x2c`): `0x800`/`0x1000` interrupt or silence only
+/// non-players, read with the interrupt masks (`0x53ca70`).
+const COL_ATTRIBUTES_EX7: usize = 187;
 /// `Category` (`+0x8`): the shared-cooldown `SpellCategory.dbc` id, such as potions 4.
 const COL_CATEGORY: usize = 2;
 const COL_CAST_UI: usize = 3;
@@ -381,7 +384,7 @@ impl SpellCatalog {
     }
 }
 
-/// 187 slots, `u32` but for `Speed`, the four float effect arrays and the four enUS string heads;
+/// 188 slots, `u32` but for `Speed`, the four float effect arrays and the four enUS string heads;
 /// the signed columns stay `u32`, as [`i32_at`] reads the same bits.
 fn spell_schema() -> Schema {
     let mut s = Schema::new("Spell");
@@ -537,6 +540,11 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 attributes_ex3: u32_at(r, COL_ATTRIBUTES_EX3).unwrap_or(0),
                 attributes_ex4: u32_at(r, COL_ATTRIBUTES_EX4).unwrap_or(0),
                 attributes_ex5: u32_at(r, COL_ATTRIBUTES_EX5).unwrap_or(0),
+                attributes_ex7: u32_at(r, COL_ATTRIBUTES_EX7).unwrap_or(0),
+                // Slot 1 is 3.3.5's `SchoolMask` (column 225, `+0x284`), whole.
+                school_mask: u32_at(r, COL_SCHOOL)
+                    .map(|v| if school_is_mask { v } else { 1 << v })
+                    .unwrap_or(0),
                 school: u32_at(r, COL_SCHOOL)
                     .map(|v| {
                         if school_is_mask && v != 0 {

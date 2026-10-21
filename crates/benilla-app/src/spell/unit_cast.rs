@@ -23,8 +23,13 @@
 //! - A unit that leaves the object manager (`0x734fd0`) fires `STOP` and `CHANNEL_STOP` for its
 //!   slots.
 //!
+//! - `notInterruptible` (`0x71ab20`): whether the local player could not interrupt the cast,
+//!   decided at its start (`0x7262e0`) from the player's interrupt masks and the caster's immunity
+//!   auras ([`not_interruptible`]); `UnitCastingInfo`, `UnitChannelInfo` and the target's plate
+//!   shield all read it.
+//!
 //! Labelled, not built: `UNIT_SPELLCAST_SENT`; the resume-cast-bar packet (`0x8020c0`); the fizzle
-//! visual (`0x4cff30`); `notInterruptible` (`0x71ab20`, always false); whether `0x726240` moves the
+//! visual (`0x4cff30`); whether `0x726240` moves the
 //! start too (both move here, which is the stock pushback); `vehicle`/`arenaN`/`bossN` tokens. The
 //! 1.12 `SPELLCAST_*` events still fire beside these; the stock 12340 frames do not read them.
 use std::collections::HashMap;
@@ -91,6 +96,102 @@ struct Slot {
     cast_count: u8,
     start_ms: u32,
     end_ms: u32,
+    /// [`not_interruptible`] at the start, the unit's `+0xa34` bit `0x8`.
+    not_interruptible: bool,
+}
+
+/// The local player's interrupt reach, build 12340's four masks (`[0xbe8da8]`..`[0xbe8db4]`),
+/// rebuilt with the spell book (`0x53ca70`): each is the OR of the school masks of the book's
+/// spells that interrupt (an `INTERRUPT_CAST` effect), silence (an `APPLY_AURA` of
+/// `MOD_SILENCE`), or interrupt or silence only non-players (`AttributesEx7` `0x800`, `0x1000`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct InterruptMasks {
+    pub(crate) interrupt: u32,
+    pub(crate) interrupt_npc: u32,
+    pub(crate) silence: u32,
+    pub(crate) silence_npc: u32,
+}
+
+const EFFECT_APPLY_AURA: u32 = 6;
+const EFFECT_INTERRUPT_CAST: u32 = 0x44;
+const AURA_MOD_SILENCE: u32 = 0x1b;
+const AURA_EFFECT_IMMUNITY: u32 = 0x25;
+const AURA_STATE_IMMUNITY: u32 = 0x26;
+const AURA_SCHOOL_IMMUNITY: u32 = 0x27;
+const AURA_MECHANIC_IMMUNITY: u32 = 0x4d;
+const MECHANIC_SILENCE: i32 = 9;
+const MECHANIC_INTERRUPT: i32 = 26;
+
+impl InterruptMasks {
+    pub(crate) fn of<'a>(book: impl IntoIterator<Item = &'a SpellDisplay>) -> Self {
+        let mut m = Self::default();
+        for d in book {
+            let school = d.school_mask;
+            for i in 0..3 {
+                match d.effects[i] {
+                    EFFECT_APPLY_AURA if d.effect_apply_aura[i] == AURA_MOD_SILENCE => {
+                        m.silence |= school
+                    }
+                    EFFECT_INTERRUPT_CAST => m.interrupt |= school,
+                    _ => {}
+                }
+            }
+            if d.attributes_ex7 & 0x800 != 0 {
+                m.interrupt_npc |= school;
+            }
+            if d.attributes_ex7 & 0x1000 != 0 {
+                m.silence_npc |= school;
+            }
+        }
+        m
+    }
+}
+
+/// Whether the local player could not interrupt `cast` (`0x7262e0`, run at its start): only a
+/// silence-prevented spell (`PreventionType` 1, `+0x258`) not exempted by `AttributesEx7`
+/// `0x2000`; a player caster drops the non-player masks; a player with no reach at all sees
+/// nothing (`0x71ab20` also requires a mask). The caster's auras then strip the reach: school
+/// immunity its schools, effect immunity to `INTERRUPT_CAST` the interrupts, state immunity to
+/// `MOD_SILENCE` the silences. If nothing remains, the cast is uninterruptible. Unresolved,
+/// labelled: the mechanic-immunity arm and the unit's own immunity words (`+0xa64`, `+0xa68`)
+/// are read as the interrupt (26) and silence (9) mechanics off the same auras.
+pub(crate) fn not_interruptible<'a>(
+    cast: &SpellDisplay,
+    caster_is_player: bool,
+    masks: InterruptMasks,
+    caster_auras: impl IntoIterator<Item = &'a SpellDisplay>,
+) -> bool {
+    if cast.attributes_ex7 & 0x2000 != 0 || cast.prevention_type != 1 {
+        return false;
+    }
+    let npc = |m: u32| if caster_is_player { 0 } else { m };
+    let (mut interrupt, mut silence) = (
+        masks.interrupt | npc(masks.interrupt_npc),
+        masks.silence | npc(masks.silence_npc),
+    );
+    if interrupt | silence == 0 {
+        return false;
+    }
+    for aura in caster_auras {
+        for i in 0..3 {
+            if aura.effects[i] != EFFECT_APPLY_AURA {
+                continue;
+            }
+            let misc = aura.effect_misc_value[i];
+            match aura.effect_apply_aura[i] {
+                AURA_SCHOOL_IMMUNITY => {
+                    interrupt &= !(misc as u32);
+                    silence &= !(misc as u32);
+                }
+                AURA_EFFECT_IMMUNITY if misc == EFFECT_INTERRUPT_CAST as i32 => interrupt = 0,
+                AURA_STATE_IMMUNITY if misc == AURA_MOD_SILENCE as i32 => silence = 0,
+                AURA_MECHANIC_IMMUNITY if misc == MECHANIC_INTERRUPT => interrupt = 0,
+                AURA_MECHANIC_IMMUNITY if misc == MECHANIC_SILENCE => silence = 0,
+                _ => {}
+            }
+        }
+    }
+    interrupt | silence == 0
 }
 
 /// The slots by caster guid, the authority every VM is seeded from.
@@ -103,8 +204,17 @@ pub(crate) struct UnitCasts {
 impl UnitCasts {
     /// `guid`'s channel, else its cast, as the plate's cast-bar driver (`0x720e50`) reads them:
     /// `(spell, start_ms, end_ms, channel)` on [`UiScript::now`]'s millisecond clock.
-    pub(crate) fn bar_of(&self, guid: u64) -> Option<(u32, u32, u32, bool)> {
-        let row = |slot: &Slot, channel| (slot.spell_id, slot.start_ms, slot.end_ms, channel);
+    /// The last field is [`not_interruptible`].
+    pub(crate) fn bar_of(&self, guid: u64) -> Option<(u32, u32, u32, bool, bool)> {
+        let row = |slot: &Slot, channel| {
+            (
+                slot.spell_id,
+                slot.start_ms,
+                slot.end_ms,
+                channel,
+                slot.not_interruptible,
+            )
+        };
         self.channels
             .get(&guid)
             .map(|s| row(s, true))
@@ -170,7 +280,7 @@ fn view(def: Option<&SpellDisplay>, slot: &Slot) -> WrathUnitCast {
         cast_count: slot.cast_count,
         start_ms: slot.start_ms,
         end_ms: slot.end_ms,
-        not_interruptible: false,
+        not_interruptible: slot.not_interruptible,
     }
 }
 
@@ -214,6 +324,8 @@ fn feed(
     net: Res<NetCommands>,
     mut commands: Commands,
     mut memo: Local<VmMemo<()>>,
+    actions: Option<Res<crate::app_core::state::PlayerActions>>,
+    auras: Option<Res<crate::net::wrath_auras::PacketAuras>>,
 ) {
     let Some(mut script) = script else {
         return;
@@ -222,6 +334,27 @@ fn feed(
     let def = |id: u32| spells.and_then(|s| s.catalog.get(id));
     let me = self_guid.0;
     let now = (script.now() * 1000.0) as u32;
+    // The player's reach from the book, and the caster's auras, for [`not_interruptible`].
+    let masks = InterruptMasks::of(
+        actions
+            .iter()
+            .flat_map(|a| a.spells.iter())
+            .filter_map(|&id| def(id)),
+    );
+    let uninterruptible = |d: &SpellDisplay, caster: u64| {
+        let caster_auras = auras
+            .as_deref()
+            .and_then(|a| a.by_guid.get(&caster))
+            .into_iter()
+            .flatten()
+            .filter_map(|s| def(s.aura.spell_id));
+        not_interruptible(
+            d,
+            benilla_protocol::guid::is_player(caster),
+            masks,
+            caster_auras,
+        )
+    };
     let mut moved = memo.get_reset(&script).1;
     let casts = &mut *casts;
 
@@ -240,6 +373,7 @@ fn feed(
                 if cast_ms == 0 {
                     continue;
                 }
+                let not_interruptible = uninterruptible(d, caster);
                 casts.casts.insert(
                     caster,
                     Slot {
@@ -247,6 +381,7 @@ fn feed(
                         cast_count,
                         start_ms: now,
                         end_ms: now.wrapping_add(cast_ms),
+                        not_interruptible,
                     },
                 );
                 publish(&mut script, casts, spells);
@@ -289,6 +424,7 @@ fn feed(
                 let Some(d) = def(spell_id).filter(|d| shown(d, me == Some(caster), true)) else {
                     continue;
                 };
+                let not_interruptible = uninterruptible(d, caster);
                 casts.channels.insert(
                     caster,
                     Slot {
@@ -296,6 +432,7 @@ fn feed(
                         cast_count: 0,
                         start_ms: now,
                         end_ms: now.wrapping_add(duration_ms),
+                        not_interruptible,
                     },
                 );
                 publish(&mut script, casts, spells);

@@ -15,7 +15,7 @@ pub(crate) struct ScriptSelect<'w, 's> {
     /// The app's unit-token resolver. The VM's own reads the same grammar
     /// ([`benilla_ui::script::parse_unit_token`]), so `TargetUnit("party1target")` and
     /// `CheckInteractDistance("party1target", …)` name the same unit.
-    tokens: crate::ui_unit::UnitTokens<'w, 's>,
+    tokens: crate::target::unit_tokens::UnitTokens<'w, 's>,
     /// `TargetLastEnemy`'s memory (`[0xb4e2e8]`), stamped by `scan::remember_last_enemy`.
     last_enemy: Res<'w, scan::LastEnemy>,
     /// `TargetLastFriend`'s memory, stamped beside it.
