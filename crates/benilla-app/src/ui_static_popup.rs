@@ -493,7 +493,7 @@ pub(crate) fn drive(
         social
             .as_deref()
             .zip(names.as_deref())
-            .and_then(|(social, names)| social.friend_guid(index, name, names))
+            .and_then(|(social, names)| social.friend_guid(index, name, |g| names.peek(g)))
     };
     let chat_line = |line_id: Option<i32>, name: Option<&str>| {
         let chat = chat.as_deref()?;

@@ -165,9 +165,12 @@ fn no_user_facing_sentence_is_written_in_rust_when_the_reference_ships_one() {
                 taken += 1;
             }
         }
-        // Every source must contribute: the `Localize()` files wrap their assignments in a
-        // function, a shape the base tables never have.
-        assert!(taken > 0, "{file} contributed no sentences");
+        // Every base table must contribute. The `Localize()` files wrap their assignments in a
+        // function, and 3.3.5 enUS ships them all but empty, so they may add none.
+        assert!(
+            taken > 0 || file.ends_with("Localization.lua"),
+            "{file} contributed no sentences"
+        );
     }
 
     let mut sources = Vec::new();

@@ -25,7 +25,7 @@ fn the_chain_feed_runs_after_the_aura_feed_it_reads() {
     let aura = one("::ui_aura::feed_auras");
     for feed in [
         "::ui_unit::held::feed_chain_units",
-        "::targeting::feed_targeting_to_vm",
+        "::ui_spell_targeting::feed_targeting_to_vm",
     ] {
         assert!(
             c.dependencies.contains(&(aura, one(feed))),

@@ -186,6 +186,8 @@ impl ChatEventKind {
 /// | 8 | `channel_number` | the local slot, `ChatTypeInfo["CHANNEL"..arg8]` |
 /// | 9 | `channel_base` | the channel name without its number |
 /// | 10 | none | the split index, 0 from vmangos (`Chat/Channel.cpp:823-827`) |
+/// | 11 | none | the 3.3.5 line id, which the player link carries (`"|Hplayer:"..arg2..":"..arg11`) |
+/// | 12 | none | the 3.3.5 sender GUID string, `GetColoredName`'s class lookup; `""` for none |
 ///
 /// arg4, arg7, arg8 and arg9 are one record (`ui_chat::edit::ChannelState::stamp_channel`). arg1
 /// is the garbled text: the reference fills one buffer (`SStrCopy` at `0x49a9f0`, the garble

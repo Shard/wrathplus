@@ -21,6 +21,7 @@ use crate::ui_script::gate;
 use super::pets::{self, Roster};
 use super::GroupState;
 pub(crate) use crate::app_core::group::GROUP_MEMBER_SUBGROUP;
+pub(crate) use crate::app_core::group::{raid_row_guid, raid_row_guids};
 
 // ─── The VM feed and drain ───────────────────────────────────────────────────────────────────────
 
@@ -392,15 +393,20 @@ pub(super) fn feed_party(
     for (i, token) in PARTY_TOKENS.iter().enumerate() {
         let member = slots.get(i);
         let snap = member.map(|m| {
-            member_unit_state(
+            let store = index.0.get(&m.guid).and_then(|e| stores.get(*e).ok());
+            let mut s = member_unit_state(
                 m,
                 group.stats.get(&m.guid),
-                index.0.get(&m.guid).and_then(|e| stores.get(*e).ok()),
+                store,
                 &group,
                 own_group.clone(),
                 chr,
                 types,
-            )
+            );
+            if store.is_none() {
+                fill_cached_traits(&mut s, names.player_traits(m.guid));
+            }
+            s
         });
         if fed.units[i] != snap {
             gate.audit("feed_party", "a party-token snapshot");
@@ -477,15 +483,20 @@ pub(super) fn feed_party(
                 Some(s)
             } else {
                 let m = group.members.iter().find(|m| m.guid == *guid)?;
-                Some(member_unit_state(
+                let store = index.0.get(guid).and_then(|e| stores.get(*e).ok());
+                let mut s = member_unit_state(
                     m,
                     group.stats.get(guid),
-                    index.0.get(guid).and_then(|e| stores.get(*e).ok()),
+                    store,
                     &group,
                     own_group.clone(),
                     chr,
                     types,
-                ))
+                );
+                if store.is_none() {
+                    fill_cached_traits(&mut s, names.player_traits(*guid));
+                }
+                Some(s)
             }
         });
         if fed.raid_units[i] != snap {
@@ -647,34 +658,6 @@ pub(super) struct RaidSelf {
     /// Our class byte, off our descriptor: the login seeds our own name without traits
     /// (`net::session::connected`), so the name cache never has our class.
     pub(super) class: Option<u8>,
-}
-
-/// The raid rows as guids, in the order [`raid_roster`] builds them, which the RaidFrame's drag,
-/// kick and menu verbs address by index: the two must agree. Us first, then the wire's members;
-/// the reference appends the local player after them (`0x5e6e73`). Empty outside a raid.
-pub(crate) fn raid_row_guids(group: &GroupState, self_guid: Option<u64>) -> Vec<u64> {
-    raid_rows(group, self_guid).collect()
-}
-
-/// [`raid_row_guids`] as an iterator, so a per-token lookup allocates nothing.
-fn raid_rows(group: &GroupState, self_guid: Option<u64>) -> impl Iterator<Item = u64> + '_ {
-    let in_raid = group.group_type == GROUPTYPE_RAID;
-    self_guid.filter(|_| in_raid).into_iter().chain(
-        group
-            .members
-            .iter()
-            .filter(move |_| in_raid)
-            .map(|m| m.guid),
-    )
-}
-
-/// The guid at a 1-based raid row, [`raid_row_guids`]`[index - 1]` without the allocation.
-pub(crate) fn raid_row_guid(
-    group: &GroupState,
-    self_guid: Option<u64>,
-    index: usize,
-) -> Option<u64> {
-    raid_rows(group, self_guid).nth(index.checked_sub(1)?)
 }
 
 /// A 1-based raid row index to its guid; row 0, a row past the end or no raid gives `None`.
@@ -891,6 +874,27 @@ fn member_unit_state(
     s.ghost = s.ghost || m.status & member_status::GHOST != 0;
     s.dead = s.dead || m.status & member_status::DEAD != 0;
     s
+}
+
+/// An unstreamed member's race, class and sex off the name cache's answer for their guid, the
+/// fallback the getters take with no object: the roster and the stats record carry none of the three.
+/// Nothing changes without an answer, so `UnitClass` stays nil until the query lands.
+fn fill_cached_traits(s: &mut UnitState, traits: Option<(u8, u8, u8)>) {
+    let Some((race, class, gender)) = traits else {
+        return;
+    };
+    let race = crate::app_core::catalogs::race_names(race);
+    let class = crate::app_core::catalogs::class_names(class);
+    s.race = race.map(|(n, _)| n.to_string());
+    s.race_file = race.map(|(_, f)| f.to_string());
+    s.class = class.map(|(n, _)| n.to_string());
+    s.class_file = class.map(|(_, f)| f.to_string());
+    // `UnitSex`'s scale, as the live leg maps the gender byte: 2 male, 3 female, 0 unknown.
+    s.sex = match gender {
+        0 => 2,
+        1 => 3,
+        _ => 0,
+    };
 }
 
 /// `"party1".."party4"` → the roster entry it names.
