@@ -111,7 +111,7 @@ pub(super) fn spellbook_ui_with(w: f32, h: f32, extra: &[&str]) -> UiScript {
         ],
         extra,
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s
 }
@@ -119,18 +119,18 @@ pub(super) fn spellbook_ui_with(w: f32, h: f32, extra: &[&str]) -> UiScript {
 #[test]
 fn shipped_spellbook_loads_clean() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    let frames = load_xml(&s, "Interface\\FrameXML\\SpellBookFrame.xml");
+    let mut s = UiScript::new().unwrap();
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
+    let frames = load_xml(&mut s, "Interface\\FrameXML\\SpellBookFrame.xml");
     assert!(s.errors().is_empty(), "loader errors: {:?}", s.errors());
     assert_eq!(
         frames, 52,
@@ -651,7 +651,7 @@ fn the_macro_editor_takes_a_shift_click_and_only_a_shift_click() {
         // The icon chooser's scroll frame inherits `ClassTrainerListScrollFrameTemplate`.
         r"Interface\FrameXML\ClassTrainerFrameTemplates.xml",
     ] {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     // A LoadOnDemand addon, seated off the chain and loaded by stock `MacroFrame_LoadUI`
     // (`UIParent.lua:178`), as the app does.

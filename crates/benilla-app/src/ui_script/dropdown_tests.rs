@@ -6,7 +6,7 @@ use benilla_ui::script::UiScript;
 use super::test_ui::load_ui as load_xml;
 
 /// Fonts for Button1's height, and GameTooltip.xml's `TOOLTIP_DEFAULT_COLOR` for the backdrop.
-fn load_dropdown_kit(s: &UiScript) {
+fn load_dropdown_kit(s: &mut UiScript) {
     for file in [
         "Interface\\FrameXML\\Fonts.xml",
         r"Interface\FrameXML\UIParent.xml",
@@ -23,8 +23,8 @@ fn load_dropdown_kit(s: &UiScript) {
 #[test]
 fn hiding_the_parent_list_closes_an_open_submenu() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_dropdown_kit(&s);
+    let mut s = UiScript::new().unwrap();
+    load_dropdown_kit(&mut s);
 
     s.run("DropDownList1:Show(); DropDownList2:Show();")
         .unwrap();
@@ -45,8 +45,8 @@ fn hiding_the_parent_list_closes_an_open_submenu() {
 #[test]
 fn hiding_a_list_clears_its_open_menu_registry_entry() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_dropdown_kit(&s);
+    let mut s = UiScript::new().unwrap();
+    load_dropdown_kit(&mut s);
 
     s.run(
         r#"
@@ -78,8 +78,8 @@ fn hiding_a_list_clears_its_open_menu_registry_entry() {
 #[test]
 fn the_default_text_height_is_derived_from_button1_not_a_literal() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_dropdown_kit(&s);
+    let mut s = UiScript::new().unwrap();
+    load_dropdown_kit(&mut s);
 
     let (height, from_button): (Option<f64>, Option<f64>) = s
         .eval(
@@ -102,8 +102,8 @@ fn the_default_text_height_is_derived_from_button1_not_a_literal() {
 #[test]
 fn a_button_label_reports_the_font_object_its_button_set() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_dropdown_kit(&s);
+    let mut s = UiScript::new().unwrap();
+    load_dropdown_kit(&mut s);
 
     let (object_height, label_height, label_face): (Option<f64>, Option<f64>, Option<String>) = s
         .eval(

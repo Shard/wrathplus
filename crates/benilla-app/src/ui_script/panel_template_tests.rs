@@ -28,7 +28,7 @@ fn harness() -> UiScript {
         r"Interface\FrameXML\UIOptionsFrame.xml",
         "Interface\\FrameXML\\StaticPopup.xml",
     ] {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     s

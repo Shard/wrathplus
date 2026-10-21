@@ -22,7 +22,7 @@ pub(crate) fn harness() -> UiScript {
         r"Interface\FrameXML\GameMenuFrame.xml",
         "Interface\\FrameXML\\StaticPopup.xml",
     ] {
-        super::test_ui::load_ui(&s, file);
+        super::test_ui::load_ui(&mut s, file);
     }
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     s

@@ -29,7 +29,7 @@ fn chat_ui() -> UiScript {
         "Interface\\FrameXML\\FloatingChatFrame.xml",
         "Interface\\FrameXML\\ColorPickerFrame.xml",
     ] {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     super::fire_chat_login(&mut s);
     s.set_screen_size(1600.0, 900.0);

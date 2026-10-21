@@ -29,7 +29,7 @@ fn harness() -> UiScript {
         // The reference's own map, which <Include>s its blip templates itself.
         r"Interface\FrameXML\WorldMapFrame.xml",
     ] {
-        super::test_ui::load_ui(&s, file);
+        super::test_ui::load_ui(&mut s, file);
     }
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     s

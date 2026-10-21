@@ -25,7 +25,7 @@ fn harness(extra: &[&str]) -> UiScript {
         ],
         extra,
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     // The stock tooltip sizes from its lines, so its rect needs a text measurer. Detailed tips
     // default on in 1.12 (`UIOptionsFrame.lua:100`); this kit loads no options window.

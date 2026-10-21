@@ -13,7 +13,7 @@ fn load_pet_page() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     for f in super::test_ui::CHARACTER_UI {
-        super::test_ui::load_ui_strict(&s, f);
+        super::test_ui::load_ui_strict(&mut s, f);
     }
     s.set_unit("player", Some(player_unit()));
     s
@@ -121,10 +121,10 @@ fn take_pet(s: &mut UiScript) {
 #[test]
 fn shipped_pet_page_loads_clean() {
     let _data = benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
+    let mut s = UiScript::new().unwrap();
     let mut pet_frames = 0;
     for f in super::test_ui::CHARACTER_UI {
-        let n = super::test_ui::load_ui_strict(&s, f);
+        let n = super::test_ui::load_ui_strict(&mut s, f);
         if *f == "Interface\\FrameXML\\PetPaperDollFrame.xml" {
             pet_frames = n;
         }

@@ -40,7 +40,7 @@ fn setup() -> UiScript {
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
         "Interface\\FrameXML\\HelpFrame.xml",
     ] {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_gm_ticket_categories(vec![
         (1, "Stuck".into()),
