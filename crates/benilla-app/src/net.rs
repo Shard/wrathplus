@@ -188,7 +188,6 @@ impl Plugin for NetPlugin {
             .add_message::<WorldportMessage>()
             .add_message::<RealmListMessage>()
             .add_message::<CharListMessage>()
-            .add_message::<CharActionResultMessage>()
             .add_message::<WrathCharActionResultMessage>()
             .add_message::<CharacterLoginFailedMessage>()
             .add_message::<EnteredWorldMessage>()
@@ -2180,16 +2179,8 @@ pub(crate) struct CharListMessage {
     pub(crate) realm: Option<benilla_protocol::RealmInfo>,
 }
 
-/// A character create or delete result; a refreshed [`CharListMessage`] precedes a success.
-/// `code` is the raw `WorldResult` byte.
-#[derive(Message, Clone, Copy)]
-pub(crate) struct CharActionResultMessage {
-    pub(crate) action: benilla_protocol::CharAction,
-    pub(crate) code: u8,
-}
-
 /// Native build-12340 result; successful operations publish the refreshed roster first.
-/// Deliberately separate from Vanilla's result-byte namespace.
+/// The 12340 `ResponseCodes` byte.
 #[derive(Message, Clone, Copy)]
 pub(crate) struct WrathCharActionResultMessage {
     pub(crate) action: benilla_protocol::CharAction,

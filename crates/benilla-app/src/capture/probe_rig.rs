@@ -30,14 +30,13 @@
 //! (`ObjectMgr.cpp:12079-12117`), so re-dressing a body leaves the old set in its bags or mailed;
 //! a fresh rig-named character starts with empty bags.
 
-use benilla_protocol::{types, CharAction, CharCreateReq};
+use benilla_protocol::{CharAction, CharCreateReq};
 use bevy::prelude::*;
 
 use super::probes::ProbeClock;
 use crate::char_select::{send_pick, Roster};
 use crate::net::{
-    CharActionResultMessage, CharListMessage, CharPick, CharRequest, EnteredWorldMessage,
-    ObjectStore, SelfPlayer,
+    CharListMessage, CharPick, CharRequest, EnteredWorldMessage, ObjectStore, SelfPlayer,
 };
 
 /// Grace after world entry before the first GM line, while the descriptor and the UI VM come up;
@@ -243,7 +242,7 @@ fn drive_rig(
     pick: Res<CharPick>,
     time: ProbeClock,
     mut lists: MessageReader<CharListMessage>,
-    mut results: MessageReader<CharActionResultMessage>,
+    mut results: MessageReader<crate::net::WrathCharActionResultMessage>,
     mut entered: MessageReader<EnteredWorldMessage>,
     script: Option<NonSendMut<benilla_ui::script::UiScript>>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
@@ -298,8 +297,13 @@ fn drive_rig(
                 return;
             };
             match r.code {
-                types::CHAR_CREATE_SUCCESS => rig.phase = RigPhase::AwaitRoster,
-                types::CHAR_CREATE_SERVER_LIMIT if !rig.evicted => {
+                benilla_protocol::wrath_world::CHAR_CREATE_SUCCESS => {
+                    rig.phase = RigPhase::AwaitRoster
+                }
+                code if !rig.evicted
+                    && crate::char_select::wrath_char_result_key(code)
+                        == Some("CHAR_CREATE_SERVER_LIMIT") =>
+                {
                     rig.evicted = true;
                     match crate::run_mode::rig_suffix().and_then(|word| {
                         evictable(&rig.roster, rig_char_name(&rig.spec).as_deref(), &word)

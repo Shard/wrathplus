@@ -22,7 +22,7 @@ use benilla_assets::{LockRecover, WorldAssets};
 const SRC_NODE: u32 = 2;
 const DEST_NODE: u32 = 4;
 const TAXI_PATH: u32 = 6;
-/// Dungar Longdrink's spawn (vmangos `creature` guid 79658, entry 352, map 0); the flight master
+/// Dungar Longdrink's spawn (AzerothCore `creature` guid 79658, entry 352, map 0); the flight master
 /// is then found in the streamed world by his npc flag.
 const FLIGHTMASTER_AT: [f32; 3] = [-8835.8, 490.1, 109.7];
 /// vmangos `PLAYER_FLIGHT_SPEED` in yd/s (`WaypointMovementGenerator.cpp:390`).
