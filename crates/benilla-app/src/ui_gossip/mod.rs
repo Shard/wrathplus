@@ -2,9 +2,7 @@
 //! [`feed_gossip`] pushes the menu and fires its events, and [`drain_gossip`] sends the selects.
 //! As in the reference's `0x4e2010`, a menu opens only once its greeting is drawn.
 
-use benilla_protocol::types::select_greeting;
-#[cfg(test)]
-use benilla_protocol::types::{GossipOption, NpcTextBlock};
+use benilla_protocol::types::{select_greeting, GossipOption, NpcTextBlock};
 use bevy::prelude::*;
 
 use benilla_ui::script::{GossipMenu, GossipOptionView, GossipQuestRow, ScriptValue, UiScript};
@@ -296,12 +294,79 @@ fn drain_gossip(
 pub(crate) trait GossipGreeting {
     /// `None` when the record has not arrived or has no line in the NPC's gender column.
     fn draw_greeting(&self, text_id: u32, npc_gender: u8) -> Option<String>;
+    /// Latch a `SMSG_GOSSIP_MESSAGE` menu; `true` when the caller owes the `CMSG_NPC_TEXT_QUERY`.
+    fn open_menu(
+        &mut self,
+        npc: u64,
+        text_id: u32,
+        options: Vec<GossipOption>,
+        quests: Vec<(u32, u32, u32, String)>,
+        npc_gender: u8,
+    ) -> bool;
+    /// Cache a `SMSG_NPC_TEXT_UPDATE` record and resolve the menu waiting on it, if any.
+    fn text_arrived(&mut self, text_id: u32, blocks: Vec<NpcTextBlock>, npc_gender: u8);
+    /// Draw the open menu's greeting, or end the interaction when there is no line.
+    fn resolve_greeting(&mut self, npc_gender: u8);
 }
 
 impl GossipGreeting for GossipState {
     fn draw_greeting(&self, text_id: u32, npc_gender: u8) -> Option<String> {
         let blocks = self.cached_record(text_id)?;
         select_greeting(blocks, npc_gender, greeting_roll()).map(str::to_string)
+    }
+
+    /// Latch a `SMSG_GOSSIP_MESSAGE` menu; `true` when the caller owes the `CMSG_NPC_TEXT_QUERY`.
+    /// A `text_id` of 0 stays pending: the reference's `DBCache::Get` never queries id 0.
+    fn open_menu(
+        &mut self,
+        npc: u64,
+        text_id: u32,
+        options: Vec<GossipOption>,
+        quests: Vec<(u32, u32, u32, String)>,
+        npc_gender: u8,
+    ) -> bool {
+        self.npc = Some(npc);
+        self.text_id = text_id;
+        self.options = options;
+        self.quests = quests;
+        self.quest_info.clear();
+        self.greeting = None;
+        if text_id == 0 {
+            return false;
+        }
+        match self.cached_record(text_id).is_some() {
+            true => {
+                self.resolve_greeting(npc_gender);
+                false
+            }
+            false => true,
+        }
+    }
+
+    /// Cache a `SMSG_NPC_TEXT_UPDATE` record and resolve the menu waiting on it, if any. An open
+    /// menu's greeting is not re-drawn: the reference's cache callback re-enters only for the
+    /// query it was registered for.
+    fn text_arrived(&mut self, text_id: u32, blocks: Vec<NpcTextBlock>, npc_gender: u8) {
+        self.remember_record(text_id, blocks);
+        if self.npc.is_some() && self.text_id == text_id && self.greeting.is_none() {
+            self.resolve_greeting(npc_gender);
+        }
+    }
+
+    /// Draw the open menu's greeting, or end the interaction when the record has no line for the
+    /// NPC's gender: the reference's missing-text path (`0x4e216e`) logs "Missing gossip text!"
+    /// and fires `GOSSIP_CLOSED`. Here the clear makes the feed fire it if a menu was showing.
+    fn resolve_greeting(&mut self, npc_gender: u8) {
+        match self.draw_greeting(self.text_id, npc_gender) {
+            Some(line) => self.greeting = Some(line),
+            None => {
+                debug!(
+                    "ui_gossip: missing gossip text (id {}) — ending the interaction",
+                    self.text_id
+                );
+                self.clear();
+            }
+        }
     }
 }
 

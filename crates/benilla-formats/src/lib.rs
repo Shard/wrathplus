@@ -272,7 +272,7 @@ pub use talents::{load_talent_catalog, Talent, TalentCatalog, TalentTabInfo, MAX
 mod spell_visual;
 pub use spell_visual::{
     char_proc_small_int, char_proc_type, load_spell_visual_catalog, ChainEffect, ChainProc,
-    CharProc, SpellVisualCatalog, TrailProc, VisualKit, VisualStages, CHAIN_MAX_BEAMS,
+    CharProc, EffectScale, SpellVisualCatalog, TrailProc, VisualKit, VisualStages, CHAIN_MAX_BEAMS,
     KIT_CHAR_PROCS, KIT_SLOT_TAGS, MISSILE_ATTACH_TABLE, WORLD_EFFECT_TAG,
 };
 mod emit_timing;

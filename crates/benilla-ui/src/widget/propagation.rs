@@ -74,16 +74,17 @@ impl WidgetArena {
 
     // ── Level ────────────────────────────────────────────────────────────────────────────────────
 
-    /// Set `h`'s level (`0x76a4f0`); with `propagate`, same-strata children shift by the same
-    /// delta. A same-value call returns before relinking (`0x76a509`).
+    /// Set `h`'s level (12340 `0x4910a0`); with `propagate`, same-strata children shift by the same
+    /// delta. A same-value call returns before relinking, and a raise moves at most `0x80` levels
+    /// at once, children included.
     pub fn set_frame_level(&mut self, h: FrameHandle, level: u16, propagate: bool) {
         let (delta, strata, children) = match self.frame_mut(h) {
             Some(f) => {
                 if f.level == level {
                     return;
                 }
-                let delta = i32::from(level) - i32::from(f.level);
-                f.level = level;
+                let delta = (i32::from(level) - i32::from(f.level)).min(0x80);
+                f.level = (i32::from(f.level) + delta).clamp(0, i32::from(u16::MAX)) as u16;
                 (delta, f.strata, f.children.clone())
             }
             None => return,
@@ -267,11 +268,13 @@ impl WidgetArena {
                 let pf = self.frame(np).expect("live new parent");
                 (pf.strata, pf.level.saturating_add(1))
             }
-            // `SetParent(nil)` resets to MEDIUM and level 0 (`0x76aba3`/`0x76abac`).
+            // `SetParent(nil)` resets to MEDIUM and level 0.
             None => (Strata::default(), 0),
         };
+        // `CSimpleFrame::SetParent` (12340 `0x4911b0`): the parent's strata (`0x491020`), then its
+        // level + 1 with propagation (`0x4910a0(level, 1)`), so the subtree moves with the frame.
         self.set_frame_strata(h, pstrata);
-        self.set_frame_level(h, plevel, false);
+        self.set_frame_level(h, plevel, true);
         let ps = self.parent_effective_scale(h);
         self.propagate_scale(h, ps);
 
@@ -412,7 +415,7 @@ impl WidgetArena {
             }
             cur = self.frame(c).and_then(|f| f.parent);
             guard += 1;
-            if guard > self.frames.slots.len() {
+            if guard > self.frames.capacity() {
                 break; // a well-formed tree never loops
             }
         }

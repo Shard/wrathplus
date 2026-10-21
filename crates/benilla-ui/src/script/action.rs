@@ -292,16 +292,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // ChangeActionBarPage(): fires `ACTIONBAR_PAGE_CHANGED` synchronously and returns nothing
-    // (`0x4e7650`); the page itself is FrameXML's `CURRENT_ACTIONBAR_PAGE`.
-    g.set(
-        "ChangeActionBarPage",
-        lua.create_function(|lua, ()| {
-            super::tick::fire_event_into(lua, "ACTIONBAR_PAGE_CHANGED", Vec::new());
-            Ok(())
-        })?,
-    )?;
-
     // ── Per-action state ──
     // 1/nil booleans and `IsActionInRange`'s nil/0/1, which FrameXML tests with a plain `if`.
 

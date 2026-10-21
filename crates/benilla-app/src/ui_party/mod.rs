@@ -20,7 +20,7 @@ mod ready_close;
 mod records;
 pub(crate) mod wrath;
 pub(crate) use feed::{
-    raid_row_guid, raid_row_guids, synthetic_raid, synthetic_roster, GROUPTYPE_RAID,
+    raid_row_guids, synthetic_raid, synthetic_roster, GROUPTYPE_RAID,
     PARTY_PET_TOKENS, PARTY_TOKENS, RAID_PET_TOKENS, RAID_TOKENS,
 };
 

@@ -43,6 +43,11 @@ pub struct SpellDisplay {
     /// Build 12340's `AttributesEx5` (`+0x24`): `0x8` usable while stunned, `0x20000` while
     /// feared, `0x40000` while confused (AzerothCore `SPELL_ATTR5_USABLE_WHILE_*`).
     pub attributes_ex5: u32,
+    /// Build 12340's `AttributesEx7` (`+0x2c`): `0x800` interrupts only non-players, `0x1000`
+    /// silences only non-players, `0x2000` the cast cannot be shown as uninterruptible.
+    pub attributes_ex7: u32,
+    /// Build 12340's `SchoolMask` (`+0x284`), one bit per school.
+    pub school_mask: u32,
     /// `SpellFamilyName` (column 160): `GetSpellModifiers` (`0x6e6b30`) applies nothing unless it
     /// is nonzero and equals the local player's class family (`[0xcecaac]`, `0x6e6b46`).
     pub spell_family: u32,
@@ -242,6 +247,8 @@ impl Default for SpellDisplay {
             attributes_ex3: 0,
             attributes_ex4: 0,
             attributes_ex5: 0,
+            attributes_ex7: 0,
+            school_mask: 0,
             spell_family: 0,
             spell_family_flags: 0,
             spell_family_flags_2: 0,

@@ -43,6 +43,7 @@ mod wrath_unit_casts;
 mod wrath_combat_log;
 mod wrath_chat_verbs;
 mod wrath_static_popup;
+mod glue;
 mod wrath_friends_frame;
 mod wrath_guild_bank;
 mod wrath_macro_icons;
@@ -74,6 +75,7 @@ pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
     WrathGuildEvent,
 };
+pub use glue::{GlueRealm, GlueRealmTab, GlueRequest};
 pub use wrath_static_popup::{WrathInstanceLock, WrathPopupRequest, WrathPopupState};
 pub use wrath_unit_popup::{WrathChatLine, WrathUnitPopupRequest, WrathUnitPopupState};
 pub use wrath_chat_verbs::WrathChatVerbRequest;
@@ -136,7 +138,7 @@ mod merchant;
 mod messageframe;
 mod minimap;
 pub mod nameplate;
-pub use nameplate::{PlateGeometry, PlateState};
+pub use nameplate::{PlateCast, PlateGeometry, PlateState};
 mod model;
 mod modelframe;
 mod net_stats;
@@ -623,9 +625,11 @@ fn own_script_kinds(kind: FrameKind) -> (&'static [&'static str], &'static [&'st
             &["OnMovieFinished", "OnMovieShowSubtitle", "OnMovieHideSubtitle"],
             NONE,
         ),
-        FrameKind::Model | FrameKind::PlayerModel | FrameKind::DressUpModel | FrameKind::TabardModel => {
-            (&["OnUpdateModel", "OnAnimFinished"], NONE)
-        }
+        FrameKind::Model
+        | FrameKind::PlayerModel
+        | FrameKind::DressUpModel
+        | FrameKind::TabardModel
+        | FrameKind::ModelFFX => (&["OnUpdateModel", "OnAnimFinished"], NONE),
         FrameKind::StatusBar | FrameKind::Slider => (&["OnValueChanged", "OnMinMaxChanged"], NONE),
         FrameKind::ScrollFrame => (
             &["OnHorizontalScroll", "OnVerticalScroll", "OnScrollRangeChanged"],
@@ -634,7 +638,9 @@ fn own_script_kinds(kind: FrameKind) -> (&'static [&'static str], &'static [&'st
         FrameKind::ColorSelect => (&["OnColorSelect"], NONE),
         FrameKind::SimpleHtml | FrameKind::MessageFrame => (&HYPERLINK_SCRIPT_KINDS, NONE),
         FrameKind::ScrollingMessageFrame => (&["OnMessageScrollChanged"], &HYPERLINK_SCRIPT_KINDS),
-        FrameKind::Frame | FrameKind::WorldFrame | FrameKind::Minimap => (NONE, NONE),
+        FrameKind::Frame | FrameKind::WorldFrame | FrameKind::Minimap | FrameKind::Cooldown => {
+            (NONE, NONE)
+        }
     }
 }
 
@@ -1233,6 +1239,7 @@ impl UiScript {
     pub fn resolve(&mut self) {
         self.resolve_and_measure();
         event::fire_size_changes(&self.lua);
+        scrollframe::fire_range_changes(&self.lua);
         // The EditBox's own `OnSizeChanged` (`0x77a8d0`) runs after the script fire and re-seats a
         // resized box's text, which the reference's drain resolves in the same pass.
         let reseated = editbox::reseat_resized(&mut self.model_mut());
@@ -1497,6 +1504,7 @@ impl UiScript {
                 crate::widget::FrameKind::PlayerModel => "PlayerModel",
                 crate::widget::FrameKind::DressUpModel => "DressUpModel",
                 crate::widget::FrameKind::TabardModel => "TabardModel",
+                crate::widget::FrameKind::ModelFFX => "ModelFFX",
                 crate::widget::FrameKind::MessageFrame => "MessageFrame",
                 crate::widget::FrameKind::ScrollingMessageFrame => "ScrollingMessageFrame",
                 crate::widget::FrameKind::ColorSelect => "ColorSelect",
@@ -1504,6 +1512,7 @@ impl UiScript {
                 crate::widget::FrameKind::MovieFrame => "MovieFrame",
                 crate::widget::FrameKind::GameTooltip => "GameTooltip",
                 crate::widget::FrameKind::Minimap => "Minimap",
+                crate::widget::FrameKind::Cooldown => "Cooldown",
             });
         }
         // Region leaves publish into their own name table, not the arena's.

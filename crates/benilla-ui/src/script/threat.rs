@@ -19,6 +19,12 @@ pub struct MobThreat {
 }
 
 impl MobThreat {
+    /// `member`'s threat situation on this mob, `UnitThreatSituation`'s 0-3, or `None` when not
+    /// on its list.
+    pub fn situation(&self, member: u64) -> Option<u8> {
+        self.details(member).map(|d| d.1)
+    }
+
     fn details(&self, member: u64) -> Option<(bool, u8, f64, f64, f64)> {
         let value = f64::from(*self.members.get(&member)?);
         let tanking = self.highest == Some(member);

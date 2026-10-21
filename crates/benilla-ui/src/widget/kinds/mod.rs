@@ -35,6 +35,10 @@ pub enum FrameKind {
     DressUpModel,
     /// `TabardModel` (`0x503bd0`): `CGCharacterModelBase` plus ten verbs (table `0x84ee40`).
     TabardModel,
+    /// `ModelFFX`, the glue screens' backdrop model (`<ModelFFX>` in GlueXML: `AccountLogin`,
+    /// `CharacterSelect`, `CharacterCreate`): a `Model` with fog and glow. Labelled: its own method
+    /// table, if any, is not read; it answers `Model`'s.
+    ModelFFX,
     /// `CSimpleMessageFrame`, `UIErrorsFrame`'s class: a sibling of the scrolling one.
     MessageFrame,
     /// `CSimpleMessageScrollFrame`, the chat window's ring-buffered class; a sibling of
@@ -47,6 +51,10 @@ pub enum FrameKind {
     GameTooltip,
     /// The `<Minimap>` widget, a game-layer factory (`0x495940`) the app draws the map into.
     Minimap,
+    /// Wrath's `<Cooldown>` (`ActionButtonTemplate.xml:63`): a `Frame` plus the sweep verbs, which
+    /// the engine paints from [`crate::script::QuadContent::CooldownSweep`]. Its factory address
+    /// in 12340 is untraced.
+    Cooldown,
 }
 
 /// The kind of a [`Region`] leaf, the client's `CScriptRegion`-derived non-frame objects.
@@ -643,6 +651,9 @@ pub struct ScrollFrameState {
     /// `SetVerticalScroll`'s offset in px (`0x786db0`), unclamped: a positive one lifts the child
     /// to show what is below; the FrameXML scroll bar's range keeps it in bounds.
     pub vertical: f32,
+    /// The `(horizontal, vertical)` ranges `OnScrollRangeChanged` last carried, `(0, 0)` at
+    /// creation; the layout pump fires again only on a change.
+    pub notified: (f32, f32),
 }
 
 /// `Button:SetFont`'s record, one for the client's three embedded fonts (`+0x33c`, `+0x434`,

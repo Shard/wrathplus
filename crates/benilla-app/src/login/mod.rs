@@ -53,8 +53,22 @@ impl Plugin for LoginPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LoginIntent>()
             .init_resource::<LoginForm>()
-            .add_systems(OnEnter(ClientState::Login), enter_login)
-            .add_systems(OnExit(ClientState::Login), screen::exit_login)
+            // The stock glue hosts the screen when on ([`crate::ui_script::glue`]); the native one
+            // otherwise.
+            .add_systems(
+                OnEnter(ClientState::Login),
+                (
+                    enter_login.run_if(|| !crate::ui_script::glue::stock_glue_active()),
+                    crate::ui_script::glue::enter_stock_login,
+                ),
+            )
+            .add_systems(
+                OnExit(ClientState::Login),
+                (
+                    screen::exit_login,
+                    crate::ui_script::glue::leave_stock_login,
+                ),
+            )
             .add_systems(
                 Update,
                 (
@@ -85,7 +99,11 @@ impl Plugin for LoginPlugin {
                         // `answer_dialog` holds the VM, and every VM holder in `Update` declares
                         // its side of the UI tick; a glue screen has nothing the tick must see.
                         .after(crate::ui_script::UiInput)
-                        .run_if(in_state(ClientState::Login)),
+                        .run_if(in_state(ClientState::Login))
+                        .run_if(|| !crate::ui_script::glue::stock_glue_active()),
+                    crate::ui_script::glue::stock_login
+                        .after(crate::ui_script::UiInput)
+                        .run_if(crate::ui_script::glue::stock_login_up),
                     (smoke::debug_login_smoke, screen::debug_login_shot),
                 )
                     .chain()
@@ -102,14 +120,33 @@ pub(crate) use crate::app_core::ui_flags::{IoPark, LoginIntent};
 /// the parked IO thread, the abandon generation a Cancel bumps, and the realmlist it dials. A
 /// bundle keeps [`login_input`] under Bevy's sixteen-parameter ceiling.
 #[derive(bevy::ecs::system::SystemParam)]
-pub(super) struct Attempt<'w> {
+pub(crate) struct Attempt<'w> {
     pub(super) intent: ResMut<'w, LoginIntent>,
     submit: Res<'w, LoginSubmit>,
     abandon: Res<'w, LoginAbandon>,
-    realmlist: Res<'w, crate::realmlist::Realmlist>,
+    realmlist: ResMut<'w, crate::realmlist::Realmlist>,
 }
 
 impl Attempt<'_> {
+    /// A typed submit from another screen (the stock glue's `DefaultServerLogin`).
+    pub(crate) fn submit_typed(&mut self, user: &str, pass: &str) {
+        self.send(user, pass, true);
+    }
+
+    /// The realmlist the next attempt dials, for the stock glue's Realmlist button.
+    pub(crate) fn realmlist_mut(&mut self) -> &mut crate::realmlist::Realmlist {
+        &mut self.realmlist
+    }
+
+    /// Cancel the attempt in flight, if any: bump the abandon generation and drop the credentials.
+    pub(crate) fn abandon_in_flight(&mut self) {
+        if self.intent.in_flight {
+            self.abandon.0.fetch_add(1, Ordering::SeqCst);
+            self.intent.in_flight = false;
+            self.intent.clear();
+        }
+    }
+
     /// Send one login attempt to the parked IO thread, stamped with the abandon generation. The
     /// realmlist is read at submit time, so an attempt keeps the server it started with.
     fn send(&mut self, user: &str, pass: &str, announced: bool) {
@@ -152,7 +189,7 @@ fn login_press(form: &LoginForm) -> LoginPress {
 }
 
 /// The connecting dialog's `LOGIN_STATE_*` text for a stage.
-fn stage_text(strings: &GlueStrings, stage: LoginStage) -> &str {
+pub(crate) fn stage_text(strings: &GlueStrings, stage: LoginStage) -> &str {
     match stage {
         LoginStage::Connecting => strings.text("LOGIN_STATE_CONNECTING", "Connecting"),
         LoginStage::Authenticating => strings.text("LOGIN_STATE_AUTHENTICATING", "Authenticating"),
@@ -165,7 +202,7 @@ fn stage_text(strings: &GlueStrings, stage: LoginStage) -> &str {
 /// Deviation: a dial that never opened a socket reads `AUTH_LOGIN_SERVER_NOT_FOUND` or
 /// `LOGIN_SERVER_DOWN` plus the address, because with an editable realmlist "Unable to connect"
 /// cannot tell a bad name from a server that is down.
-fn fail_text(
+pub(crate) fn fail_text(
     strings: &GlueStrings,
     refusal: Option<LoginRefusal>,
     dial: Option<&DialFailure>,
@@ -871,7 +908,7 @@ fn answer_dialog(
 /// Take the realmlist dialog's Okay: normalize, point the session at it, and write the
 /// `realmList` CVar so it persists; `false` keeps the dialog open. A CVar the VM has not
 /// registered yet is not saved, but the session value stands.
-fn accept_realmlist(
+pub(crate) fn accept_realmlist(
     typed: &str,
     realmlist: &mut crate::realmlist::Realmlist,
     script: Option<&mut benilla_ui::script::UiScript>,
@@ -930,14 +967,14 @@ fn save_account_to(path: &std::path::Path, name: &str) {
 }
 
 /// `GetSavedAccountName`, at [`crate::local_state`]'s path.
-fn load_saved_account() -> String {
+pub(crate) fn load_saved_account() -> String {
     crate::local_state::saved_account_path()
         .map(|p| load_saved_account_from(&p))
         .unwrap_or_default()
 }
 
 /// `SetSavedAccountName`; empty clears.
-fn save_account(name: &str) {
+pub(crate) fn save_account(name: &str) {
     if let Some(path) = crate::local_state::saved_account_path() {
         save_account_to(&path, name);
     }

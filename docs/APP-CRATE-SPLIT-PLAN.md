@@ -46,7 +46,7 @@ The cycles come from three patterns, not from tangled features:
 
 | Crate | Layer | Today's modules (examples) | Size | Lib tests |
 |---|---|---|---|---|
-| `benilla-app-core` | shared state, schedule sets, cvar registry | `run_mode`, `local_state`, `query_cache`, `area`, `chr_classes`, `text_filter`, `text_reshape`, `glue_strings`, `crash`, `shutdown`, `pending_item_ops`, `quest_reputation`, `cvars` (registry only), `app_core` (the state extracted in step 0) | ~12k + extracted | ~150 |
+| `benilla-app-core` | shared state, schedule sets, cvar registry | `run_mode`, `local_state`, `query_cache`, `area`, `chr_classes`, `text_filter`, `text_reshape`, `glue_strings`, `crash`, `shutdown`, `pending_item_ops`, `quest_reputation`, `cvars` (registry only), `launch_plan` (the run's command line and environment), `app_core` (the state extracted in step 0) | ~12k + extracted | ~150 |
 | `benilla-app-net` | session and wire drain | `net` (with the capture FIFOs), `realmlist`, and the wire-query caches `names`, `items`, `go_templates`, `area_trigger`, `name_persist`, `creature_type` (reassigned after the move dry run) | ~25k | ~280 |
 | `benilla-app-world` | world, rendering, gameplay | `entities`, `creature_anim`, `player`, `target`, `spell`, `motion`, `swing_refusal`, `sound`, `portrait`, `minimap`, `transport`, `video`, `cursor`, `death`, `nameplates`, `vplates`, `quest_markers`, `world_state`, `loading_screen`, the effect modules (`aura_visual`, `weapon_trail`, `bowstring`, `fishing_line`, `footprints`, …) | ~136k | ~1.4k |
 | `benilla-app-ui` | FrameXML host and feeds, glue screens | `ui_script`, every `ui_*`, `bindings`, `console`, `combat_log`, `char_select`, `char_create`, `realm_select`, `login`, `glue`, `textinput`, `tutorial`, `script_calls`, `experience_ui`, `world_state_ui` | ~234k | ~2.8k |
@@ -54,7 +54,14 @@ The cycles come from three patterns, not from tangled features:
 | `benilla-app` (root) | assembly | `lib.rs` (`run`, `run_with`), `game_plugins`, the bins, `tests/` | ~1.4k | few |
 
 Dependencies point down only: root → tools → ui → world → net → core. `benilla-ui` (the Lua VM)
-becomes a dependency of `benilla-app-ui` only, so world and net builds stop pulling mlua.
+is a separate crate below all of them: core depends on it (decision of 2026-10-21, below), so
+every layer builds mlua once and a world feed taking `UiScript` is not a layer break.
+
+**Decision (2026-10-21): core depends on `benilla-ui`.** `app_core::vm_memo::VmMemo` holds
+`UiScript`, `app_core::errors` carries `MsgKind` and `app_core::interaction` a `WhoSortChain`, and
+the world feeds (area, cinematic, cursor, minimap, sound::ui, spell::unit_cast,
+spell::targeting::item, video, vplates) take `UiScript`. `benilla-ui` is already its own crate
+below `benilla-app`, so these are downward edges; nothing moves up to avoid them.
 
 Against this layering there are, today, about 1,100 references in about 250 module pairs that
 point the wrong way (world → ui 613, net → world 153, core → world 92, core → ui 73, net → ui 72,
@@ -385,9 +392,9 @@ Done (Experience):
 **Needs design (~93 references): calls from a lower layer into a higher one.** Each wants an
 event, a message the higher layer drains, or the caller moving up:
 
-- `ui_script::VmMemo` (17): it holds the Lua VM, so it cannot go to core without `benilla-ui`.
-  Its world users (area, cinematic, cursor, death, minimap, sound, spell, video, vplates) want a
-  UI-layer event or a narrower memo.
+- `ui_script::VmMemo` (17): it holds the Lua VM; it is `app_core::vm_memo` now, core depending on
+  `benilla-ui` (the 2026-10-21 decision under Proposed crates), so its world users (area,
+  cinematic, cursor, death, minimap, sound, spell, video, vplates) are downward edges.
 - UI helpers world code calls: `ui_items::{find_item, carried_counts, slot_guid,
   collect_inventory, send_item_use}`, `ui_session::feed_interact_npc`,
   `ui_merchant::end_repair_mode_on_right_press`, `ui_loot::{close_interaction,
@@ -459,8 +466,8 @@ Each lands as a behaviour-neutral unit with the usual gates, in this order.
 | Run conditions | `ui_script::{ingame_ui_up, seam_scale, load_stock_bindings}` | **Move down.** `ingame_ui_up` reads only `PendingEntryUiLoad` and `ClientState`, both already core, so the run condition itself moves to `app_core::ui_state` (no new resource, no frame of lag); `seam_scale` is pure and goes with it; world callers name the core path, `ui_script` re-exports both. `load_stock_bindings`' one world caller was a `vplates` test; the 12340 nameplate port (Assets, 71fed466) replaced it with a client test, closing the edge. | done |
 | Drawing helpers | `ui_pass::{project_overlay, tile_quad_mesh, overlay_z, ui_render_layers}`, `ui_models::spawn_warm_tile_cam` | **Move down.** The four `ui_pass` helpers are a new world-layer `overlay` module (`ui_pass` re-exports `ui_render_layers`, which it still uses); `spawn_warm_tile_cam` goes to `portrait` beside its twin `spawn_warm_booth`, with the tile atlas's first edge and camera order. chat_bubble, combat_text, minimap::composite, pipe_warm and vplates name the new paths. | in review |
 | Cast-bar feedback | `ui_cast::feed_cast_bar` from world | **Drained message.** The queue world already writes, `CastBarEdge`/`CastBarFeed`, moves to `spell::cast_bar`; `ui_cast` keeps the drain in its slot (`UnitFeed`, after `spell::LocalCancel`), the same frame, pinned by `a_queued_edge_reaches_the_vm_the_same_frame`. The four Esc tests that ran `feed_cast_bar` from `spell::inflight` move to `ui_cast_esc_tests.rs` over a shared `spell::cast_test_support` harness. | in review |
-| Other action requests | `ui_session::feed_interact_npc`, `ui_pet::pet_stop_on_old_target_clear`, `ui_world_map::world_enter_selection`, `script_calls::{apply_script_calls, in_call_order}` | Narrower than the dry run by now. `InteractNpc` is already `app_core::state`: world code (target::click, creature_anim, motion::facing, portrait, capture) names that path, and `target::click`'s re-click test, which runs `feed_interact_npc`, moves to `ui_session`'s tests. `pet_stop_on_old_target_clear` is ordered against by `spell::targeting::feed_targeting_to_vm`, itself a `VmMemo` user: it moves up with the `VmMemo` row. `world_enter_selection` and the `script_calls` links in target and spell docs are prose. `apply_script_calls` in the target chain was App Migration's split unit 1. | in review (`pet_stop_on_old_target_clear` with `VmMemo`) |
-| `VmMemo` (17) | `ui_script::VmMemo` users in area, cinematic, cursor, death, minimap, sound, spell, video, vplates | **Move the caller up.** Each world user is a Lua feed that already takes `UiScript`; the feed systems move to UI-side modules beside their world state, and `VmMemo` stays in `ui`. | claimed |
+| Other action requests | `ui_session::feed_interact_npc`, `ui_pet::pet_stop_on_old_target_clear`, `ui_world_map::world_enter_selection`, `script_calls::{apply_script_calls, in_call_order}` | Narrower than the dry run by now. `InteractNpc` is already `app_core::state`: world code (target::click, creature_anim, motion::facing, portrait, capture) names that path, and `target::click`'s re-click test, which runs `feed_interact_npc`, moves to `ui_session`'s tests. `pet_stop_on_old_target_clear` is ordered against by `spell::targeting::feed_targeting_to_vm`, itself a `VmMemo` user: it moves up with the `VmMemo` row. `world_enter_selection` and the `script_calls` links in target and spell docs are prose. `apply_script_calls` in the target chain was App Migration's split unit 1. | done (`pet_stop_on_old_target_clear` with `VmMemo`: its one world reader moved up) |
+| `VmMemo` (17) | `ui_script::VmMemo` users in area, cinematic, cursor, death, minimap, sound, spell, video, vplates | `VmMemo` is `app_core::vm_memo` now, so a `ui_script::VmMemo` path is a re-export path that `scripts/split/canonical-paths.py` rewrites at move time, and `ui_party::GroupState` likewise. Done: `spell::targeting::feed_targeting_to_vm` moved up to `ui_spell_targeting` (its plugin keeps the `UnitFeed`, old-target-clear and aura-feed order), and its four VM tests went with it onto `spell::targeting::test_support`. `UnitTokens` moved down to `target::unit_tokens` (world state only), and `raid_row_guid(s)` to `app_core::group`. Not inversions: `bindings` and `tutorial` are UI-layer, so the bindings loaders and `TaxiState` (read by `tutorial`, `ui_session`, `capture`) stay. The other world feeds that take `UiScript` (area, cinematic, cursor, minimap, sound::ui, spell::unit_cast, spell::targeting::item, video, vplates) hold `benilla-ui` in world; they stay: core depends on `benilla-ui` (the 2026-10-21 decision under Proposed crates). The death row is App's. | done |
 
 When the pure moves and the in-flight items land, the move phase can start with `core` and `net`;
 `world` and `ui` wait for the design items above.
@@ -567,19 +574,67 @@ relative hop.
 
 | Cause | Sites | What | Owner |
 |---|---|---|---|
-| Core calls an extension-trait method | 4 | `GossipState::resolve_greeting` → `GossipGreeting::draw_greeting`, `Realms::highlight_current` → `RealmsSelect::rows` (and their `use` lines) | Wire B: the callers join their traits |
-| `Default` impl left in an upper layer | 2 | `CollisionHeight` (`entities::collision_height`), `ui_flags::Sort` (`realm_select`) | Wire B: the impls move with their types (the inherent-impl matcher did not look at trait impls) |
-| Core → spell | 3 | `Spells`' cast-time helpers take `spell::SpellModifiers` and `OP_CAST_TIME` (`app_core::state`) | Wire B: an extension trait beside `spell::mods` |
-| Core → ui_items | 1 | `app_core::state`'s `Key(ui_items::ItemUse)` | `ItemUse` moves down if pure |
+| Core calls an extension-trait method | 4 | `GossipState::resolve_greeting` → `GossipGreeting::draw_greeting`, `Realms::highlight_current` → `RealmsSelect::rows` (and their `use` lines) | Done (Wire B): `open_menu`, `text_arrived` and `resolve_greeting` are `GossipGreeting`'s, `highlight_current` is `RealmsSelect`'s |
+| `Default` impl left in an upper layer | 2 | `CollisionHeight` (`entities::collision_height`), `ui_flags::Sort` (`realm_select`) | Done (Wire B): both impls moved with their types (the inherent-impl matcher did not look at trait impls) |
+| Core → spell | 3 | `Spells`' cast-time helpers take `spell::SpellModifiers` and `OP_CAST_TIME` (`app_core::state`) | Done (Wire B): `spell::SpellsCastTime` |
+| Core → ui_items | 1 | `app_core::state`'s `Key(ui_items::ItemUse)` | App Migration (`ui_items`): `ItemUse` moves down if pure |
 | Core → net | 1 (core alone only) | `app_core::interaction` reads `names::NameCache` | The method leaves core, or takes the name as an argument |
 | `cfg(test)` helper | 1 | `app_core::vm_memo` tests use the root's `test_support::{fn_parameter_lists, rust_files}` | The test moves to the root, or the helpers to a core `test_support` |
-| `launch_plan` unassigned | 1 + 2 | `run_mode` (core) and `realmlist` (net) read `launch_plan::plan()` (bad7aa42) | Table edit: `launch_plan` (process arguments and environment) is core |
+| `launch_plan` unassigned | 1 + 2 | `run_mode` (core) and `realmlist` (net) read `launch_plan::plan()` (bad7aa42) | Done (Wire B): `launch_plan` is in the core row |
 | `net` drains UI state | 4 | `ui_party::net::{member_deactivated, roster_deactivated}` (3), `combat_log::chat::faction_standing` | App Migration's groups (unchanged) |
-| Root module alias | 2 | `names` reaches `NativePetNamePackets` through the root's `use net::{wrath_pet_name_capture as ui_native_pet_name}` | Mechanical: name `net::wrath_pet_name_capture` |
+| Root module alias | 2 | `names` reaches `NativePetNamePackets` through the root's `use net::{wrath_pet_name_capture as ui_native_pet_name}` | Done (Wire B): `names` names `net::wrath_pet_name_capture` |
+
+After those (860a358f, with `launch_plan` moved as core): **core 3, core+net 6**. Left: `ItemUse` and the four
+`net` drains (App Migration, in flight), the `vm_memo` test helper, and in core alone
+`app_core::interaction`'s read of `names::NameCache`.
+After fa933740 (both moved, the `vm_memo` scan to the root): **core 0, core+net 0**: both crates
+build, lib and tests (`cargo check -p benilla-app-core --lib --tests`).
 
 `ConsoleCommandApp` and `capture::ProbeAuctionPlugin` are not net-side. The console trait is used by
 `experience`, `video` (world) and `ui_script`. The probe plugin is named only by `dev` (tools) and in a
 plain-text `ui_auction` comment. They stay with the world → ui rows.
+
+### Move dry run: world and ui (Wire B, 2026-10-21)
+
+On 939f2801 (wrath-hud 2a5560d2 and the core rows), after `canonical-paths.py --apply` (2588
+paths). The layers below each pass go into one crate with it, so a pass shows only the edges out
+of its top layer and below, as resolution errors (distinct `cargo check --lib --tests` sites):
+**world pass** (core + net + world, 71 modules): **62** (49 in the lib); **ui pass** (core through
+ui, 175 modules): **16** (3 in the lib). Each pass's one core → root site, `vm_memo`'s test, is
+gone in fa933740. Not measured: the visibility widening and the cross-crate inherent impls, which
+only separate crates report.
+
+Modules the table above does not list, as the pass placed them. World: `asset_churn`,
+`blob_shadow`, `camera_shake`, `chat_bubble`, `cinematic`, `combat_text`, `doodad_events`,
+`experience`, `experience_ao`, `go_anim`, `inventory`, `loot`, `overlay`, `pipe_warm`,
+`poi_marker`, `area_poi`, `raid_marks`, `ranged_flex`, `screen_fade`, `screenshot`, `shaders`,
+`opaque2d`, `smart_rect`, `world_backdrop`. Ui: `npc_text`, `quest_rewards`, `game_tip`,
+`wrath_vehicle_seats`. Root: `shipped_cvars`, `test_support`.
+
+**World → ui: 61 sites.**
+
+| Cause | Sites | What | Owner |
+|---|---|---|---|
+| 2-D drawing primitives in ui | 20 | `ui_pass::{UiQuad, UiQuads, UiQuadMask, UiQuadMaterial, UiQuadAppend, UvRect, PlayerUiCamera}`, `ui_text::{layout_text_quads, measure_text, FontSpec, Justify, TextSeat, UiFontAtlas}` (3 are `Justify` follow-ons), `ui_models::UiModelTiles`, from `minimap` (6), `chat_bubble`, `nameplates`, `combat_text`, `pipe_warm` (4), `portrait`, `world_backdrop` | **Design:** the quad and text layout primitives move into the world `overlay` module (Native UI's), or the 2-D overlays (`minimap`, `chat_bubble`, `nameplates`, `combat_text`) are ui modules |
+| A ui test fixture | 7 | `ui_items::TestObjects::new` in world tests | Mechanical: the fixture moves to `net::test_support` |
+| Ui-owned state and data | 15 | `ui_guild::{GuildState, unit_guild_name, unit_guild_emblem, corpse_guild_emblem}` (6), `ui_unit::{UnitTokens, player_token_guid}` (4), `ui_loot::LootMoveStart`, `ui_items::ItemSubClasses`, `ui_chat::{default_color, combat::DURABILITYDAMAGE_DEATH}`, `tutorial::id::LOOTING` | Pure moves: `GuildState` (Assets) and `UnitTokens` (Native UI) are in flight |
+| World calls a ui system or helper | 10 | `combat_log::{native::NativeCombatLog, text::{melee_center_text, classify_source}}`, `ui_quest::net::register`, `ui_pet::pet_stop_on_old_target_clear`, `ui_merchant::end_repair_mode_on_right_press`, `ui_party::raid_row_guids`, `ui_action::reagent_totem_refusal`, `tutorial::InputHooks`, `game_tip::tip_bundle` | **Design per row:** a message the ui drains, the caller moving up, or the helper moving down |
+| A ui extension trait called from world | 8 | `ConsoleCommandApp` (`experience`, `video`: 4), `ChatLogFeed::push_combat` (`death`: 2), `AuraDurationsTrace::set` (`spell::net`: 2), each counting its `use` and its call | **Design:** the console trait is the registry question above; the other two methods need their ui feature, so world sends a message or the trait's lower half moves down |
+| `Default` impl in ui | 1 | `app_core::state::LootConfig` | Mechanical: the impl moves to its type |
+
+**Ui → root: 15 sites** (the ui pass's 16, less `vm_memo`).
+
+| Cause | Sites | What | Owner |
+|---|---|---|---|
+| `shipped_cvars` | 11 | `ui_script` reads the root's aggregate (`addons`, `manifest`, `wrath_addons`, five test files) | **Design:** the cvar-registry note above: the root passes the static table in |
+| Root module alias | 2 | `ui_social` reaches `wrath_who_capture` through the root's `use net::{wrath_who_capture as ui_native_who}` | Mechanical |
+| `include_dir!` path | 1 | `ui_script::content` embeds `$CARGO_MANIFEST_DIR/assets/ui` | Mechanical: the assets move with `ui_script`, or the path names `benilla-app` |
+| `cfg(test)` helper | 1 | `ui_session` tests use the root's `test_support` | Mechanical: the test moves to the root, or the helper down |
+
+So of the 76 sites, 27 are mechanical (the fixture 7, the pure moves 15 of which 10 are in flight,
+two aliases, the asset path, the test helper, the `Default` impl), and 49 are four design
+questions: where the 2-D primitives live (20), how world reaches ui systems (10) and ui-feature
+traits (8), and how the root hands `ui_script` the cvar table (11).
 
 ## Moving a layer out (steps 1 to 4)
 
@@ -665,6 +720,4 @@ takes seconds and needs no build. Keep it next to this plan when execution start
 - The root crate keeps `game_plugins`, so a whole-client test still rebuilds everything; the
   savings are for edits and tests inside one layer.
 - `app_core::errors::UiErrorTexts` carries `benilla_ui::messages::MsgKind` (found in step 0
-  unit 2a), so a `benilla-app-core` crate would depend on `benilla-ui` and its mlua build. Before
-  the core move, put that plain enum in a small shared crate both can depend on, or mirror it in
-  core; it must stay a plain enum.
+  unit 2a). Settled by the 2026-10-21 decision: `benilla-app-core` depends on `benilla-ui`.

@@ -59,17 +59,21 @@ pub(super) fn redress_if_dressup(lua: &Lua, this: &Table) -> mlua::Result<()> {
     Ok(())
 }
 
-/// `trunc(tonumber(arg))`, the reference's `__ftol` (`0x40a2b0`) over `lua_tonumber`; anything
-/// else is 0.
+/// The item a `TryOn` names: a number truncated, a digit string, or an item string or link, whose
+/// `item:<id>` field is read, as stock 3.3.5 `DressUpItemLink` passes the link as is
+/// (DressUpFrame.lua:10). Labelled: an item name is not resolved; anything else is 0.
 fn item_arg(v: &Value) -> i64 {
     match v {
         Value::Integer(i) => *i,
         Value::Number(n) => n.trunc() as i64,
-        Value::String(s) => s
-            .to_str()
-            .ok()
-            .and_then(|t| t.trim().parse::<f64>().ok())
-            .map_or(0, |n| n.trunc() as i64),
+        Value::String(s) => {
+            let Ok(t) = s.to_str() else { return 0 };
+            if let Some(rest) = t.split("item:").nth(1) {
+                let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+                return digits.parse().unwrap_or(0);
+            }
+            t.trim().parse::<f64>().map_or(0, |n| n.trunc() as i64)
+        }
         _ => 0,
     }
 }
@@ -170,7 +174,8 @@ mod tests {
         }
     }
 
-    /// The stock `DressUpItemLink` passes the link's digits: a digit string is an id, a link is 0.
+    /// A digit string is an id, and so is a link's `item:` field, which stock 3.3.5
+    /// `DressUpItemLink` passes whole.
     #[test]
     fn the_verbs_queue_intents_in_order_and_try_on_reads_its_argument_like_the_client() {
         let mut s = room();
@@ -198,6 +203,7 @@ mod tests {
                 DressUpIntent::Undress,
                 DressUpIntent::Dress,
                 DressUpIntent::Dress,
+                DressUpIntent::TryOn(117),
             ]
         );
         // The same two PlayerModel verbs on a paper-doll pane queue nothing.

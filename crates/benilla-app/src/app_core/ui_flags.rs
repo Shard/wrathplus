@@ -2,7 +2,6 @@
 //! pointer's click and hover, the glue canvas, the realm list and the login intent; their owners
 //! keep the systems and re-export the types.
 
-use crate::realm_select::RealmsSelect;
 use benilla_formats::RealmCategory;
 use benilla_protocol::RealmInfo;
 use bevy::prelude::*;
@@ -159,18 +158,6 @@ impl Realms {
         self.selected = Some(name.to_string());
     }
 
-    /// `RealmListUpdate` with no clicked name: the highlight is the row `GetRealmInfo` flags
-    /// `currentRealm`, [`Self::current`] case-folded, on the tab in front, or none.
-    pub(crate) fn highlight_current(&mut self) {
-        self.selected = self.current.as_deref().and_then(|want| {
-            self.rows()
-                .into_iter()
-                .map(|i| &self.realms[i])
-                .find(|r| r.name.eq_ignore_ascii_case(want))
-                .map(|r| r.name.clone())
-        });
-    }
-
     /// `RealmList:Hide()`, and nothing else.
     pub(crate) fn hide(&mut self) {
         self.shown = false;
@@ -196,6 +183,17 @@ pub(crate) enum SortKey {
 /// (`0x46e430`), so a click persists for the session. Ascending characters is higher count first.
 #[derive(Clone, Copy)]
 pub(crate) struct Sort(pub(crate) [(SortKey, bool); 4]);
+
+impl Default for Sort {
+    fn default() -> Self {
+        Self([
+            (SortKey::Characters, false),
+            (SortKey::Load, false),
+            (SortKey::Name, false),
+            (SortKey::Type, false),
+        ])
+    }
+}
 
 impl Sort {
     /// A column header click (`0x46e9b0`): the front key toggles its direction; any other moves

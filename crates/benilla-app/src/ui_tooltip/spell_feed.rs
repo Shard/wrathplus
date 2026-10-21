@@ -16,6 +16,7 @@ use super::spell_deps::{Chance, Changes, Deps, RangeSeen, Reagents, Seen, UnitFi
 use crate::items::Items;
 use crate::net::{NetCommands, ObjectStore, Objects, SelfPlayer};
 use crate::spell::usable::{self, CostBasis};
+use crate::spell::SpellsCastTime;
 use crate::ui_action::{PlayerActions, Spells};
 use crate::ui_items::{count_of, InventoryScope};
 use crate::ui_trainer::TrainerTooltipSubjects;

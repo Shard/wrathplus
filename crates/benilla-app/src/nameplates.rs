@@ -9,9 +9,9 @@
 //!   reference does.
 //! - Seat: the top line's baseline is at `anchor.z + lineCount*scale` and the block hangs down one
 //!   pitch per line (`0x5cdc20`'s rotated branch).
-//! - Show gate (`ShouldShowName`, `0x6070a0`): the own unit by `UnitNameOwn`, before the target
-//!   rescue; the current target (`[0xb4e2d8]`, the selection) regardless of CVars; a dead creature
-//!   only through that rescue; others by their kind's `UnitName*` CVar ([`NameConfig::shows`]).
+//! - Show gate (build 12340's unit `ShouldShowName`, `0x729c70`): the own unit by `UnitNameOwn`;
+//!   the current target (`[0xbd07b0]`, the selection) regardless of CVars; others by their kind's
+//!   `UnitName*` CVar ([`NameConfig::shows`]).
 //! - Lines (`0x608f50`): an NPC's name and `<Subname>`; a player's `<AFK>`/`<DND>`/`<GM>` prefixes,
 //!   name and `<Guild>`. The guild (a5) and subname (a6) slots share the format `"\n<%s>"`
 //!   (`0x860f9c`) and are never both reached; a5 alone is CVar-gated (`0x609085`).
@@ -96,32 +96,62 @@ impl NameConfig {
         self.0 & bit != 0
     }
 
-    /// Whether a non-own, non-target unit's name shows: its kind's CVar, the kind being the plate
-    /// gate's [`crate::vplates::UnitSort`] and reaction. Unresolved, labelled: build 12340 asks
-    /// the unit's own virtual (`vtable+0xd0`, called at `0x7e567d` and `0x7e63f6` with the mask),
-    /// untraced; this pairs each CVar with the kind its name and options text describe.
-    pub(crate) fn shows(self, friendly: bool, sort: crate::vplates::UnitSort) -> bool {
+    /// Whether a non-own, non-target unit's name shows: build 12340's unit `ShouldShowName`
+    /// (`0x729c70`, CGUnit vtable `+0xd0`, asked with this mask at `0x7e567d`/`0x7e63f6`).
+    /// - A player: friendly (`0x729b30`) by `FriendlyPlayerName`; otherwise `EnemyPlayerName`,
+    ///   and none while stealthed.
+    /// - Any other unit that can be attacked while stealthed: none.
+    /// - An unowned unit: `NonCombatCreatureName` for a critter or non-combat pet, else
+    ///   `UnitNameNPC`.
+    /// - A player-owned unit: a totem by the enemy or friendly totem CVar as it can be attacked or
+    ///   not; a creator-only guardian by `EnemyGuardianName` whatever its reaction (`0x729d9c`,
+    ///   so `FriendlyGuardianName` gates nothing here); a pet by `FriendlyPetName` when friendly
+    ///   or ours, else `EnemyPetName`; the creator-only flag-`0x200` case by
+    ///   `NonCombatCreatureName`.
+    ///
+    /// Unresolved, labelled: the leading `vtable+0xa8` and `[0xac80a8]` legs; the owner is
+    /// [`crate::vplates::unit_sort`]'s, where this virtual takes the charmer else the creator.
+    pub(crate) fn shows(self, u: &NameSubject) -> bool {
         use crate::vplates::UnitSort;
         use name_bit::*;
-        let (player, pet, guardian, totem) = if friendly {
-            (
-                FRIENDLY_PLAYER,
-                FRIENDLY_PET,
-                FRIENDLY_GUARDIAN,
-                FRIENDLY_TOTEM,
-            )
-        } else {
-            (ENEMY_PLAYER, ENEMY_PET, ENEMY_GUARDIAN, ENEMY_TOTEM)
-        };
-        self.on(match sort {
-            UnitSort::Player => player,
-            UnitSort::Pet => pet,
-            UnitSort::Guardian => guardian,
-            UnitSort::Totem => totem,
+        if u.sort == UnitSort::Player {
+            return if u.friendly {
+                self.on(FRIENDLY_PLAYER)
+            } else {
+                self.on(ENEMY_PLAYER) && !u.stealthed
+            };
+        }
+        if u.stealthed && u.attackable {
+            return false;
+        }
+        let owned = matches!(u.sort, UnitSort::Totem | UnitSort::Guardian | UnitSort::Pet);
+        self.on(match u.sort {
+            _ if owned && u.creator_flag_200 => NON_COMBAT,
+            UnitSort::Totem if u.attackable => ENEMY_TOTEM,
+            UnitSort::Totem => FRIENDLY_TOTEM,
+            UnitSort::Guardian => ENEMY_GUARDIAN,
+            UnitSort::Pet if u.friendly || u.ours => FRIENDLY_PET,
+            UnitSort::Pet => ENEMY_PET,
             UnitSort::NonCombat => NON_COMBAT,
-            UnitSort::Creature => NPC,
+            UnitSort::Creature | UnitSort::Player => NPC,
         })
     }
+}
+
+/// What [`NameConfig::shows`] reads of a unit.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct NameSubject {
+    pub(crate) sort: crate::vplates::UnitSort,
+    /// `0x729b30` from the player: same faction group and not attackable.
+    pub(crate) friendly: bool,
+    /// `CanAttack` from the player (`0x729740`).
+    pub(crate) attackable: bool,
+    /// `UNIT_FIELD_BYTES_1` byte 2 `0x2` (`+0x112`).
+    pub(crate) stealthed: bool,
+    /// Charmed, summoned or created by the local player.
+    pub(crate) ours: bool,
+    /// A creator, no summoner and flags bit 9 (`0x716140`, `0x53b8c0`, `+0xd4`).
+    pub(crate) creator_flag_200: bool,
 }
 
 /// The a1-a3 prefix slots of the line stack (`0x608f50`), CGPlayer vtable `+0x7c/+0x80/+0x84`
@@ -425,9 +455,8 @@ pub(crate) fn drive_nameplates(
         }
         // No distance cull: the name's update, cull and build (`0x6c6d40`, `0x6c6e00`,
         // `0x6c6e90`) compare none; the 20-yard cap (`0x60f600`) is the V-key frame's.
-        // ShouldShowName's order: own unit by its CVar, the target (`[0xb4e2d8]`), the kind CVar.
-        // A V-key plate or chat bubble (`+0xe64`) suppresses the name (`0x6070a0`). A dead
-        // creature shows only as the target, as in the reference; that gate leg is untraced.
+        // ShouldShowName's order (`0x729c70`): own unit by its CVar, the target, the kind CVar.
+        // A V-key plate or chat bubble suppresses the name.
         let show = if vplates.0.contains(&entity) || bubbles.0.contains(&entity) {
             false
         } else if is_self {
@@ -440,8 +469,6 @@ pub(crate) fn drive_nameplates(
                     > 0.0
         } else if selection.target == Some(entity) {
             true
-        } else if net.kind == EntityKind::Unit && store.is_some_and(|s| s.0.unit_is_dead()) {
-            false
         } else {
             let is_player = net.kind == EntityKind::Player;
             let own = self_store.single().ok();
@@ -457,12 +484,34 @@ pub(crate) fn drive_nameplates(
                 .and_then(|s| s.0.object_entry())
                 .filter(|_| !is_player)
                 .and_then(|entry| names.creature_type(entry));
+            let attackable = crate::target::ring::can_attack_from_player(
+                factions.as_deref(),
+                &reputations,
+                store,
+                own,
+                relations.context(),
+            );
+            let me = own.and_then(|o| {
+                o.0.get_field_guid(benilla_protocol::types::Field::ObjectGuid, 0)
+            });
             matches!(net.kind, EntityKind::Player | EntityKind::Unit)
                 && store.is_some_and(|s| {
-                    name_cfg.shows(
+                    let linked = |g: Option<u64>| g.filter(|&g| g != 0);
+                    let (charmer, summoner, creator) = (
+                        linked(s.0.unit_charmed_by()),
+                        linked(s.0.unit_summoned_by()),
+                        linked(s.0.unit_created_by()),
+                    );
+                    name_cfg.shows(&NameSubject {
+                        sort: crate::vplates::unit_sort(is_player, &s.0, creature_type),
                         friendly,
-                        crate::vplates::unit_sort(is_player, &s.0, creature_type),
-                    )
+                        attackable,
+                        stealthed: s.0.unit_is_stealthed(),
+                        ours: me.is_some() && [charmer, summoner, creator].contains(&me),
+                        creator_flag_200: creator.is_some()
+                            && summoner.is_none()
+                            && s.0.unit_flags() & 0x200 != 0,
+                    })
                 })
         };
         if !show {
@@ -758,6 +807,68 @@ fn evict_name_meshes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `0x729c70`'s kind ladder over the registered defaults (guild, PvP title, both reactions'
+    /// player and pet names on; NPC, totems, guardians, non-combat off).
+    #[test]
+    fn the_unit_should_show_name_ladder() {
+        use crate::vplates::UnitSort;
+        let subject = |sort| NameSubject {
+            sort,
+            friendly: false,
+            attackable: false,
+            stealthed: false,
+            ours: false,
+            creator_flag_200: false,
+        };
+        let cfg = NameConfig::default();
+        assert!(cfg.shows(&subject(UnitSort::Player)), "enemy player on");
+        assert!(!cfg.shows(&NameSubject {
+            stealthed: true,
+            ..subject(UnitSort::Player)
+        }));
+        assert!(cfg.shows(&NameSubject {
+            friendly: true,
+            stealthed: true,
+            ..subject(UnitSort::Player)
+        }));
+        assert!(!cfg.shows(&subject(UnitSort::Creature)), "UnitNameNPC is 0");
+        assert!(cfg.shows(&subject(UnitSort::Pet)), "pets are on");
+        assert!(!cfg.shows(&NameSubject {
+            stealthed: true,
+            attackable: true,
+            ..subject(UnitSort::Pet)
+        }));
+        let npc_on = NameConfig(name_bit::NPC);
+        assert!(npc_on.shows(&subject(UnitSort::Creature)));
+        assert!(
+            !npc_on.shows(&subject(UnitSort::NonCombat)),
+            "critters have their own"
+        );
+        // A guardian answers to the enemy bit whatever its reaction.
+        let friendly_guardians = NameConfig(name_bit::FRIENDLY_GUARDIAN);
+        let friendly_guardian = NameSubject {
+            friendly: true,
+            ..subject(UnitSort::Guardian)
+        };
+        assert!(!friendly_guardians.shows(&friendly_guardian));
+        assert!(NameConfig(name_bit::ENEMY_GUARDIAN).shows(&friendly_guardian));
+        // Totems split on attackable; our pet is a friendly pet.
+        let totems = NameConfig(name_bit::ENEMY_TOTEM);
+        assert!(totems.shows(&NameSubject {
+            attackable: true,
+            ..subject(UnitSort::Totem)
+        }));
+        assert!(!totems.shows(&subject(UnitSort::Totem)));
+        assert!(NameConfig(name_bit::FRIENDLY_PET).shows(&NameSubject {
+            ours: true,
+            ..subject(UnitSort::Pet)
+        }));
+        assert!(NameConfig(name_bit::NON_COMBAT).shows(&NameSubject {
+            creator_flag_200: true,
+            ..subject(UnitSort::Guardian)
+        }));
+    }
 
     /// `>` not `>=` at the knee and `0.075*d` beyond: the jump at the knee is the reference's.
     #[test]

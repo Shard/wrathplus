@@ -51,7 +51,7 @@ const SPELL: &str = "DBFilesClient\\Spell.dbc";
 
 /// The 1.12 record's 173 fields plus slots for the 3.3.5-only columns the build-12340 layout
 /// maps in (`wrath_layouts::spell`); a 1.12 file no longer parses.
-const SPELL_FIELDS: usize = 189;
+const SPELL_FIELDS: usize = 190;
 /// `SpellFamilyFlags[2]`, family bits 64-95 (3.3.5 column 211; AzerothCore `flag96
 /// SpellFamilyFlags`, 209-211).
 const COL_SPELL_FAMILY_FLAGS_2: usize = 173;
@@ -61,11 +61,13 @@ const COL_EFFECT_SPELL_CLASS_MASK_1: usize = 174;
 /// `AttributesEx5` (3.3.5 column 9, `+0x24`): the usable-while-stunned/feared/confused bits the
 /// pet bar's slot predicate reads (`0x5d3fd0`).
 const COL_ATTRIBUTES_EX5: usize = 186;
+/// `AttributesEx7` (3.3.5 column 11, `+0x2c`), read by the interrupt masks (`0x53ca70`).
+const COL_ATTRIBUTES_EX7: usize = 187;
 /// `RuneCostID` (3.3.5 column 226): the `SpellRuneCost.dbc` row a rune-cost spell (power type 5)
 /// spends.
-const COL_RUNE_COST_ID: usize = 187;
+const COL_RUNE_COST_ID: usize = 188;
 /// `PowerDisplayId` (3.3.5 column 228): the `PowerDisplay.dbc` row naming a vehicle power.
-const COL_POWER_DISPLAY_ID: usize = 188;
+const COL_POWER_DISPLAY_ID: usize = 189;
 /// `Category` (`+0x8`): the shared-cooldown `SpellCategory.dbc` id, such as potions 4.
 const COL_CATEGORY: usize = 2;
 const COL_CAST_UI: usize = 3;
@@ -195,7 +197,6 @@ const COL_EFFECT_POINTS_PER_COMBO_POINT_1: usize = 112;
 
 /// The per-effect `[3]` arrays, each constant slot 0; die sides and base points are signed.
 const COL_EFFECT_DIE_SIDES_1: usize = 64;
-const COL_EFFECT_BASE_DICE_1: usize = 67;
 const COL_EFFECT_DICE_PER_LEVEL_1: usize = 70;
 const COL_EFFECT_REAL_POINTS_PER_LEVEL_1: usize = 73;
 const COL_EFFECT_BASE_POINTS_1: usize = 76;
@@ -422,7 +423,7 @@ impl SpellCatalog {
     }
 }
 
-/// 187 slots, `u32` but for `Speed`, the four float effect arrays and the four enUS string heads;
+/// 190 slots, `u32` but for `Speed`, the four float effect arrays and the four enUS string heads;
 /// the signed columns stay `u32`, as [`i32_at`] reads the same bits.
 fn spell_schema() -> Schema {
     let mut s = Schema::new("Spell");
@@ -476,8 +477,6 @@ fn spell_schema() -> Schema {
 
 /// Load the joined spell display catalog off the patch chain.
 pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
-    // Build 12340 stores a school mask where 1.12 stores the school's index.
-    let school_is_mask = matches!(chain.profile(), crate::DataProfile::Wrath { .. });
     let icons = crate::dbc::load_spell_icon_map(chain)?;
     let dispel_types = load_spell_dispel_types(chain)?;
     // Categories whose `SpellCategory.dbc` flags carry `0x2` match every cooldown query
@@ -578,15 +577,10 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 attributes_ex3: u32_at(r, COL_ATTRIBUTES_EX3).unwrap_or(0),
                 attributes_ex4: u32_at(r, COL_ATTRIBUTES_EX4).unwrap_or(0),
                 attributes_ex5: u32_at(r, COL_ATTRIBUTES_EX5).unwrap_or(0),
-                school: u32_at(r, COL_SCHOOL)
-                    .map(|v| {
-                        if school_is_mask && v != 0 {
-                            v.trailing_zeros()
-                        } else {
-                            v
-                        }
-                    })
-                    .unwrap_or(0),
+                attributes_ex7: u32_at(r, COL_ATTRIBUTES_EX7).unwrap_or(0),
+                // Slot 1 is build 12340's `SchoolMask` (column 225, `+0x284`); `school` its lowest.
+                school_mask: u32_at(r, COL_SCHOOL).unwrap_or(0),
+                school: u32_at(r, COL_SCHOOL).map_or(0, |v| v.trailing_zeros() % 32),
                 mechanic: u32_at(r, COL_MECHANIC).unwrap_or(0),
                 effect_mechanic: std::array::from_fn(|i| {
                     u32_at(r, COL_EFFECT_MECHANIC_1 + i).unwrap_or(0)
@@ -688,14 +682,9 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 effect_die_sides: std::array::from_fn(|i| {
                     i32_at(r, COL_EFFECT_DIE_SIDES_1 + i).unwrap_or(0)
                 }),
+                // 3.3.5 has no BaseDice: AC's CalcValue rolls one die for positive DieSides.
                 effect_base_dice: std::array::from_fn(|i| {
-                    if school_is_mask {
-                        // 3.3.5 removed BaseDice. AC SpellEffectInfo::CalcValue rolls
-                        // one die for positive DieSides; zero sides adds nothing.
-                        i32::from(i32_at(r, COL_EFFECT_DIE_SIDES_1 + i).unwrap_or(0) > 0)
-                    } else {
-                        i32_at(r, COL_EFFECT_BASE_DICE_1 + i).unwrap_or(0)
-                    }
+                    i32::from(i32_at(r, COL_EFFECT_DIE_SIDES_1 + i).unwrap_or(0) > 0)
                 }),
                 effect_dice_per_level: std::array::from_fn(|i| {
                     i32_at(r, COL_EFFECT_DICE_PER_LEVEL_1 + i).unwrap_or(0)

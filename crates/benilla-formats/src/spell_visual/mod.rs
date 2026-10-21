@@ -9,16 +9,17 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
-use crate::dbc::{f32_at, i32_at, parse, str_at, u32_at};
+use crate::dbc::{f32_at, i32_at, parse, u32_at};
 use crate::Chain;
 
 pub mod chain_effects;
+mod effect_names;
 
 pub use chain_effects::{ChainEffect, ChainProc, CHAIN_MAX_BEAMS};
+pub use effect_names::EffectScale;
 
 const SPELL_VISUAL: &str = "DBFilesClient\\SpellVisual.dbc";
 const SPELL_VISUAL_KIT: &str = "DBFilesClient\\SpellVisualKit.dbc";
-const SPELL_VISUAL_EFFECT_NAME: &str = "DBFilesClient\\SpellVisualEffectName.dbc";
 
 const SPELL_VISUAL_FIELDS: usize = 16;
 const SPELL_VISUAL_KIT_FIELDS: usize = 35;
@@ -292,6 +293,7 @@ pub struct SpellVisualCatalog {
     /// The `"HARDCODED *"` rows, name → (id, path): the effects the engine spawns itself, which the
     /// client resolves by name at boot against 14 baked strings (`0x61f5b0`).
     hardcoded: HashMap<String, (u32, String)>,
+    effect_scales: HashMap<u32, EffectScale>,
     chain_effects: HashMap<u32, ChainEffect>,
     chain_raw: HashMap<u32, Vec<u8>>,
 }
@@ -312,6 +314,7 @@ impl SpellVisualCatalog {
             kits,
             effect_paths,
             hardcoded: HashMap::new(),
+            effect_scales: HashMap::new(),
             chain_effects: HashMap::new(),
             chain_raw: HashMap::new(),
         }
@@ -375,6 +378,14 @@ impl SpellVisualCatalog {
             .filter(|p| !p.is_empty())
     }
 
+    /// A `SpellVisualEffectName` id's scale and world-size bounds; the identity without a row.
+    pub fn effect_scale(&self, effect_id: u32) -> EffectScale {
+        self.effect_scales
+            .get(&effect_id)
+            .copied()
+            .unwrap_or_default()
+    }
+
     /// An engine-spawned effect's `(id, model path)` by its baked name, compared without case as
     /// the client's boot resolve (`0x61f5b0`) does.
     pub fn hardcoded_effect(&self, name: &str) -> Option<(u32, &str)> {
@@ -410,20 +421,6 @@ fn n_u32_schema(name: &str, fields: usize) -> Schema {
     let mut s = Schema::new(name);
     for i in 0..fields {
         s.add_field(SchemaField::new(format!("F{i}"), FieldType::UInt32));
-    }
-    s
-}
-
-/// `SpellVisualEffectName`: id, name, model path, and two columns the client never reads.
-fn effect_name_schema() -> Schema {
-    let mut s = Schema::new("SpellVisualEffectName");
-    for i in 0..5 {
-        let ty = if i == 1 || i == 2 {
-            FieldType::String
-        } else {
-            FieldType::UInt32
-        };
-        s.add_field(SchemaField::new(format!("F{i}"), ty));
     }
     s
 }
@@ -532,34 +529,15 @@ pub fn load_spell_visual_catalog(chain: &mut Chain) -> Result<SpellVisualCatalog
         );
     }
 
-    let sven_bytes = chain
-        .read_file(SPELL_VISUAL_EFFECT_NAME)
-        .context("reading SpellVisualEffectName.dbc")?;
-    let sven_set = parse(
-        &sven_bytes,
-        effect_name_schema(),
-        "SpellVisualEffectName.dbc",
-    )?;
-    let mut effect_paths = HashMap::with_capacity(sven_set.records().len());
-    let mut hardcoded = HashMap::new();
-    for r in sven_set.records() {
-        let Some(id) = u32_at(r, 0) else { continue };
-        if let Some(path) = str_at(&sven_set, r, 2) {
-            // Only the rows the client's boot resolve can hit, those named "HARDCODED …".
-            if let Some(name) = str_at(&sven_set, r, 1).filter(|n| n.starts_with("HARDCODED ")) {
-                hardcoded.insert(name, (id, path.clone()));
-            }
-            effect_paths.insert(id, path);
-        }
-    }
-
+    let names = effect_names::load(chain)?;
     let chains = chain_effects::load(chain).context("reading SpellChainEffects.dbc")?;
 
     Ok(SpellVisualCatalog {
         visuals,
         kits,
-        effect_paths,
-        hardcoded,
+        effect_paths: names.paths,
+        hardcoded: names.hardcoded,
+        effect_scales: names.scales,
         chain_effects: chains.effects,
         chain_raw: chains.raw,
     })

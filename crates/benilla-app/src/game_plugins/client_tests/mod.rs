@@ -67,3 +67,4 @@ mod ui_stable_wrath_tests;
 mod ui_tooltip_tests;
 mod ui_unit;
 mod ui_unit_held;
+mod vm_memo_locals_tests;

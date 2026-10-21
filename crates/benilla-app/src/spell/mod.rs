@@ -40,9 +40,9 @@ pub(crate) use inflight::{
 };
 #[cfg(test)]
 pub(crate) use inflight::cast_test_support;
-pub(crate) use mods::{ModsDiff, SpellModifiers, OP_CAST_TIME, OP_COST, OP_GCD, OP_RADIUS};
+pub(crate) use mods::{ModsDiff, SpellModifiers, SpellsCastTime, OP_COST, OP_GCD, OP_RADIUS};
 #[cfg(test)]
-pub(crate) use mods::{OP_COOLDOWN, OP_RANGE};
+pub(crate) use mods::{OP_CAST_TIME, OP_COOLDOWN, OP_RANGE};
 pub(crate) use range_units::{RangeUnits, DEFAULT_REACH};
 // `TargetingWants` is exported for the ground reticle, which draws for the location word alone.
 pub(crate) use targeting::{
@@ -99,15 +99,6 @@ impl Plugin for SpellPlugin {
                     mods::track_class_family
                         .after(WorldStage::Net)
                         .before(UnitFeed),
-                    // The state push runs before the input pass's `ToggleGameMenu`, whose
-                    // `SpellStopTargeting` lands with the script calls after it. After the
-                    // old-target clear, the pet bar's writer in the feed: `"pet"` resolves off
-                    // the bar. After the aura feed, whose resolver inputs list the units the
-                    // hover verdict is asked for.
-                    targeting::feed_targeting_to_vm
-                        .in_set(UnitFeed)
-                        .after(crate::ui_pet::pet_stop_on_old_target_clear)
-                        .after(crate::ui_aura::AuraEvents),
                     (
                         targeting::publish_picks_self,
                         targeting::publish_corpse_pick,

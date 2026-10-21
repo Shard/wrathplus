@@ -2,7 +2,6 @@
 //! bank, reader, gossip, binder, meeting stone, spirit healer, taxi, trade skill, merchant,
 //! social lists and tabard designer; their owners keep the systems and re-export the types.
 
-use crate::ui_gossip::GossipGreeting;
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -311,60 +310,6 @@ impl GossipState {
     pub(crate) fn text_pending(&self) -> bool {
         self.npc.is_some() && self.greeting.is_none()
     }
-
-    /// Latch a `SMSG_GOSSIP_MESSAGE` menu; `true` when the caller owes the `CMSG_NPC_TEXT_QUERY`.
-    /// A `text_id` of 0 stays pending: the reference's `DBCache::Get` never queries id 0.
-    pub(crate) fn open_menu(
-        &mut self,
-        npc: u64,
-        text_id: u32,
-        options: Vec<GossipOption>,
-        quests: Vec<(u32, u32, u32, String)>,
-        npc_gender: u8,
-    ) -> bool {
-        self.npc = Some(npc);
-        self.text_id = text_id;
-        self.options = options;
-        self.quests = quests;
-        self.quest_info.clear();
-        self.greeting = None;
-        if text_id == 0 {
-            return false;
-        }
-        match self.cached_record(text_id).is_some() {
-            true => {
-                self.resolve_greeting(npc_gender);
-                false
-            }
-            false => true,
-        }
-    }
-
-    /// Cache a `SMSG_NPC_TEXT_UPDATE` record and resolve the menu waiting on it, if any. An open
-    /// menu's greeting is not re-drawn: the reference's cache callback re-enters only for the
-    /// query it was registered for.
-    pub(crate) fn text_arrived(&mut self, text_id: u32, blocks: Vec<NpcTextBlock>, npc_gender: u8) {
-        self.remember_record(text_id, blocks);
-        if self.npc.is_some() && self.text_id == text_id && self.greeting.is_none() {
-            self.resolve_greeting(npc_gender);
-        }
-    }
-
-    /// Draw the open menu's greeting, or end the interaction when the record has no line for the
-    /// NPC's gender: the reference's missing-text path (`0x4e216e`) logs "Missing gossip text!"
-    /// and fires `GOSSIP_CLOSED`. Here the clear makes the feed fire it if a menu was showing.
-    pub(crate) fn resolve_greeting(&mut self, npc_gender: u8) {
-        match self.draw_greeting(self.text_id, npc_gender) {
-            Some(line) => self.greeting = Some(line),
-            None => {
-                debug!(
-                    "ui_gossip: missing gossip text (id {}) — ending the interaction",
-                    self.text_id
-                );
-                self.clear();
-            }
-        }
-    }
 }
 
 /// The innkeeper's pending bind question; everything the dialog reads rides the event's argument.
@@ -637,12 +582,12 @@ impl SocialState {
     }
 
     /// `SetFriendNotes(index | name, notes)`' friend: the 1-based row as last shown, else the
-    /// friend whose known name matches, case-insensitively.
-    pub(crate) fn friend_guid(
+    /// friend whose known name (`name_of`, the name cache's peek) matches, case-insensitively.
+    pub(crate) fn friend_guid<'n>(
         &self,
         index: Option<u32>,
         name: Option<&str>,
-        names: &crate::names::NameCache,
+        name_of: impl Fn(u64) -> Option<&'n str>,
     ) -> Option<u64> {
         if let Some(i) = index {
             return (i as usize)
@@ -653,7 +598,7 @@ impl SocialState {
         self.friends
             .iter()
             .map(|f| f.guid)
-            .find(|&g| names.peek(g).is_some_and(|n| n.eq_ignore_ascii_case(name)))
+            .find(|&g| name_of(g).is_some_and(|n| n.eq_ignore_ascii_case(name)))
     }
 
     /// Is `guid` on the friend list? The reference's `FindFriendSlot` (`0x5ae810`), which keeps the

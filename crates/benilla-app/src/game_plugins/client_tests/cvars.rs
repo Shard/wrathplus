@@ -190,6 +190,16 @@ fn registered_defaults_mirror_the_code_truths() {
     assert_eq!(d["nameplateShowEnemies"] != 0.0, plates.enemies);
     assert_eq!(d["nameplateShowFriends"] != 0.0, plates.friends);
     assert_eq!(d["nameplateShowEnemyTotems"] != 0.0, plates.enemy_totems);
+    assert_eq!(d["showVKeyCastbar"] != 0.0, plates.cast_bar);
+    assert!(
+        plates.cast_bar,
+        "the binary registers showVKeyCastbar \"1\""
+    );
+    assert_eq!(d["threatWarning"], f32::from(plates.threat_warning));
+    assert_eq!(
+        plates.threat_warning, 3,
+        "the binary registers threatWarning \"3\""
+    );
     assert_eq!(
         d["nameplateShowFriendlyGuardians"] != 0.0,
         plates.friendly_guardians

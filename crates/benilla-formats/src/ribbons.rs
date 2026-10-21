@@ -41,6 +41,11 @@ pub struct RibbonEmitterDef {
     /// The model's sequences, the look tracks' slot clocks. Empty for the single-lane 1.12
     /// parse, whose keys are rebased onto sequence 0 and sampled on seconds since spawn.
     pub sequences: SeqTable,
+    /// The first material's flag `0x1`: the ribbon draws unlit (`0x980b70` sets lighting off,
+    /// `0x8731c0`); otherwise the scene lights it. 1,445 of the install's 1,502 ribbons.
+    pub unlit: bool,
+    /// The first material's flag `0x2`: no fog (`0x873390`); 1,181 of 1,502.
+    pub unfogged: bool,
 }
 
 /// The `+0xc0` enable track per `AnimationData.dbc` id: step keys in band-local seconds, the

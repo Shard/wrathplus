@@ -32,8 +32,14 @@ pub(super) use scrolling::REG_SCROLLINGMESSAGEFRAME_METHODS;
 /// full keyring and gets a silent click. Only the text is gated so: a bad colour still adds the
 /// line in white (`0x79581c`), and the receiver checks (`0x847ef8`) still raise. A number becomes
 /// its decimal text (`0x6f7c80`).
+///
+/// The line is stored grammar-resolved ([`crate::grammar`]), as its fontstring's setter
+/// (`0x483910`, called from the line set `0x61c620`) would draw it. Inferred: that call's flag was
+/// not read.
 pub(super) fn message_text(lua: &mlua::Lua, v: &mlua::Value) -> Option<String> {
-    super::binding_abi::optional_string(lua, v).filter(|s| !s.is_empty())
+    super::binding_abi::optional_string(lua, v)
+        .filter(|s| !s.is_empty())
+        .map(crate::grammar::resolve_owned)
 }
 
 /// Install `SetJustifyH`, `GetJustifyH`, `SetJustifyV` and `GetJustifyV`, which both classes carry,

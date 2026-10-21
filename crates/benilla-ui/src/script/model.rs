@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::layout::{LayoutInput, LayoutSolver, Rect};
-use crate::widget::{FrameHandle, RegionHandle, WidgetArena};
+use crate::widget::{FrameHandle, HandleMap, RegionHandle, WidgetArena};
 
 use super::{
     auction, backdrop, bank, bind_confirm, camera_view, char_stats, chat_window, colorselect,
@@ -113,9 +113,9 @@ pub(crate) struct Model {
         std::cell::RefCell<std::collections::HashMap<String, crate::framexml::Element>>,
     pub(crate) arena: WidgetArena,
     /// Per-frame anchors, size and scale; every live frame has one from creation on.
-    pub(crate) layout_inputs: HashMap<FrameHandle, LayoutInput>,
+    pub(crate) layout_inputs: HandleMap<FrameHandle, LayoutInput>,
     /// Each resolvable frame's rect from the last resolve.
-    pub(crate) resolved: HashMap<FrameHandle, Rect>,
+    pub(crate) resolved: HandleMap<FrameHandle, Rect>,
     /// The anchor solver, kept across resolves so a steady round allocates nothing; scratch only.
     pub(crate) solver: LayoutSolver,
     /// Tier 2 of the resolve gate, the last converged inputs' fingerprint; `None` forces a resolve.
@@ -158,7 +158,7 @@ pub(crate) struct Model {
     /// Per frame, rasterized links `(y-up rect, link, full |H…|h markup)` for `OnHyperlinkClick`.
     pub(crate) link_spans: HashMap<FrameHandle, Vec<(Rect, String, String)>>,
     /// Region visuals (texture, colour, text) and layout (anchors, size, justify).
-    pub(crate) region_data: HashMap<RegionHandle, RegionData>,
+    pub(crate) region_data: HandleMap<RegionHandle, RegionData>,
     /// Each frame's backdrop plate (`<Backdrop>` or `SetBackdrop`, the client's `frame+0x1ac`).
     pub(crate) backdrops: HashMap<FrameHandle, backdrop::Backdrop>,
     /// `CSimpleHTML`'s state: element fonts `+0x350`, link format `+0x360`, content nodes `+0x340`.
@@ -168,14 +168,14 @@ pub(crate) struct Model {
     pub(crate) font_objects_by_lower: HashMap<String, FontObject>,
     /// Anchored regions' owner-relative rects from the last resolve; anchor-less ones are absent.
     pub(crate) animation_transforms: std::collections::BTreeMap<usize, (crate::order::ZTarget, Vec<super::animation::transforms::Transform>)>,
-    pub(crate) region_resolved: HashMap<RegionHandle, Rect>,
+    pub(crate) region_resolved: HandleMap<RegionHandle, Rect>,
 
     /// The next object id to mint; ids start at 1, since 0 is `SCREEN`.
     pub(crate) next_id: u32,
     pub(crate) id_to_frame: IdMap<FrameHandle>,
-    pub(crate) frame_to_id: HashMap<FrameHandle, u32>,
+    pub(crate) frame_to_id: HandleMap<FrameHandle, u32>,
     pub(crate) id_to_region: IdMap<RegionHandle>,
-    pub(crate) region_to_id: HashMap<RegionHandle, u32>,
+    pub(crate) region_to_id: HandleMap<RegionHandle, u32>,
     /// Region name to id, first wins: `SetPoint` anchors to a sibling region by name, after frames.
     pub(crate) region_names: HashMap<String, u32>,
 
@@ -477,6 +477,8 @@ pub(crate) struct Model {
     pub(crate) wrath_chat_verbs: Vec<super::wrath_chat_verbs::WrathChatVerbRequest>,
     /// StaticPopup's dialog answers and the state its dialogs read.
     pub(crate) wrath_popup: super::wrath_static_popup::State,
+    /// The glue VM's login-slice state ([`super::glue`]).
+    pub(crate) glue: super::glue::GlueState,
     pub(crate) wrath_unit_popup: super::wrath_unit_popup::State,
     pub(crate) wrath_titles: super::wrath_titles::State,
     /// Socketed gems by `(bag, slot)`, [`super::cursor::EQUIPMENT_BAG`] for worn items.
@@ -872,6 +874,8 @@ pub(crate) struct Model {
     pub(crate) quest_log_collapses: Vec<(u32, bool)>,
     /// Watched quest ids in watch order, pruned when a quest leaves the log.
     pub(crate) quest_log_watched: Vec<u32>,
+    /// A timed watch's expiry, in `GetTime` seconds, by quest id; a permanent watch has none.
+    pub(crate) quest_log_watch_expiry: HashMap<u32, f64>,
     /// The server's clock in Unix seconds, `None` before `SMSG_QUERY_TIME_RESPONSE`. A quest
     /// deadline is a stamp in it, and `GetQuestTimers` subtracts per call, as the reference does.
     pub(crate) server_unix_time: Option<f64>,
@@ -1146,7 +1150,7 @@ impl Model {
             load_log: Default::default(),
             framexml_fonts: Default::default(),
             arena: WidgetArena::new(),
-            layout_inputs: HashMap::new(),
+            layout_inputs: HandleMap::default(),
             solver: LayoutSolver::new(),
             layout_fingerprint: None,
             layout_epoch: 0,
@@ -1162,19 +1166,19 @@ impl Model {
             layout_solves: 0,
             layout_gate_walks: 0,
             layout_rounds: 0,
-            resolved: HashMap::new(),
+            resolved: HandleMap::default(),
             link_spans: HashMap::new(),
-            region_data: HashMap::new(),
+            region_data: HandleMap::default(),
             backdrops: HashMap::new(),
             simple_html: simplehtml::SimpleHtmlStates::new(),
             font_objects_by_lower: HashMap::new(),
             animation_transforms: Default::default(),
-            region_resolved: HashMap::new(),
+            region_resolved: HandleMap::default(),
             next_id: 1,
             id_to_frame: IdMap::default(),
-            frame_to_id: HashMap::new(),
+            frame_to_id: HandleMap::default(),
             id_to_region: IdMap::default(),
-            region_to_id: HashMap::new(),
+            region_to_id: HandleMap::default(),
             region_names: HashMap::new(),
             scripts: HashMap::new(),
             on_update_frames: Vec::new(),
@@ -1315,6 +1319,7 @@ impl Model {
             wrath_combat_log: Default::default(),
             wrath_chat_verbs: Vec::new(),
             wrath_popup: Default::default(),
+            glue: Default::default(),
             wrath_unit_popup: Default::default(),
             wrath_titles: Default::default(),
             wrath_item_gems: Vec::new(),
@@ -1527,6 +1532,7 @@ impl Model {
             spell_tooltip_waits: HashMap::new(),
             quest_log_collapses: Vec::new(),
             quest_log_watched: Vec::new(),
+            quest_log_watch_expiry: HashMap::new(),
             server_unix_time: None,
             worldmap: super::worldmap::WorldMapState::default(),
             nameplates: super::nameplate::NamePlates::default(),

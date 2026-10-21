@@ -226,16 +226,8 @@ pub fn partcensus(chain: &mut Chain, prefix: Option<&str>) -> Result<()> {
                 benilla_formats::ParticleBlend::Alpha => hit("blend:alpha"),
                 benilla_formats::ParticleBlend::AlphaKey => hit("blend:alphakey"),
                 benilla_formats::ParticleBlend::Opaque => hit("blend:opaque"),
-            }
-            // The raw blend byte disambiguates what the parsed enum folds: 5 = Mod, 6 = Mod2x.
-            {
-                const STRIDE: usize = 0x1f8;
-                let base = u32::from_le_bytes(bytes[0x140..0x144].try_into().unwrap()) as usize;
-                match bytes[base + i * STRIDE + 0x28] {
-                    5 => hit("blend:MOD(5)"),
-                    6 => hit("blend:MOD2X(6)"),
-                    _ => {}
-                }
+                benilla_formats::ParticleBlend::Mod => hit("blend:mod"),
+                benilla_formats::ParticleBlend::Mod2x => hit("blend:mod2x"),
             }
             if d.flags & 0x1 == 0 {
                 hit("flag:LIT(0x1 clear)");

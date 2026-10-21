@@ -23,7 +23,7 @@ fn installed_wrath_remaining_mapped_catalogs() {
     assert_eq!(voices.len(), 1306);
     let v = voices.for_model(1).unwrap();
     assert_eq!(v.death, 569);
-    assert_eq!(v.fidget, [0, 0, 571, 572]);
+    assert_eq!(v.fidget, [0, 0, 571, 572, 0]);
     assert_eq!(v.custom_attack, [0, 7374, 0, 0]);
     let pets = benilla_formats::load_pet_personalities(&mut chain).unwrap();
     assert_eq!(pets.len(), 2);
