@@ -287,6 +287,7 @@ pub use ribbons::{RibbonEmitterDef, RibbonVisibility};
 mod value_track;
 pub use value_track::{SeqClock, SeqTable, SeqTrack, TrackValue, ValueTrack};
 mod models;
+pub use benilla_m2::wrath::WrathCamera;
 pub use models::wrath::{
     parse_wrath_render_model, parse_wrath_render_model_with_animations, sample_wrath_camera,
     wrath_render_animation_dependencies, WrathBoneInterpolation, WrathCameraPose, WrathRenderModel,
@@ -305,7 +306,7 @@ pub use models::{
     AnimEvent, ArtExtent, BatchFootprint, Billboard,
     BillboardKind, BoneKeys, BoneScaleAnim, BoneSpin, CharSkinSlot, CollisionMesh, Coverage,
     CoverageReader, EventMarker, FogPolicy, FootprintTris, GlobalSeqBone,
-    GlobalSeqChannel, GroundQuad, KeyAnim, M2Attachment, M2Bounds, M2CameraTracks, M2Light,
+    GlobalSeqChannel, GroundQuad, KeyAnim, M2Attachment, M2Bounds, M2Light,
     M2LightAnim, M2PortraitCamera, ModelAnimation, ModelBlend, ParentArm, ParentBasis, PlayableAnim,
     RenderSubmesh, RgbAnim, ScalarAnim, SeqLoops, ShippedGlueScene, Skeleton, SkeletonBone,
     StringAnchors, UvAnim, UvRotAnim, WmoBatchClass, WmoDoodad, WmoDoodadSet, WmoFog,

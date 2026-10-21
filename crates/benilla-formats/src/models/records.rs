@@ -227,14 +227,3 @@ pub fn parse_wmo_lights(root_bytes: &[u8]) -> Vec<WmoLight> {
     }
     Vec::new()
 }
-
-/// A moving camera's tracks and bases, the publish pass's inputs (`0x718960`,
-/// `[0x718b60, 0x718c3a)`): `eye = position_base + positions(t)`, likewise the target.
-#[derive(Debug, Clone)]
-pub struct M2CameraTracks {
-    pub positions: benilla_m2::M2Vec3SplineTrack,
-    pub position_base: [f32; 3],
-    pub target: benilla_m2::M2Vec3SplineTrack,
-    pub target_base: [f32; 3],
-    pub roll: benilla_m2::M2ScalarSplineTrack,
-}
