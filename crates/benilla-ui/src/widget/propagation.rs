@@ -415,7 +415,7 @@ impl WidgetArena {
             }
             cur = self.frame(c).and_then(|f| f.parent);
             guard += 1;
-            if guard > self.frames.slots.len() {
+            if guard > self.frames.capacity() {
                 break; // a well-formed tree never loops
             }
         }

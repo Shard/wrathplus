@@ -5,7 +5,7 @@
 use benilla_ui::script::{parse_unit_token, UnitBase, UnitTokenParse};
 use bevy::prelude::*;
 
-use crate::app_core::group::{raid_row_guid, GroupState};
+use crate::app_core::{group::GroupState, raid_rows::raid_row_guid};
 use crate::app_core::state::PetBar;
 use crate::net::{Guid, GuidIndex, ObjectStore, SelfPlayer};
 use crate::target::{Hovered, HoveredObject, Selection};
