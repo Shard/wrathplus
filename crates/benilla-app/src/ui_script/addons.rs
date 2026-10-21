@@ -358,9 +358,9 @@ pub(super) const WRATH_BLIZZARD_ADDONS: [&str; 24] = [
 ];
 
 /// Every Blizzard addon the chain carries: the LoadOnDemand rows `UIParentLoadAddOn` reaches, and
-/// the one startup addon, `Blizzard_TokenUI` (its 30300 toc has no `LoadOnDemand`), which the walk
-/// loads like any enabled addon. Stock `CharacterFrame_ShowSubFrame` walks `TokenFrame`
-/// unguarded, so the reference has it from login, before any `TokenFrame_LoadUI`.
+/// the one startup addon, `Blizzard_TokenUI` (its 30300 toc has no `LoadOnDemand`), which
+/// [`load_wrath_startup_blizzard`] loads with the core. Stock `CharacterFrame_ShowSubFrame` walks
+/// `TokenFrame` unguarded, so the reference has it from login, before any `TokenFrame_LoadUI`.
 fn chain_addons(names: &[&str]) -> Vec<Addon> {
     names
         .iter()
@@ -787,9 +787,13 @@ pub(super) fn load_wrath_third_party(
     roster: &[String],
     version_check: bool,
 ) -> Vec<String> {
-    // The archive's Blizzard addons first, then the loose folders, a name's first registration
-    // winning.
-    let mut addons = chain_addons(&WRATH_BLIZZARD_ADDONS);
+    // The archive's LoadOnDemand Blizzard rows first, then the loose folders, a name's first
+    // registration winning. The archive's startup addon loads apart, right after the core
+    // ([`load_wrath_startup_blizzard`]).
+    let mut addons: Vec<Addon> = chain_addons(&WRATH_BLIZZARD_ADDONS)
+        .into_iter()
+        .filter(|addon| addon.toc.load_on_demand())
+        .collect();
     let seen: HashSet<String> = addons.iter().map(|a| a.name.to_ascii_lowercase()).collect();
     addons.extend(
         discover_folder()
@@ -844,9 +848,9 @@ pub(super) fn load_wrath_third_party(
     state.failures
 }
 
-/// The archive's startup Blizzard addons alone (`Blizzard_TokenUI`), what a clean login loads
-/// besides FrameXML, for a VM whose addon registry its caller owns (the test rig, the harness):
-/// no rows are registered and no folder is read.
+/// The archive's startup Blizzard addons (`Blizzard_TokenUI`), loaded right after the core, as a
+/// clean login has them. Outside the registry walk, whose rows stay the LoadOnDemand ones: no row
+/// is registered and no folder is read, so a caller's own registry (the rig, the harness) stands.
 pub(super) fn load_wrath_startup_blizzard(script: &mut UiScript) -> Vec<String> {
     let startup: Vec<Addon> = chain_addons(&WRATH_BLIZZARD_ADDONS)
         .into_iter()
