@@ -111,6 +111,12 @@ pub struct SpellDisplay {
     pub mana_cost_per_level: u32,
     /// `manaPerSecond` (column 34): the tooltip's "plus N per sec"; column 35 is 0 on every row.
     pub mana_per_second: u32,
+    /// `RuneCostID`: the `SpellRuneCost.dbc` row a rune-cost spell spends
+    /// ([`SpellCatalog::rune_cost`]).
+    pub rune_cost_id: u32,
+    /// `PowerDisplayId`: the `PowerDisplay.dbc` row naming a vehicle power
+    /// ([`SpellCatalog::power_display`]); 0 for none.
+    pub power_display_id: u32,
     /// `rangeIndex` (column 36): the `SpellRange.dbc` row.
     pub range_index: u32,
     /// `Targets` (column 13): the `TARGET_FLAG_*` seed of the cast arm's targeting word.
@@ -263,6 +269,8 @@ impl Default for SpellDisplay {
             mana_cost_pct: 0,
             mana_cost_per_level: 0,
             mana_per_second: 0,
+            rune_cost_id: 0,
+            power_display_id: 0,
             range_index: 0,
             targets: 0,
             target_creature_type: 0,

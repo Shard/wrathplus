@@ -51,7 +51,7 @@ const SPELL: &str = "DBFilesClient\\Spell.dbc";
 
 /// The 1.12 record's 173 fields plus slots for the 3.3.5-only columns the build-12340 layout
 /// maps in (`wrath_layouts::spell`); a 1.12 file no longer parses.
-const SPELL_FIELDS: usize = 187;
+const SPELL_FIELDS: usize = 189;
 /// `SpellFamilyFlags[2]`, family bits 64-95 (3.3.5 column 211; AzerothCore `flag96
 /// SpellFamilyFlags`, 209-211).
 const COL_SPELL_FAMILY_FLAGS_2: usize = 173;
@@ -61,6 +61,11 @@ const COL_EFFECT_SPELL_CLASS_MASK_1: usize = 174;
 /// `AttributesEx5` (3.3.5 column 9, `+0x24`): the usable-while-stunned/feared/confused bits the
 /// pet bar's slot predicate reads (`0x5d3fd0`).
 const COL_ATTRIBUTES_EX5: usize = 186;
+/// `RuneCostID` (3.3.5 column 226): the `SpellRuneCost.dbc` row a rune-cost spell (power type 5)
+/// spends.
+const COL_RUNE_COST_ID: usize = 187;
+/// `PowerDisplayId` (3.3.5 column 228): the `PowerDisplay.dbc` row naming a vehicle power.
+const COL_POWER_DISPLAY_ID: usize = 188;
 /// `Category` (`+0x8`): the shared-cooldown `SpellCategory.dbc` id, such as potions 4.
 const COL_CATEGORY: usize = 2;
 const COL_CAST_UI: usize = 3;
@@ -301,6 +306,19 @@ pub struct SpellCatalog {
     /// Spell id to the `Languages.dbc` id its first effect declares.
     declared_language: HashMap<u32, u32>,
     dispel_types: SpellDispelTypes,
+    /// `SpellRuneCost.dbc` by id.
+    rune_costs: HashMap<u32, RuneCost>,
+    /// `PowerDisplay.dbc` by id: the `GlobalStrings.lua` key naming the power.
+    power_displays: HashMap<u32, String>,
+}
+
+/// One `SpellRuneCost.dbc` row's runes, columns 1-3 as the 12340 tooltip reads them (`0x623d21`):
+/// Blood, then Unholy, then Frost.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RuneCost {
+    pub blood: u32,
+    pub unholy: u32,
+    pub frost: u32,
 }
 
 impl SpellCatalog {
@@ -330,7 +348,30 @@ impl SpellCatalog {
             learn_effects,
             declared_language: HashMap::new(),
             dispel_types: SpellDispelTypes::default(),
+            rune_costs: HashMap::new(),
+            power_displays: HashMap::new(),
         }
+    }
+
+    /// A test catalog's rune and power-display rows.
+    pub fn with_cost_tables(
+        mut self,
+        rune_costs: HashMap<u32, RuneCost>,
+        power_displays: HashMap<u32, String>,
+    ) -> Self {
+        self.rune_costs = rune_costs;
+        self.power_displays = power_displays;
+        self
+    }
+
+    /// The `SpellRuneCost.dbc` row `id`.
+    pub fn rune_cost(&self, id: u32) -> Option<RuneCost> {
+        self.rune_costs.get(&id).copied()
+    }
+
+    /// The `GlobalStrings.lua` key `PowerDisplay.dbc` row `id` names its power by.
+    pub fn power_display(&self, id: u32) -> Option<&str> {
+        self.power_displays.get(&id).map(String::as_str)
     }
 
     /// A spell's learn effects in slot order, empty for a plain ability.
@@ -591,6 +632,8 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 mana_cost_pct: u32_at(r, COL_MANA_COST_PCT).unwrap_or(0),
                 mana_cost_per_level: u32_at(r, COL_MANA_COST_PER_LEVEL).unwrap_or(0),
                 mana_per_second: u32_at(r, COL_MANA_PER_SECOND).unwrap_or(0),
+                rune_cost_id: u32_at(r, COL_RUNE_COST_ID).unwrap_or(0),
+                power_display_id: u32_at(r, COL_POWER_DISPLAY_ID).unwrap_or(0),
                 range_index: u32_at(r, COL_RANGE_INDEX).unwrap_or(0),
                 modal_next_spell: u32_at(r, COL_MODAL_NEXT_SPELL).unwrap_or(0),
                 targets: u32_at(r, COL_TARGETS).unwrap_or(0),
@@ -698,7 +741,57 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
         learn_effects,
         declared_language,
         dispel_types,
+        rune_costs: load_rune_costs(chain)?,
+        power_displays: load_power_displays(chain)?,
     })
+}
+
+/// `SpellRuneCost.dbc`, 3.3.5-only: id, three rune counts, the runic power gain.
+fn load_rune_costs(chain: &mut Chain) -> Result<HashMap<u32, RuneCost>> {
+    let bytes = chain
+        .read_file("DBFilesClient\\SpellRuneCost.dbc")
+        .context("reading SpellRuneCost.dbc")?;
+    let mut s = Schema::new("SpellRuneCost");
+    for name in ["ID", "Blood", "Unholy", "Frost", "RunicPowerGain"] {
+        s.add_field(SchemaField::new(name, FieldType::UInt32));
+    }
+    let rs = parse(&bytes, s, "SpellRuneCost.dbc")?;
+    Ok(rs
+        .records()
+        .iter()
+        .filter_map(|r| {
+            let at = |i| u32_at(r, i).unwrap_or(0);
+            Some((
+                u32_at(r, 0)?,
+                RuneCost {
+                    blood: at(1),
+                    unholy: at(2),
+                    frost: at(3),
+                },
+            ))
+        })
+        .collect())
+}
+
+/// `PowerDisplay.dbc`, 3.3.5-only: id, the actual power type, the `GlobalStrings.lua` key, and
+/// the bar colour.
+fn load_power_displays(chain: &mut Chain) -> Result<HashMap<u32, String>> {
+    let bytes = chain
+        .read_file("DBFilesClient\\PowerDisplay.dbc")
+        .context("reading PowerDisplay.dbc")?;
+    let mut s = Schema::new("PowerDisplay");
+    s.add_field(SchemaField::new("ID", FieldType::UInt32));
+    s.add_field(SchemaField::new("ActualType", FieldType::UInt32));
+    s.add_field(SchemaField::new("GlobalStringBaseTag", FieldType::String));
+    for name in ["Red", "Green", "Blue"] {
+        s.add_field(SchemaField::new(name, FieldType::UInt32));
+    }
+    let rs = parse(&bytes, s, "PowerDisplay.dbc")?;
+    Ok(rs
+        .records()
+        .iter()
+        .filter_map(|r| Some((u32_at(r, 0)?, str_at(&rs, r, 2)?)))
+        .collect())
 }
 
 #[cfg(test)]
