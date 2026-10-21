@@ -51,9 +51,6 @@ fn count(
     objects: &Objects,
     matches: &mut impl FnMut(&ObjectFields) -> Option<bool>,
 ) -> Option<u64> {
-    if store.layout() != benilla_protocol::types::FieldLayout::Wrath12340 {
-        return None;
-    }
     let mut total = 0u64;
     let mut path = Vec::new();
     let mut visit = |guid: Option<u64>| -> Option<()> {

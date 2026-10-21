@@ -92,8 +92,7 @@ impl Plugin for UiChatPlugin {
             .init_resource::<channels::ZoneChannelWalk>()
             .init_resource::<recruitment::GuildRecruitmentCascade>()
             .init_resource::<language::ChatLanguages>()
-            .init_resource::<combat::CombatLogRanges>()
-            // `combat::on_cvar` writes this and the range set: a missing one panics on the first
+            // `combat::on_cvar` writes this: a missing one panics on the first
             // write, which only `scripts/smoke.sh` sees (the unit suites build their own worlds).
             .init_resource::<combat::LogPeriodicSpells>()
             // These DBC loads must follow `AssetSet::Open`: before it there is no chain, and each
@@ -118,11 +117,6 @@ impl Plugin for UiChatPlugin {
                     language::feed_default_language,
                 )
                     .before(feed::feed_chat),
-            )
-            // Descriptor-diff combat-log lines, ahead of the drain so none lands a frame late.
-            .add_systems(
-                Update,
-                (combat::watch::death_lines, combat::watch::aura_lines).before(feed::feed_chat),
             )
             // Before the drain, so a broadcast lands on the frame it decodes.
             .add_systems(

@@ -115,9 +115,8 @@ pub(super) struct ArcEdges {
 /// the forward, back and strafe transitions go silent and their live bits ride the packets that do
 /// go out. Sends are fire-and-forget; updates `player`'s last-sent flags, facing and heartbeat.
 ///
-/// A settle hold sends no `CMSG_MOVE_TIME_SKIPPED`: the build-12340 writer does not admit it (its
-/// packed-GUID body, AzerothCore `MovementHandler.cpp::HandleMoveTimeSkippedOpcode`), so the held
-/// time is dropped.
+/// `CMSG_MOVE_TIME_SKIPPED` is the controller's, for a frame longer than the mover's 250 ms step
+/// (`mover::capped_step`).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn stream_self_movement(
     sender: &CommandSender,

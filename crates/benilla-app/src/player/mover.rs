@@ -54,6 +54,23 @@ pub(super) struct Outcome {
     pub ground: Option<Entity>,
 }
 
+/// The longest step the mover integrates (`0x6f09f0`, `0xfa` ms).
+pub(super) const MAX_STEP: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// `time` with its delta capped at [`MAX_STEP`], and the whole milliseconds skipped past it: the
+/// reference integrates 250 ms of a longer frame and reports the rest for the active mover as
+/// `CMSG_MOVE_TIME_SKIPPED` (`0x6f09f0` → `0x6e9b20` → `0x717d90`).
+pub(super) fn capped_step(time: &Time) -> (Time, u32) {
+    let delta = time.delta();
+    if delta <= MAX_STEP {
+        return (*time, 0);
+    }
+    let mut capped = Time::default();
+    capped.advance_to(time.elapsed() - MAX_STEP);
+    capped.advance_by(MAX_STEP);
+    (capped, (delta - MAX_STEP).as_millis() as u32)
+}
+
 /// Advance the player mover one frame, writing its position and velocities.
 pub(super) fn step(
     player: &mut Player,

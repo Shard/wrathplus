@@ -1,6 +1,6 @@
 //! Actual authored observed-unit addon coverage for the bounded Wrath host.
 
-use benilla_ui::script::{ScriptDialect, ScriptValue, UiScript, UnitState};
+use benilla_ui::script::{ScriptValue, UiScript, UnitState};
 
 use super::load_bootstrap;
 
@@ -17,7 +17,7 @@ fn unit(name: Option<&str>, guid: u64, health: u32, max_health: u32, level: u32)
 }
 
 fn load_units() -> UiScript {
-    let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut script = UiScript::new().unwrap();
     script.set_screen_size(1024.0, 768.0);
     assert!(load_bootstrap(&script).is_empty());
     script

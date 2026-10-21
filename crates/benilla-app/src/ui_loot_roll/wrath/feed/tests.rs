@@ -19,7 +19,7 @@ fn independent_limits_short_circuit_without_fabricating_unknown_counts() {
     assert_eq!(capacity(1, 0, 2, || Some(u64::MAX), |_| None), None);
 }
 fn script() -> UiScript {
-    let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let script = UiScript::new().unwrap();
     script.run("STARTS=0; CANCELS=0; local f=CreateFrame('Frame'); f:RegisterEvent('START_LOOT_ROLL'); f:RegisterEvent('CANCEL_LOOT_ROLL'); f:SetScript('OnEvent',function(self,event,id,countdown) if event=='START_LOOT_ROLL' then STARTS=STARTS+1; local _,name=GetLootRollItemInfo(id); SEEN=name; COUNTDOWN=countdown else CANCELS=CANCELS+1 end end)").unwrap();
     script
 }

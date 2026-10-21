@@ -84,13 +84,12 @@ pub(super) fn query_statuses(
     if store.is_changed() {
         state.fields = self_generation(&store.0);
     }
-    let wrath = store.0.layout() == benilla_protocol::types::FieldLayout::Wrath12340;
     // Deliberate conservative superset, authorised for Wrath: the native refresh body
     // 00729f40 is proven, but its descriptor-watch chain is not. TODO trace the native
     // BYTES_2 watch registration. Coalesce own PvP/FFA edges at most once per second;
     // retain pending work even if no further descriptor update arrives.
     let pvp_refresh = state.pvp_refresh.poll(
-        wrath.then(|| (store.0.unit_is_pvp(), store.0.unit_is_ffa_pvp())),
+        Some((store.0.unit_is_pvp(), store.0.unit_is_ffa_pvp())),
         std::time::Instant::now(),
     );
     let generation = state.fields ^ (u64::from(quest.reask_epoch()) << 32);
@@ -145,10 +144,9 @@ pub(super) fn query_statuses(
                     Some(&*obj),
                     Some(&store),
                 );
-                // Wrath refresh 00729f40 clears below internal rank 3; Vanilla
-                // 005eb143 only clears Hated/Hostile. Neutral fallback stays visible.
-                if reaction < if wrath { 3 } else { 2 } {
-                    // The sweep's one teardown (`0x5eb143`), questgiver or not. Dropping the ask
+                // The refresh 00729f40 clears below internal rank 3, questgiver or not.
+                if reaction < 3 {
+                    // The sweep's one teardown, questgiver or not. Dropping the ask
                     // key brings the marker back through a `0x607380` when the reaction recovers.
                     state.asked.remove(&guid.0);
                     tear_down(&mut quest, &mut ecs);

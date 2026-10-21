@@ -841,7 +841,7 @@ mod tests {
         let mut world = World::new();
         world.spawn((Window { resolution: WindowResolution::new(1600, 1000), ..Default::default() }, PrimaryWindow));
         for _ in 0..2 {
-            let mut script = benilla_ui::script::UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();
+            let mut script = benilla_ui::script::UiScript::new().unwrap();
             seed_display_modes(&mut world, &mut script);
             script.run("local r = ({GetScreenResolutions()})[GetCurrentResolution()] assert(r == '1600x1000')").unwrap();
         }

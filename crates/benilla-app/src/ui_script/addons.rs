@@ -31,6 +31,9 @@ pub(super) enum Source {
     Dir(PathBuf),
     /// The player's patch chain ([`super::reference_ui`]), by full chain path, `/` and `\` alike.
     Chain,
+    /// A Blizzard addon the chain carries: chain reads, its toc entries under its own
+    /// `Interface/AddOns/<Name>` folder, as a `Dir` addon's are.
+    ChainAddon,
 }
 
 /// One loadable interface: a name, its parsed manifest, and where its files come from.
@@ -75,16 +78,16 @@ impl Addon {
                     .map(String::into_bytes)
             }
             Source::Dir(root) => read_addon_file(root, req),
-            Source::Chain => super::reference_ui::read(req),
+            Source::Chain | Source::ChainAddon => super::reference_ui::read(req),
         }
     }
 
     /// The base this addon's manifest entries resolve against: `Interface/AddOns/<Folder>` for a
-    /// `Dir`, empty for the shipped flat tree and the chain's full paths.
+    /// `Dir` and a chain addon, empty for the shipped flat tree and the core's full chain paths.
     fn prefix(&self) -> String {
         match &self.source {
             Source::Builtin | Source::Chain => String::new(),
-            Source::Dir(_) => format!("{ADDONS_PREFIX}{}", self.name),
+            Source::Dir(_) | Source::ChainAddon => format!("{ADDONS_PREFIX}{}", self.name),
         }
     }
 
@@ -95,7 +98,9 @@ impl Addon {
     fn chunk_name(&self, file: &str, path: &str) -> String {
         match &self.source {
             Source::Builtin => benilla_ui::script::addon_chunk_name(&self.name, file),
-            Source::Dir(_) | Source::Chain => format!("@{}", path.replace('/', "\\")),
+            Source::Dir(_) | Source::Chain | Source::ChainAddon => {
+                format!("@{}", path.replace('/', "\\"))
+            }
         }
     }
 
@@ -179,7 +184,9 @@ impl Addon {
                 // the package's fault, which the reference skips silently, and an ERROR line fails
                 // `smoke.sh`.
                 match self.source {
-                    Source::Builtin | Source::Chain => error!("ui_script: {e}"),
+                    Source::Builtin | Source::Chain | Source::ChainAddon => {
+                        error!("ui_script: {e}")
+                    }
                     Source::Dir(_) => warn!("ui_script: {e}"),
                 }
                 // Retained for the player: the commonest way an addon fails with nothing on screen.
@@ -238,7 +245,9 @@ impl Addon {
             for m in &report.missing_files {
                 let e = format!("{}/{file}: {m}", self.name);
                 match self.source {
-                    Source::Builtin | Source::Chain => error!("ui_script: {e}"),
+                    Source::Builtin | Source::Chain | Source::ChainAddon => {
+                        error!("ui_script: {e}")
+                    }
                     Source::Dir(_) => warn!("ui_script: {e}"),
                 }
                 script.report_load_failure(&e);
@@ -348,18 +357,20 @@ pub(super) const WRATH_BLIZZARD_ADDONS: [&str; 24] = [
     "Blizzard_TrainerUI",
 ];
 
-/// The Blizzard addons the chain carries as LoadOnDemand registry rows, for `UIParentLoadAddOn`;
-/// a toc that is not LoadOnDemand is skipped, as the startup walk does not read the chain.
+/// Every Blizzard addon the chain carries: the LoadOnDemand rows `UIParentLoadAddOn` reaches, and
+/// the one startup addon, `Blizzard_TokenUI` (its 30300 toc has no `LoadOnDemand`), which
+/// [`load_wrath_startup_blizzard`] loads with the core. Stock `CharacterFrame_ShowSubFrame` walks
+/// `TokenFrame` unguarded, so the reference has it from login, before any `TokenFrame_LoadUI`.
 fn chain_addons(names: &[&str]) -> Vec<Addon> {
     names
         .iter()
         .filter_map(|name| {
             let bytes = super::reference_ui::read(&format!(r"Interface\AddOns\{name}\{name}.toc"))?;
             let toc = Toc::parse(&benilla_ui::source::decode(&bytes));
-            toc.load_on_demand().then(|| Addon {
+            Some(Addon {
                 name: (*name).to_string(),
                 toc,
-                source: Source::Chain,
+                source: Source::ChainAddon,
             })
         })
         .collect()
@@ -443,7 +454,7 @@ fn manifest_in(dir: &Path, name: &str) -> Option<String> {
 /// The AddOn API's registry row for one discovered addon.
 fn info_for(addon: &Addon) -> benilla_ui::script::AddOnInfo {
     let mut info = info_from_toc(&addon.name, &addon.toc);
-    info.chain = matches!(addon.source, Source::Chain);
+    info.chain = matches!(addon.source, Source::Chain | Source::ChainAddon);
     info
 }
 
@@ -768,17 +779,21 @@ const SAVED_HEADER: &str = "\
 -- Written at logout/exit from the live globals; executed as a Lua chunk at addon load.
 ";
 
-/// Discover and load only player addons from `benilla-config/AddOns` under the 30300 gate. No
-/// archive Blizzard rows or binding files are admitted on this route.
+/// The addon walk under the 30300 gate: the archive's Blizzard addons ([`chain_addons`]), then the
+/// player's from `benilla-config/AddOns`. No binding files are admitted on this route.
 pub(super) fn load_wrath_third_party(
     script: &mut UiScript,
     identity: Option<&(String, String)>,
     roster: &[String],
     version_check: bool,
 ) -> Vec<String> {
-    // The archive's Blizzard addons first, then the loose folders, a name's first registration
-    // winning, as `discover` orders the 1.12 registry.
-    let mut addons = chain_addons(&WRATH_BLIZZARD_ADDONS);
+    // The archive's LoadOnDemand Blizzard rows first, then the loose folders, a name's first
+    // registration winning. The archive's startup addon loads apart, right after the core
+    // ([`load_wrath_startup_blizzard`]).
+    let mut addons: Vec<Addon> = chain_addons(&WRATH_BLIZZARD_ADDONS)
+        .into_iter()
+        .filter(|addon| addon.toc.load_on_demand())
+        .collect();
     let seen: HashSet<String> = addons.iter().map(|a| a.name.to_ascii_lowercase()).collect();
     addons.extend(
         discover_folder()
@@ -829,6 +844,26 @@ pub(super) fn load_wrath_third_party(
         }
         script.set_instruction_budget(LOAD_INSTRUCTION_BUDGET);
         let _ = state.load(script, &addons, &addon.name);
+    }
+    state.failures
+}
+
+/// The archive's startup Blizzard addons (`Blizzard_TokenUI`), loaded right after the core, as a
+/// clean login has them. Outside the registry walk, whose rows stay the LoadOnDemand ones: no row
+/// is registered and no folder is read, so a caller's own registry (the rig, the harness) stands.
+pub(super) fn load_wrath_startup_blizzard(script: &mut UiScript) -> Vec<String> {
+    let startup: Vec<Addon> = chain_addons(&WRATH_BLIZZARD_ADDONS)
+        .into_iter()
+        .filter(|addon| !addon.toc.load_on_demand())
+        .collect();
+    let mut state = Walk {
+        version_check: true,
+        client_interface: 30300,
+        ..Walk::default()
+    };
+    for addon in &startup {
+        script.set_instruction_budget(LOAD_INSTRUCTION_BUDGET);
+        let _ = state.load(script, &startup, &addon.name);
     }
     state.failures
 }
@@ -2106,7 +2141,7 @@ mod tests {
     /// restores only the current character's saved state in a replacement VM.
     #[test]
     fn actual_wrath_observer_report_loads_on_demand_and_restores_per_character_state() {
-        use benilla_ui::script::{ScriptDialect, UnitState};
+        use benilla_ui::script::UnitState;
 
         let _l = crate::local_state::test_env::ENV_LOCK
             .lock()
@@ -2147,7 +2182,7 @@ mod tests {
         );
 
         let start = |identity: &(String, String)| {
-            let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+            let mut script = UiScript::new().unwrap();
             script.set_screen_size(1024.0, 768.0);
             script.seed_cvars(
                 crate::cvars::Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS).vm_seed(),

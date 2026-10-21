@@ -3,7 +3,7 @@
 //! and `LOOT_CLOSED`, and [`drain_loot`] sends what the Lua asked for.
 
 #[cfg(test)]
-use crate::app_core::group::GROUPTYPE_RAID;
+use crate::app_core::state::GROUPTYPE_RAID;
 use benilla_protocol::types::{slot_type, ItemPushResult, LootItem, BAG_PLAYER_INVENTORY};
 use bevy::prelude::*;
 
@@ -493,64 +493,20 @@ fn feed_loot(
             if templates_outstanding(&items, snap) {
                 return;
             }
-            let wrath = script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340;
             // Auto-loot (`autoLootDefault`), inverted by a held Shift (`AUTOLOOTTOGGLE`).
             let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
             let auto = cfg.auto_loot != shift;
-            if wrath {
-                // Build 12340 (`0x5896b0`): an auto-loot window sweeps instead (`0x588f90`), then
-                // opens with `autoLoot` 1 while anything remains (`0x588eb0`), else releases
-                // (`CloseLoot(1, 0, 0)`). Labelled: the flag is sampled here, where the reference
-                // samples it at the request send (`0x6dcd70` → `0x513700`, `[player+0x18e8]`).
-                if !auto {
-                    script.fire_event("LOOT_OPENED", vec![ScriptValue::Int(0)]);
-                } else if loot.is_empty() {
-                    loot.arm_auto_release();
-                } else {
-                    wrath_auto_loot(&mut loot, &commands, &items, &mut script, &mut pickup, snap);
-                    script.fire_event("LOOT_OPENED", vec![ScriptValue::Int(1)]);
-                }
+            // Build 12340 (`0x5896b0`): an auto-loot window sweeps instead (`0x588f90`), then
+            // opens with `autoLoot` 1 while anything remains (`0x588eb0`), else releases
+            // (`CloseLoot(1, 0, 0)`). Labelled: the flag is sampled here, where the reference
+            // samples it at the request send (`0x6dcd70` → `0x513700`, `[player+0x18e8]`).
+            if !auto {
+                script.fire_event("LOOT_OPENED", vec![ScriptValue::Int(0)]);
+            } else if loot.is_empty() {
+                loot.arm_auto_release();
             } else {
-                script.fire_event("LOOT_OPENED", vec![]);
-            }
-            // Every row gets a hand pick's sends, and emptying the window auto-releases it.
-            if !wrath && auto {
-                let mut bind_confirm_fired = false;
-                for index in 1..=snap.rows.len() as u32 {
-                    match loot.action_at(index) {
-                        Some(LootAction::Money) => {
-                            let _ = commands.0.send(ClientCommand::LootMoney);
-                        }
-                        // Only `ALLOW_LOOT` rows: the reference's sweep skips any other slot type
-                        // (`0x4c2180`/`0x4c2196`).
-                        Some(LootAction::Item {
-                            wire_slot,
-                            display_id,
-                            item_id,
-                            slot_type,
-                        }) if slot_type == slot_type::ALLOW_LOOT => {
-                            // A hand click's bind gate plus a one-shot latch (`0x4c21c2`,
-                            // `0x4c21e2`): later bind-on-pickup rows stay, untaken and unasked.
-                            if bind_confirm_required(&items, &commands, item_id, slot_type) {
-                                if bind_confirm_fired {
-                                    continue;
-                                }
-                                loot.pending_bind_confirm = Some(index);
-                                script.fire_event(
-                                    "LOOT_BIND_CONFIRM",
-                                    vec![ScriptValue::Int(i64::from(index))],
-                                );
-                                bind_confirm_fired = true;
-                                continue;
-                            }
-                            let _ = commands
-                                .0
-                                .send(ClientCommand::AutostoreLootItem { slot: wire_slot });
-                            pickup.write(crate::sound::LootPickupSound { display_id });
-                        }
-                        Some(LootAction::Item { .. }) | None => {}
-                    }
-                }
+                wrath_auto_loot(&mut loot, &commands, &items, &mut script, &mut pickup, snap);
+                script.fire_event("LOOT_OPENED", vec![ScriptValue::Int(1)]);
             }
         }
         // One `LOOT_SLOT_CLEARED` per row that went, with its 1-based row: the stock handler hides
@@ -1183,8 +1139,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<LootState>()
             .open(0x42, loot_type::CORPSE, gold, rows);
-        let script =
-            UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();
+        let script = UiScript::new().unwrap();
         script
             .run(
                 "OPENED = {} CONFIRMS = {}\n\

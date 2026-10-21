@@ -1,9 +1,7 @@
 //! Immutable build-12340 metadata and current authenticated context; not queue policy.
 use std::sync::Arc;
 
-use benilla_ui::script::{
-    ScriptDialect, UiScript, WrathLfgCatalog, WrathLfgDungeon, WrathLfgEncounter,
-};
+use benilla_ui::script::{UiScript, WrathLfgCatalog, WrathLfgDungeon, WrathLfgEncounter};
 use bevy::prelude::*;
 
 use super::auth::NativeAccountExpansion;
@@ -97,9 +95,6 @@ pub(super) fn feed(
     let (Some(mut script), Some(catalog)) = (script, catalog) else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let (last, last_encounters) = memo.get(&script);
     if let Some(rows) = encounters.as_deref() {
         if !last_encounters
@@ -217,8 +212,8 @@ mod tests {
         assert_eq!(out.map_difficulties, vec![(-2, -3, -1); 2]);
     }
 
-    fn script(dialect: ScriptDialect) -> UiScript {
-        UiScript::new_with_dialect(dialect).unwrap()
+    fn script() -> UiScript {
+        UiScript::new().unwrap()
     }
     fn min_level(app: &App) -> Option<i32> {
         app.world()
@@ -241,7 +236,7 @@ mod tests {
         };
         app.insert_resource(Catalog(Arc::new(rows)))
             .init_resource::<NativeAccountExpansion>()
-            .insert_non_send_resource(script(ScriptDialect::Wrath12340))
+            .insert_non_send_resource(script())
             .add_systems(Update, feed);
         app
     }
@@ -256,8 +251,7 @@ mod tests {
         app.world_mut().resource_mut::<NativeAccountExpansion>().0 = Some(2);
         app.update();
         assert_eq!(min_level(&app), Some(40));
-        app.world_mut()
-            .insert_non_send_resource(script(ScriptDialect::Wrath12340));
+        app.world_mut().insert_non_send_resource(script());
         app.update();
         assert_eq!(min_level(&app), Some(40));
         // Exercise the actual sole auth owner's disconnect path, not a synthetic replay.

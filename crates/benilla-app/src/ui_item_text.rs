@@ -27,25 +27,9 @@ pub(crate) struct PageText {
     pub(crate) next: u32,
 }
 
-/// Build 12340's letter texts, by item GUID: `CMSG_ITEM_TEXT_QUERY` names the item and
-/// `SMSG_ITEM_TEXT_QUERY_RESPONSE` answers with it (AC `HandleItemTextQuery`); a `None` answer is
-/// an item the server has no text for.
-#[derive(Resource, Default)]
-pub(crate) struct LetterTexts {
-    texts: QueryCache<u64, String>,
-}
-
-impl LetterTexts {
-    /// Record an answer (`wrath_inventory_capture`).
-    pub(crate) fn insert(&mut self, item_guid: u64, text: Option<String>) {
-        self.texts.insert(item_guid, text);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn text(&mut self, item_guid: u64) -> Option<String> {
-        self.texts.get_or_ask(item_guid, || {}).cloned()
-    }
-}
+pub(crate) use crate::app_core::interaction::{
+    ItemTextOpen, LetterTexts, PageMaterials, ReadSource,
+};
 
 /// The ask-once page cache, the client's `PageText` dbcache (`0xc0e174`), keyed by page id.
 /// vmangos answers one query with the whole chain; a missing page is still asked for alone.
@@ -73,81 +57,6 @@ impl PageTexts {
                 .0
                 .send(ClientCommand::PageTextQuery { page_id, guid });
         })
-    }
-}
-
-/// Which of the reference's two text sources a session shows; the object decides, not the click.
-pub(crate) enum ReadSource {
-    /// A mail-made letter: one body, asked by the letter's GUID, and a creator line.
-    Letter,
-    /// A page chain. `visited` runs from the first page to the one shown, as pages link only
-    /// forwards (the reference's array at `0xbc3fd0`); it is empty until the object's template
-    /// answers, since the reference asks for the page id at paint time (`0x5f59d0`).
-    Pages { visited: Vec<u32> },
-}
-
-pub(crate) struct ReadSession {
-    /// An item's or a GameObject's guid; reading the same object again closes the reader.
-    pub(crate) object_guid: u64,
-    pub(crate) source: ReadSource,
-    /// Keyed on the VM, so a `/reload` re-fires `ITEM_TEXT_BEGIN` for a reader still open.
-    told: crate::ui_script::VmMemo<ItemTextTold>,
-}
-
-#[derive(Default)]
-struct ItemTextTold {
-    /// `ITEM_TEXT_BEGIN` fired: once per open, before the text lands.
-    begun: bool,
-    ready: bool,
-}
-
-#[derive(Resource, Default)]
-pub(crate) struct ItemTextOpen {
-    pub(crate) pending: Option<ReadSession>,
-    /// A toggle closed the reader and the frame is not told yet; the feed holds the script.
-    closing: bool,
-}
-
-impl ItemTextOpen {
-    /// Open a bag letter; re-opening restarts from `ITEM_TEXT_BEGIN`.
-    pub(crate) fn open_letter(&mut self, item_guid: u64) {
-        self.open(item_guid, ReadSource::Letter);
-    }
-
-    /// Open a page chain; the feed asks the object's template for the first page.
-    pub(crate) fn open_pages(&mut self, object_guid: u64) {
-        self.open(
-            object_guid,
-            ReadSource::Pages {
-                visited: Vec::new(),
-            },
-        );
-    }
-
-    /// The reference's toggle, `0x4e32e0` with flag 0 from both click routes (`0x5d8e5e`,
-    /// `0x5f58e7`): reading the open object again closes it. Returns whether it closed.
-    pub(crate) fn toggle_closed(&mut self, object_guid: u64) -> bool {
-        let open = self
-            .pending
-            .as_ref()
-            .is_some_and(|s| s.object_guid == object_guid);
-        if open {
-            self.pending = None;
-            self.closing = true;
-        }
-        open
-    }
-
-    fn take_closing(&mut self) -> bool {
-        std::mem::take(&mut self.closing)
-    }
-
-    fn open(&mut self, object_guid: u64, source: ReadSource) {
-        self.pending = Some(ReadSession {
-            object_guid,
-            source,
-            told: Default::default(),
-        });
     }
 }
 
@@ -391,10 +300,6 @@ fn feed_item_text(
     script.fire_event("ITEM_TEXT_READY", vec![]);
     sess.told.get(&script).ready = true;
 }
-
-/// `PageTextMaterial.dbc`; absent without client data, leaving every reader on Parchment.
-#[derive(Resource)]
-pub(crate) struct PageMaterials(pub(crate) benilla_formats::PageTextMaterialCatalog);
 
 /// Drain the reader's intents: `CloseItemText()` clears the session and fires `ITEM_TEXT_CLOSED`;
 /// a page turn re-runs the feed from `ITEM_TEXT_READY`, as the reference does not re-fire BEGIN.

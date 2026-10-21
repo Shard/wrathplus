@@ -330,7 +330,6 @@ pub(super) fn deliver(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_ui::script::ScriptDialect;
     fn message(kind: u8) -> Message {
         Message {
             gm: false,
@@ -405,7 +404,7 @@ mod tests {
     /// waits while a zero GUID is an empty sender.
     #[test]
     fn addon_lines_fire_chat_msg_addon_with_lossless_bytes() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script
             .run(
                 "GOT = {} local function hex(s) \
@@ -458,7 +457,7 @@ mod tests {
 
     #[test]
     fn basic_visible_types_dispatch_once_with_native_event_names() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script
             .lua()
             .load(
@@ -517,7 +516,7 @@ mod tests {
     }
     #[test]
     fn named_monster_receives_native_event_receiver_tag_guid_and_line_id() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script
             .lua()
             .load(
@@ -563,7 +562,7 @@ mod tests {
     }
     #[test]
     fn absent_player_name_parks_original_until_bounded_expiry() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         let mut msg = message(7);
         msg.sender_name = None;
         msg.sender_guid = 123;

@@ -6,7 +6,7 @@ use crate::names::NameCache;
 use crate::net::{NetCommands, NetHandlerApp};
 use benilla_protocol::wrath_guild::{EventLogEntry, Packet, Rank};
 use benilla_protocol::{SessionEvent, SessionEventKind};
-use benilla_ui::script::{ScriptDialect, UiScript, WrathGuildEvent};
+use benilla_ui::script::{UiScript, WrathGuildEvent};
 use bevy::prelude::*;
 
 #[derive(Resource, Default)]
@@ -90,9 +90,6 @@ fn feed_events(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let rows = events(
         &guild.log,
         |guid| names.resolve(guid, &commands).map(str::to_string),

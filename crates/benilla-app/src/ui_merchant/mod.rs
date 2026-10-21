@@ -30,59 +30,7 @@ const NPC_FLAG_REPAIR: u32 = 0x1000;
 const BUYBACK_SLOT_FIRST: u32 = 74;
 
 pub(crate) use crate::app_core::catalogs::RepairTables;
-/// The open vendor and its `SMSG_LIST_INVENTORY` rows, until a close or a disconnect.
-#[derive(Resource, Default)]
-pub(crate) struct MerchantOpen {
-    pub(crate) vendor: Option<u64>,
-    /// In wire order, which is the 1-based display order.
-    pub(crate) items: Vec<VendorItem>,
-}
-
-impl MerchantOpen {
-    pub(crate) fn open(&mut self, vendor: u64, items: Vec<VendorItem>) {
-        self.vendor = Some(vendor);
-        self.items = items;
-    }
-
-    pub(crate) fn is_open(&self) -> bool {
-        self.vendor.is_some()
-    }
-
-    /// The item entry at a 1-based row: `CMSG_BUY_ITEM` buys by entry, not by vendor slot.
-    pub(crate) fn entry_at(&self, index_1based: u32) -> Option<u32> {
-        index_1based
-            .checked_sub(1)
-            .and_then(|i| self.items.get(i as usize))
-            .map(|it| it.entry)
-    }
-
-    /// `SMSG_BUY_ITEM`'s new count for the row at 1-based vendor `slot`; the bought item itself
-    /// arrives as an object create.
-    pub(crate) fn update_stock(&mut self, slot: u32, new_count: u32) {
-        if let Some(it) = self.items.iter_mut().find(|it| it.slot == slot) {
-            it.current_count = new_count;
-        }
-    }
-
-    /// Zero every row of `entry`, as the reference's `ITEM_ALREADY_SOLD` arm writes 0 (`0x5dcdbf`)
-    /// into each matching row of its 128-row cache (`0x5dcdcd`).
-    pub(crate) fn sold_out(&mut self, entry: u32) {
-        for it in self.items.iter_mut().filter(|it| it.entry == entry) {
-            it.current_count = 0;
-        }
-    }
-
-    /// A client-side close; a re-open re-lists.
-    pub(crate) fn clear(&mut self) {
-        self.vendor = None;
-        self.items.clear();
-    }
-
-    /// The disconnect clear.
-    pub(crate) fn clear_session(&mut self) {
-        self.clear();
-    }
-}
+pub(crate) use crate::app_core::interaction::MerchantOpen;
 
 /// Buy and sell refusals waiting for the feed's message line.
 #[derive(Resource, Default)]

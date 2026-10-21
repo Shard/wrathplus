@@ -13,8 +13,10 @@ Replies that mean what their 1.12 counterparts mean feed the shared events their
 Outbound (routes need only the live writer; no leadership or permission is claimed):
 - Existing commands now with native writers: 0075 uninvite by name, 0078 set leader, 01D5 minimap
   ping, 01FB random roll.
-- Transport-only `ClientCommand::NativeParty`: 0076 uninvite by GUID with a reason, 03C6 ready
-  check finished.
+- `ClientCommand::NativeParty`: 0076 uninvite by GUID with a reason, from 12340's
+  `UninviteUnit(unitOrName [, reason])` (`0x51a7a0` → `0x6d43c0`; the stock kick popups and
+  `/kick`), and 03C6 ready check finished, the initiator's close when its own check's 30 s pass
+  (`0x573390`, `A/ui_party/ready_close.rs`).
 
 Not actionable: 0071 group cancel, 0299 chat not in party, 0397 real group update, 0408 ready-check
 error, 0411 action throttled, 0469 dynamic drop roll result, 03F6 squelch echo (no AC sender);

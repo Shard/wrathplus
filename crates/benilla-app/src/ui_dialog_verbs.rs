@@ -84,10 +84,8 @@ impl InstanceBoot {
     }
 }
 
-/// `UNIT_NPC_FLAGS` bit 6, `SPIRITGUIDE`, which the acquire callback `0x4924c0` tests (`0x4924fc`).
-/// The area spirit healer's aura, cancelled by `0x4921c0` and `CancelAreaSpiritHeal`; `0x6e7040`
-/// fires `AREA_SPIRIT_HEALER_OUT_OF_RANGE` for this spell id alone (`0x6e70b6`).
-pub(crate) const AREA_SPIRIT_HEALER_AURA: u32 = 2584;
+pub(crate) use crate::app_core::interaction::SetHealerOutcome;
+pub(crate) use crate::app_core::interaction::AREA_SPIRIT_HEALER_AURA;
 
 /// The acquire radius, `[0x8044d0]` = 20.0, compared squared in the enumerate callback `0x4924c0`.
 const SPIRIT_GUIDE_ACQUIRE_YD: f32 = 20.0;
@@ -95,78 +93,9 @@ const SPIRIT_GUIDE_ACQUIRE_YD: f32 = 20.0;
 /// inside 20 yd is kept until 22.
 const SPIRIT_GUIDE_RETAIN_YD: f32 = SPIRIT_GUIDE_ACQUIRE_YD * 1.1;
 
-/// What [`AreaSpiritHealer::set_healer`] owes the frame; the reference does both in `0x4921c0`.
-#[derive(Default, PartialEq, Eq, Debug)]
-pub(crate) struct SetHealerOutcome {
-    /// A wave was pending and the healer changed (`0x4921fc`): `AREA_SPIRIT_HEALER_OUT_OF_RANGE`
-    /// fires and `CMSG_CANCEL_AURA` goes out for 2584; this, not Lua, closes the dialog.
-    pub(crate) cancel_aura: bool,
-    /// A newly adopted non-zero healer: `CMSG_AREA_SPIRIT_HEALER_QUERY` with it.
-    pub(crate) query: Option<u64>,
-}
-
-/// The current-area spirit healer (`[0xb4e330/334]`) and its wave clock (`[0xb4e338]`).
-#[derive(Resource, Default)]
-pub(crate) struct AreaSpiritHealer {
-    /// Written only by [`Self::set_healer`], the reference's `0x4921c0`.
-    healer: Option<u64>,
-    deadline: Option<Instant>,
-    in_range: bool,
-}
-
-impl AreaSpiritHealer {
-    /// `SMSG_AREA_SPIRIT_HEALER_TIME`: arms the clock only for the cached healer (`0x4922a0`) and
-    /// a positive time, and owes `AREA_SPIRIT_HEALER_IN_RANGE`.
-    pub(crate) fn on_time(&mut self, healer: u64, ms: u32, now: Instant) {
-        if self.healer == Some(healer) && ms > 0 {
-            self.deadline = Some(now + std::time::Duration::from_millis(u64::from(ms)));
-            self.in_range = true;
-        }
-    }
-
-    /// `0x4921c0`: an unchanged guid returns before anything else (`0x4921cf`/`0x4921dd`), so the
-    /// poll calls it every frame; a change cancels a pending wave (`0x4921fc`), zeroes the
-    /// deadline (`0x492211`) and queries a non-zero healer (`0x492217`).
-    pub(crate) fn set_healer(&mut self, new: Option<u64>) -> SetHealerOutcome {
-        // The reference's zero guid is our `None`.
-        let new = new.filter(|&g| g != 0);
-        if self.healer == new {
-            return SetHealerOutcome::default();
-        }
-        self.healer = new;
-        let cancel_aura = self.deadline.take().is_some();
-        if cancel_aura {
-            // The cancel closes the dialog, so an `_IN_RANGE` still owed is stale.
-            self.in_range = false;
-        }
-        SetHealerOutcome {
-            cancel_aura,
-            query: new,
-        }
-    }
-
-    /// The spirit-guide click (`0x5df950`): `0x4921c0(0)` then `0x4921c0(guid)`, a cache-bust that
-    /// makes the second call query even for the healer already cached.
-    pub(crate) fn click_guide(&mut self, guid: u64) -> SetHealerOutcome {
-        let bust = self.set_healer(None);
-        let set = self.set_healer(Some(guid));
-        SetHealerOutcome {
-            cancel_aura: bust.cancel_aura || set.cancel_aura,
-            query: set.query,
-        }
-    }
-
-    /// The cached healer: `AcceptAreaSpiritHeal`'s guid and the poll's retain subject.
-    pub(crate) fn healer(&self) -> Option<u64> {
-        self.healer
-    }
-
-    fn secs(&self, now: Instant) -> u32 {
-        self.deadline
-            .map(|d| d.saturating_duration_since(now).as_secs())
-            .map_or(0, |s| u32::try_from(s).unwrap_or(u32::MAX))
-    }
-}
+pub(crate) use crate::app_core::interaction::{
+    AreaSpiritHealer, MeetingStone, MeetingStoneUse, StoneText,
+};
 
 /// The two battleground queue slots (`0xbea4b8`, `0x40` bytes each, written by
 /// `SMSG_BATTLEFIELD_STATUS` `0x54ae40`), each stamped with the moment its status landed, and the
@@ -351,53 +280,8 @@ impl BattlefieldQueue {
     }
 }
 
-/// The status text (`[0xb7203c]`): none until the server's `0x295` lands and after world leave,
-/// then a built line; localized at push time.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-enum StoneText {
-    #[default]
-    None,
-    Built(String),
-}
-
 /// `SStrPrintf`'s buffer at the rebuild: 256 bytes, so 255 of text.
 const STONE_TEXT_BYTES: usize = 255;
-
-/// The meeting-stone queue: the two globals and what the wire still owes the screen.
-#[derive(Resource, Default)]
-pub(crate) struct MeetingStone {
-    /// `[0xb72038]`, the queued area id, 0 for none.
-    pub(crate) area: u32,
-    text: StoneText,
-    /// `0x295` arrivals as `(previous area, status)`; the handler stores the new area before it
-    /// switches, so that one is already in `area`.
-    updates: Vec<(u32, u8)>,
-    notices: Vec<MeetingStoneNotice>,
-    /// `0x299` guids whose name has not resolved yet.
-    pending_members: Vec<u64>,
-    /// The VM's copy of the two globals is stale.
-    dirty: bool,
-}
-
-impl MeetingStone {
-    /// `SMSG 0x295` (`0x4ca230`): the area is stored at once; the line and event wait for the feed.
-    pub(crate) fn apply(&mut self, area: u32, status: u8) {
-        let old = self.area;
-        self.area = area;
-        self.updates.push((old, status));
-    }
-
-    /// One of the four display-only replies.
-    pub(crate) fn apply_notice(&mut self, notice: MeetingStoneNotice) {
-        self.notices.push(notice);
-    }
-
-    /// The leave-world sweep (`0x4c9f80`): the text goes, the area stays.
-    fn leave_world(&mut self) {
-        self.text = StoneText::None;
-        self.dirty = true;
-    }
-}
 
 /// A `GlobalStrings` value as the client's `GetText` reads it: `""` when the global is missing
 /// (`0x882748`, the shared empty string, never NULL).
@@ -567,12 +451,6 @@ fn feed_meeting_stone(
         };
         script.set_meeting_stone(stone.area, text);
     }
-}
-
-/// A right-click on a `GAMEOBJECT_TYPE_MEETINGSTONE` (23) that passed the shared click gates.
-#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct MeetingStoneUse {
-    pub(crate) go_guid: u64,
 }
 
 /// The use drain: a click on a meeting stone, which build 12340 calls a summoning stone. 3.3.5 has

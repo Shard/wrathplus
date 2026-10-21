@@ -31,3 +31,49 @@ fn ordered_replies_keep_zero_duplicates_and_reject_malformed() {
         ]
     );
 }
+
+#[test]
+fn a_mirror_image_unit_asks_for_its_look_once_per_object() {
+    use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore};
+    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::ObjectFields;
+    let (tx, rx) = crossbeam_channel::unbounded();
+    let mut app = App::new();
+    app.insert_resource(NetCommands(tx));
+    register(&mut app);
+    let unit = |flags2: u32| {
+        ObjectStore(ObjectFields::from_fields(
+            FieldLayout::Wrath12340,
+            &[(Field::ObjectType, 0x09), (Field::UnitFlags2, flags2)],
+        ))
+    };
+    let image = app.world_mut().spawn((Guid(7), unit(0x10))).id();
+    let plain = app.world_mut().spawn((Guid(8), unit(0))).id();
+    app.update();
+    let sent: Vec<_> = rx.try_iter().collect();
+    assert!(
+        matches!(
+            sent[..],
+            [ClientCommand::NativeMirrorImageQuery { guid: 7 }]
+        ),
+        "{sent:?}"
+    );
+    // Another delta on the same object stays silent; the flag arriving later asks.
+    app.world_mut().entity_mut(image).insert(unit(0x11));
+    app.world_mut().entity_mut(plain).insert(unit(0x10));
+    app.update();
+    let sent: Vec<_> = rx.try_iter().collect();
+    assert!(
+        matches!(
+            sent[..],
+            [ClientCommand::NativeMirrorImageQuery { guid: 8 }]
+        ),
+        "{sent:?}"
+    );
+    // A new object asks again.
+    app.world_mut().despawn(image);
+    app.update();
+    app.world_mut().spawn((Guid(7), unit(0x10)));
+    app.update();
+    assert_eq!(rx.try_iter().count(), 1);
+}

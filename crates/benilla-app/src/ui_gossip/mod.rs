@@ -2,9 +2,9 @@
 //! [`feed_gossip`] pushes the menu and fires its events, and [`drain_gossip`] sends the selects.
 //! As in the reference's `0x4e2010`, a menu opens only once its greeting is drawn.
 
-use std::collections::HashMap;
-
-use benilla_protocol::types::{select_greeting, GossipOption, NpcTextBlock};
+use benilla_protocol::types::select_greeting;
+#[cfg(test)]
+use benilla_protocol::types::{GossipOption, NpcTextBlock};
 use bevy::prelude::*;
 
 use benilla_ui::script::{GossipMenu, GossipOptionView, GossipQuestRow, ScriptValue, UiScript};
@@ -15,120 +15,12 @@ use crate::ui_quest::{row_is_active, row_is_one_click};
 use crate::ui_script::{UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 
-/// The open gossip menu, plus the NPC-text records by id, which outlive it. The cache holds whole
-/// records: the reference draws the greeting afresh at each open, from the NPC's gender and a roll.
-#[derive(Resource, Default)]
-pub(crate) struct GossipState {
-    pub(crate) npc: Option<u64>,
-    pub(crate) text_id: u32,
-    /// This open's drawn greeting; `None` while its text query is out.
-    pub(crate) greeting: Option<String>,
-    pub(crate) options: Vec<GossipOption>,
-    /// The packet's quest rows, `(quest_id, dialog-status icon, level, title)`. The level is kept
-    /// because `GetGossipAvailableQuests` and `GetGossipActiveQuests` return `(title, level)`
-    /// pairs, walked in twos by stock `GossipFrame.lua` (lines 66 and 90).
-    pub(crate) quests: Vec<(u32, u32, u32, String)>,
-    pub(crate) quest_info: Vec<benilla_protocol::types::WrathQuestInfo>,
-    records: HashMap<u32, Vec<NpcTextBlock>>,
-}
-
-impl GossipState {
-    pub(crate) fn cached_record(&self, text_id: u32) -> Option<&[NpcTextBlock]> {
-        self.records.get(&text_id).map(Vec::as_slice)
-    }
-
-    pub(crate) fn remember_record(&mut self, text_id: u32, blocks: Vec<NpcTextBlock>) {
-        self.records.insert(text_id, blocks);
-    }
-
-    /// `None` when the record has not arrived or has no line in the NPC's gender column.
-    pub(crate) fn draw_greeting(&self, text_id: u32, npc_gender: u8) -> Option<String> {
-        let blocks = self.cached_record(text_id)?;
-        select_greeting(blocks, npc_gender, greeting_roll()).map(str::to_string)
-    }
-
-    /// The reference's text-pending latch (`[0xbbb670]`): a menu whose text query is out, or was
-    /// never sent (`text_id` 0). While it holds, nothing fires and every select is refused.
-    pub(crate) fn text_pending(&self) -> bool {
-        self.npc.is_some() && self.greeting.is_none()
-    }
-
-    /// Latch a `SMSG_GOSSIP_MESSAGE` menu; `true` when the caller owes the `CMSG_NPC_TEXT_QUERY`.
-    /// A `text_id` of 0 stays pending: the reference's `DBCache::Get` never queries id 0.
-    pub(crate) fn open_menu(
-        &mut self,
-        npc: u64,
-        text_id: u32,
-        options: Vec<GossipOption>,
-        quests: Vec<(u32, u32, u32, String)>,
-        npc_gender: u8,
-    ) -> bool {
-        self.npc = Some(npc);
-        self.text_id = text_id;
-        self.options = options;
-        self.quests = quests;
-        self.quest_info.clear();
-        self.greeting = None;
-        if text_id == 0 {
-            return false;
-        }
-        match self.cached_record(text_id).is_some() {
-            true => {
-                self.resolve_greeting(npc_gender);
-                false
-            }
-            false => true,
-        }
-    }
-
-    /// Cache a `SMSG_NPC_TEXT_UPDATE` record and resolve the menu waiting on it, if any. An open
-    /// menu's greeting is not re-drawn: the reference's cache callback re-enters only for the
-    /// query it was registered for.
-    pub(crate) fn text_arrived(&mut self, text_id: u32, blocks: Vec<NpcTextBlock>, npc_gender: u8) {
-        self.remember_record(text_id, blocks);
-        if self.npc.is_some() && self.text_id == text_id && self.greeting.is_none() {
-            self.resolve_greeting(npc_gender);
-        }
-    }
-
-    /// Draw the open menu's greeting, or end the interaction when the record has no line for the
-    /// NPC's gender: the reference's missing-text path (`0x4e216e`) logs "Missing gossip text!"
-    /// and fires `GOSSIP_CLOSED`. Here the clear makes the feed fire it if a menu was showing.
-    fn resolve_greeting(&mut self, npc_gender: u8) {
-        match self.draw_greeting(self.text_id, npc_gender) {
-            Some(line) => self.greeting = Some(line),
-            None => {
-                debug!(
-                    "ui_gossip: missing gossip text (id {}) — ending the interaction",
-                    self.text_id
-                );
-                self.clear();
-            }
-        }
-    }
-}
+pub(crate) use crate::app_core::interaction::GossipState;
 
 /// The greeting draw's roll in `[1.0, 2.0)`, built as the reference builds it: random bits in the
 /// mantissa of 1.0 (`(rand & 0x7fffff) | 0x3f800000`), from our own random source.
 fn greeting_roll() -> f32 {
     f32::from_bits((rand::random::<u32>() & 0x7f_ffff) | 0x3f80_0000)
-}
-
-impl GossipState {
-    /// Close the menu; the records stay.
-    pub(crate) fn clear(&mut self) {
-        self.npc = None;
-        self.text_id = 0;
-        self.greeting = None;
-        self.options.clear();
-        self.quests.clear();
-        self.quest_info.clear();
-    }
-
-    /// The disconnect clear; NPC text is static per id, so the records stay.
-    pub(crate) fn clear_session(&mut self) {
-        self.clear();
-    }
 }
 
 mod net;
@@ -397,6 +289,19 @@ fn drain_gossip(
     if script.take_gossip_close() {
         debug!("ui_gossip: client-side close (no packet)");
         state.clear();
+    }
+}
+
+/// `GossipState`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait GossipGreeting {
+    /// `None` when the record has not arrived or has no line in the NPC's gender column.
+    fn draw_greeting(&self, text_id: u32, npc_gender: u8) -> Option<String>;
+}
+
+impl GossipGreeting for GossipState {
+    fn draw_greeting(&self, text_id: u32, npc_gender: u8) -> Option<String> {
+        let blocks = self.cached_record(text_id)?;
+        select_greeting(blocks, npc_gender, greeting_roll()).map(str::to_string)
     }
 }
 

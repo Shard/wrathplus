@@ -16,9 +16,8 @@ use benilla_protocol::wrath_guild_bank_log::{Log, Payload};
 use benilla_protocol::wrath_guild_bank_swap::{BankSlot, Swap, Transfer};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use benilla_ui::script::{
-    ScriptDialect, ScriptValue, UiScript, WrathGuildBankItemLog, WrathGuildBankMoneyLog,
-    WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankSlot, WrathGuildBankTab,
-    WrathGuildBankView,
+    ScriptValue, UiScript, WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankRankRights,
+    WrathGuildBankRequest, WrathGuildBankSlot, WrathGuildBankTab, WrathGuildBankView,
 };
 use bevy::prelude::*;
 
@@ -29,26 +28,7 @@ const MONEY_LOG_TAB: u8 = 6;
 const TAB_VIEW: u32 = 1;
 const TAB_DEPOSIT: u32 = 2;
 
-/// The vault the player opened, set by the object click and cleared by the frame's close.
-#[derive(Resource, Default)]
-pub(crate) struct GuildBankOpen {
-    banker: Option<u64>,
-    /// The click is waiting for this feed to send the activate.
-    pending: bool,
-}
-
-impl GuildBankOpen {
-    /// The object click on a guild vault (`GAMEOBJECT_TYPE_GUILD_BANK`).
-    pub(crate) fn open(&mut self, banker: u64) {
-        self.banker = Some(banker);
-        self.pending = true;
-    }
-
-    /// The vault in use, for the bank writers that name it.
-    pub(crate) fn banker(&self) -> Option<u64> {
-        self.banker
-    }
-}
+pub(crate) use crate::app_core::interaction::GuildBankOpen;
 
 #[derive(Resource, Default)]
 pub(crate) struct GuildBank {
@@ -312,9 +292,6 @@ pub(crate) fn feed_guild_bank(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     if open.pending {
         open.pending = false;
         if let Some(banker) = open.banker {

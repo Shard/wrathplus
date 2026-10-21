@@ -3,12 +3,12 @@
 //! the input map, the pet bar, world states, factions, emote sounds and collision heights. Each
 //! owner keeps its systems and impls and re-exports the type from its old path.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::time::Instant;
 
-use benilla_formats::{EmoteSoundCatalog, FactionCatalog, SpellCatalog};
+use benilla_formats::{EmoteSoundCatalog, FactionCatalog, SkillLineCatalog, SpellCatalog};
 use benilla_protocol::types::{
-    PetSpells, QuestDetails, QuestGiverList, QuestOfferReward, QuestRequestItems,
+    ActionButton, PetSpells, QuestDetails, QuestGiverList, QuestOfferReward, QuestRequestItems,
 };
 use benilla_protocol::Character;
 use bevy::prelude::*;
@@ -840,3 +840,149 @@ pub(crate) const UNIT_FLAG_IN_COMBAT: u32 = 0x0008_0000;
 /// `UNIT_FIELD_FLAGS` bit 21 (vmangos `UnitDefines.h:566`), tested inside `GetWeapon` at
 /// `0x5ec2b8` (CGPlayer) and `0x605e58`/`0x605e98` (CGUnit).
 pub(crate) const UNIT_FLAG_DISARMED: u32 = 0x0020_0000;
+
+/// The action slots (wire 0..119) and the known spells. The bar is client-authoritative:
+/// [`drain::drain_action_sets`] writes it directly, and vmangos stores a slot without a reply
+/// (`MasterPlayer::addActionButton`).
+#[derive(Resource, Default)]
+pub(crate) struct PlayerActions {
+    /// Wire slot (0-based) to its packed action; the Lua action id is slot + 1.
+    pub buttons: HashMap<u8, ActionButton>,
+    /// The spell book (`SMSG_INITIAL_SPELLS`), ordered on purpose: the reference's first-hit
+    /// scans (the lock resolver `0x5f83d0`) pick between equal spells, 6478 and 22810 "Opening",
+    /// by array order, which is ascending id: the server sends the book from a `std::map`.
+    pub spells: BTreeSet<u32>,
+    /// Set by every book or bar change, cleared once the feed re-resolves slot identity, which a
+    /// landed item template ([`crate::items::Items::template_epoch`]) also triggers. Item counts
+    /// refresh every frame regardless.
+    pub dirty: bool,
+}
+
+/// The world right-click's GameObject openers, queued one frame for the cast ladder: the click
+/// system cannot also hold the ladder's resources, and only the ladder sends a cast, so a chest
+/// right-clicked mid-cast takes the reference's silent same-spell bail (`0x6e4d43`).
+#[derive(Resource, Default)]
+pub(crate) struct GoOpenerCasts(pub(crate) Vec<GoOpener>);
+
+/// A right-click's resolved opener ([`crate::target::click::resolve_go_action`]).
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum GoOpener {
+    /// A known `OPEN_LOCK` spell, cast with a GameObject target block.
+    Spell { spell_id: u32, go_guid: u64 },
+    /// A carried key: `CMSG_USE_ITEM` with `TARGET_FLAG_GAMEOBJECT`, the object's guid in
+    /// [`crate::ui_items::ItemUse::on_object`].
+    Key(crate::ui_items::ItemUse),
+}
+
+/// One `COMBAT_TEXT_UPDATE` (event `0x21E`, via `0x703f50`), fired at packet parse by every
+/// producer, melee included (`0x6255b0` → `0x629d30`); `data`/`extra` are `arg2`/`arg3`. Fired only
+/// when the unit the line is about is the player: each emitter tests that unit's class (`0x5efea0`)
+/// for 0 before its helper (`0x629ef1`, `0x62d046`, `0x62834b`).
+#[derive(Message, Clone)]
+pub(crate) struct CombatTextEvent {
+    pub(crate) message_type: &'static str,
+    pub(crate) data: Option<String>,
+    pub(crate) extra: Option<String>,
+}
+
+/// The player's aura durations by raw slot, each `SMSG_UPDATE_AURA_DURATION` stamped with its
+/// arrival: the reference's expiry array `0xbc5f68`. Only the session's end clears it, never an
+/// empty slot, whose aura may be a frame behind its packet, nor a worldport. At most 48 entries.
+#[derive(Resource, Default)]
+pub(crate) struct AuraDurations {
+    pub(crate) by_slot: HashMap<u8, DurationStamp>,
+}
+
+impl AuraDurations {}
+
+pub(crate) struct DurationStamp {
+    /// Seconds: the full duration on an apply or refresh, only the remainder on a relog
+    /// (`Map::ExistingPlayerLogin`) or a cast pushback (`Unit::DelaySpellAuraHolder`).
+    pub(crate) total: f64,
+    /// The real-clock instant it runs out: a server-sent span counts down in real seconds.
+    pub(crate) expires_at: f64,
+    /// The real-clock arrival, the freshness gate against a recycled slot.
+    pub(crate) received_at: f64,
+}
+
+/// `SkillLine.dbc` × `SkillLineAbility.dbc`; absent when the data failed to load.
+#[derive(Resource)]
+pub(crate) struct SkillLines {
+    pub(crate) catalog: SkillLineCatalog,
+}
+
+/// Spells learned mid-session, queued for `LEARNED_SPELL_IN_TAB` (event 510). Filled by the learn
+/// and rank-up arms (`crate::spell::net`), never the `SMSG_INITIAL_SPELLS` load, which the
+/// reference passes with `0x4b25b0`'s live-mutation flag clear. A queue because the event follows
+/// the tab re-sort and `SPELLS_CHANGED` (`0x4b2b5a` before `0x4b2b92`).
+#[derive(Resource, Default)]
+pub(crate) struct LearnedInTab(pub(crate) Vec<u32>);
+
+/// The reference's optimistic mirror of our `PLAYER_FLAGS` AFK bit (`[0xb6e5cc]`): written at
+/// command time (`0x5eb7ae`, `0x5eb885`), reconciled from the descriptor (`0x5ee9f2`), reseeded
+/// at world enter (`0x4989c0`). A `u32` tested for non-zero: the reconcile stores
+/// `PLAYER_FLAGS & 2`, so a set mirror can read 2. DND has no mirror, so a second `/dnd` before
+/// the server's update re-marks where a second `/afk` clears.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AfkMirror(pub(crate) u32);
+
+impl AfkMirror {
+    /// Non-zero, as all six of the reference's readers test it.
+    pub(crate) fn is_afk(self) -> bool {
+        self.0 != 0
+    }
+}
+
+/// A site's ask of the tutorial system, written from wherever the reference's site lives.
+#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TutorialEvent {
+    /// `TriggerTutorial(id, delayMs)`: the fire-once leg.
+    Trigger { id: u32, delay_ms: u32 },
+    /// `SetTutorialFlag(id)` (`0x4b54c0`): the acknowledge-and-send leg.
+    Acknowledge { id: u32 },
+}
+
+impl TutorialEvent {
+    pub(crate) const fn trigger(id: u32) -> Self {
+        Self::Trigger { id, delay_ms: 0 }
+    }
+}
+
+/// `Attack`, the auto-attack pseudo-spell: it toggles melee rather than casting. The use path
+/// keys on this id; the icon keys on `SPELL_EFFECT_ATTACK`, which only 6603 carries.
+pub(crate) const SPELL_ATTACK: u32 = 6603;
+
+/// `SMSG_GROUP_LIST`'s first byte for a raid; 0 is a party (vmangos `Group/Group.h:119`).
+pub(crate) const GROUPTYPE_RAID: u8 = 1;
+
+/// `partypet1..partypet4`, the pet of each [`PARTY_TOKENS`] slot (`0x4e81d0`).
+pub(crate) const PARTY_PET_TOKENS: [&str; 4] = ["partypet1", "partypet2", "partypet3", "partypet4"];
+
+/// `ItemClass` 2, weapon: the disarm ladder's whole test, so a shield is never the hand it hides.
+pub(crate) const ITEM_CLASS_WEAPON: u8 = 2;
+
+/// The one held slot the disarm hides: the main hand if it holds a weapon, else the off hand if it
+/// does (`GetWeapon(slot, 0)`, `0x5ec2ae`/`0x5ec262`); the ranged slot is never gated
+/// (`0x5ec25e`), as vmangos agrees (`Unit.h:991`). Over classes so the action bar's
+/// equipped-item test (`0x5ea5d0`) can use it on raw inventory.
+pub(crate) fn disarmed_hand(main_class: Option<u8>, off_class: Option<u8>) -> Option<usize> {
+    if main_class == Some(ITEM_CLASS_WEAPON) {
+        return Some(0);
+    }
+    if off_class == Some(ITEM_CLASS_WEAPON) {
+        return Some(1);
+    }
+    None
+}
+
+/// `(realm, character)` off the roster's login pick, keying the per-character files.
+pub(crate) fn identity(roster: &Roster) -> Option<(String, String)> {
+    let guid = roster.pending_pick?;
+    let name = roster.chars.iter().find(|c| c.guid == guid)?.name.clone();
+    let realm = roster
+        .realm
+        .as_ref()
+        .map(|r| r.name.clone())
+        .unwrap_or_else(|| "Realm".into());
+    Some((realm, name))
+}

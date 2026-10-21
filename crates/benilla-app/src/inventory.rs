@@ -32,10 +32,6 @@ pub(crate) const BANK_SLOTS: u8 = 24;
 /// The first bank generic slot in the player array (vmangos `BANK_SLOT_ITEM_START`).
 pub(crate) const BANK_SLOT_FIRST: u8 = 39;
 
-/// The first bank-bag slot (vmangos `BANK_SLOT_BAG_START`); as with an equipped bag, a bank bag's
-/// slot number is its wire bag byte.
-pub(crate) const BANK_BAG_SLOT_FIRST: u8 = 63;
-
 /// Bank bag count (live-API bag ids [`BANK_BAG_ID_FIRST`]..=10).
 pub(crate) const BANK_BAGS: u8 = 6;
 
@@ -47,13 +43,6 @@ pub(crate) const BANK_BAG_ID_FIRST: i64 = 5;
 
 /// `KEYRING_CONTAINER` (`MainMenuBarBagButtons.lua:1`).
 pub(crate) const KEYRING_CONTAINER: i64 = -2;
-
-/// The first keyring slot in the player array (vmangos `KEYRING_SLOT_START`).
-pub(crate) const KEYRING_SLOT_FIRST: u8 = 81;
-
-/// Addressable keyring positions, 81..96 (vmangos `KEYRING_SLOT_END` 97): the descriptor array is
-/// 32 wide, but the server uses 16. The usable count is [`keyring_size`].
-pub(crate) const KEYRING_SLOTS: u8 = 16;
 
 /// `BAG_FAMILY_KEYS`: what the server routes into the keyring (`Player::_CanStoreItem`) and the
 /// reference's `HasKey` searches for.
@@ -77,9 +66,8 @@ pub(crate) fn keyring_size(level: u32) -> u32 {
 /// move between them is `CMSG_SWAP_INV_ITEM`; an equipped or bank bag is addressed by its own
 /// player-array slot, with a 0-based inner slot. The keyring spans the wire's 16 positions, not
 /// [`keyring_size`]: a click past the unlocked count is the server's to refuse.
-/// Storage geometry follows the descriptor dialect. AzerothCore `Player.h:698-718`
-/// defines bank 39..67, bags 67..74 and keyring 86..118 (exclusive ends);
-/// `Player.h:1379` exposes all 32 keyring slots. Vanilla retains vmangos geometry.
+/// Build 12340's storage geometry. AzerothCore `Player.h:698-718` defines bank 39..67, bags
+/// 67..74 and keyring 86..118 (exclusive ends); `Player.h:1379` exposes all 32 keyring slots.
 #[derive(Clone, Copy)]
 pub(crate) struct StorageSlots {
     pub bank_slots: u8,
@@ -90,23 +78,14 @@ pub(crate) struct StorageSlots {
 }
 
 impl StorageSlots {
-    pub fn for_layout(layout: benilla_protocol::types::FieldLayout) -> Self {
-        if layout == benilla_protocol::types::FieldLayout::Wrath12340 {
-            Self {
-                bank_slots: 28,
-                bank_bags: 7,
-                bank_bag_first: 67,
-                keyring_first: 86,
-                keyring_slots: 32,
-            }
-        } else {
-            Self {
-                bank_slots: BANK_SLOTS,
-                bank_bags: BANK_BAGS,
-                bank_bag_first: BANK_BAG_SLOT_FIRST,
-                keyring_first: KEYRING_SLOT_FIRST,
-                keyring_slots: KEYRING_SLOTS,
-            }
+    /// The one geometry left; the layout argument goes when `FieldLayout` collapses.
+    pub fn for_layout(_layout: benilla_protocol::types::FieldLayout) -> Self {
+        Self {
+            bank_slots: 28,
+            bank_bags: 7,
+            bank_bag_first: 67,
+            keyring_first: 86,
+            keyring_slots: 32,
         }
     }
 

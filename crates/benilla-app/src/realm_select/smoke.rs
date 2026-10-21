@@ -9,6 +9,7 @@
 //!
 //! Inert without the env.
 
+use crate::realm_select::RealmsSelect;
 use bevy::prelude::*;
 
 use crate::char_select::{ClientState, Roster};

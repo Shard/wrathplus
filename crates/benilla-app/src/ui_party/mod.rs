@@ -16,6 +16,7 @@ use crate::ui_script::{UiFeed, UiInput};
 pub(crate) mod feed;
 pub(crate) mod net;
 mod pets;
+mod ready_close;
 mod records;
 pub(crate) mod wrath;
 pub(crate) use feed::{
@@ -36,6 +37,7 @@ impl Plugin for UiPartyPlugin {
                 (
                     feed::feed_party.in_set(UiFeed),
                     feed::drain_party.after(UiInput),
+                    ready_close::close_own_ready_check,
                 ),
             );
     }

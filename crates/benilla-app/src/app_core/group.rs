@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use super::errors::UiError;
+use super::state::GROUPTYPE_RAID;
 
 use benilla_protocol::types::{
     party_operation, party_result, patch_auras, GroupLootInfo, GroupMemberEntry, ObjectFields,
@@ -790,9 +791,6 @@ impl GroupState {
         )
     }
 }
-
-/// `SMSG_GROUP_LIST`'s first byte for a raid; 0 is a party (vmangos `Group/Group.h:119`).
-pub(crate) const GROUPTYPE_RAID: u8 = 1;
 
 /// The subgroup bits (0-2) of a member's flags byte; `0x80` is the assistant bit.
 pub(crate) const GROUP_MEMBER_SUBGROUP: u8 = 0x07;

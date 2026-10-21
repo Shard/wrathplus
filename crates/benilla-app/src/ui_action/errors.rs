@@ -2,7 +2,7 @@
 //! [`show_messages`]; cast failures resolve in [`super::cast_fail`].
 
 use benilla_ui::messages::MessageRecord;
-use benilla_ui::script::{ScriptDialect, ScriptValue, UiScript};
+use benilla_ui::script::{ScriptValue, UiScript};
 use bevy::prelude::*;
 
 use crate::net::ObjectStore;
@@ -37,21 +37,23 @@ pub(crate) fn ui_error_text(e: &UiError, get: &dyn Fn(&str) -> Option<String>) -
     (!text.is_empty()).then_some(text)
 }
 
-/// Resolve one VM global, preserving Vanilla's silent miss while making a missing Wrath
-/// localization diagnosable. The marker is host-authored rather than a pretend stock template.
+/// Resolve one VM global, a missing localization made diagnosable. The marker is host-authored
+/// rather than a pretend stock template.
 pub(crate) fn global_string(script: &UiScript, key: &str) -> Option<String> {
-    script.lua().globals().get::<String>(key).ok().or_else(|| {
-        (script.dialect() == ScriptDialect::Wrath12340)
-            .then(|| format!("[unavailable localization: {key}]"))
-    })
+    Some(
+        script
+            .lua()
+            .globals()
+            .get::<String>(key)
+            .unwrap_or_else(|_| format!("[unavailable localization: {key}]")),
+    )
 }
 
-/// [`ui_error_text`] with the active VM's dialect-aware missing-localization policy. Wrath keeps
-/// the declared key and appends arguments because there is no template left to place them.
+/// [`ui_error_text`] with the missing-localization policy: a miss keeps the declared key and appends arguments because there is no template left to place them.
 pub(crate) fn ui_error_text_for_script(e: &UiError, script: &UiScript) -> Option<String> {
     match script.lua().globals().get::<String>(e.key).ok() {
         Some(template) => ui_error_text(e, &|_| Some(template.clone())),
-        None if script.dialect() == ScriptDialect::Wrath12340 => {
+        None => {
             let mut text = format!("[unavailable localization: {}]", e.key);
             for arg in &e.args {
                 use std::fmt::Write as _;
@@ -63,7 +65,6 @@ pub(crate) fn ui_error_text_for_script(e: &UiError, script: &UiScript) -> Option
             }
             Some(text)
         }
-        None => None,
     }
 }
 
@@ -112,7 +113,7 @@ impl Shown {
 }
 
 /// Resolve a message key against the VM's `GlobalStrings.lua` into a [`Shown`]. An absent key is
-/// silent for Vanilla and diagnostic for Wrath; an explicitly empty string stays silent.
+/// diagnostic; an explicitly empty string stays silent.
 pub(crate) fn keyed_line(script: &UiScript, key: &'static str) -> Option<Shown> {
     let text = global_string(script, key)?;
     (!text.is_empty()).then(|| Shown::keyed(key, text))
@@ -121,9 +122,6 @@ pub(crate) fn keyed_line(script: &UiScript, key: &'static str) -> Option<Shown> 
 /// [`keyed_line`] for a `%s` template, each argument filling the next `%s`.
 pub(crate) fn keyed_line_s(script: &UiScript, key: &'static str, args: &[&str]) -> Option<Shown> {
     let Some(template) = script.lua().globals().get::<String>(key).ok() else {
-        if script.dialect() != ScriptDialect::Wrath12340 {
-            return None;
-        }
         let mut text = format!("[unavailable localization: {key}]");
         for arg in args {
             text.push(' ');
@@ -159,16 +157,14 @@ pub(crate) fn show_messages(
     } in lines
     {
         debug!("{who}: message ({kind:?}) {text:?}");
-        // No visible native overlay is claimed. Wrath lines are nevertheless preserved in the
+        // No visible native overlay is claimed. The lines are nevertheless preserved in the
         // durable host log, while the normal addon event continues below.
-        if script.dialect() == ScriptDialect::Wrath12340 {
-            match kind {
-                MsgKind::Error => {
-                    warn!(key = ?key, kind = ?kind, text = %text, source = who, "Wrath UI message")
-                }
-                MsgKind::Info | MsgKind::Chat => {
-                    info!(key = ?key, kind = ?kind, text = %text, source = who, "Wrath UI message")
-                }
+        match kind {
+            MsgKind::Error => {
+                warn!(key = ?key, kind = ?kind, text = %text, source = who, "Wrath UI message")
+            }
+            MsgKind::Info | MsgKind::Chat => {
+                info!(key = ?key, kind = ?kind, text = %text, source = who, "Wrath UI message")
             }
         }
         // The reference sounds a message beside its text, so the sound shares the display's guards.
@@ -403,7 +399,7 @@ mod ui_error_tests {
     use super::{
         keyed_line, keyed_line_s, ui_error_text, ui_error_text_for_script, FillArg, UiError,
     };
-    use benilla_ui::script::{ScriptDialect, UiScript};
+    use benilla_ui::script::UiScript;
 
     fn filled(key: &'static str, s: Option<&str>, d: Option<u32>) -> UiError {
         let mut args = Vec::new();
@@ -443,7 +439,7 @@ mod ui_error_tests {
     /// arguments survive as host diagnostics.
     #[test]
     fn missing_key_is_preserved_only_for_wrath() {
-        let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).expect("Wrath VM");
+        let wrath = UiScript::new().expect("Wrath VM");
         let error = UiError::args(
             "TEST_MISSING_SD",
             vec![FillArg::S("Mining".into()), FillArg::D(155)],
@@ -469,7 +465,7 @@ mod ui_error_tests {
 
     #[test]
     fn an_explicitly_empty_key_remains_silent() {
-        let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).expect("Wrath VM");
+        let wrath = UiScript::new().expect("Wrath VM");
         wrath.run("TEST_EMPTY = ''").expect("set Wrath key");
 
         assert!(keyed_line(&wrath, "TEST_EMPTY").is_none());

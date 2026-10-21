@@ -5,7 +5,8 @@ use std::collections::VecDeque;
 
 use benilla_protocol::types::{slot_type, LootItem};
 
-use super::group::{GroupState, GROUPTYPE_RAID, GROUP_MEMBER_SUBGROUP};
+use super::group::{GroupState, GROUP_MEMBER_SUBGROUP};
+use super::state::GROUPTYPE_RAID;
 use bevy::prelude::*;
 
 #[derive(Default)]

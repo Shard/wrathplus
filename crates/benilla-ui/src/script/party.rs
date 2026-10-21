@@ -107,6 +107,10 @@ pub enum PartyRequest {
     InviteUnit(String),
     /// `UninviteFromParty(unit)`, by unit token.
     UninviteUnit(String),
+    /// Build 12340's `UninviteUnit(unitOrName [, reason])` (`0x51a7a0`): the token or member name
+    /// resolved to a guid (`0x60abf0`), then `CMSG_GROUP_UNINVITE_GUID` with the reason
+    /// (`0x6d43c0`).
+    UninviteGuid { guid: u64, reason: String },
     /// `PromoteToPartyLeader(unit)`, by unit token.
     PromoteUnit(String),
     /// `SetLootMethod(method[, masterName][, threshold])`; the app resolves the master looter's

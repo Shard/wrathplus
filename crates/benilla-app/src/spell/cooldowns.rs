@@ -25,6 +25,119 @@ use benilla_formats::SpellDisplay;
 
 pub(crate) use crate::app_core::cooldowns::{Cooldowns, Timer};
 
+/// `Cooldowns`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait CooldownsSpell {
+    /// A spell's own cooldown from `Spell.dbc` (`StartCooldown 0x6e2c60`), without a GCD.
+    ///
+    /// `ranged_attack_time_ms` is `UNIT_FIELD_RANGEDATTACKTIME` when
+    /// [`SpellDisplay::ranged_speed_cooldown`], else 0, added to the category timer (`0x6e2b60`):
+    /// the Throw and wand Shoot sweep. Category 0 (Auto Shot) never surfaces it. `mods` applies
+    /// op 11 to both timers, as the self and pet legs do; `None` inserts the DBC values.
+    fn start_spell(
+        &mut self,
+        spell_id: u32,
+        spell: &SpellDisplay,
+        ranged_attack_time_ms: u32,
+        now: Instant,
+        mods: Option<&SpellModifiers>,
+    );
+    /// Arm the GCD at cast send (`StartGlobalCooldown 0x6e2de0`, from `0x6e58fb`) for any cast or
+    /// item use, and at a pet-bar spell press (`0x4bd367`, into the pet's list), unless
+    /// `startRecoveryCategory` and `startRecoveryTime` are both 0
+    /// (`0x6e2e0f`-`0x6e2e21`), then with op 21 applied (`0x6e2e2c`) and nothing armed for a zero
+    /// result (`0x6e2e3d`). A negative one arms nothing either, where the reference inserts a
+    /// record no reader shows. `on_hold` is Attributes bit 25.
+    fn start_gcd(
+        &mut self,
+        spell_id: u32,
+        spell: &SpellDisplay,
+        now: Instant,
+        mods: &SpellModifiers,
+    );
+}
+
+impl CooldownsSpell for Cooldowns {
+    fn start_spell(
+        &mut self,
+        spell_id: u32,
+        spell: &SpellDisplay,
+        ranged_attack_time_ms: u32,
+        now: Instant,
+        mods: Option<&SpellModifiers>,
+    ) {
+        let (recovery_ms, category_ms) = mods.map_or_else(
+            || {
+                (
+                    spell.recovery_ms,
+                    spell
+                        .category_recovery_ms
+                        .saturating_add(ranged_attack_time_ms),
+                )
+            },
+            |mods| mods.spell_cooldowns(spell, ranged_attack_time_ms),
+        );
+        self.add(
+            now,
+            spell_id,
+            0,
+            Timer {
+                start: now,
+                duration: Duration::from_millis(u64::from(recovery_ms)),
+            },
+            spell.category,
+            spell.category_wildcard,
+            Timer {
+                start: now,
+                duration: Duration::from_millis(u64::from(category_ms)),
+            },
+            spell.cooldown_on_event(),
+            0,
+            Timer::none(now),
+        );
+    }
+
+    fn start_gcd(
+        &mut self,
+        spell_id: u32,
+        spell: &SpellDisplay,
+        now: Instant,
+        mods: &SpellModifiers,
+    ) {
+        if spell.start_recovery_category == 0 && spell.start_recovery_ms == 0 {
+            return;
+        }
+        // `StartGlobalCooldown 0x6e2de0`: op 21 before the zero-duration exit (`0x6e2e2c`).
+        let duration_ms = mods.apply(spell, OP_GCD, spell.start_recovery_ms as i32);
+        if duration_ms <= 0 {
+            return;
+        }
+        if benilla_assets::trace::enabled() {
+            benilla_assets::trace::line(
+                "cd",
+                &format!(
+                    "arm-gcd spell={spell_id} gcdcat={} dur={}ms (cast-send)",
+                    spell.start_recovery_category, duration_ms
+                ),
+            );
+        }
+        self.add(
+            now,
+            spell_id,
+            0,
+            Timer::none(now),
+            0,
+            false,
+            Timer::none(now),
+            spell.cooldown_on_event(),
+            spell.start_recovery_category,
+            Timer {
+                start: now,
+                duration: Duration::from_millis(duration_ms as u64),
+            },
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -779,118 +892,5 @@ mod wrath_pet_tests {
             0x08000000
         );
         assert!(!cds.records.last().unwrap().on_hold);
-    }
-}
-
-/// `Cooldowns`'s methods that need this module (the type lives in `app_core` for the crate split).
-pub(crate) trait CooldownsSpell {
-    /// A spell's own cooldown from `Spell.dbc` (`StartCooldown 0x6e2c60`), without a GCD.
-    ///
-    /// `ranged_attack_time_ms` is `UNIT_FIELD_RANGEDATTACKTIME` when
-    /// [`SpellDisplay::ranged_speed_cooldown`], else 0, added to the category timer (`0x6e2b60`):
-    /// the Throw and wand Shoot sweep. Category 0 (Auto Shot) never surfaces it. `mods` applies
-    /// op 11 to both timers, as the self and pet legs do; `None` inserts the DBC values.
-    fn start_spell(
-        &mut self,
-        spell_id: u32,
-        spell: &SpellDisplay,
-        ranged_attack_time_ms: u32,
-        now: Instant,
-        mods: Option<&SpellModifiers>,
-    );
-    /// Arm the GCD at cast send (`StartGlobalCooldown 0x6e2de0`, from `0x6e58fb`) for any cast or
-    /// item use, and at a pet-bar spell press (`0x4bd367`, into the pet's list), unless
-    /// `startRecoveryCategory` and `startRecoveryTime` are both 0
-    /// (`0x6e2e0f`-`0x6e2e21`), then with op 21 applied (`0x6e2e2c`) and nothing armed for a zero
-    /// result (`0x6e2e3d`). A negative one arms nothing either, where the reference inserts a
-    /// record no reader shows. `on_hold` is Attributes bit 25.
-    fn start_gcd(
-        &mut self,
-        spell_id: u32,
-        spell: &SpellDisplay,
-        now: Instant,
-        mods: &SpellModifiers,
-    );
-}
-
-impl CooldownsSpell for Cooldowns {
-    fn start_spell(
-        &mut self,
-        spell_id: u32,
-        spell: &SpellDisplay,
-        ranged_attack_time_ms: u32,
-        now: Instant,
-        mods: Option<&SpellModifiers>,
-    ) {
-        let (recovery_ms, category_ms) = mods.map_or_else(
-            || {
-                (
-                    spell.recovery_ms,
-                    spell
-                        .category_recovery_ms
-                        .saturating_add(ranged_attack_time_ms),
-                )
-            },
-            |mods| mods.spell_cooldowns(spell, ranged_attack_time_ms),
-        );
-        self.add(
-            now,
-            spell_id,
-            0,
-            Timer {
-                start: now,
-                duration: Duration::from_millis(u64::from(recovery_ms)),
-            },
-            spell.category,
-            spell.category_wildcard,
-            Timer {
-                start: now,
-                duration: Duration::from_millis(u64::from(category_ms)),
-            },
-            spell.cooldown_on_event(),
-            0,
-            Timer::none(now),
-        );
-    }
-
-    fn start_gcd(
-        &mut self,
-        spell_id: u32,
-        spell: &SpellDisplay,
-        now: Instant,
-        mods: &SpellModifiers,
-    ) {
-        if spell.start_recovery_category == 0 && spell.start_recovery_ms == 0 {
-            return;
-        }
-        // `StartGlobalCooldown 0x6e2de0`: op 21 before the zero-duration exit (`0x6e2e2c`).
-        let duration_ms = mods.apply(spell, OP_GCD, spell.start_recovery_ms as i32);
-        if duration_ms <= 0 {
-            return;
-        }
-        if benilla_assets::trace::enabled() {
-            benilla_assets::trace::line(
-                "cd",
-                &format!(
-                    "arm-gcd spell={spell_id} gcdcat={} dur={}ms (cast-send)",
-                    spell.start_recovery_category, duration_ms
-                ),
-            );
-        }
-        self.add(
-            now,
-            spell_id,
-            0,
-            Timer::none(now),
-            0,
-            false,
-            Timer::none(now),
-            spell.cooldown_on_event(),
-            spell.start_recovery_category,
-            Timer {
-                start: now,
-                duration: Duration::from_millis(duration_ms as u64),
-            },
-        );
     }
 }

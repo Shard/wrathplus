@@ -17,7 +17,7 @@ fn app() -> (App, crossbeam_channel::Receiver<ClientCommand>) {
             .into(),
         ))
         .add_systems(Update, feed_movie);
-    let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let script = UiScript::new().unwrap();
     script
         .run(
             r#"

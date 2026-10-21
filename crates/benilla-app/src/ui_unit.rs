@@ -9,11 +9,10 @@ use bevy::prelude::*;
 use benilla_formats::ChrClasses;
 use benilla_protocol::types::ObjectType;
 use benilla_ui::script::{
-    parse_unit_token, power_token, ScriptValue, UiScript, UnitBase, UnitState, UnitTokenParse,
-    WornDisplay,
+    parse_unit_token, ScriptValue, UiScript, UnitBase, UnitState, UnitTokenParse, WornDisplay,
 };
 
-use crate::creature_type::CreatureTypeSources;
+use crate::creature_type::{creature_type_word, CreatureTypeSources};
 use crate::names::NameCache;
 use crate::net::{
     FieldChanged, FieldEdges, Guid, NetCommands, NetHandlerApp, ObjectStore, Reputations,
@@ -26,11 +25,10 @@ pub(crate) mod held;
 
 pub(crate) use crate::app_core::schedule::UnitFeed;
 
-/// One `UNIT_COMBAT` over a unit, the portrait hit indicator's feed. The emitter `0x494600` fires
-/// `(token, action, descriptor, amount, type)` once per token naming the unit, with no
-/// self-suppression and no CVar gate; `type` is the school on the melee and spell-damage paths, 0
-/// from the miss and heal wrappers, and the 1.12 binary never emits `ENERGIZE`. The melee victim
-/// event waits for the impact keyframe (`0x6243e0`, reached only from `0x624530`).
+/// One `UNIT_COMBAT` over a unit, the portrait hit indicator's feed (stock `CombatFeedback`). Build
+/// 12340's emitter `0x5132c0` fires `(token, action, flags, amount, school)` (event `0x8f`) once per
+/// token naming the unit ([`fire_unit_combat`]). The melee victim event waits for the swing's
+/// impact keyframe.
 #[derive(Message, Clone, Copy)]
 pub(crate) struct UnitCombatFeedback {
     pub(crate) unit: Entity,
@@ -44,17 +42,7 @@ pub(crate) struct UnitCombatFeedback {
     pub(crate) school: u32,
 }
 
-/// One `COMBAT_TEXT_UPDATE` (event `0x21E`, via `0x703f50`), fired at packet parse by every
-/// producer, melee included (`0x6255b0` → `0x629d30`); `data`/`extra` are `arg2`/`arg3`. Fired only
-/// when the unit the line is about is the player: each emitter tests that unit's class (`0x5efea0`)
-/// for 0 before its helper (`0x629ef1`, `0x62d046`, `0x62834b`).
-#[derive(Message, Clone)]
-pub(crate) struct CombatTextEvent {
-    pub(crate) message_type: &'static str,
-    pub(crate) data: Option<String>,
-    pub(crate) extra: Option<String>,
-}
-
+pub(crate) use crate::app_core::state::CombatTextEvent;
 /// `PLAYER_LEAVING_WORLD` on a cross-map worldport. The reference fires event `0x111` at one site
 /// (`0x490b48`), gated only by the latch `[0xb4b424]`, from the local player's destructor
 /// (`0x5dd543`, this system), the shutdown tail `0x490bd0` (ours is `wrath_addons::shutdown`) and the
@@ -402,40 +390,52 @@ fn load_exhaustion_rows(
     }
 }
 
-/// Melee swing to the `UNIT_COMBAT` action (victim-state table `0x83de28`, `0x4946d0`) and
-/// descriptor, HitInfo keyed on the amount's sign: above zero CRITICAL `0x80`, GLANCING `0x4000`,
-/// CRUSHING `0x8000`; else ABSORB `0x20`, BLOCK `0x800`, RESIST `0x40`.
-fn melee_feedback(hit_info: u32, victim_state: u32, damage: u32) -> (&'static str, &'static str) {
-    match victim_state {
-        2 => ("DODGE", ""),
-        3 => ("PARRY", ""),
-        5 => ("BLOCK", ""),
-        6 => ("EVADE", ""),
-        7 => ("IMMUNE", ""),
-        8 => ("DEFLECT", ""),
-        // 0 UNAFFECTED / 1 NORMAL / 4 INTERRUPT: WOUND, descriptor by the amount-sign key.
-        _ => {
-            if damage > 0 {
-                if hit_info & 0x80 != 0 {
-                    ("WOUND", "CRITICAL")
-                } else if hit_info & 0x4000 != 0 {
-                    ("WOUND", "GLANCING")
-                } else if hit_info & 0x8000 != 0 {
-                    ("WOUND", "CRUSHING")
-                } else {
-                    ("WOUND", "")
-                }
-            } else if hit_info & 0x20 != 0 {
-                ("WOUND", "ABSORB")
-            } else if hit_info & 0x800 != 0 {
-                ("WOUND", "BLOCK") // a full block the parse did not already make state 5
-            } else if hit_info & 0x40 != 0 {
-                ("WOUND", "RESIST")
-            } else {
-                ("MISS", "")
-            }
+/// Build 12340's victim-state action words, the table `0x00ac8050` its melee wrapper `0x5133b0`
+/// indexes (`rec+0x54 < 9`).
+const VICTIM_ACTIONS: [&str; 9] = [
+    "MISS",
+    "WOUND",
+    "DODGE",
+    "PARRY",
+    "INTERRUPT",
+    "BLOCK",
+    "EVADE",
+    "IMMUNE",
+    "DEFLECT",
+];
+
+/// A melee swing's `UNIT_COMBAT` action and flags, as `0x5133b0` passes them to `0x5132c0`: the
+/// action by victim state, the flags by `0x5132c0`'s hit-info ladder keyed on the amount's sign.
+/// `hit_info` is the presentation view's (`net::wrath_melee::presentation`), whose bits stand for
+/// 12340's: above zero CRITICAL (12340 `0x200`, here `0x80`), GLANCING (`0x10000`, `0x4000`),
+/// CRUSHING (`0x20000`, `0x8000`); else ABSORB (`0x20`), BLOCK (`0x2000`, `0x800`), RESIST (`0x80`,
+/// `0x40`). A state past the table fires nothing.
+fn melee_feedback(
+    hit_info: u32,
+    victim_state: u32,
+    damage: u32,
+) -> Option<(&'static str, &'static str)> {
+    let action = *VICTIM_ACTIONS.get(victim_state as usize)?;
+    let flags = if damage > 0 {
+        if hit_info & 0x80 != 0 {
+            "CRITICAL"
+        } else if hit_info & 0x4000 != 0 {
+            "GLANCING"
+        } else if hit_info & 0x8000 != 0 {
+            "CRUSHING"
+        } else {
+            ""
         }
-    }
+    } else if hit_info & 0x20 != 0 {
+        "ABSORB"
+    } else if hit_info & 0x800 != 0 {
+        "BLOCK"
+    } else if hit_info & 0x40 != 0 {
+        "RESIST"
+    } else {
+        ""
+    };
+    Some((action, flags))
 }
 
 /// The melee `UNIT_COMBAT` producer, on the swing's impact keyframe, `text_only` flushes included;
@@ -446,7 +446,9 @@ fn melee_unit_combat(
 ) {
     for crate::creature_anim::SwingImpact { swing: s, .. } in impacts.read() {
         let Some(victim) = s.victim else { continue };
-        let (action, flags) = melee_feedback(s.hit_info, s.victim_state, s.damage);
+        let Some((action, flags)) = melee_feedback(s.hit_info, s.victim_state, s.damage) else {
+            continue;
+        };
         out.write(UnitCombatFeedback {
             unit: victim,
             action,
@@ -478,83 +480,72 @@ fn fire_combat_text(
     }
 }
 
-/// Drain [`UnitCombatFeedback`] into `UNIT_COMBAT` for `"player"` and `"target"` only; the
-/// reference fires once per token naming the unit, and stock `PetFrame.lua:13` listens for `"pet"`.
+/// The tokens naming `unit`, in build 12340's order (`0x60bb70`): `player`, `vehicle`, `pet`, the
+/// first `partyN` or `partypetN`, the first `raidN` or `raidpetN`, then the arena units. Labelled:
+/// `vehicle` and `arenaN`/`arenapetN` resolve to nothing in [`UnitTokens`] yet, so they never fire.
+fn unit_combat_tokens(tokens: &UnitTokens, unit: Entity) -> Vec<String> {
+    let names = |token: &str| {
+        tokens
+            .resolve(token, &Selection::default())
+            .is_some_and(|(e, _)| e == unit)
+    };
+    let mut out: Vec<String> = ["player", "pet"]
+        .into_iter()
+        .filter(|t| names(t))
+        .map(str::to_string)
+        .collect();
+    for (group, rows) in [("party", 4), ("raid", 40)] {
+        for row in 1..=rows {
+            let member = format!("{group}{row}");
+            let pet = format!("{group}pet{row}");
+            if names(&member) {
+                out.push(member);
+                break;
+            }
+            if names(&pet) {
+                out.push(pet);
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Drain [`UnitCombatFeedback`] into `UNIT_COMBAT(token, action, flags, amount, school)`, once per
+/// token naming the unit, with no self-suppression and no CVar gate (`0x5132c0`).
 fn fire_unit_combat(
     script: Option<NonSendMut<UiScript>>,
     mut events: MessageReader<UnitCombatFeedback>,
-    self_q: Query<(), With<SelfPlayer>>,
-    selection: Res<Selection>,
+    tokens: UnitTokens,
 ) {
     let Some(mut script) = script else {
+        events.clear();
         return;
     };
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-        // Shared feedback carries Vanilla school-index/event semantics. Do not advertise
-        // that payload as Wrath's Lua UNIT_COMBAT ABI before independent qualification.
-        events.read().for_each(|_| {});
-        return;
-    }
     for ev in events.read() {
-        let mut fire = |token: &str| {
+        for token in unit_combat_tokens(&tokens, ev.unit) {
             script.fire_event(
                 "UNIT_COMBAT",
                 vec![
-                    ScriptValue::Str(token.to_string()),
+                    ScriptValue::Str(token),
                     ScriptValue::Str(ev.action.to_string()),
                     ScriptValue::Str(ev.flags.to_string()),
                     ScriptValue::Int(i64::from(ev.amount)),
                     ScriptValue::Int(i64::from(ev.school)),
                 ],
             );
-        };
-        if self_q.contains(ev.unit) {
-            fire("player");
-        }
-        if selection.target == Some(ev.unit) {
-            fire("target");
         }
     }
 }
 
-/// The race id to `UnitRace`'s display name and `raceFile` token (`"Scourge"`, `"NightElf"`); the
-/// display name is also what `$R`/`$r` expand to.
-pub(crate) fn race_names(race: u8) -> Option<(&'static str, &'static str)> {
-    Some(match race {
-        1 => ("Human", "Human"),
-        2 => ("Orc", "Orc"),
-        3 => ("Dwarf", "Dwarf"),
-        4 => ("Night Elf", "NightElf"),
-        5 => ("Undead", "Scourge"),
-        6 => ("Tauren", "Tauren"),
-        7 => ("Gnome", "Gnome"),
-        8 => ("Troll", "Troll"),
-        _ => return None,
-    })
-}
-
-/// The class id to `UnitClass`'s display name and uppercase `classFileName`.
-pub(crate) fn class_names(class: u8) -> Option<(&'static str, &'static str)> {
-    Some(match class {
-        1 => ("Warrior", "WARRIOR"),
-        2 => ("Paladin", "PALADIN"),
-        3 => ("Hunter", "HUNTER"),
-        4 => ("Rogue", "ROGUE"),
-        5 => ("Priest", "PRIEST"),
-        6 => ("Death Knight", "DEATHKNIGHT"),
-        7 => ("Shaman", "SHAMAN"),
-        8 => ("Mage", "MAGE"),
-        9 => ("Warlock", "WARLOCK"),
-        11 => ("Druid", "DRUID"),
-        _ => return None,
-    })
-}
+pub(crate) use crate::app_core::catalogs::{class_names, race_names};
 
 /// A playable race's fixed side, for where no faction template is at hand, as at world entry,
 /// where addons concatenate `UnitFactionGroup("player")` at file scope; [`faction_group`] reads
 /// the live template.
 pub(crate) fn race_faction_group(race: u8) -> Option<&'static str> {
-    if !(1..=8).contains(&race) {
+    // The ten playable races; 9 (Goblin) is no player's.
+    if !matches!(race, 1..=8 | 10 | 11) {
         return None;
     }
     Some(if crate::char_create::ALLIANCE.contains(&race) {
@@ -1059,25 +1050,18 @@ fn drain_worn_display_toggles(
     let Some(mut script) = script else {
         return;
     };
-    let wrath = script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340;
     let hidden = self_q
         .iter()
         .next()
         .map(|s| (s.0.player_hides_helm(), s.0.player_hides_cloak()));
     for which in script.take_worn_display_toggles() {
-        let command = match (which, wrath) {
-            (WornDisplay::Helm, false) => crate::net::ClientCommand::ToggleHelm,
-            (WornDisplay::Cloak, false) => crate::net::ClientCommand::ToggleCloak,
-            (WornDisplay::Helm, true) => {
-                crate::net::ClientCommand::NativeAppearance(A::ShowingHelm {
-                    show: hidden.is_some_and(|h| h.0),
-                })
-            }
-            (WornDisplay::Cloak, true) => {
-                crate::net::ClientCommand::NativeAppearance(A::ShowingCloak {
-                    show: hidden.is_some_and(|h| h.1),
-                })
-            }
+        let command = match which {
+            WornDisplay::Helm => crate::net::ClientCommand::NativeAppearance(A::ShowingHelm {
+                show: hidden.is_some_and(|h| h.0),
+            }),
+            WornDisplay::Cloak => crate::net::ClientCommand::NativeAppearance(A::ShowingCloak {
+                show: hidden.is_some_and(|h| h.1),
+            }),
         };
         let _ = commands.0.send(command);
     }
@@ -1161,25 +1145,6 @@ pub(crate) fn faction_group_localized(
         .map(str::to_string)
 }
 
-/// `CreatureType.dbc` id to the enUS word, a creature's level-line class slot.
-fn creature_type_word(t: u32) -> Option<&'static str> {
-    Some(match t {
-        1 => "Beast",
-        2 => "Dragonkin",
-        3 => "Demon",
-        4 => "Elemental",
-        5 => "Giant",
-        6 => "Undead",
-        7 => "Humanoid",
-        8 => "Critter",
-        9 => "Mechanical",
-        // The shipped table runs 1..11; the nameplate filter tests 11 (`0x605570`).
-        11 => "Totem",
-        // Deviation: 10, "Not specified", answers None because the word would print in the
-        // tooltip's level line; `UnitCreatureType` then answers nil where the reference names it.
-        _ => return None,
-    })
-}
 
 /// Build-12340 UnitFrame.lua listens for these per-resource events, not modern UNIT_POWER_UPDATE.
 fn fire_wrath_power_transitions(
@@ -1262,23 +1227,7 @@ pub(crate) fn fire_transitions(
     ) {
         script.fire_event("UNIT_DYNAMIC_FLAGS", vec![tok()]);
     }
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-        fire_wrath_power_transitions(script, token, prev, cur);
-    } else {
-        // Preserve the 1.12 active-resource event contract.
-        if changed(|u| u64::from(u.power)) {
-            script.fire_event(
-                &format!("UNIT_{}", power_token(cur.power_type)),
-                vec![tok()],
-            );
-        }
-        if changed(|u| u64::from(u.max_power)) {
-            script.fire_event(
-                &format!("UNIT_MAX{}", power_token(cur.power_type)),
-                vec![tok()],
-            );
-        }
-    }
+    fire_wrath_power_transitions(script, token, prev, cur);
     if prev.is_none_or(|p| p.name != cur.name) {
         script.fire_event("UNIT_NAME_UPDATE", vec![tok()]);
     }
@@ -1830,7 +1779,6 @@ mod tests {
     fn wrath_power_snapshot_and_events_keep_inactive_and_runic_values() {
         use benilla_protocol::types::ObjectFields;
         use benilla_protocol::types::{Field, FieldLayout};
-        use benilla_ui::script::ScriptDialect;
         let layout = FieldLayout::Wrath12340;
         let power = layout.resolve(Field::UnitPower).unwrap();
         let maximum = layout.resolve(Field::UnitMaxPower).unwrap();
@@ -1854,7 +1802,7 @@ mod tests {
         current.powers.as_mut().unwrap()[0].current = 731;
         current.powers.as_mut().unwrap()[6].current = 439;
         current.powers.as_mut().unwrap()[6].maximum = 1250;
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script.run("SEEN={} local f=CreateFrame('Frame') for _,e in ipairs({'UNIT_MANA','UNIT_RUNIC_POWER','UNIT_MAXRUNIC_POWER','UNIT_RAGE'}) do f:RegisterEvent(e) end f:SetScript('OnEvent',function(self,event,unit) table.insert(SEEN,event..':'..UnitPower(unit,6)) end)").unwrap();
         script.set_unit("player", Some(current.clone()));
         fire_transitions(
@@ -2026,6 +1974,68 @@ mod tests {
 
         fn guid_of(app: &mut App, token: &str) -> Option<u64> {
             resolve(app, token).map(|(_, guid)| guid)
+        }
+
+        /// `UNIT_COMBAT` fires once per token naming the unit, in 12340's order (`0x60bb70`): a
+        /// party member is `party1` and nothing else; its pet is `partypet1`.
+        #[test]
+        fn unit_combat_fires_for_every_token_naming_the_unit() {
+            let mut app = party(2, true, true);
+            app.add_message::<UnitCombatFeedback>();
+            let script = UiScript::new().unwrap();
+            script
+                .run(
+                    "SEEN = {} local f = CreateFrame('Frame') f:RegisterEvent('UNIT_COMBAT') \
+                     f:SetScript('OnEvent', function(_, _, unit, action, flags, amount, school) \
+                     SEEN[#SEEN + 1] = unit .. ':' .. action .. ':' .. flags .. ':' .. amount .. ':' \
+                     .. school end)",
+                )
+                .unwrap();
+            app.insert_non_send_resource(script);
+            let (member_entity, _) = resolve(&mut app, "party1").expect("party1");
+            let (pet_entity, _) = resolve(&mut app, "partypet1").expect("partypet1");
+            app.world_mut().write_message(UnitCombatFeedback {
+                unit: member_entity,
+                action: "WOUND",
+                flags: "CRITICAL",
+                amount: 42,
+                school: 0,
+            });
+            app.world_mut().write_message(UnitCombatFeedback {
+                unit: pet_entity,
+                action: "HEAL",
+                flags: "",
+                amount: 7,
+                school: 0,
+            });
+            app.world_mut().run_system_once(fire_unit_combat).unwrap();
+            let seen: Vec<String> = app
+                .world()
+                .non_send_resource::<UiScript>()
+                .eval("return SEEN")
+                .unwrap();
+            assert_eq!(seen, ["party1:WOUND:CRITICAL:42:0", "partypet1:HEAL::7:0"]);
+        }
+
+        /// 12340's victim-state table (`0x00ac8050`): state 0 is `MISS` and 4 `INTERRUPT`, each
+        /// with the hit-info ladder's flags; a state past the table fires nothing.
+        #[test]
+        fn melee_feedback_takes_12340s_victim_state_table() {
+            assert_eq!(super::super::melee_feedback(0, 0, 0), Some(("MISS", "")));
+            assert_eq!(
+                super::super::melee_feedback(0x80, 1, 30),
+                Some(("WOUND", "CRITICAL"))
+            );
+            assert_eq!(
+                super::super::melee_feedback(0, 4, 5),
+                Some(("INTERRUPT", ""))
+            );
+            assert_eq!(
+                super::super::melee_feedback(0x20, 1, 0),
+                Some(("WOUND", "ABSORB"))
+            );
+            assert_eq!(super::super::melee_feedback(0, 2, 0), Some(("DODGE", "")));
+            assert_eq!(super::super::melee_feedback(0, 9, 0), None);
         }
 
         /// `partypetN` is the Nth party slot's pet, and `partyN` is still the slot's member: the
@@ -2740,6 +2750,30 @@ mod tests {
     }
 
     /// [`race_pvp_team`] against the shipped DBCs, walked as `0x5efe00` walks them.
+    /// Every race row build 12340's `ChrRaces.dbc` ships up to 11, with its enUS name and
+    /// `clientFileString`, and the side of each playable one.
+    #[test]
+    fn race_names_cover_every_12340_race_and_side() {
+        for (race, display, file, side) in [
+            (1, "Human", "Human", Some("Alliance")),
+            (2, "Orc", "Orc", Some("Horde")),
+            (3, "Dwarf", "Dwarf", Some("Alliance")),
+            (4, "Night Elf", "NightElf", Some("Alliance")),
+            (5, "Undead", "Scourge", Some("Horde")),
+            (6, "Tauren", "Tauren", Some("Horde")),
+            (7, "Gnome", "Gnome", Some("Alliance")),
+            (8, "Troll", "Troll", Some("Horde")),
+            (9, "Goblin", "Goblin", None),
+            (10, "Blood Elf", "BloodElf", Some("Horde")),
+            (11, "Draenei", "Draenei", Some("Alliance")),
+        ] {
+            assert_eq!(race_names(race), Some((display, file)), "race {race}");
+            assert_eq!(race_faction_group(race), side, "race {race}");
+        }
+        assert_eq!(race_names(0), None);
+        assert_eq!(race_names(12), None);
+    }
+
     #[test]
     fn race_pvp_team_matches_the_shipped_tables() {
         let data = benilla_formats::wow_data_or_skip!();
@@ -3705,7 +3739,6 @@ mod tests {
     #[test]
     fn wrath_unit_is_unit_tracks_actual_player_and_target_snapshots() {
         use benilla_protocol::types::{ObjectFields, ObjectType};
-        use benilla_ui::script::ScriptDialect;
 
         const PLAYER: u64 = 0x77;
         const OTHER: u64 = 0xF130_0000_4500_0001;
@@ -3722,9 +3755,7 @@ mod tests {
         app.add_message::<FieldChanged>();
         let (tx, _rx) = crossbeam_channel::unbounded();
         app.insert_resource(NetCommands(tx));
-        app.insert_non_send_resource(
-            UiScript::new_with_dialect(ScriptDialect::Wrath12340).expect("Wrath VM"),
-        );
+        app.insert_non_send_resource(UiScript::new().expect("Wrath VM"));
         app.add_systems(Update, feed_units);
 
         let player = app

@@ -17,7 +17,7 @@ fn connected() -> SessionEvent {
 /// offset the VM's `server_now` reads; leaving the world stops the ticker and forgets it.
 #[test]
 fn the_ticker_queries_every_twenty_seconds_and_replies_set_the_offset() {
-    use benilla_ui::script::{ScriptDialect, UiScript};
+    use benilla_ui::script::UiScript;
     use std::time::Duration;
     let (tx, rx) = crossbeam_channel::unbounded();
     let mut app = App::new();
@@ -25,7 +25,7 @@ fn the_ticker_queries_every_twenty_seconds_and_replies_set_the_offset() {
         .insert_state(crate::char_select::ClientState::InWorld)
         .insert_resource(NetCommands(tx))
         .init_resource::<Time>()
-        .insert_non_send_resource(UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap());
+        .insert_non_send_resource(UiScript::new().unwrap());
     crate::net::wrath_ui_timer_capture::register(&mut app);
     register(&mut app);
     let advance = |app: &mut App, secs: f64| {

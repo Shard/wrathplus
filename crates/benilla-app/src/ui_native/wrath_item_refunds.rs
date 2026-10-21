@@ -10,7 +10,7 @@ use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
 #[cfg(test)]
 use benilla_protocol::wrath_inventory::RefundCost;
 use benilla_protocol::wrath_inventory::{Command, Packet};
-use benilla_ui::script::{ItemRefundCost, ItemRefundView, ScriptDialect, UiScript};
+use benilla_ui::script::{ItemRefundCost, ItemRefundView, UiScript};
 use bevy::prelude::*;
 
 /// `ITEM_FIELD_FLAG_REFUNDABLE` (AzerothCore ItemTemplate.h).
@@ -65,9 +65,6 @@ pub(crate) fn feed_item_refunds(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let now = time.elapsed_secs_f64();
     absorb(&mut packets.0, &mut refunds, now);
     let Some(store) = self_q.iter().next() else {

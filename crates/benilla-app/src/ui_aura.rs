@@ -8,8 +8,6 @@
 mod native;
 mod units;
 
-use std::collections::HashMap;
-
 use bevy::prelude::*;
 
 use benilla_formats::SpellCatalog;
@@ -20,48 +18,12 @@ use crate::char_select::ClientState;
 use crate::net::{
     ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, Reputations, SelfPlayer,
 };
-use crate::target::{can_assist, Factions, RelationContext, Selection};
+use crate::target::{Factions, Selection};
 use crate::ui_action::Spells;
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
 
-/// The player's aura durations by raw slot, each `SMSG_UPDATE_AURA_DURATION` stamped with its
-/// arrival: the reference's expiry array `0xbc5f68`. Only the session's end clears it, never an
-/// empty slot, whose aura may be a frame behind its packet, nor a worldport. At most 48 entries.
-#[derive(Resource, Default)]
-pub(crate) struct AuraDurations {
-    by_slot: HashMap<u8, DurationStamp>,
-}
-
-struct DurationStamp {
-    /// Seconds: the full duration on an apply or refresh, only the remainder on a relog
-    /// (`Map::ExistingPlayerLogin`) or a cast pushback (`Unit::DelaySpellAuraHolder`).
-    total: f64,
-    /// The real-clock instant it runs out: a server-sent span counts down in real seconds.
-    expires_at: f64,
-    /// The real-clock arrival, the freshness gate against a recycled slot.
-    received_at: f64,
-}
-
-impl AuraDurations {
-    /// Records one `SMSG_UPDATE_AURA_DURATION`.
-    pub(crate) fn set(&mut self, slot: u8, remaining_ms: u32, now: f64) {
-        let total = f64::from(remaining_ms) / 1000.0;
-        if trace_period().is_some() {
-            info!(
-                "aura trace: SMSG_UPDATE_AURA_DURATION slot {slot} = {remaining_ms} ms @ {now:.2}"
-            );
-        }
-        self.by_slot.insert(
-            slot,
-            DurationStamp {
-                total,
-                expires_at: now + total,
-                received_at: now,
-            },
-        );
-    }
-}
+pub(crate) use crate::app_core::state::{AuraDurations, DurationStamp};
 
 /// A record of the player's cache (`0xbc6040`): the position persists, the fields refresh.
 struct CachedAura {
@@ -287,35 +249,6 @@ fn record_inputs<'a>(
         .filter(move |&(_, spell)| spell != 0 && shown_in_aura_ui(catalog, spell))
         .map(|(slot, spell)| (slot, spell, 1, 0))
 }
-
-/// `UnitBuff 0x519500`'s unit-level gate, before any slot: a unit's buffs are listed only if it
-/// has `UNIT_FLAG_AURAS_VISIBLE` or the uncharmed player can assist it (`0x5195aa`-`0x5195f7`),
-/// else every index is nil; `UnitDebuff` has no gate. vmangos sets the flag for Detect Magic
-/// (`UnitDefines.h:572`) and for a GM viewer (`Object.cpp:765-766`), so it is read as received.
-fn buffs_visible_on(
-    store: &ObjectStore,
-    self_store: Option<&ObjectStore>,
-    factions: Option<&Factions>,
-    reputations: &Reputations,
-    ctx: RelationContext,
-) -> bool {
-    if store.0.layout() == benilla_protocol::types::FieldLayout::Wrath12340 {
-        // Native packet/roster lists apply their own whole-unit gate. No native snapshot
-        // establishes type 295 here; never reinterpret Wrath MOUNT as AURAS_VISIBLE.
-        return true;
-    }
-    if store.0.unit_flags() & UNIT_FLAG_AURAS_VISIBLE != 0 {
-        return true;
-    }
-    // While charmed you assist nobody (`0x5195f1`-`0x5195f7`).
-    if self_store.is_some_and(|s| s.0.unit_charmed_by().is_some()) {
-        return false;
-    }
-    can_assist(Some(store), factions, reputations, self_store, ctx)
-}
-
-/// `UNIT_FIELD_FLAGS` bit 27, `0x08000000` (`0x5195b6`).
-const UNIT_FLAG_AURAS_VISIBLE: u32 = 0x0800_0000;
 
 /// `AttributesEx & 0x4` (vmangos `SpellDefines.h:834`), the cancel gate's DBC arm (`0x4e4a10`).
 const SPELL_ATTR_EX_IS_CHANNELED: u32 = 0x4;
@@ -590,23 +523,10 @@ fn feed_auras(
     }
 
     let held = |guid: u64| index.0.get(&guid).and_then(|&e| stores.get(e).ok());
-    let held_lookup = crate::target::ByGuid::new(held);
     let pet_guid = units.pet.guid();
-    // `UnitBuff`'s unit gate on a live unit. `unit` is never `store`, the player's, which is the
-    // gate's second argument. The pet is ungated; the reference gates a pet too, but `CanAssist`'s
-    // player-controlled arm (`0x60673e`-`0x60679f`, the controlling players' duel and FFA-PvP
-    // state) passes for your own pet, leaving only the charm, selectable and reaction clauses to
-    // hide its buffs.
-    let buffs_visible = |guid: u64, unit: &ObjectStore| {
-        guid == pet_guid
-            || buffs_visible_on(
-                unit,
-                Some(store),
-                factions.as_deref(),
-                &reputations,
-                RelationContext::new(None, &held_lookup),
-            )
-    };
+    // `UnitBuff`'s unit gate: the native packet and roster lists apply their own whole-unit gate,
+    // and no native snapshot establishes type 295 here, so every live unit's list is shown.
+    let buffs_visible = |_guid: u64, _unit: &ObjectStore| true;
     let target_guid = units.selection.guid.unwrap_or(0);
     let catalog_moved = spells.as_ref().is_some_and(|s| s.is_changed());
     let unit_changed = memo.units.feed(
@@ -735,6 +655,31 @@ fn drain_aura_cancels(script: Option<NonSendMut<UiScript>>, net: Res<NetCommands
     };
     for spell_id in script.take_cancel_aura_requests() {
         let _ = net.0.send(ClientCommand::CancelAura { spell_id });
+    }
+}
+
+/// `AuraDurations`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait AuraDurationsTrace {
+    /// Records one `SMSG_UPDATE_AURA_DURATION`.
+    fn set(&mut self, slot: u8, remaining_ms: u32, now: f64);
+}
+
+impl AuraDurationsTrace for AuraDurations {
+    fn set(&mut self, slot: u8, remaining_ms: u32, now: f64) {
+        let total = f64::from(remaining_ms) / 1000.0;
+        if trace_period().is_some() {
+            info!(
+                "aura trace: SMSG_UPDATE_AURA_DURATION slot {slot} = {remaining_ms} ms @ {now:.2}"
+            );
+        }
+        self.by_slot.insert(
+            slot,
+            DurationStamp {
+                total,
+                expires_at: now + total,
+                received_at: now,
+            },
+        );
     }
 }
 

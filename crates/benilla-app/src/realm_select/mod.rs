@@ -30,8 +30,8 @@ pub(crate) use load::pvp_rp;
 use bevy::prelude::*;
 
 use crate::net::{RealmChoice, RealmListMessage, RealmRequest};
-use benilla_formats::RealmCategory;
 use benilla_protocol::RealmInfo;
+use category::RealmsCategory;
 
 /// The persisted 1.12 CVar naming the last realm connected to (`0x83f2d0`); the SavedVariables
 /// path (`0x8539a8`) is built from it.
@@ -41,62 +41,7 @@ pub(crate) const CVAR_REALM_NAME: &str = "realmName";
 /// dialog is up.
 const REFRESH_SECS: f32 = 5.0;
 
-/// The realm list, the selection on it, and the policy's memory.
-#[derive(Resource, Default)]
-pub(crate) struct Realms {
-    /// Every realm the auth server advertised, in wire order.
-    pub(super) realms: Vec<RealmInfo>,
-    /// The highlighted row by realm name, so a refresh that adds or drops a realm cannot move it.
-    selected: Option<String>,
-    /// The client Region's categories ([`category`]), read once at startup; `None` until then,
-    /// and every realm lists untabbed.
-    pub(super) categories: Option<Vec<RealmCategory>>,
-    /// The tab in front, `RealmList.selectedCategory`: a 1-based ordinal over the categories
-    /// holding a realm.
-    pub(super) category: Option<usize>,
-    /// `[0x837e98]`, the stored category `GetSelectedCategory` opens the list on, by index into
-    /// [`Self::categories`]; `None` is its `-1` load value.
-    chosen_category: Option<usize>,
-    /// First visible row within the selected category (`RealmList.offset`).
-    pub(super) offset: usize,
-    /// Which column the list is sorted on, and which way.
-    pub(super) sort: Sort,
-    /// `RealmList:IsVisible()`. While set, a published list is a refresh and is never
-    /// auto-answered.
-    pub(super) shown: bool,
-    /// `GetRealmInfo`'s `currentRealm`, the row highlighted when nothing else is. The reference
-    /// case-folds the `realmName` CVar (`0x46ef9e`, via `0x5ab7d0` on the handle from `0x63db90`)
-    /// against the realm name, and `ConnectToRealm` (`0x46b217`) writes the CVar before it dials.
-    /// Ours is set when we answer a park and seeded from the persisted CVar, because benilla
-    /// writes `realmName` only at world entry (the VM's `set_realm_name`).
-    current: Option<String>,
-    /// Seconds until the next refresh request.
-    refresh_in: f32,
-    /// `WOW_REALM`, read once.
-    env_realm: Option<String>,
-    env_read: bool,
-}
-
-/// One of the four sort columns, `SortRealms`' string argument.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum SortKey {
-    /// `SortRealms("characters")`, comparator case 0: the account's character count.
-    Characters,
-    /// `SortRealms("load")`, case 1: the computed load band, not the raw population.
-    Load,
-    /// `SortRealms("name")`, case 2: a case-folding compare.
-    Name,
-    /// `SortRealms("mode")`, case 3: the `(pvp, rp)` pair.
-    Type,
-}
-
-/// The sort config (`0xb41f40`): four `{key, descending}` records. The comparator (`0x46e790`)
-/// walks them in order and the first that does not tie decides, negated by its own `descending`.
-/// The default, `[characters, load, name, mode]` all ascending, is written once per process
-/// (`0x46e430`), so a click persists for the session. Ascending characters is higher count first.
-#[derive(Clone, Copy)]
-pub(super) struct Sort(pub(super) [(SortKey, bool); 4]);
-
+pub(crate) use crate::app_core::ui_flags::{Realms, Sort, SortKey};
 impl Default for Sort {
     fn default() -> Self {
         Self([
@@ -105,119 +50,6 @@ impl Default for Sort {
             (SortKey::Name, false),
             (SortKey::Type, false),
         ])
-    }
-}
-
-impl Sort {
-    /// A column header click (`0x46e9b0`): the front key toggles its direction; any other moves
-    /// to the front keeping its direction, and the records it passes shift down.
-    pub(super) fn click(&mut self, key: SortKey) {
-        if self.0[0].0 == key {
-            self.0[0].1 = !self.0[0].1;
-            return;
-        }
-        let Some(at) = self.0.iter().position(|(k, _)| *k == key) else {
-            return;
-        };
-        let record = self.0[at];
-        self.0.copy_within(0..at, 1);
-        self.0[0] = record;
-    }
-}
-
-impl Realms {
-    /// The rows the screen draws: indices into [`Self::realms`] for the tab in front, sorted per
-    /// category (`0x46e750`).
-    pub(super) fn rows(&self) -> Vec<usize> {
-        let (mean, stddev) = self.stats();
-        let mut rows = self.category_realms();
-        rows.sort_by(|&a, &b| {
-            let (ra, rb) = (&self.realms[a], &self.realms[b]);
-            for (key, descending) in self.sort.0 {
-                let ord = match key {
-                    // Higher count first.
-                    SortKey::Characters => rb.characters.cmp(&ra.characters),
-                    SortKey::Load => {
-                        let la = load::realm_load_classify(ra.flags, ra.population, mean, stddev);
-                        let lb = load::realm_load_classify(rb.flags, rb.population, mean, stddev);
-                        la.total_cmp(&lb)
-                    }
-                    SortKey::Name => ra.name.to_lowercase().cmp(&rb.name.to_lowercase()),
-                    SortKey::Type => load::pvp_rp(ra.realm_type).cmp(&load::pvp_rp(rb.realm_type)),
-                };
-                if ord != std::cmp::Ordering::Equal {
-                    return if descending { ord.reverse() } else { ord };
-                }
-            }
-            // The reference's characters case answers +1 both ways on equal nonzero counts (its
-            // tie-break strcmp is clobbered), a defect not reproduced: all four tied is Equal.
-            std::cmp::Ordering::Equal
-        });
-        rows
-    }
-
-    /// The load distribution, over every realm, not the selected category: `0x46e510` walks the
-    /// flat all-categories array, so switching tabs moves no band.
-    pub(super) fn stats(&self) -> (f32, f32) {
-        let pops: Vec<f32> = self.realms.iter().map(|r| r.population).collect();
-        load::realm_load_stats(&pops)
-    }
-
-    /// The highlighted realm, if it is still on the list.
-    pub(super) fn selected(&self) -> Option<&RealmInfo> {
-        let name = self.selected.as_deref()?;
-        self.realms.iter().find(|r| r.name == name)
-    }
-
-    /// Highlight a realm by name.
-    pub(super) fn select(&mut self, name: &str) {
-        self.selected = Some(name.to_string());
-    }
-
-    /// Whether Okay is live: `RealmListUpdate` disables it and only a highlighted, online row
-    /// re-enables it.
-    pub(super) fn can_enter(&self) -> bool {
-        self.selected().is_some_and(|r| !is_down(r))
-    }
-
-    /// `RealmList:Show()`: front the stored category's tab, reset the scroll, highlight
-    /// [`Self::current`], start the refresh timer.
-    fn open(&mut self) {
-        self.shown = true;
-        self.front_selected_category();
-        self.offset = 0;
-        self.highlight_current();
-        self.refresh_in = REFRESH_SECS;
-    }
-
-    /// `RealmListUpdate` with no clicked name: the highlight is the row `GetRealmInfo` flags
-    /// `currentRealm`, [`Self::current`] case-folded, on the tab in front, or none.
-    fn highlight_current(&mut self) {
-        self.selected = self.current.as_deref().and_then(|want| {
-            self.rows()
-                .into_iter()
-                .map(|i| &self.realms[i])
-                .find(|r| r.name.eq_ignore_ascii_case(want))
-                .map(|r| r.name.clone())
-        });
-    }
-
-    /// `GlueScrollFrame_Update` clamps the scroll bar to the tab's row count, and the bar's
-    /// change handler writes `RealmList.offset` back.
-    fn clamp_offset(&mut self) {
-        let max = self.rows().len().saturating_sub(screen::MAX_ROWS);
-        self.offset = self.offset.min(max);
-    }
-
-    /// Answer a park with a realm and remember it as [`Self::current`].
-    pub(super) fn enter(&mut self, choice: &RealmChoice, name: String) {
-        self.current = Some(name.clone());
-        let _ = choice.0.send(RealmRequest::Enter(name));
-    }
-
-    /// `RealmList:Hide()`, and nothing else.
-    pub(super) fn hide(&mut self) {
-        self.shown = false;
     }
 }
 
@@ -361,6 +193,84 @@ fn tick_refresh(time: Res<Time>, mut realms: ResMut<Realms>, choice: Res<RealmCh
     if realms.refresh_in <= 0.0 {
         realms.refresh_in = REFRESH_SECS;
         let _ = choice.0.send(RealmRequest::Refresh);
+    }
+}
+
+/// `Realms`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait RealmsSelect {
+    /// The rows the screen draws: indices into [`Self::realms`] for the tab in front, sorted per
+    /// category (`0x46e750`).
+    fn rows(&self) -> Vec<usize>;
+    /// The load distribution, over every realm, not the selected category: `0x46e510` walks the
+    /// flat all-categories array, so switching tabs moves no band.
+    fn stats(&self) -> (f32, f32);
+    /// Whether Okay is live: `RealmListUpdate` disables it and only a highlighted, online row
+    /// re-enables it.
+    fn can_enter(&self) -> bool;
+    /// `RealmList:Show()`: front the stored category's tab, reset the scroll, highlight
+    /// [`Self::current`], start the refresh timer.
+    fn open(&mut self);
+    /// `GlueScrollFrame_Update` clamps the scroll bar to the tab's row count, and the bar's
+    /// change handler writes `RealmList.offset` back.
+    fn clamp_offset(&mut self);
+    /// Answer a park with a realm and remember it as [`Self::current`].
+    fn enter(&mut self, choice: &RealmChoice, name: String);
+}
+
+impl RealmsSelect for Realms {
+    fn rows(&self) -> Vec<usize> {
+        let (mean, stddev) = self.stats();
+        let mut rows = self.category_realms();
+        rows.sort_by(|&a, &b| {
+            let (ra, rb) = (&self.realms[a], &self.realms[b]);
+            for (key, descending) in self.sort.0 {
+                let ord = match key {
+                    // Higher count first.
+                    SortKey::Characters => rb.characters.cmp(&ra.characters),
+                    SortKey::Load => {
+                        let la = load::realm_load_classify(ra.flags, ra.population, mean, stddev);
+                        let lb = load::realm_load_classify(rb.flags, rb.population, mean, stddev);
+                        la.total_cmp(&lb)
+                    }
+                    SortKey::Name => ra.name.to_lowercase().cmp(&rb.name.to_lowercase()),
+                    SortKey::Type => load::pvp_rp(ra.realm_type).cmp(&load::pvp_rp(rb.realm_type)),
+                };
+                if ord != std::cmp::Ordering::Equal {
+                    return if descending { ord.reverse() } else { ord };
+                }
+            }
+            // The reference's characters case answers +1 both ways on equal nonzero counts (its
+            // tie-break strcmp is clobbered), a defect not reproduced: all four tied is Equal.
+            std::cmp::Ordering::Equal
+        });
+        rows
+    }
+
+    fn stats(&self) -> (f32, f32) {
+        let pops: Vec<f32> = self.realms.iter().map(|r| r.population).collect();
+        load::realm_load_stats(&pops)
+    }
+
+    fn can_enter(&self) -> bool {
+        self.selected().is_some_and(|r| !is_down(r))
+    }
+
+    fn open(&mut self) {
+        self.shown = true;
+        self.front_selected_category();
+        self.offset = 0;
+        self.highlight_current();
+        self.refresh_in = REFRESH_SECS;
+    }
+
+    fn clamp_offset(&mut self) {
+        let max = self.rows().len().saturating_sub(screen::MAX_ROWS);
+        self.offset = self.offset.min(max);
+    }
+
+    fn enter(&mut self, choice: &RealmChoice, name: String) {
+        self.current = Some(name.clone());
+        let _ = choice.0.send(RealmRequest::Enter(name));
     }
 }
 

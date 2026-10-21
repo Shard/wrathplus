@@ -7,14 +7,13 @@ use crate::ui_items::currency::tests::fields;
 use crate::ui_items::currency::*;
 use benilla_protocol::types::Field;
 use benilla_protocol::types::FieldLayout;
-use benilla_ui::script::ScriptDialect;
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 
 #[test]
 fn real_feed_preserves_optional_native_balances_and_clears_logout() {
     let mut app = crate::game_plugins::schedule_tests::headless_client();
-    app.insert_non_send_resource(UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap());
+    app.insert_non_send_resource(UiScript::new().unwrap());
     let mut schedule = Schedule::default();
     schedule.add_systems(feed);
     let entity = app
@@ -34,7 +33,7 @@ fn real_feed_preserves_optional_native_balances_and_clears_logout() {
     let script = app.world().non_send_resource::<UiScript>();
     script.run("local h,hcap=GetHonorCurrency(); local a,acap=GetArenaCurrency(); assert(h==0 and hcap==75000 and a==4294967295 and acap==10000)").unwrap();
     // An identical source must seed a new VM, not be hidden by the previous VM's memo.
-    app.insert_non_send_resource(UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap());
+    app.insert_non_send_resource(UiScript::new().unwrap());
     schedule.run(app.world_mut());
     app.world()
         .non_send_resource::<UiScript>()

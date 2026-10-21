@@ -146,12 +146,7 @@ fn durability_damage_death(log: &mut crate::ui_chat::ChatLog) {
     log.push_combat(crate::ui_chat::combat::PendingCombat {
         kind: crate::ui_chat::ChatEventKind::CombatMiscInfo,
         family: crate::ui_chat::combat::DURABILITYDAMAGE_DEATH,
-        variant: crate::ui_chat::combat::Variant::OtherOther,
-        subject: 0,
-        object: 0,
         fills: crate::ui_chat::combat::Fills::default(),
-        named: crate::ui_chat::combat::Named::Ready,
-        tries: 0,
     });
 }
 

@@ -219,6 +219,21 @@ pub(super) fn stand_state_refused(reads_dead: bool, move_flags: u32, new_state: 
     move_flags & (f::ANY_MOVE | f::SWIMMING) != 0
 }
 
+/// `Player`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait PlayerSettle {
+    /// End the settle hold, called by the terrain streamer: `resident` is false when
+    /// [`SETTLE_TIMEOUT`] fired first, which the `sett` trace records.
+    fn end_settle(&mut self, resident: bool, now: f32);
+}
+
+impl PlayerSettle for Player {
+    fn end_settle(&mut self, resident: bool, now: f32) {
+        self.settling = false;
+        let waited = now - self.settle_since;
+        super::move_trace::settle(resident, waited, self.pos);
+    }
+}
+
 #[cfg(test)]
 mod stand_state_tests {
     use super::stand_state_refused;
@@ -779,20 +794,5 @@ mod move_mode_tests {
             f::SWIMMING,
             "a rooted swimmer is still swimming — `0xffe07f00` preserves 0x200000"
         );
-    }
-}
-
-/// `Player`'s methods that need this module (the type lives in `app_core` for the crate split).
-pub(crate) trait PlayerSettle {
-    /// End the settle hold, called by the terrain streamer: `resident` is false when
-    /// [`SETTLE_TIMEOUT`] fired first, which the `sett` trace records.
-    fn end_settle(&mut self, resident: bool, now: f32);
-}
-
-impl PlayerSettle for Player {
-    fn end_settle(&mut self, resident: bool, now: f32) {
-        self.settling = false;
-        let waited = now - self.settle_since;
-        super::move_trace::settle(resident, waited, self.pos);
     }
 }

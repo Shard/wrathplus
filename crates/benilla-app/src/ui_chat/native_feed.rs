@@ -1,6 +1,6 @@
 //! One-shot native display receipts and revision-bound name completion. No roster cache.
 use super::{native_membership::NativeMembership, native_roster::NativeChannelRosters};
-use benilla_ui::script::{ScriptDialect, UiScript, WrathChannelRosterMember, WrathDisplayChannel};
+use benilla_ui::script::{UiScript, WrathChannelRosterMember, WrathDisplayChannel};
 use bevy::prelude::*;
 
 #[derive(Resource, Default)]
@@ -26,12 +26,6 @@ pub(super) fn feed(
         deltas.0.clear();
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        state.pending.clear();
-        receipts.0.clear();
-        deltas.0.clear();
-        return;
-    }
     if state.session != Some(script.session()) {
         state.pending.clear();
         // Never deliver old callbacks into a replacement VM, whose revision may restart.
@@ -130,15 +124,13 @@ pub(super) fn drain_requests(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     for request in script.take_wrath_channel_roster_requests() {
         let command = match request {
             WrathChannelRosterRequest::Watch { name } => ClientCommand::SetChannelWatch { name },
             WrathChannelRosterRequest::DisplayList { name } => {
                 ClientCommand::ChannelDisplayList { name }
             }
+            WrathChannelRosterRequest::ClearWatch => ClientCommand::ClearChannelWatch,
         };
         let _ = commands.0.send(command);
     }
@@ -176,7 +168,7 @@ mod tests {
 
     fn world() -> World {
         let mut world = World::new();
-        let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let script = UiScript::new().unwrap();
         let mut channels = super::super::edit::ChannelState::default();
         let slot = channels.claim_slot("World").unwrap();
         let mut ledger = NativeMembership::default();
@@ -229,9 +221,7 @@ mod tests {
         let mut world = world();
         receipt(&mut world, 1);
         assert_eq!(world.resource::<NativeRosterFeed>().pending.len(), 1);
-        world.insert_non_send_resource(
-            UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap(),
-        );
+        world.insert_non_send_resource(UiScript::new().unwrap());
         receipt(&mut world, 1);
         assert!(world.resource::<NativeRosterFeed>().pending.is_empty());
         assert!(world.resource::<NativeChannelRosters>().0.is_empty());

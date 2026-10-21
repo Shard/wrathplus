@@ -140,6 +140,7 @@ fn commands_encode_ac_read_order() {
         (Command::NamedPair { opcode: 0xa4, name: "x".into(), other: "Bob".into() }, 0xa4, b"x\0Bob\0".to_vec()),
         (Command::TextEmote { text_emote: 101, emote_num: 0, target: 9 }, 0x104, [w(101), w(0), q(9)].concat()),
         (Command::ChatIgnored { guid: 9 }, 0x225, [q(9), vec![0]].concat()),
+        (Command::ClearWatch, 0x3f3, vec![]),
     ] {
         assert_eq!(encode(&command), (opcode, body), "{command:?}");
     }

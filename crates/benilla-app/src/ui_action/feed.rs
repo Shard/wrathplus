@@ -3,7 +3,6 @@
 //! and feeds the stance page (`GetBonusBarOffset`: the form's `SpellShapeshiftForm.dbc`
 //! BonusActionBar column, `0x4e4fc0`).
 
-use crate::ui_chat::feed::ChatLogFeed;
 use crate::ui_items::{count_of, InventoryScope};
 use std::collections::{HashMap, HashSet};
 
@@ -100,9 +99,6 @@ pub(super) fn feed_actions(
     // miss the entry stays queued, as the reference's callback `0x6e29b0` redisplays on the answer.
     let self_store = self_q.iter().next();
     let mut await_template: Vec<crate::ui_action::CastFail> = Vec::new();
-    // The same failures for the combat log: `0x6e1a00` calls both `DisplayError` and the log
-    // formatter `0x62c360`.
-    let mut fail_lines: Vec<crate::ui_chat::combat::PendingCombat> = Vec::new();
     let fail_args = name_tables.args(spells.as_deref());
     let texts: Vec<cast_fail::CastFailLine> = cast_errors
         .0
@@ -211,46 +207,10 @@ pub(super) fn feed_actions(
                  arg {:?} → {:?}",
                 fail.arg, line
             );
-            // The combat-log line, after the display as in the reference (`DisplayError` at
-            // `0x6e21dd`, the log formatter `0x62c360` at `0x6e21fc`), from the argText buffer
-            // ([`CastFailLine::logged`]). Nothing is logged for a line that shows nothing, for a
-            // redisplay (`0x6e29b0` skips the log) or for the pet (`0x6e8eb0` never calls
-            // `0x62c360`). `SMSG_CAST_RESULT` goes to the caster alone, so the `OTHER` keys stay
-            // unused.
-            if let (Some(shown), Some(display), false, false) =
-                (line.as_ref(), d, pet, fail.redisplay)
-            {
-                // `0x62aff0`: `Attributes` bit 4 marks an ability, which "performs", not "casts".
-                const ATTR_IS_ABILITY: u32 = 0x10;
-                let family = if display.attributes & ATTR_IS_ABILITY != 0 {
-                    crate::ui_chat::combat::SPELLFAILPERFORM
-                } else {
-                    crate::ui_chat::combat::SPELLFAILCAST
-                };
-                if !display.name.is_empty() {
-                    fail_lines.push(crate::ui_chat::combat::PendingCombat {
-                        kind: crate::ui_chat::ChatEventKind::SpellFailedLocalPlayer,
-                        family,
-                        variant: crate::ui_chat::combat::Variant::SelfOther,
-                        subject: 0,
-                        object: 0,
-                        fills: crate::ui_chat::combat::Fills {
-                            spell: display.name.clone(),
-                            named: shown.logged().to_string(),
-                            ..Default::default()
-                        },
-                        named: crate::ui_chat::combat::Named::Ready,
-                        tries: 0,
-                    });
-                }
-            }
             line
         })
         .collect();
     cast_errors.0.extend(await_template);
-    for line in fail_lines {
-        sink.chat.push_combat(line);
-    }
     show_messages(
         &mut script,
         &mut sink,

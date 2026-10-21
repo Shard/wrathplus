@@ -150,6 +150,8 @@ pub use pet_stats::{
 };
 mod items;
 pub use items::{load_item_display_catalog, ItemDisplay, ItemDisplayCatalog};
+mod item_records;
+pub use item_records::{load_item_records, ItemRecord, ItemRecordCatalog};
 mod item_sounds;
 pub use item_sounds::{load_item_group_sounds, ItemGesture, ItemGroupSoundsCatalog};
 mod item_visuals;

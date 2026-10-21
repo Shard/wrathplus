@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::BuildId;
+use benilla_world::build_id::BuildId;
 
 /// Chains the crash-report hook after the current one. Called once as the client launches
 /// ([`crate::run`], [`crate::run_with`]), before the `App` exists, so a panic while plugins build

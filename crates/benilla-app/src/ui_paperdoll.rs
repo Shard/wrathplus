@@ -149,9 +149,6 @@ fn feed(
     tables: Option<Res<PaperDollTables>>,
 ) {
     let Some(mut script) = script else { return };
-    if script.dialect() != benilla_ui::script::ScriptDialect::Wrath12340 {
-        return;
-    }
     script.set_wrath_paperdoll_stats(
         player
             .iter()
@@ -212,14 +209,11 @@ mod tests {
     }
     #[test]
     fn feed_clears_logout_and_reseeds_a_new_vm() {
-        use benilla_ui::script::ScriptDialect;
         let layout = FieldLayout::Wrath12340;
         let index = layout.resolve(Field::PlayerCritPercentage).unwrap().index;
         let mut app = App::new();
         app.add_plugins(UiPaperDollPlugin);
-        app.insert_non_send_resource(
-            UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap(),
-        );
+        app.insert_non_send_resource(UiScript::new().unwrap());
         let player = app
             .world_mut()
             .spawn((
@@ -238,9 +232,7 @@ mod tests {
                 .unwrap(),
             8.25
         );
-        app.insert_non_send_resource(
-            UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap(),
-        );
+        app.insert_non_send_resource(UiScript::new().unwrap());
         app.update();
         assert_eq!(
             app.world()

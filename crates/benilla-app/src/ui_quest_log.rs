@@ -14,8 +14,8 @@ use benilla_protocol::types::{
 };
 use benilla_protocol::ObjectFields;
 use benilla_ui::script::{
-    QuestItemView, QuestLogDetail, QuestLogEntryView, QuestLogObjectiveView, QuestLogState,
-    ScriptValue, UiScript,
+    QuestItemView, QuestLinkView, QuestLogDetail, QuestLogEntryView, QuestLogObjectiveView,
+    QuestLogState, ScriptValue, UiScript,
 };
 use benilla_ui::strings::{fill, Arg};
 
@@ -152,11 +152,99 @@ impl Plugin for UiQuestLogPlugin {
                         .run_if(crate::ui_script::ingame_ui_up),
                     // Before the script tick, so `QuestTimerFrame` reads this frame's clock.
                     feed_server_clock.in_set(UiFeed),
+                    // Before the script tick, so a link tooltip rebuilds the frame its template lands.
+                    feed_quest_links.in_set(UiFeed),
                     drain_quest_log_abandons.after(UiInput),
                     drain_quest_log_pushes.after(UiInput),
                     drain_quest_log_collapses.after(UiInput),
                 ),
             );
+    }
+}
+
+/// Quest link tooltips (`GameTooltip:SetHyperlink("quest:…")`, core `0x622960`): each id the VM
+/// asks for goes through the template cache, asked once, and its view goes back once the
+/// template is in, which rebuilds a tooltip still waiting on it (`0x61de20`). An id the server
+/// does not know is dropped, so its tooltip stays as an uncached quest's.
+///
+/// Labelled: 12340 composes the requirement rows itself (`0x5e1300` counts, `0x5e1460` writes);
+/// ours are the quest log's leaderboard lines ([`build_objectives`]), read off the player's log
+/// slot when the quest is in it, else at zero, not traced against that composer.
+#[allow(clippy::too_many_arguments)] // the template, the subject and the objective readers
+fn feed_quest_links(
+    script: Option<NonSendMut<UiScript>>,
+    self_q: Query<(&ObjectStore, &Guid), With<SelfPlayer>>,
+    quest_log: Res<QuestLog>,
+    names: Res<NameCache>,
+    objects: crate::net::Objects,
+    items: Res<Items>,
+    commands: Res<NetCommands>,
+    states: Res<crate::world_state::WorldStates>,
+    // The ids this VM asked for: a rebuilt VM has no tooltip waiting on them.
+    mut waiting: Local<crate::ui_script::VmMemo<Vec<u32>>>,
+) {
+    let Some(mut script) = script else {
+        return;
+    };
+    let waiting = waiting.get(&script);
+    for id in script.take_quest_link_requests() {
+        if !waiting.contains(&id) {
+            waiting.push(id);
+        }
+    }
+    if waiting.is_empty() {
+        return;
+    }
+    let Some((store, _)) = self_q.iter().next() else {
+        return;
+    };
+    let player = crate::npc_text::player_identity(&self_q, &names, &commands);
+    let macros = crate::npc_text::MacroContext {
+        subject: player.as_ref(),
+        states: &states,
+    };
+    let mut ready = Vec::new();
+    {
+        let get = |key: &str| {
+            script
+                .lua()
+                .globals()
+                .get::<String>(key)
+                .ok()
+                .filter(|t| !t.is_empty())
+        };
+        waiting.retain(|&id| {
+            let Some(t) = quest_log.template(id, &commands) else {
+                return !quest_log.template_answered_unknown(id);
+            };
+            let slot = (0..store.0.player_quest_log_slots())
+                .filter_map(|s| store.0.player_quest_log(s))
+                .find(|s| s.quest_id == id)
+                .unwrap_or(QuestLogSlot {
+                    quest_id: id,
+                    counters: [0; 4],
+                    state: 0,
+                    timer: 0,
+                });
+            let requirements = build_objectives(
+                t, &slot, &store.0, &objects, &items, &names, &commands, &get,
+            )
+            .into_iter()
+            .map(|o| o.text)
+            .collect();
+            ready.push((
+                id,
+                QuestLinkView {
+                    title: t.title.clone(),
+                    objectives: crate::npc_text::substitute(&t.objectives_text, &macros),
+                    requirements,
+                },
+            ));
+            false
+        });
+    }
+    for (id, view) in ready {
+        script.set_quest_link_view(id, view);
     }
 }
 
@@ -854,9 +942,6 @@ fn feed_quest_special_items(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != benilla_ui::script::ScriptDialect::Wrath12340 {
-        return;
-    }
     let Some(store) = self_q.iter().next() else {
         return;
     };
@@ -1953,5 +2038,82 @@ mod tests {
             fired[0].changed_lines.is_empty(),
             "the objective count did not move — only the quest's COMPLETE state did"
         );
+    }
+    /// A quest link asks the template once; when it lands, the waiting tooltip fills with its
+    /// title, objectives text and a requirement row per objective line.
+    #[test]
+    fn a_quest_link_asks_once_then_fills_from_the_template() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let mut app = App::new();
+        app.insert_resource(NetCommands(tx));
+        app.init_resource::<crate::net::GuidIndex>()
+            .init_resource::<NameCache>()
+            .init_resource::<Items>()
+            .init_resource::<crate::world_state::WorldStates>()
+            .init_resource::<QuestLog>();
+        app.world_mut().spawn((
+            ObjectStore(ObjectFields::from_pairs(&[])),
+            Guid(0x2A),
+            SelfPlayer,
+        ));
+        let s = UiScript::new().unwrap();
+        s.run(
+            r#"
+            local a = CreateFrame("Button", "LinkOwner"); a:SetPoint("CENTER", 0, 0)
+            a:SetWidth(10); a:SetHeight(10)
+            local tt = CreateFrame("GameTooltip", "TT")
+            tt:SetOwner(a, "ANCHOR_RIGHT")
+            QUEST_TOOLTIP_REQUIREMENTS = "Requirements:"
+            QUEST_MONSTERS_KILLED = "%s slain: %d/%d"
+            QUEST_OBJECTS_FOUND = "%s: %d/%d"
+            TT:SetHyperlink("|cffffff00|Hquest:1:1|h[A Threat Within]|h|r")
+            "#,
+        )
+        .unwrap();
+        app.insert_non_send_resource(s);
+        app.add_systems(Update, feed_quest_links);
+
+        app.update();
+        app.update();
+        // The quest asks; the unnamed test player's own name query rides along.
+        let quest_queries = |rx: &crossbeam_channel::Receiver<ClientCommand>| {
+            rx.try_iter()
+                .filter(|c| matches!(c, ClientCommand::QuestQuery { .. }))
+                .collect::<Vec<_>>()
+        };
+        let asked = quest_queries(&rx);
+        assert!(
+            matches!(asked[..], [ClientCommand::QuestQuery { quest: 1 }]),
+            "asked once: {asked:?}"
+        );
+
+        let mut template = quest_template([
+            obj(0x8000_0000 | 33, 2, 0, 0, "Gnoll Totem"),
+            obj(0, 0, 0, 0, ""),
+            obj(0, 0, 0, 0, ""),
+            obj(0, 0, 0, 0, ""),
+        ]);
+        template.objectives_text = "Burn the totems.".into();
+        app.world_mut()
+            .resource_mut::<QuestLog>()
+            .insert_template(template);
+        app.update();
+        let lines: Vec<String> = app
+            .world()
+            .non_send_resource::<UiScript>()
+            .eval(
+                "local t = {} for i = 1, TT:NumLines() do \
+                 t[i] = _G['TTTextLeft' .. i]:GetText() or '' end return t",
+            )
+            .unwrap();
+        assert_eq!(lines.first().map(String::as_str), Some("A Threat Within"));
+        assert!(lines.iter().any(|l| l == "Burn the totems."), "{lines:?}");
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with(" - ") && l.contains("0/2")),
+            "a requirement row at zero progress: {lines:?}"
+        );
+        assert!(quest_queries(&rx).is_empty(), "no second ask");
     }
 }

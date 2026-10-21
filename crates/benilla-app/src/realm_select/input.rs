@@ -2,6 +2,8 @@
 //! sort and `RealmList_OnKeyDown`. Every exit only hides the dialog; neither names a screen, so the
 //! player stays on the screen underneath.
 
+use crate::realm_select::category::RealmsCategory;
+use crate::realm_select::RealmsSelect;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 

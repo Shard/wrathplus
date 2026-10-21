@@ -158,17 +158,7 @@ fn seed_wrath_icon_catalog<T>(
     }
 }
 
-/// `(realm, character)` off the roster's login pick, keying the per-character files.
-pub(crate) fn identity(roster: &crate::char_select::Roster) -> Option<(String, String)> {
-    let guid = roster.pending_pick?;
-    let name = roster.chars.iter().find(|c| c.guid == guid)?.name.clone();
-    let realm = roster
-        .realm
-        .as_ref()
-        .map(|r| r.name.clone())
-        .unwrap_or_else(|| "Realm".into());
-    Some((realm, name))
-}
+pub(crate) use crate::app_core::state::identity;
 
 /// Seed the engine's macro table from disk, once per character per VM.
 fn load_macros(

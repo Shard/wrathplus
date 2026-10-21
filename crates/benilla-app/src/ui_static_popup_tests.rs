@@ -86,8 +86,10 @@ fn answers_map_to_their_sends() {
     ));
     assert!(send(WrathPopupRequest::CancelSummon).is_none());
     assert!(matches!(
-        send(WrathPopupRequest::DeclineInvite),
-        Some(ClientCommand::GroupDecline)
+        send(WrathPopupRequest::DeclineInvite {
+            channel: "Trade".into()
+        }),
+        Some(ClientCommand::DeclineChannelInvite { name }) if name == "Trade"
     ));
     assert!(matches!(
         send(WrathPopupRequest::ArenaTeamDisband { team: 2 }),

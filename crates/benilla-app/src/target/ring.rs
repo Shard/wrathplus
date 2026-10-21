@@ -471,16 +471,6 @@ fn ffa_reaction(
         && own.unit_is_ffa_pvp()
 }
 
-/// Target `UNIT_FIELD_FLAGS` bits, any one of which makes `CanAttack` refuse
-/// (`0x6069b7`–`0x6069ff`); their vanilla names are unconfirmed, so none is used.
-const CANNOT_BE_ATTACKED: u32 = 0x2 | 0x80 | 0x1_0000 | 0x10_0000 | 0x200_0000;
-/// The cross-flag immunity bits `CanAttack` reads on both sides (`0x606a05`–`0x606a8a`), each
-/// against the other unit's bit 3.
-const IMMUNE_TO_PLAYER_CONTROLLED: u32 = 0x100;
-const IMMUNE_TO_UNCONTROLLED: u32 = 0x200;
-/// The PvP flag, which `CanAttack`'s player-vs-player arm accepts on its target (`0x606b5c`).
-const UNIT_FLAG_PVP: u32 = 0x1000;
-
 /// The local player's reaction toward a unit, `0x6061e0` with the player as `this`. This direction
 /// reaches leg 3 (`0x606372`), which answers a reputation faction by the at-war bit alone, never
 /// the standing, so a not-at-war neutral NPC is friendly here and neutral to [`ring_reaction`]: a
@@ -560,75 +550,27 @@ pub(crate) fn can_interact_from_player(
         && reaction_from_player(factions, reputations, target_store, self_store) >= NEUTRAL
 }
 
-/// `CanAttack` from the local player (`0x606980`), every leg in the reference's order; the V-plate
-/// category turns on it. Not a reaction threshold: an unflagged opposite-faction player on a PvE
+/// `CanAttack 00729740` from the local player (12340, [`super::wrath_relations::attack`]); the
+/// V-plate category turns on it. Not a reaction threshold: an unflagged opposite-faction player on a PvE
 /// realm is hostile yet not attackable, a same-faction duel opponent friendly yet attackable.
 pub(crate) fn can_attack_from_player(
     factions: Option<&Factions>,
     reputations: &Reputations,
     target_store: Option<&ObjectStore>,
     self_store: Option<&ObjectStore>,
-    target_is_player: bool,
     ctx: super::wrath_relations::Context,
 ) -> bool {
     let (Some(target), Some(own)) = (target_store, self_store) else {
         return false; // fields not streamed yet; the reference's null path refuses too
     };
     // 12340's `CanAttack 00729740`, on both reaction directions and `ctx`'s live owner lookup.
-    if own.0.layout() == benilla_protocol::types::FieldLayout::Wrath12340 {
-        return super::wrath_relations::attack(
-            own,
-            target,
-            reaction_from_player(factions, reputations, target_store, self_store),
-            ring_reaction(factions, reputations, target_store, self_store),
-            ctx,
-        );
-    }
-    let (tflags, oflags) = (target.0.unit_flags(), own.0.unit_flags());
-    // (a) The ghost gate (`0x606987`): only a creature whose type flags carry `0x2` may attack a
-    // ghost player, so the local player never can.
-    const PLAYER_FLAGS_GHOST: u32 = 0x10;
-    if target_is_player && target.0.player_flags() & PLAYER_FLAGS_GHOST != 0 {
-        return false;
-    }
-    // (b) Five target-flag disqualifiers.
-    if tflags & CANNOT_BE_ATTACKED != 0 {
-        return false;
-    }
-    // (c) The four cross-flag immunity legs.
-    let (t_controlled, o_controlled) = (
-        tflags & UNIT_FLAG_PVP_ATTACKABLE != 0,
-        oflags & UNIT_FLAG_PVP_ATTACKABLE != 0,
-    );
-    if o_controlled && tflags & IMMUNE_TO_PLAYER_CONTROLLED != 0
-        || !o_controlled && tflags & IMMUNE_TO_UNCONTROLLED != 0
-        || oflags & IMMUNE_TO_PLAYER_CONTROLLED != 0 && t_controlled
-        || oflags & IMMUNE_TO_UNCONTROLLED != 0 && !t_controlled
-    {
-        return false;
-    }
-    // (d) The three terminal arms, selected by the two bit-3 flags.
-    let toward_target = || reaction_from_player(factions, reputations, target_store, self_store);
-    match (o_controlled, t_controlled) {
-        // Neither player-controlled: hostile in either direction suffices.
-        (false, false) => {
-            toward_target() <= Reaction::Hostile as u8
-                || ring_reaction(factions, reputations, target_store, self_store)
-                    <= Reaction::Hostile as u8
-        }
-        // Both: a friendly reaction refuses; else a live duel, the target's PvP flag or mutual
-        // FFA. The reference's charm-owner resolve (`0x606170`) is not applied.
-        (true, true) => {
-            if toward_target() >= Reaction::Friendly as u8 {
-                return false;
-            }
-            matches!(duel_rung(&target.0, &own.0), DuelRung::Engaged { .. })
-                || tflags & UNIT_FLAG_PVP != 0
-                || ffa_reaction(&target.0, &own.0)
-        }
-        // Mixed, the player against an ordinary NPC: attackable when worse than friendly.
-        _ => toward_target() < Reaction::Friendly as u8,
-    }
+    super::wrath_relations::attack(
+        own,
+        target,
+        reaction_from_player(factions, reputations, target_store, self_store),
+        ring_reaction(factions, reputations, target_store, self_store),
+        ctx,
+    )
 }
 
 /// A unit's `FactionTemplate` faction-group mask (`row + 0xc`), the one number `CanCooperate`
@@ -684,14 +626,7 @@ pub(crate) fn plate_is_friendly(
     target_is_player: bool,
     ctx: super::wrath_relations::Context,
 ) -> bool {
-    let attackable = can_attack_from_player(
-        factions,
-        reputations,
-        target_store,
-        self_store,
-        target_is_player,
-        ctx,
-    );
+    let attackable = can_attack_from_player(factions, reputations, target_store, self_store, ctx);
     if target_is_player {
         can_cooperate_with_player(factions, target_store, self_store) && !attackable
     } else {
@@ -1017,7 +952,6 @@ pub(crate) mod tests {
                 r,
                 Some(u),
                 Some(&me),
-                false,
                 RelationContext::none(),
             )
         };
@@ -1124,7 +1058,6 @@ pub(crate) mod tests {
                 &reps,
                 Some(&player(35)),
                 Some(&me),
-                true,
                 RelationContext::none()
             ),
             "…and not because we can attack them",

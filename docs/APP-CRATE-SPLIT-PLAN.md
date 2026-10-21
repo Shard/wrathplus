@@ -311,13 +311,11 @@ already resolve to `app_core` through the old paths' re-exports: the move steps 
 - Assets, `GuildState` (after App's last step-4 batch): `ui_guild::GuildState` from `entities`
   and `nameplates` (3); `GuildMemberNotify` goes with it.
 
-**Queued for Wire A (Native Wire): producer-less native writers.** Wire B's `ClientCommand` dead-field
-audit (d20aeba3) kept seven admitted Wrath writers that nothing constructs, each under its own
-`#[allow(dead_code)]` in `net.rs`: `MoveTimeSkipped`, `NativeChatCommand`, `NativeMirrorImageQuery`,
-`NativeParty`, `GetChannelMemberCount`, `ClearChannelWatch`, `DeclineChannelInvite`. For each,
-check whether the stock 12340 UI or client sends it (a missing producer is a player-facing gap, as
-`DeclineChannelInvite` or `NativeParty` may be), then wire the producer or delete the variant, and
-drop its allow.
+**Done (Wire A): producer-less native writers.** Of the seven Wrath writers Wire B's dead-field
+audit (d20aeba3) left under `#[allow(dead_code)]`, five now have their 12340 producers
+(`DeclineChannelInvite`, `ClearChannelWatch`, `NativeParty`, `NativeMirrorImageQuery`,
+`MoveTimeSkipped`; see the coverage rows) and two are deleted: `NativeChatCommand` duplicated the
+shared `CMSG_MESSAGECHAT` writer, and Wow.exe never sends `GetChannelMemberCount`.
 
 **The cvar registry (item 4 follow-up, 121): needs a short design note before moving.** After
 Experience's unit the rows register from their features, but `cvars` still names each feature's
@@ -472,8 +470,8 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
 | Fixed since the dry-run base | 6 (and part of 2 more) | `net::{ObjectStore, SelfPlayer, NetOffline, EnteredWorldMessage, DisconnectedMessage}`, now in `app_core::session` | Done, 563f0119 |
 | core → net command API | 13 (4 in `names`' tests, 1 follow-on) | `names`, `items`, `go_templates` and `area_trigger` send through `ClientCommand`/`NetCommands`, key on `Guid`/`GuidIndex`/`Objects`, and register with `NetHandlerApp`; `names` reads `net::wrath_pet_name_capture`; `preflight` and `probe_shield` read `SelfGuid` and `ServerSaidMessage` | Proposed below |
 | core → world/ui lookups | 6 | `ui_unit::{snapshot, race_names, class_names}` (`creature_type`, `preflight`), `ui_macro::identity` (`name_persist`), `creature_anim::disarmed_hand` (`items`, 2) | The "lookups" and "core up, pure" rows above; unowned |
-| core → root | 1 | `crate::BuildId` (`crash`) | Unowned: `BuildId` moves to core, and the root re-exports it for the launcher API |
-| Pure-move rows not done yet | 1 | `login::LoginIntent` (`probe_shield`) | The pure-moves table (Assets) |
+| core → root | 1 | `crate::BuildId` (`crash`) | Done (Assets, pure moves 2): `crash` names `benilla_world::build_id::BuildId`, where it is defined; the root keeps its re-export for the launcher API |
+| Pure-move rows not done yet | 1 | `login::LoginIntent` (`probe_shield`) | Done (Assets, pure moves 2): `app_core::ui_flags` |
 | `cfg(test)` helper across layers | 1 | `app_core::vm_memo` tests use `crate::test_support` | See the test-helper item below |
 
 **Compiler, net (core+net crate, net files only): 43 distinct sites.**
@@ -484,7 +482,7 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
 | Fixed since the base | 2 | `ui_totems::NativeTotems`, `combat_log::native::NativeCombatLog` | Done, 563f0119 |
 | `net` drains UI state | 4 | `ui_party::net::{member_deactivated, roster_deactivated}`, `combat_log::chat::faction_standing` | App Migration's groups |
 | `net` installs and re-exports `crate::motion` | 5 | `MotionPlugin` (installed by `NetPlugin`), the `drive_display_facing`/`Spline`/… re-exports | Wire B: `game_plugins` installs `MotionPlugin` and the callers repoint (the ui_session ordering test then adds it) |
-| Pure move not done | 3 | `ui_item_text::LetterTexts` (`wrath_inventory_capture` and its test) | The pure-moves table (unowned) |
+| Pure move not done | 3 | `ui_item_text::LetterTexts` (`wrath_inventory_capture` and its test) | Done (Assets, pure moves 2): `app_core::interaction` |
 | `swing_refusal` → world | 2 | `creature_anim::{AttackSeam, Engaged}` (plus one `chain` follow-on error) | Proposed: `swing_refusal` is the attack seam's feedback, a world module, not net |
 
 **Static, both layers** (what rustc reports only after resolution succeeds):
@@ -504,7 +502,11 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
   `BindingInput`, `ArcEdges`, `move_trace`, the chat broadcast and combat queues, `LootAction`, the
   push-container map). Those are eight extension traits beside the feature: `BindingsScriptInput`,
   `ChatEventScript`, `ChatLogFeed`, `CooldownsSpell`, `LootStateRows`, `PlayerArc`, `PlayerSettle` and
-  `QuestPoisView`.
+  `QuestPoisView`. Assets' pure moves 2 added 26 more (the `interaction` and `ui_flags` types,
+  `AuraDurations`, `AfkMirror`, `TutorialEvent`, and the chat types after Experience trimmed them):
+  all moved, `SetHealerOutcome` with them, except `GossipGreeting`, `AuraDurationsTrace`,
+  `RealmsCategory` and `RealmsSelect` (realm_select's helpers and `net::{RealmChoice, RealmRequest}`).
+  The matcher now finds no inherent impl on a moved type.
 - *Visibility*: 428 distinct `crate::<core|net module>::…` symbols named from upper layers (254 core,
   174 net; an upper bound, since it counts re-export paths and module paths). The plan's estimate was
   about 115 and 114. Each still widens to `pub` only when the compiler names it.

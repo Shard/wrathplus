@@ -69,7 +69,7 @@ pub(crate) use relations::{
 };
 // `CanAttack`/`CanAssist`'s live inputs: the creature template cache and the guid lookup.
 pub(crate) use wrath_relations::{
-    guid_store, ByGuid, Context as RelationContext, GuidStores, RelationInputs, StoreLookup,
+    guid_store, Context as RelationContext, GuidStores, RelationInputs, StoreLookup,
 };
 // The attack validator's target half, run in the call that asks, for the player's Attack and the
 // pet bar's; the melee probe's press with nothing selected.

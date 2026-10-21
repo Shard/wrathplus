@@ -156,14 +156,7 @@ pub(crate) fn screen_scale(window: Option<&Window>) -> f32 {
     window.map(|w| (w.height() / 768.0).min(2.2)).unwrap_or(1.0)
 }
 
-/// The rect a glue screen's chrome lays out into: the pillarboxed scene's box, not the window, as
-/// a reference client of the box's aspect would lay it out.
-///
-/// The screen's root stays full-window: the bars are the booth camera's clear inside a
-/// window-sized target, which the full-bleed scene pane must keep covering.
-#[derive(Component)]
-pub(crate) struct GlueCanvas;
-
+pub(crate) use crate::app_core::ui_flags::GlueCanvas;
 /// The canvas node: full height, sized by its insets, which [`fit_glue_canvas`] keeps current.
 /// Spawn it after the screen's full-bleed scene pane so the chrome draws over the scene.
 pub(crate) fn glue_canvas() -> (GlueCanvas, FocusPolicy, Node) {

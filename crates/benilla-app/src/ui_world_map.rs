@@ -1688,8 +1688,7 @@ mod direct_area_tests {
         let player = resolve_player_selection(&data, 489, (0.0, 0.0), Some(3277), None);
         assert_eq!(player.direct, Some(443));
 
-        let mut script =
-            UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).expect("VM");
+        let mut script = UiScript::new().expect("VM");
         script.set_world_map_catalog(views);
         script.set_world_map_direct_areas(
             data.direct

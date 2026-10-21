@@ -20,7 +20,7 @@ use crate::ui_script::gate;
 
 use super::pets::{self, Roster};
 use super::GroupState;
-pub(crate) use crate::app_core::group::{GROUPTYPE_RAID, GROUP_MEMBER_SUBGROUP};
+pub(crate) use crate::app_core::group::GROUP_MEMBER_SUBGROUP;
 
 // ─── The VM feed and drain ───────────────────────────────────────────────────────────────────────
 
@@ -51,9 +51,6 @@ pub(super) struct FedParty {
     raid_key: Vec<(u64, u32, u32, bool)>,
     /// The saved-instance receipts the feed has answered.
     saved_receipts: usize,
-    ready_check: u32,
-    ready_check_requests: u32,
-    answers_forwarded: usize,
     native_ready_forwarded: usize,
     raid_targets: [u64; 8],
 }
@@ -83,8 +80,7 @@ pub(crate) fn forward_native_ready(
 
 pub(crate) const PARTY_TOKENS: [&str; 4] = ["party1", "party2", "party3", "party4"];
 
-/// `partypet1..partypet4`, the pet of each [`PARTY_TOKENS`] slot (`0x4e81d0`).
-pub(crate) const PARTY_PET_TOKENS: [&str; 4] = ["partypet1", "partypet2", "partypet3", "partypet4"];
+pub(crate) use crate::app_core::state::PARTY_PET_TOKENS;
 
 /// A receipt's rows with their `Map.dbc` name, raid bit and `MapDifficulty` cap and string.
 fn saved_instances(
@@ -158,6 +154,7 @@ pub(crate) const RAID_PET_TOKENS: [&str; 40] = [
     "raidpet36", "raidpet37", "raidpet38", "raidpet39", "raidpet40",
 ];
 
+pub(crate) use crate::app_core::state::GROUPTYPE_RAID;
 /// Push the roster and the party unit snapshots into the VM and fire the party events on their
 /// edges. A member's unit state is their live descriptor when streamed, else their roster record.
 pub(super) fn feed_party(
@@ -591,41 +588,12 @@ pub(super) fn feed_party(
         script.fire_event("RAID_TARGET_UPDATE", vec![]);
     }
 
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-        forward_native_ready(
-            &mut script,
-            &group.wrath_raid.ready_events,
-            &mut fed.native_ready_forwarded,
-            vm_reset,
-        );
-    } else {
-        // ── READY_CHECK ─────────────────────────────────────────────────────────
-        //
-        // Fired by the reference's open handler `0x4ba360` (at `0x4ba53a`), which also arms the 30 s
-        // deadline (`0xb713f4`). `UIParent.lua:571` shows the popup on it, and UIParent's OnUpdate
-        // ticks the deadline through `CheckReadyCheckTime` (`UIParent.xml:24`): no clock here.
-        if group.ready_check != fed.ready_check {
-            gate.audit("feed_party", "the ready-check edge");
-            fed.ready_check = group.ready_check;
-            // Not on the first look after a VM reset, which would pop a check that has ended.
-            if !vm_reset {
-                script.fire_event("READY_CHECK", vec![]);
-            }
-        }
-        // Each request arms the engine's side (the leader's close, a member's 30 s deadline); the
-        // answer log then replays from this memo's cursor.
-        if group.ready_check_requests != fed.ready_check_requests {
-            fed.ready_check_requests = group.ready_check_requests;
-            fed.answers_forwarded = 0;
-            if !vm_reset {
-                script.ready_check_request(Some(group.leader) == self_guid);
-            }
-        }
-        for &(guid, ready) in group.ready_check_answers.iter().skip(fed.answers_forwarded) {
-            script.ready_check_answered(guid, ready);
-        }
-        fed.answers_forwarded = group.ready_check_answers.len();
-    }
+    forward_native_ready(
+        &mut script,
+        &group.wrath_raid.ready_events,
+        &mut fed.native_ready_forwarded,
+        vm_reset,
+    );
 
     // ── UPDATE_INSTANCE_INFO ────────────────────────────────────────────────
     //
@@ -1012,6 +980,11 @@ pub(super) fn drain_party(
                     });
                 }
             }
+            PartyRequest::UninviteGuid { guid, reason } => {
+                let _ = commands.0.send(ClientCommand::NativeParty(
+                    benilla_protocol::wrath_party::Command::UninviteGuid { guid, reason },
+                ));
+            }
             PartyRequest::PromoteUnit(token) => {
                 if let Some(m) = member_for_token(&group, &token) {
                     let _ = commands
@@ -1206,6 +1179,7 @@ fn test_apply_local(
         req,
         PartyRequest::Leave
             | PartyRequest::UninviteUnit(_)
+            | PartyRequest::UninviteGuid { .. }
             | PartyRequest::PromoteUnit(_)
             | PartyRequest::LootMethod { .. }
             | PartyRequest::LootThreshold(_)
@@ -1242,6 +1216,11 @@ fn apply_test_intent(
                 group.members.retain(|m| m.guid != guid);
                 group.stats.remove(&guid);
             }
+            true
+        }
+        PartyRequest::UninviteGuid { guid, .. } => {
+            group.members.retain(|m| m.guid != *guid);
+            group.stats.remove(guid);
             true
         }
         PartyRequest::PromoteUnit(token) => {

@@ -5,8 +5,8 @@ use crate::{
     net::{NetCommands, Objects, SelfGuid},
 };
 use benilla_ui::script::{
-    wrath_loot_roll_reasons as native_reasons, ScriptDialect, ScriptValue, UiScript,
-    WrathLootRollEntry as Entry, WrathLootRollsState as State,
+    wrath_loot_roll_reasons as native_reasons, ScriptValue, UiScript, WrathLootRollEntry as Entry,
+    WrathLootRollsState as State,
 };
 use bevy::prelude::*;
 
@@ -190,9 +190,6 @@ pub(super) fn feed(
         lifecycle.prepare(|e| matches!(ready.get(&e.id), Some(Err(()))).then_some(false));
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let starts = lifecycle.prepare(|e| ready.get(&e.id).map(Result::is_ok));
     for (id, _) in &starts {
         if let Some(Ok(entry)) = ready.remove(id) {

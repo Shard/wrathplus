@@ -226,6 +226,7 @@ pub(super) struct WeaponVisualSrc<'w, 's> {
     displays: Option<Res<'w, ItemDisplays>>,
     items: Option<Res<'w, Items>>,
     net: Option<Res<'w, NetCommands>>,
+    records: Option<Res<'w, crate::app_core::catalogs::ItemRecords>>,
     // `Without<ItemObject>`: an item's store overlaps the unit indices, so a unit read of it
     // answers item fields.
     units: Query<'w, 's, (Option<&'static NetEntity>, &'static ObjectStore), Without<ItemObject>>,
@@ -237,8 +238,11 @@ impl WeaponVisualSrc<'_, '_> {
         let (net_entity, store) = self.units.get(caster).ok()?;
         let s = &store.0;
         let display_id = match net_entity?.kind {
-            // 12340 has no creature virtual-item display field.
-            EntityKind::Unit => None,
+            // Slot 2, the ranged virtual item: its entry's `Item.dbc` display.
+            EntityKind::Unit => s
+                .unit_virtual_item_entry(2)
+                .and_then(|entry| self.records.as_deref()?.0.get(entry))
+                .map(|r| r.display_id),
             // 17: vmangos `EQUIPMENT_SLOT_RANGED`.
             EntityKind::Player => s
                 .player_visible_item_entry(17)

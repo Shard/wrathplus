@@ -6,14 +6,13 @@ use crate::ui_party::GroupState;
 use benilla_protocol::wrath_group::{raid::Packet, Packet as GroupPacket};
 use benilla_protocol::SessionEvent;
 use benilla_ui::script::PartyState;
-use benilla_ui::script::ScriptDialect;
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 
 #[test]
 fn registered_packets_forward_in_order_once_and_leave_rejoin_does_not_lose_edges() {
     let mut app = crate::game_plugins::schedule_tests::headless_client();
-    let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut script = UiScript::new().unwrap();
     script.set_party(PartyState {
         own_guid: 7,
         leader_guid: 99,

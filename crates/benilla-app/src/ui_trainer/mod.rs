@@ -34,64 +34,7 @@ const TRAINER_TYPE_TRADESKILL: u32 = 2;
 /// A mount trainer, which the client calls "talent" (`IsTalentTrainer 0x4d8ed0`).
 const TRAINER_TYPE_MOUNT: u32 = 1;
 
-/// The open trainer as `SMSG_TRAINER_LIST` delivered it.
-#[derive(Resource, Default)]
-pub(crate) struct TrainerOpen {
-    pub(crate) trainer: Option<u64>,
-    /// In wire order, which is the 1-based display order.
-    pub(crate) services: Vec<TrainerSpell>,
-    pub(crate) trainer_type: u32,
-    pub(crate) greeting: String,
-    /// A list landed and the engine's filter, collapse set and selection are not yet reset, as
-    /// the reference's builder resets them per list (`0x4d7b42` for the selection); an open window
-    /// repaints through [`reeval`], never a second list.
-    pub(crate) fresh_list: bool,
-    /// One of the reference's twelve re-evaluation triggers fired with the window open; the feed
-    /// re-derives and fires `TRAINER_UPDATE` even if no state moved, as `0x4d7d40`'s tail does
-    /// (`0x4d83f4`), and the stock window re-reads `GetMoney()` on it.
-    pub(crate) re_derive: bool,
-}
-
-impl TrainerOpen {
-    /// Open (or replace) the window with a trainer's freshly-listed services.
-    pub(crate) fn open(
-        &mut self,
-        trainer: u64,
-        trainer_type: u32,
-        services: Vec<TrainerSpell>,
-        greeting: String,
-    ) {
-        self.trainer = Some(trainer);
-        self.trainer_type = trainer_type;
-        self.services = services;
-        self.greeting = greeting;
-        // A fresh list carries the server's own states, so nothing is pending against it.
-        self.fresh_list = true;
-        self.re_derive = false;
-    }
-
-    /// One of the twelve triggers fired: re-derive on the next feed, if a window is open.
-    pub(crate) fn trigger_re_derive(&mut self) {
-        if self.trainer.is_some() {
-            self.re_derive = true;
-        }
-    }
-
-    /// A client-side close; a re-open re-lists.
-    pub(crate) fn clear(&mut self) {
-        self.trainer = None;
-        self.services.clear();
-        self.trainer_type = 0;
-        self.greeting.clear();
-        self.fresh_list = false;
-        self.re_derive = false;
-    }
-
-    /// Disconnect: drop the open window.
-    pub(crate) fn clear_session(&mut self) {
-        self.clear();
-    }
-}
+pub(crate) use crate::app_core::interaction::TrainerOpen;
 
 /// `SMSG_TRAINER_BUY_FAILED` codes, queued for the feed to log.
 #[derive(Resource, Default)]

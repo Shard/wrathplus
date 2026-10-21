@@ -1,11 +1,18 @@
 //! Build-12340 selected channel roster (native 0x504490/0x503990), not a per-channel cache.
 //! Display indices are resolved by the UI display list before selecting this state.
 
-/// Native channel requests, emitted in order on a server-channel selection change.
+/// Native channel requests, emitted in order on a server-channel selection change, and the
+/// addon-facing `SetChannelWatch("channel")` (`0x4ffc30`) and `ClearChannelWatch()` (`0x4ffc50`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WrathChannelRosterRequest {
-    Watch { name: String },
-    DisplayList { name: String },
+    Watch {
+        name: String,
+    },
+    DisplayList {
+        name: String,
+    },
+    /// Bodyless in build 12340: the client watches one channel at a time.
+    ClearWatch,
 }
 
 /// A received member. `None` is an outstanding name query, not an empty display name.

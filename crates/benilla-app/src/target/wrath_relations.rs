@@ -5,6 +5,7 @@
 //! directional reaction ranks. FLAGS2 bit16 / vehicle metadata guards are also untraced and
 //! deliberately not guessed here. Missing creature metadata contributes no flags.
 
+#[cfg(test)]
 use std::marker::PhantomData;
 
 use bevy::ecs::system::SystemParam;
@@ -19,15 +20,18 @@ pub(crate) trait StoreLookup: Sync {
     fn store(&self, guid: u64) -> Option<&ObjectStore>;
 }
 
-/// A closure as a [`StoreLookup`], for a caller whose stores are neither a query nor a param.
+/// A closure as a [`StoreLookup`], for a test whose stores are neither a query nor a param.
+#[cfg(test)]
 pub(crate) struct ByGuid<'a, F>(F, PhantomData<&'a ObjectStore>);
 
+#[cfg(test)]
 impl<'a, F: Fn(u64) -> Option<&'a ObjectStore> + Sync> ByGuid<'a, F> {
     pub(crate) fn new(lookup: F) -> Self {
         Self(lookup, PhantomData)
     }
 }
 
+#[cfg(test)]
 impl<'a, F: Fn(u64) -> Option<&'a ObjectStore> + Sync> StoreLookup for ByGuid<'a, F> {
     fn store(&self, guid: u64) -> Option<&ObjectStore> {
         (self.0)(guid)

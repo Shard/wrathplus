@@ -177,7 +177,7 @@ pub(crate) fn seed_bindings_for_vm(world: &mut World, script: &mut UiScript) {
     // No roster identity (a rigged or capture run) leaves set 2 unseeded.
     let id = world
         .get_resource::<crate::char_select::Roster>()
-        .and_then(crate::ui_macro::identity);
+        .and_then(crate::app_core::state::identity);
     let character = id
         .as_ref()
         .and_then(|(realm, name)| crate::local_state::bindings_character_path(realm, name));
@@ -1894,5 +1894,51 @@ mod tests {
             "let a = \"x\\\"y\"; // \"comment\"\nlet c = '\"'; let b = r#\"ToggleBackpack();\"#;",
         );
         assert_eq!(found, ["x\\\"y", "ToggleBackpack();"]);
+    }
+    /// A physical ESC on the production load, through the App's key dispatch: the install's
+    /// `bind ESCAPE TOGGLEGAMEMENU` runs stock `ToggleGameMenu`, which first closes an open window
+    /// (`CloseAllWindows`, here the friends panel) and only then toggles `GameMenuFrame`.
+    #[test]
+    fn a_physical_escape_closes_a_window_then_toggles_the_game_menu() {
+        benilla_formats::wow_data_or_skip!();
+        let mut script = UiScript::new().expect("VM");
+        let failures = crate::ui_script::load_default_ui(&mut script);
+        assert!(failures.is_empty(), "load failures: {failures:#?}");
+        script.set_default_bindings(crate::ui_script::default_bindings());
+        script.load_binding_set(1);
+        let mut app = vm_harness(script);
+        let shown = |app: &App, frame: &str| {
+            app.world()
+                .non_send_resource::<UiScript>()
+                .eval::<bool>(&format!("return {frame}:IsShown() == 1"))
+                .unwrap()
+        };
+        let escape = |app: &mut App| {
+            press_key(app, KeyCode::Escape);
+            app.update();
+            release_key(app, KeyCode::Escape);
+            app.update();
+        };
+        app.update();
+
+        escape(&mut app);
+        assert!(shown(&app, "GameMenuFrame"), "ESC opens the game menu");
+        escape(&mut app);
+        assert!(!shown(&app, "GameMenuFrame"), "a second ESC closes it");
+
+        app.world_mut()
+            .non_send_resource_mut::<UiScript>()
+            .run("ShowUIPanel(FriendsFrame)")
+            .unwrap();
+        app.update();
+        assert!(shown(&app, "FriendsFrame"), "the friends window is up");
+        escape(&mut app);
+        assert!(
+            !shown(&app, "FriendsFrame"),
+            "ESC closes the open window first"
+        );
+        assert!(!shown(&app, "GameMenuFrame"), "and opens no menu with it");
+        escape(&mut app);
+        assert!(shown(&app, "GameMenuFrame"), "the next ESC opens the menu");
     }
 }

@@ -10,7 +10,7 @@
 pub(crate) use crate::net::wrath_quest_pois::QuestPois;
 use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfPlayer};
 use benilla_protocol::wrath_quest::Command;
-use benilla_ui::script::{ScriptDialect, UiScript, WrathQuestPoi, WrathQuestPoiBlob};
+use benilla_ui::script::{UiScript, WrathQuestPoi, WrathQuestPoiBlob};
 use bevy::prelude::*;
 use std::collections::BTreeSet;
 
@@ -78,9 +78,6 @@ fn feed_quest_pois(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let logged = self_q
         .iter()
         .next()
@@ -116,10 +113,6 @@ fn feed_quest_pois(
     }
 }
 
-#[cfg(test)]
-#[path = "wrath_quest_pois_tests.rs"]
-pub(crate) mod tests;
-
 /// `QuestPois`'s methods that need this module (the type lives in `app_core` for the crate split).
 pub(crate) trait QuestPoisView {
     /// The logged quests' POIs, in log order; an unanswered or POI-less quest has no entry.
@@ -149,3 +142,7 @@ impl QuestPoisView for QuestPois {
             .collect()
     }
 }
+
+#[cfg(test)]
+#[path = "wrath_quest_pois_tests.rs"]
+pub(crate) mod tests;

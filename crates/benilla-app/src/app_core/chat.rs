@@ -1,275 +1,42 @@
 //! The chat event model and its queues: every line the session, combat log and UI raise
-//! (`ChatEvent`, `ChatEventKind`), the combat-log fills waiting on names, pending broadcasts and
+//! (`ChatEvent`, `ChatEventKind`), the client-composed lines, pending broadcasts and
 //! the drain's log. `ui_chat` keeps the systems and re-exports these from their old paths.
 
 use benilla_protocol::types::{ChatMessage, LevelUpInfo, XpGain};
 use bevy::prelude::*;
 
-/// Which of a family's four templates applies: the variant code the reference's 45 selectors
-/// (`0x629f90`, `0x62a290`, …) return. `SelfSelf` prints nothing unless the family has the key,
-/// as `SPELLLOGSELFSELF` and `HEALEDSELFSELF` do.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Variant {
-    /// I did it to someone else: `…SELFOTHER`, variant code 2.
-    SelfOther,
-    /// Someone else did it to me: `…OTHERSELF`, code 1.
-    OtherSelf,
-    /// Someone else, to someone else: `…OTHEROTHER`, code 3.
-    OtherOther,
-    /// Me, to me: `…SELFSELF`, code 0 where the family has no such key.
-    SelfSelf,
-}
-
-/// A unit's standing relative to the active player: the `0..9` index every combat-log selector
-/// takes, in the order of the reference's range table at `0x8629e0`, which `0x626810` indexes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum UnitClass {
-    Me = 0,
-    MyPet = 1,
-    Party = 2,
-    PartyPet = 3,
-    FriendlyPlayer = 4,
-    FriendlyPet = 5,
-    HostilePlayer = 6,
-    HostilePet = 7,
-    Creature = 8,
-    /// Unresolvable: not streamed, or a guid with no unit behind it.
-    Unknown = 9,
-}
-
-impl UnitClass {
-    pub(crate) fn from_index(i: usize) -> Self {
-        match i {
-            0 => Self::Me,
-            1 => Self::MyPet,
-            2 => Self::Party,
-            3 => Self::PartyPet,
-            4 => Self::FriendlyPlayer,
-            5 => Self::FriendlyPet,
-            6 => Self::HostilePlayer,
-            7 => Self::HostilePet,
-            8 => Self::Creature,
-            _ => Self::Unknown,
-        }
-    }
-
-    /// The CVar naming this class's display range; classes 0, 1 and 9 have none.
-    pub(crate) fn range_cvar(self) -> Option<&'static str> {
-        Some(match self {
-            Self::Me | Self::MyPet | Self::Unknown => return None,
-            Self::Party => "CombatLogRangeParty",
-            Self::PartyPet => "CombatLogRangePartyPet",
-            Self::FriendlyPlayer => "CombatLogRangeFriendlyPlayers",
-            Self::FriendlyPet => "CombatLogRangeFriendlyPlayersPets",
-            Self::HostilePlayer => "CombatLogRangeHostilePlayers",
-            Self::HostilePet => "CombatLogRangeHostilePlayersPets",
-            Self::Creature => "CombatLogRangeCreature",
-        })
-    }
-
-    /// The registered default in yards, from the `0x8629e0` pairs: the sentinels are `100000.0`
-    /// (`[0x80dcc4]`) for classes 0 and 1 and `0.0` (`[0x7ffd74]`) for 9.
-    pub(crate) fn default_range(self) -> f32 {
-        match self {
-            Self::Me | Self::MyPet => 100_000.0,
-            Self::Creature => 30.0,
-            Self::Unknown => 0.0,
-            _ => 50.0,
-        }
-    }
-
-    /// The `SELF` of a `…SELFOTHER`/`…OTHERSELF` key: class 0 only. Your pet is an `OTHER`, told
-    /// apart by its chat type (`COMBAT_PET_HITS`).
-    pub(crate) fn is_me(self) -> bool {
-        self == Self::Me
-    }
-}
-
-impl Variant {
-    pub(crate) fn of(subject: UnitClass, object: UnitClass) -> Self {
-        match (subject.is_me(), object.is_me()) {
-            (true, false) => Self::SelfOther,
-            (false, true) => Self::OtherSelf,
-            (false, false) => Self::OtherOther,
-            (true, true) => Self::SelfSelf,
-        }
-    }
-
-    pub(crate) fn suffix(self) -> &'static str {
-        match self {
-            Self::SelfOther => "SELFOTHER",
-            Self::OtherSelf => "OTHERSELF",
-            Self::OtherOther => "OTHEROTHER",
-            Self::SelfSelf => "SELFSELF",
-        }
-    }
-
-    /// Whether the subject is spelled by name rather than as "You".
-    pub(crate) fn names_subject(self) -> bool {
-        matches!(self, Self::OtherSelf | Self::OtherOther)
-    }
-
-    pub(crate) fn names_object(self) -> bool {
-        matches!(self, Self::SelfOther | Self::OtherOther)
-    }
-
-    /// Whether the subject is the local player, the one bit a [`Keying::Duo`] family keys on.
-    pub(crate) fn subject_is_me(self) -> bool {
-        matches!(self, Self::SelfSelf | Self::SelfOther)
-    }
-}
-
-/// How a family builds its GlobalString key from the stem and the variant: the four-way selectors
-/// (`0x62a290` and 44 more), a two-way off a sentence's single participant (`0x62c160`,
-/// `0x62b480`, `0x629610`), or one fixed key (`DURABILITYDAMAGE_DEATH`, `SELFKILLOTHER`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Keying {
-    /// `…SELFSELF` / `…SELFOTHER` / `…OTHERSELF` / `…OTHEROTHER`, off both endpoints.
-    Quad,
-    /// Two keys off the subject alone, in the family's words: `SELF`/`OTHER`, or
-    /// `_FIRSTPERSON`/`_THIRDPERSON` for `TRADESKILL_LOG` and `FEEDPET_LOG`.
-    Duo {
-        me: &'static str,
-        other: &'static str,
-    },
-    /// One key: the stem and tail are the whole name.
-    Single,
-}
-
-/// One value slot of a family's format string, in the order the shipped template consumes it.
-/// `Attacker` and `Victim` appear only in the variants that spell that endpoint by name.
+/// One value slot of a client-composed line's format string, in the order the shipped template
+/// consumes it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Slot {
-    /// `%s`: the subject's name, when the variant spells it.
-    Attacker,
-    /// `%s`: the object's name, when the variant spells it.
-    Victim,
-    /// `%s`: the spell's name.
-    Spell,
-    /// `%s`: the damage school's word (`SPELL_SCHOOL<n>_CAP`).
-    School,
-    /// `%s`: a power's word (`MANA_POINTS` and kin).
-    Power,
-    /// `%d`: the primary amount.
-    Amount,
-    /// `%d`: a second amount, the leech family's gain.
-    Amount2,
-    /// `%s`: the leech family's gained power word.
-    Power2,
-    /// `%s`: a name that is never "you" (an item, gameobject, pet, faction or failure reason),
-    /// spelled in every variant.
+    /// `%s`: a name, already localized (a faction).
     Named,
+    /// `%d`: the amount.
+    Amount,
 }
 
-/// A combat-log message family: the stem its keys are built from, and the ordered slots its
-/// templates consume.
+/// A client-composed line: its GlobalString key and the ordered slots its template consumes.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Family {
-    pub stem: &'static str,
-    pub keying: Keying,
-    /// Appended after the variant word, as `AURAADDED` + `SELF` + `HARMFUL`; empty for most.
-    pub tail: &'static str,
+    pub key: &'static str,
     pub slots: &'static [Slot],
 }
 
-impl Family {
-    /// The GlobalString key this family resolves for `variant`.
-    pub(crate) fn key(&self, variant: Variant) -> String {
-        let mid = match self.keying {
-            Keying::Quad => variant.suffix(),
-            Keying::Duo { me, other } => {
-                if variant.subject_is_me() {
-                    me
-                } else {
-                    other
-                }
-            }
-            Keying::Single => "",
-        };
-        format!("{}{mid}{}", self.stem, self.tail)
-    }
-
-    pub(crate) fn names_subject(&self, variant: Variant) -> bool {
-        match self.keying {
-            Keying::Quad => variant.names_subject(),
-            // Only the `…OTHER` half of a two-way key spells a name.
-            Keying::Duo { .. } => !variant.subject_is_me(),
-            // A fixed key such as `PARTYKILLOTHER` always names its subject.
-            Keying::Single => true,
-        }
-    }
-
-    pub(crate) fn names_object(&self, variant: Variant) -> bool {
-        match self.keying {
-            Keying::Quad => variant.names_object(),
-            // A two-way family's sentence has one participant, so no `Victim` slot.
-            Keying::Duo { .. } => false,
-            Keying::Single => true,
-        }
-    }
-}
-
-/// The six suffixes `0x628410` appends to a finished sentence, in its order, before `0x626850`
-/// emits the whole line as one `%s`; a suffix whose GlobalString is empty is skipped.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Trailers {
-    pub absorbed: u32,
-    /// Negative is a vulnerability bonus, worded by `VULNERABLE_TRAILER`.
-    pub resisted: i64,
-    pub blocked: u32,
-    /// The swing's `HitInfo`, for `0x4000` GLANCING and `0x8000` CRUSHING; melee only.
-    pub hit_info: u32,
-}
-
-/// The value bound to each [`Slot`] for one line. School and power are indices, resolved to words
-/// in [`compose_line`]; `None` where the family needs one drops the line.
+/// The value bound to each [`Slot`] for one line.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Fills {
-    pub attacker: String,
-    pub victim: String,
-    pub spell: String,
-    /// The damage school index, 0 physical to 6 arcane.
-    pub school: Option<u8>,
-    /// The vmangos `Powers` index, 0 mana to 4 happiness.
-    pub power: Option<u32>,
-    pub amount: i64,
-    pub amount2: i64,
-    /// The leech family's gained power index.
-    pub power2: Option<u32>,
-    /// The [`Slot::Named`] text, already localized.
+    /// The [`Slot::Named`] text.
     pub named: String,
-    /// The `0x628410` suffixes, for the families that can grow one.
-    pub trailers: Option<Trailers>,
+    pub amount: i64,
 }
 
-/// A combat-log line classified at the packet while both units are streamed, so a despawned
-/// creature still logs, with only its names outstanding. The reference's deferred queue
-/// (`0xc4e208`, replayed by `0x6294b0`) holds only a line waiting on an item name (`0x55ba30`).
+/// A client-composed line queued for the drain, which resolves its template off the VM's
+/// `GlobalStrings.lua`.
 #[derive(Clone, Debug)]
 pub(crate) struct PendingCombat {
     pub kind: ChatEventKind,
     pub family: Family,
-    pub variant: Variant,
-    /// The sentence's subject, naming the `Attacker` slots; for [`DAMAGESHIELD`], the bearer.
-    pub subject: u64,
-    /// The guid naming the `Victim` slots.
-    pub object: u64,
-    /// Everything the template needs but the names, which are filled at drain.
     pub fills: Fills,
-    pub named: Named,
-    pub tries: u16,
-}
-
-/// What still has to be looked up before a line's [`Slot::Named`] can be filled: an item through
-/// the item cache (`0x55ba30`), a unit through `GetObjectName` (`0x6264e0`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Named {
-    /// The text is already in [`Fills::named`], or the family has no `Named` slot.
-    Ready,
-    /// An item entry, through the ask-once item cache.
-    Item(u32),
-    /// A unit or object guid, through the name cache.
-    Unit(u64),
 }
 
 /// The chat-event kinds: the `ChatTypeInfo` keys benilla produces.
@@ -322,68 +89,6 @@ pub(crate) enum ChatEventKind {
     /// `0x19`, the reference's catch-all combat line: `DURABILITYDAMAGE_DEATH`, `SPELLDISMISSPET*`,
     /// `SPELLHAPPINESSDRAIN*` and the "string not found" warning.
     CombatMiscInfo,
-    CombatSelfHits,
-    CombatSelfMisses,
-    CombatPetHits,
-    CombatPetMisses,
-    CombatPartyHits,
-    CombatPartyMisses,
-    CombatFriendlyPlayerHits,
-    CombatFriendlyPlayerMisses,
-    CombatHostilePlayerHits,
-    CombatHostilePlayerMisses,
-    CombatCreatureVsSelfHits,
-    CombatCreatureVsSelfMisses,
-    CombatCreatureVsPartyHits,
-    CombatCreatureVsPartyMisses,
-    CombatCreatureVsCreatureHits,
-    CombatCreatureVsCreatureMisses,
-    /// `0x2b`, a death whose victim classifies 0..5 (you, yours, a friendly player or their pet).
-    CombatFriendlyDeath,
-    /// `0x2c`, every other death: a hostile player, a creature, an unresolvable victim.
-    CombatHostileDeath,
-    SpellSelfDamage,
-    SpellSelfBuff,
-    SpellPetDamage,
-    SpellPetBuff,
-    SpellPartyDamage,
-    SpellPartyBuff,
-    SpellFriendlyPlayerDamage,
-    SpellFriendlyPlayerBuff,
-    SpellHostilePlayerDamage,
-    SpellHostilePlayerBuff,
-    SpellCreatureVsSelfDamage,
-    SpellCreatureVsSelfBuff,
-    SpellCreatureVsPartyDamage,
-    SpellCreatureVsPartyBuff,
-    SpellCreatureVsCreatureDamage,
-    SpellCreatureVsCreatureBuff,
-    /// `0x3e`, the item a cast produced: `TRADESKILL_LOG_*` and `FEEDPET_LOG_*`.
-    SpellTradeskills,
-    SpellDamageShieldsOnSelf,
-    SpellDamageShieldsOnOthers,
-    /// `0x41`, an aura leaving you or your pet (`AURAREMOVED*`).
-    SpellAuraGoneSelf,
-    /// `0x42`, an aura leaving a party member or their pet.
-    SpellAuraGoneParty,
-    /// `0x43`, an aura leaving anyone else.
-    SpellAuraGoneOther,
-    /// `0x44`, an enchant landing on or fading from an item (`ITEMENCHANTMENT*`).
-    SpellItemEnchantments,
-    /// `0x45`, an aura dispelled or stolen (`AURADISPEL*`, `AURASTOLEN*`).
-    SpellBreakAura,
-    SpellPeriodicSelfDamage,
-    SpellPeriodicSelfBuffs,
-    SpellPeriodicPartyDamage,
-    SpellPeriodicPartyBuffs,
-    SpellPeriodicFriendlyPlayerDamage,
-    SpellPeriodicFriendlyPlayerBuffs,
-    SpellPeriodicHostilePlayerDamage,
-    SpellPeriodicHostilePlayerBuffs,
-    SpellPeriodicCreatureDamage,
-    SpellPeriodicCreatureBuffs,
-    /// `0x50`, your own cast that failed (`SPELLFAIL{CAST,PERFORM}SELF`).
-    SpellFailedLocalPlayer,
     /// `0x55`, a reputation delta (`FACTION_STANDING_INCREASED`/`_DECREASED`).
     CombatFactionChange,
 }
@@ -394,64 +99,7 @@ impl ChatEventKind {
     /// the combat log, are outside this set.
     pub(crate) fn is_combat_log(self) -> bool {
         use ChatEventKind as K;
-        matches!(
-            self,
-            K::CombatMiscInfo
-                | K::CombatSelfHits
-                | K::CombatSelfMisses
-                | K::CombatPetHits
-                | K::CombatPetMisses
-                | K::CombatPartyHits
-                | K::CombatPartyMisses
-                | K::CombatFriendlyPlayerHits
-                | K::CombatFriendlyPlayerMisses
-                | K::CombatHostilePlayerHits
-                | K::CombatHostilePlayerMisses
-                | K::CombatCreatureVsSelfHits
-                | K::CombatCreatureVsSelfMisses
-                | K::CombatCreatureVsPartyHits
-                | K::CombatCreatureVsPartyMisses
-                | K::CombatCreatureVsCreatureHits
-                | K::CombatCreatureVsCreatureMisses
-                | K::CombatFriendlyDeath
-                | K::CombatHostileDeath
-                | K::SpellSelfDamage
-                | K::SpellSelfBuff
-                | K::SpellPetDamage
-                | K::SpellPetBuff
-                | K::SpellPartyDamage
-                | K::SpellPartyBuff
-                | K::SpellFriendlyPlayerDamage
-                | K::SpellFriendlyPlayerBuff
-                | K::SpellHostilePlayerDamage
-                | K::SpellHostilePlayerBuff
-                | K::SpellCreatureVsSelfDamage
-                | K::SpellCreatureVsSelfBuff
-                | K::SpellCreatureVsPartyDamage
-                | K::SpellCreatureVsPartyBuff
-                | K::SpellCreatureVsCreatureDamage
-                | K::SpellCreatureVsCreatureBuff
-                | K::SpellTradeskills
-                | K::SpellDamageShieldsOnSelf
-                | K::SpellDamageShieldsOnOthers
-                | K::SpellAuraGoneSelf
-                | K::SpellAuraGoneParty
-                | K::SpellAuraGoneOther
-                | K::SpellItemEnchantments
-                | K::SpellBreakAura
-                | K::SpellPeriodicSelfDamage
-                | K::SpellPeriodicSelfBuffs
-                | K::SpellPeriodicPartyDamage
-                | K::SpellPeriodicPartyBuffs
-                | K::SpellPeriodicFriendlyPlayerDamage
-                | K::SpellPeriodicFriendlyPlayerBuffs
-                | K::SpellPeriodicHostilePlayerDamage
-                | K::SpellPeriodicHostilePlayerBuffs
-                | K::SpellPeriodicCreatureDamage
-                | K::SpellPeriodicCreatureBuffs
-                | K::SpellFailedLocalPlayer
-                | K::CombatFactionChange
-        )
+        matches!(self, K::CombatMiscInfo | K::CombatFactionChange)
     }
 
     /// Every kind, for the exhaustive sweeps; `ui_chat::tests::every_kind_is_in_all` fails when one
@@ -499,59 +147,6 @@ impl ChatEventKind {
             K::BgSystemAlliance,
             K::BgSystemHorde,
             K::CombatMiscInfo,
-            K::CombatSelfHits,
-            K::CombatSelfMisses,
-            K::CombatPetHits,
-            K::CombatPetMisses,
-            K::CombatPartyHits,
-            K::CombatPartyMisses,
-            K::CombatFriendlyPlayerHits,
-            K::CombatFriendlyPlayerMisses,
-            K::CombatHostilePlayerHits,
-            K::CombatHostilePlayerMisses,
-            K::CombatCreatureVsSelfHits,
-            K::CombatCreatureVsSelfMisses,
-            K::CombatCreatureVsPartyHits,
-            K::CombatCreatureVsPartyMisses,
-            K::CombatCreatureVsCreatureHits,
-            K::CombatCreatureVsCreatureMisses,
-            K::CombatFriendlyDeath,
-            K::CombatHostileDeath,
-            K::SpellSelfDamage,
-            K::SpellSelfBuff,
-            K::SpellPetDamage,
-            K::SpellPetBuff,
-            K::SpellPartyDamage,
-            K::SpellPartyBuff,
-            K::SpellFriendlyPlayerDamage,
-            K::SpellFriendlyPlayerBuff,
-            K::SpellHostilePlayerDamage,
-            K::SpellHostilePlayerBuff,
-            K::SpellCreatureVsSelfDamage,
-            K::SpellCreatureVsSelfBuff,
-            K::SpellCreatureVsPartyDamage,
-            K::SpellCreatureVsPartyBuff,
-            K::SpellCreatureVsCreatureDamage,
-            K::SpellCreatureVsCreatureBuff,
-            K::SpellTradeskills,
-            K::SpellDamageShieldsOnSelf,
-            K::SpellDamageShieldsOnOthers,
-            K::SpellAuraGoneSelf,
-            K::SpellAuraGoneParty,
-            K::SpellAuraGoneOther,
-            K::SpellItemEnchantments,
-            K::SpellBreakAura,
-            K::SpellPeriodicSelfDamage,
-            K::SpellPeriodicSelfBuffs,
-            K::SpellPeriodicPartyDamage,
-            K::SpellPeriodicPartyBuffs,
-            K::SpellPeriodicFriendlyPlayerDamage,
-            K::SpellPeriodicFriendlyPlayerBuffs,
-            K::SpellPeriodicHostilePlayerDamage,
-            K::SpellPeriodicHostilePlayerBuffs,
-            K::SpellPeriodicCreatureDamage,
-            K::SpellPeriodicCreatureBuffs,
-            K::SpellFailedLocalPlayer,
             K::CombatFactionChange,
         ]
     };
@@ -705,27 +300,6 @@ pub(crate) struct ChatLog {
 }
 
 impl ChatLog {
-    /// How many broadcasts are waiting, the drain's early-out.
-    pub(crate) fn broadcasts_pending(&self) -> usize {
-        self.broadcasts.len()
-    }
-
-    /// Park a level-up's gains for the `PLAYER_LEVEL_UP` fire.
-    pub(crate) fn push_level_up_gains(&mut self, info: &LevelUpInfo, talent_points: u32) {
-        self.level_up_gains.push((*info, talent_points));
-    }
-
-    /// Take the parked gains for `level`; with none (a GM's level write), the caller fires zeros.
-    pub(crate) fn take_level_up_gains(&mut self, level: u32) -> Option<(LevelUpInfo, u32)> {
-        let i = self
-            .level_up_gains
-            .iter()
-            .position(|(l, _)| l.level == level)?;
-        Some(self.level_up_gains.remove(i))
-    }
-}
-
-impl ChatLog {
     /// Queue a decoded wire line (`SMSG_MESSAGECHAT`).
     pub(crate) fn push_wire(&mut self, msg: ChatMessage) {
         self.pending.push(Pending::Wire { msg, tries: 0 });
@@ -863,6 +437,27 @@ impl ChatLog {
                 _ => None,
             })
             .collect()
+    }
+}
+
+impl ChatLog {
+    /// How many broadcasts are waiting, the drain's early-out.
+    pub(crate) fn broadcasts_pending(&self) -> usize {
+        self.broadcasts.len()
+    }
+
+    /// Park a level-up's gains for the `PLAYER_LEVEL_UP` fire.
+    pub(crate) fn push_level_up_gains(&mut self, info: &LevelUpInfo, talent_points: u32) {
+        self.level_up_gains.push((*info, talent_points));
+    }
+
+    /// Take the parked gains for `level`; with none (a GM's level write), the caller fires zeros.
+    pub(crate) fn take_level_up_gains(&mut self, level: u32) -> Option<(LevelUpInfo, u32)> {
+        let i = self
+            .level_up_gains
+            .iter()
+            .position(|(l, _)| l.level == level)?;
+        Some(self.level_up_gains.remove(i))
     }
 }
 
