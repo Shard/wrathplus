@@ -5,7 +5,7 @@
 use crate::script::{PlateGeometry, PlateState, UiScript};
 
 /// A VM with a `WorldFrame` to hang plates off, all [`UiScript::sync_nameplates`] requires.
-fn vm() -> UiScript {
+pub(super) fn vm() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     s.run(r#"WorldFrame = CreateFrame("WorldFrame", "WorldFrame") WorldFrame:SetAllPoints()"#)
@@ -15,7 +15,7 @@ fn vm() -> UiScript {
 }
 
 /// A 1280 px window, where one gx unit is 1280 px, so the 0.1 × 0.025 plate is 128 × 32.
-fn geometry() -> PlateGeometry {
+pub(super) fn geometry() -> PlateGeometry {
     PlateGeometry {
         width: 128.0,
         height: 32.0,
@@ -33,7 +33,7 @@ fn geometry() -> PlateGeometry {
     }
 }
 
-fn plate(name: &str, health: f32, max: f32) -> PlateState {
+pub(super) fn plate(name: &str, health: f32, max: f32) -> PlateState {
     PlateState {
         // A hash of the name stands in for the GUID: stable per unit, distinct between units.
         key: name.bytes().map(u64::from).sum(),
@@ -56,7 +56,7 @@ fn plate(name: &str, health: f32, max: f32) -> PlateState {
 }
 
 /// Drive N plates and settle the layout, the way one app frame does.
-fn drive(s: &mut UiScript, states: &[PlateState]) {
+pub(super) fn drive(s: &mut UiScript, states: &[PlateState]) {
     s.sync_nameplates(geometry(), states);
     s.resolve();
 }
@@ -180,87 +180,6 @@ fn the_region_and_child_tuples_are_eleven_and_two() {
         "#
         )
         .unwrap());
-}
-
-/// The cast bar (`0x98f040`): hidden without a cast; a cast shows the bar at its value in cast
-/// orange with the spell's icon and the border, and an uninterruptible one swaps the border for
-/// the shield; the cast's end hides the bar again.
-#[test]
-fn the_cast_bar_follows_the_targets_cast() {
-    let mut s = vm();
-    let mut state = plate("Wolf", 30.0, 40.0);
-    drive(&mut s, std::slice::from_ref(&state));
-    let castbar_shown = |s: &UiScript| {
-        s.eval::<bool>(
-            "local _, cast = WorldFrame:GetChildren():GetChildren() return cast:IsShown() == 1",
-        )
-        .unwrap()
-    };
-    assert!(!castbar_shown(&s), "no cast, no bar");
-
-    state.cast = Some(benilla_ui_plate_cast(1.5, 0.5, false));
-    drive(&mut s, std::slice::from_ref(&state));
-    assert!(castbar_shown(&s));
-    assert!(s
-        .eval::<bool>(
-            r#"
-            local p = WorldFrame:GetChildren()
-            local _, cast = p:GetChildren()
-            local _, _, castborder, shield, icon = p:GetRegions()
-            local lo, hi = cast:GetMinMaxValues()
-            local r, g, b = cast:GetStatusBarColor()
-            return lo == 0 and math.abs(hi - 1.5) < 1e-6 and math.abs(cast:GetValue() - 0.5) < 1e-6
-               and math.abs(r - 1) < 1e-6 and math.abs(g - 0.7) < 1e-6 and b == 0
-               and castborder:IsShown() == 1 and shield:IsShown() == nil
-               and icon:IsShown() == 1 and icon:GetTexture() == "Interface\\Icons\\Spell_Fire_Fireball02"
-        "#
-        )
-        .unwrap());
-
-    state.cast = Some(benilla_ui_plate_cast(1.5, 0.75, true));
-    drive(&mut s, std::slice::from_ref(&state));
-    assert!(s
-        .eval::<bool>(
-            r#"
-            local _, _, castborder, shield = WorldFrame:GetChildren():GetRegions()
-            return castborder:IsShown() == nil and shield:IsShown() == 1
-        "#
-        )
-        .unwrap());
-
-    state.cast = None;
-    drive(&mut s, std::slice::from_ref(&state));
-    assert!(!castbar_shown(&s), "the cast's end hides the bar");
-}
-
-fn benilla_ui_plate_cast(
-    max: f32,
-    value: f32,
-    not_interruptible: bool,
-) -> crate::script::PlateCast {
-    crate::script::PlateCast {
-        max,
-        value,
-        icon: Some("Interface\\Icons\\Spell_Fire_Fireball02".into()),
-        channel: false,
-        not_interruptible,
-    }
-}
-
-/// The elite dragon shows for an elite unit only (`0x98e6e0`).
-#[test]
-fn the_elite_icon_marks_an_elite() {
-    let mut s = vm();
-    let mut state = plate("Ogre", 30.0, 40.0);
-    drive(&mut s, std::slice::from_ref(&state));
-    let elite = |s: &UiScript| {
-        s.eval::<bool>("return select(11, WorldFrame:GetChildren():GetRegions()):IsShown() == 1")
-            .unwrap()
-    };
-    assert!(!elite(&s));
-    state.elite = true;
-    drive(&mut s, std::slice::from_ref(&state));
-    assert!(elite(&s));
 }
 
 /// `_Nameplates.lua:163` rejects a plate unless its name is anchored `BOTTOM` to `CENTER` and its
@@ -439,182 +358,6 @@ fn the_driver_does_not_overwrite_an_addons_takeover() {
         .unwrap());
 }
 
-/// The glow art has no alpha and is mostly black, so the reference blends it ADD (`0x7cb36a`); as
-/// BLEND it is an opaque box. Deviation: we paint no rim, which reads as hard edges in our
-/// pipeline, but the region stays shown, ADD and textured. The border check fails an empty extract.
-#[test]
-fn a_hovered_plate_emits_no_glow_quad() {
-    use crate::script::QuadContent;
-    let mut s = vm();
-    let mut p = plate("Wolf", 30.0, 40.0);
-    p.hovered = true;
-    p.lit = true;
-    drive(&mut s, &[p]);
-
-    assert!(s
-        .eval::<bool>(
-            r#"local glow = select(6, WorldFrame:GetChildren():GetRegions())
-               return glow:IsShown() == 1
-                  and glow:GetTexture() == "Interface\\Tooltips\\Nameplate-Glow"
-                  and glow:GetBlendMode() == "ADD""#
-        )
-        .unwrap());
-
-    let paths: Vec<String> = s
-        .extract()
-        .iter()
-        .filter_map(|q| match &q.content {
-            QuadContent::Texture { path, .. } => path.clone(),
-            _ => None,
-        })
-        .collect();
-    assert!(
-        !paths.iter().any(|p| p.contains("Nameplate-Glow")),
-        "the hovered plate's glow must not be painted; quads were {paths:?}"
-    );
-    assert!(
-        paths.iter().any(|p| p.contains("Nameplate-Border")),
-        "the plate's border must still paint; quads were {paths:?}"
-    );
-}
-
-/// Text on a plate skips the UI grid snap: the plate's rect snaps to the finer device grid as it
-/// slides, and a text top snapped to the logical grid would jump a pixel against it. The flag is
-/// the owning frame's, so an addon's own string on the plate gets it too.
-#[test]
-fn the_plates_texts_carry_the_world_seat_and_its_textures_do_not() {
-    use crate::script::QuadContent;
-    let mut s = vm();
-    drive(&mut s, &[plate("Wolf", 30.0, 40.0)]);
-
-    let seats: Vec<(String, bool)> = s
-        .extract()
-        .iter()
-        .filter_map(|q| match &q.content {
-            QuadContent::Text {
-                text: Some(t),
-                world_seat,
-                ..
-            } => Some((t.clone(), *world_seat)),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(
-        seats,
-        vec![("Wolf".to_string(), true), ("12".to_string(), true)],
-        "the plate draws exactly its name and level, both seated off the UI grid"
-    );
-
-    // A FontString on an ordinary frame stays on the grid.
-    s.run(
-        r#"local f = CreateFrame("Frame", "Chrome", UIParent) f:SetAllPoints()
-           local t = f:CreateFontString("ChromeText") t:SetAllPoints() t:SetText("Chrome")"#,
-    )
-    .unwrap();
-    s.resolve();
-    assert!(s.extract().iter().any(|q| matches!(
-        &q.content,
-        QuadContent::Text { text: Some(t), world_seat: false, .. } if t == "Chrome"
-    )));
-
-    // An addon's own string on the plate, as pfUI draws its text, gets the same seat.
-    s.run(
-        r#"local plate = WorldFrame:GetChildren()
-           local t = plate:CreateFontString() t:SetAllPoints() t:SetText("pfName")"#,
-    )
-    .unwrap();
-    s.resolve();
-    assert!(
-        s.extract().iter().any(|q| matches!(
-            &q.content,
-            QuadContent::Text { text: Some(t), world_seat: true, .. } if t == "pfName"
-        )),
-        "an addon's FontString on the plate seats off the UI grid too"
-    );
-}
-
-/// Only the stock glow art on an ADD region goes unpainted; an addon's own glow texture paints.
-#[test]
-fn an_addon_that_retextures_the_glow_gets_its_art_painted() {
-    use crate::script::QuadContent;
-    let mut s = vm();
-    let mut p = plate("Wolf", 30.0, 40.0);
-    p.hovered = true;
-    drive(&mut s, &[p]);
-    s.run(
-        r#"local glow = select(6, WorldFrame:GetChildren():GetRegions())
-           glow:SetTexture("Interface\\AddOns\\pfUI\\img\\glow")"#,
-    )
-    .unwrap();
-    s.resolve();
-
-    assert!(s
-        .extract()
-        .iter()
-        .filter_map(|q| match &q.content {
-            QuadContent::Texture { path, .. } => path.clone(),
-            _ => None,
-        })
-        .any(|p| p.contains("pfUI")));
-}
-
-/// pfUI reads `glow:IsShown()` as the mouseover signal (`:601`, `:880`), so the glow shows on hover
-/// though it paints nothing.
-#[test]
-fn the_glow_region_is_the_mouseover_signal() {
-    let mut s = vm();
-    drive(&mut s, &[plate("Wolf", 30.0, 40.0)]);
-    assert!(s
-        .eval::<bool>(
-            "local glow = select(6, WorldFrame:GetChildren():GetRegions()) return glow:IsShown() == nil"
-        )
-        .unwrap());
-    let mut hovered = plate("Wolf", 30.0, 40.0);
-    hovered.hovered = true;
-    drive(&mut s, &[hovered]);
-    assert!(s
-        .eval::<bool>(
-            "local glow = select(6, WorldFrame:GetChildren():GetRegions()) return glow:IsShown() == 1"
-        )
-        .unwrap());
-}
-
-/// The level and the skull (a world boss, or ten levels up) share one seat; pfUI reads
-/// `levelicon:IsShown()` and CustomNameplates `Boss:IsVisible()`.
-#[test]
-fn the_skull_replaces_the_level_number() {
-    let mut s = vm();
-    let mut skulled = plate("Wolf", 30.0, 40.0);
-    skulled.skull = true;
-    drive(&mut s, &[skulled]);
-    assert!(s
-        .eval::<bool>(
-            r#"
-            local level, levelicon = select(8, WorldFrame:GetChildren():GetRegions())
-            return level:IsShown() == nil and levelicon:IsShown() == 1
-                   and levelicon:IsVisible() == 1
-        "#
-        )
-        .unwrap());
-}
-
-/// A level not yet known, with no skull, leaves the seat empty.
-#[test]
-fn a_unit_with_no_level_yet_wears_no_skull() {
-    let mut s = vm();
-    let mut unknown = plate("Wolf", 30.0, 40.0);
-    unknown.level = None;
-    drive(&mut s, &[unknown]);
-    assert!(s
-        .eval::<bool>(
-            r#"
-            local level, levelicon = select(8, WorldFrame:GetChildren():GetRegions())
-            return level:IsShown() == nil and levelicon:IsShown() == nil
-        "#
-        )
-        .unwrap());
-}
-
 #[test]
 fn a_plate_created_after_the_first_frame_is_laid_out() {
     let mut s = vm();
@@ -667,190 +410,4 @@ fn an_addon_frame_under_the_worldframe_is_not_a_plate() {
         .unwrap(),
         1
     );
-}
-
-/// A plate is a mouse-enabled `Button` (`CSimpleButton`'s constructor writes `[+0xcc] = 0x4`), so
-/// hovering it takes the mouse focus from the world; the widget layer then names the plate's unit,
-/// as the reference's OnEnter (`0x7cb850`) publishes `[0xb4e2c8]`.
-#[test]
-fn hovering_a_plate_names_its_unit() {
-    let mut s = vm();
-    let wolf = plate("Wolf", 30.0, 40.0);
-    let key = wolf.key;
-    drive(&mut s, &[wolf]);
-
-    assert_eq!(s.hovered_nameplate(), None, "nothing hovered yet");
-    // The plate hangs 32 units below its top centre (500, 400), so this is its middle.
-    s.mouse_move(500.0, 384.0);
-    assert_eq!(s.hovered_nameplate(), Some(key));
-    // Off the plate the WorldFrame takes the focus again.
-    s.mouse_move(50.0, 50.0);
-    assert_eq!(s.hovered_nameplate(), None);
-}
-
-/// The reference's click slot (`0x7cb910`) ends in the same `SetSelection` as a click on the body,
-/// and fires on the up edge only: `RegisterForClicks(0x500)` at `0x7cb637`.
-#[test]
-fn a_completed_click_on_a_plate_reaches_the_app() {
-    let mut s = vm();
-    let wolf = plate("Wolf", 30.0, 40.0);
-    let key = wolf.key;
-    drive(&mut s, &[wolf]);
-    s.mouse_move(500.0, 384.0);
-
-    s.mouse_button(500.0, 384.0, "LeftButton", true);
-    assert!(
-        s.take_nameplate_clicks().is_empty(),
-        "a press is not a click: the plate fires on the UP edge only"
-    );
-    s.mouse_button(500.0, 384.0, "LeftButton", false);
-    let clicks = s.take_nameplate_clicks();
-    assert_eq!(clicks.len(), 1);
-    assert_eq!(clicks[0].key, key);
-    assert_eq!(clicks[0].button, "LeftButton");
-    assert!(
-        s.take_nameplate_clicks().is_empty(),
-        "drained, not repeated"
-    );
-}
-
-/// `0x500` includes RightButtonUp (`0x7cb637` writes `[this+0x330]`), where a plain `Button`
-/// registers LeftButtonUp alone; the slot forks on the mask: 1 selects (`0x4925d0`), 4 selects and
-/// interacts (`0x492820`).
-#[test]
-fn a_physical_right_click_on_a_plate_reaches_the_app() {
-    let mut s = vm();
-    let wolf = plate("Wolf", 30.0, 40.0);
-    let key = wolf.key;
-    drive(&mut s, &[wolf]);
-    s.mouse_move(500.0, 384.0);
-
-    s.mouse_button(500.0, 384.0, "RightButton", true);
-    assert!(
-        s.take_nameplate_clicks().is_empty(),
-        "the UP lane only: `0x500` has no ButtonDown bit"
-    );
-    s.mouse_button(500.0, 384.0, "RightButton", false);
-    let clicks = s.take_nameplate_clicks();
-    assert_eq!(clicks.len(), 1);
-    assert_eq!(clicks[0].key, key);
-    assert_eq!(clicks[0].button, "RightButton");
-}
-
-#[test]
-fn a_middle_click_on_a_plate_fires_nothing() {
-    let mut s = vm();
-    drive(&mut s, &[plate("Wolf", 30.0, 40.0)]);
-    s.mouse_move(500.0, 384.0);
-    s.mouse_button(500.0, 384.0, "MiddleButton", true);
-    s.mouse_button(500.0, 384.0, "MiddleButton", false);
-    assert!(
-        s.take_nameplate_clicks().is_empty(),
-        "`0x500` is Left|Right on the up edge and nothing else"
-    );
-}
-
-/// pfUI's click-through (`nameplates.lua:1228`) calls `plate:Click`; in the reference a scripted
-/// and a physical click go through the button's one click slot.
-#[test]
-fn a_scripted_click_selects_too() {
-    let mut s = vm();
-    let wolf = plate("Wolf", 30.0, 40.0);
-    let key = wolf.key;
-    drive(&mut s, &[wolf]);
-    s.run(r#"WorldFrame:GetChildren():Click("RightButton")"#)
-        .unwrap();
-    let clicks = s.take_nameplate_clicks();
-    assert_eq!(clicks.len(), 1);
-    assert_eq!(clicks[0].key, key);
-    assert_eq!(clicks[0].button, "RightButton");
-}
-
-/// Entering mouselook turns the mouse off on every plate and leaving turns it back on (`0x60f830`,
-/// from `0x483e80` and `0x483e70`), for a turn begun on the world that drags across a plate; a
-/// press on a plate never reaches mouselook (`0x7662c0`).
-#[test]
-fn freelook_hands_the_mouse_back() {
-    let mut s = vm();
-    drive(&mut s, &[plate("Wolf", 30.0, 40.0)]);
-    s.mouse_move(500.0, 384.0);
-    assert!(s.hovered_nameplate().is_some());
-
-    s.set_nameplate_mouse(false);
-    s.mouse_move(500.0, 384.1);
-    assert_eq!(
-        s.hovered_nameplate(),
-        None,
-        "a plate must not hold the pointer while the camera does"
-    );
-
-    s.set_nameplate_mouse(true);
-    s.mouse_move(500.0, 384.0);
-    assert!(
-        s.hovered_nameplate().is_some(),
-        "and it takes it back on leave"
-    );
-}
-
-/// The plate's `+0x3c` hit test (`0x7cba30`) refuses the point while a ground-targeted spell is
-/// armed (`0x6e48a0() && 0x6e6320() && !0x6e6180()`), so it falls through to the `WorldFrame`.
-/// It never touches `[+0xcc]`: `IsMouseEnabled` stays true, unlike under mouselook (`0x60f830`).
-#[test]
-fn a_ground_target_veto_refuses_the_hit_without_disabling_the_mouse() {
-    let mut s = vm();
-    drive(&mut s, &[plate("Wolf", 30.0, 40.0)]);
-    s.mouse_move(500.0, 384.0);
-    assert!(s.hovered_nameplate().is_some(), "the plate takes the mouse");
-
-    s.set_nameplate_hit_test_veto(true);
-    s.mouse_move(500.0, 384.1);
-    assert_eq!(
-        s.hovered_nameplate(),
-        None,
-        "the reticle must be placeable through a plate"
-    );
-    // The press falls through too, so the WorldFrame takes the ground cast.
-    s.mouse_button(500.0, 384.1, "LeftButton", true);
-    s.mouse_button(500.0, 384.1, "LeftButton", false);
-    assert!(
-        s.take_nameplate_clicks().is_empty(),
-        "a vetoed plate takes no click either"
-    );
-    assert_eq!(
-        s.eval::<i64>("local p = WorldFrame:GetChildren() return p:IsMouseEnabled()")
-            .unwrap(),
-        1,
-        "the veto refuses the hit test, it does not disable the mouse"
-    );
-
-    s.set_nameplate_hit_test_veto(false);
-    s.mouse_move(500.0, 384.0);
-    assert!(
-        s.hovered_nameplate().is_some(),
-        "and the plate takes it back when the cast is gone"
-    );
-}
-
-/// The threat flash (region 1) shows in the warning's colour, and hides without one (`0x98eaef`).
-#[test]
-fn the_threat_flash_shows_in_the_warnings_colour() {
-    let mut s = vm();
-    let mut state = plate("Ogre", 30.0, 40.0);
-    drive(&mut s, std::slice::from_ref(&state));
-    let flash = |s: &UiScript| {
-        s.eval::<(bool, f64, f64, f64)>(
-            "local f = WorldFrame:GetChildren():GetRegions() \
-             local r, g, b = f:GetVertexColor() return f:IsShown() == 1, r, g, b",
-        )
-        .unwrap()
-    };
-    assert!(!flash(&s).0, "no warning, no flash");
-    state.threat = Some([1.0, 0.6, 0.0]);
-    drive(&mut s, std::slice::from_ref(&state));
-    let (shown, r, g, b) = flash(&s);
-    assert!(shown);
-    assert!((r - 1.0).abs() < 1e-6 && (g - 0.6).abs() < 1e-6 && b == 0.0);
-    state.threat = None;
-    drive(&mut s, std::slice::from_ref(&state));
-    assert!(!flash(&s).0);
 }

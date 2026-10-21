@@ -61,8 +61,7 @@ const COL_EFFECT_SPELL_CLASS_MASK_1: usize = 174;
 /// `AttributesEx5` (3.3.5 column 9, `+0x24`): the usable-while-stunned/feared/confused bits the
 /// pet bar's slot predicate reads (`0x5d3fd0`).
 const COL_ATTRIBUTES_EX5: usize = 186;
-/// `AttributesEx7` (3.3.5 column 11, `+0x2c`): `0x800`/`0x1000` interrupt or silence only
-/// non-players, read with the interrupt masks (`0x53ca70`).
+/// `AttributesEx7` (3.3.5 column 11, `+0x2c`), read by the interrupt masks (`0x53ca70`).
 const COL_ATTRIBUTES_EX7: usize = 187;
 /// `Category` (`+0x8`): the shared-cooldown `SpellCategory.dbc` id, such as potions 4.
 const COL_CATEGORY: usize = 2;
@@ -193,7 +192,6 @@ const COL_EFFECT_POINTS_PER_COMBO_POINT_1: usize = 112;
 
 /// The per-effect `[3]` arrays, each constant slot 0; die sides and base points are signed.
 const COL_EFFECT_DIE_SIDES_1: usize = 64;
-const COL_EFFECT_BASE_DICE_1: usize = 67;
 const COL_EFFECT_DICE_PER_LEVEL_1: usize = 70;
 const COL_EFFECT_REAL_POINTS_PER_LEVEL_1: usize = 73;
 const COL_EFFECT_BASE_POINTS_1: usize = 76;
@@ -438,8 +436,6 @@ fn spell_schema() -> Schema {
 
 /// Load the joined spell display catalog off the patch chain.
 pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
-    // Build 12340 stores a school mask where 1.12 stores the school's index.
-    let school_is_mask = matches!(chain.profile(), crate::DataProfile::Wrath { .. });
     let icons = crate::dbc::load_spell_icon_map(chain)?;
     let dispel_types = load_spell_dispel_types(chain)?;
     // Categories whose `SpellCategory.dbc` flags carry `0x2` match every cooldown query
@@ -541,19 +537,9 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 attributes_ex4: u32_at(r, COL_ATTRIBUTES_EX4).unwrap_or(0),
                 attributes_ex5: u32_at(r, COL_ATTRIBUTES_EX5).unwrap_or(0),
                 attributes_ex7: u32_at(r, COL_ATTRIBUTES_EX7).unwrap_or(0),
-                // Slot 1 is 3.3.5's `SchoolMask` (column 225, `+0x284`), whole.
-                school_mask: u32_at(r, COL_SCHOOL)
-                    .map(|v| if school_is_mask { v } else { 1 << v })
-                    .unwrap_or(0),
-                school: u32_at(r, COL_SCHOOL)
-                    .map(|v| {
-                        if school_is_mask && v != 0 {
-                            v.trailing_zeros()
-                        } else {
-                            v
-                        }
-                    })
-                    .unwrap_or(0),
+                // Slot 1 is build 12340's `SchoolMask` (column 225, `+0x284`); `school` its lowest.
+                school_mask: u32_at(r, COL_SCHOOL).unwrap_or(0),
+                school: u32_at(r, COL_SCHOOL).map_or(0, |v| v.trailing_zeros() % 32),
                 mechanic: u32_at(r, COL_MECHANIC).unwrap_or(0),
                 effect_mechanic: std::array::from_fn(|i| {
                     u32_at(r, COL_EFFECT_MECHANIC_1 + i).unwrap_or(0)
@@ -653,14 +639,9 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 effect_die_sides: std::array::from_fn(|i| {
                     i32_at(r, COL_EFFECT_DIE_SIDES_1 + i).unwrap_or(0)
                 }),
+                // 3.3.5 has no BaseDice: AC's CalcValue rolls one die for positive DieSides.
                 effect_base_dice: std::array::from_fn(|i| {
-                    if school_is_mask {
-                        // 3.3.5 removed BaseDice. AC SpellEffectInfo::CalcValue rolls
-                        // one die for positive DieSides; zero sides adds nothing.
-                        i32::from(i32_at(r, COL_EFFECT_DIE_SIDES_1 + i).unwrap_or(0) > 0)
-                    } else {
-                        i32_at(r, COL_EFFECT_BASE_DICE_1 + i).unwrap_or(0)
-                    }
+                    i32::from(i32_at(r, COL_EFFECT_DIE_SIDES_1 + i).unwrap_or(0) > 0)
                 }),
                 effect_dice_per_level: std::array::from_fn(|i| {
                     i32_at(r, COL_EFFECT_DICE_PER_LEVEL_1 + i).unwrap_or(0)

@@ -60,7 +60,8 @@ pub struct RibbonTrail {
     seq: RibbonSeq,
     /// The model whose [`crate::model_fade::ModelAlpha`] gates the draw (`None` always draws): the
     /// reference's ribbon leg drops the draw below a render-alpha threshold (`0x707680`, alpha
-    /// `block+0x3c × Model+0x19c`). Whether that alpha also scales the strip is untraced.
+    /// `block+0x3c × Model+0x19c`). The draw itself (`0x980b70`) reads no model alpha; the
+    /// vertex build (`0x97fef0`) is untraced, so the strip is not scaled by it here.
     alpha_src: Option<Entity>,
     /// The placed model's [`crate::particles::EmitterFade`]: the reference ticks and draws a
     /// model's emitters inside that model's draw step, so a trail takes its quad clouds' draw-set
@@ -509,12 +510,20 @@ pub(crate) fn simulate_ribbons(
                 cam,
                 texture: texture.id(),
                 blend: def.blend.into(),
-                // The M2 batch state's per-blend fog colour (`0x70baf0`): additive trails fog
-                // toward black, the rest toward the scene colour. No ribbon has the unfogged flag.
-                fog: EffectFog::for_blend(0, def.blend),
-                // Unlit: the ribbon record has no flag word for the particles' unlit bit, and the
-                // reference's ribbon batch lighting is untraced.
-                lighting: crate::particles::buffer::EffectLighting::None,
+                // The ribbon draw (`0x980b70`) sets its material's fog and lighting: no fog on
+                // the unfogged flag (`0x873390`), else the per-blend colour (`0x70baf0`); unlit on
+                // the unlit flag (`0x8731c0`), else the scene's light. Unresolved, labelled: a lit
+                // ribbon inside a WMO takes the scene light, not the room's committed one.
+                fog: if def.unfogged {
+                    EffectFog::Off
+                } else {
+                    EffectFog::for_blend(0, def.blend)
+                },
+                lighting: if def.unlit {
+                    crate::particles::buffer::EffectLighting::None
+                } else {
+                    crate::particles::buffer::EffectLighting::Scene
+                },
                 anchor,
                 // The owner rung, dropped under the water pass when the model's bound, radius
                 // slack included, is on the eye's far side of its water plane (`0x7081f1`); with
@@ -561,51 +570,5 @@ impl Plugin for RibbonPlugin {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::gravity_step;
-
-    #[test]
-    fn gravity_telescopes_to_g_t_squared_at_any_frame_rate() {
-        for &g in &[0.5_f32, 1.0, 1.5, 2.0, 5.0, -1.0] {
-            for &dt in &[1.0 / 144.0_f32, 1.0 / 60.0, 1.0 / 30.0, 1.0 / 15.0] {
-                let steps = (1.0 / dt).round() as usize; // exactly one second of frames
-                let (mut z, mut age) = (0.0_f32, 0.0_f32);
-                for _ in 0..steps {
-                    z += gravity_step(g, age, dt);
-                    age += dt;
-                }
-                let t = steps as f32 * dt;
-                assert!(
-                    (z - g * t * t).abs() < 1e-4,
-                    "g {g} at dt {dt}: got {z}, want {}",
-                    g * t * t
-                );
-            }
-        }
-        // A positive gravity rises.
-        assert!(gravity_step(2.0, 0.0, 0.016) > 0.0);
-        assert!(gravity_step(-1.0, 0.0, 0.016) < 0.0);
-    }
-
-    /// The Frost Trap's four low streamers (authored `gravity`, `edgeLifetime`) rise `g·L²` over an
-    /// edge's life from a node at model z 0.129, clearing the crown's own geometry at z 0.637.
-    #[test]
-    fn frost_trap_low_rig_rises_into_a_tuft_over_the_crown() {
-        for (g, life, want) in [
-            (0.5_f32, 1.1_f32, 0.605_f32),
-            (1.0, 1.0, 1.000),
-            (1.5, 0.9, 1.215),
-            (2.0, 0.8, 1.280),
-        ] {
-            let dt = 1.0 / 60.0;
-            let steps = (life / dt).round() as usize;
-            let (mut z, mut age) = (0.0_f32, 0.0_f32);
-            for _ in 0..steps {
-                z += gravity_step(g, age, dt);
-                age += dt;
-            }
-            assert!((z - want).abs() < 0.01, "g {g} life {life}: {z} vs {want}");
-            assert!(0.129 + z > 0.637, "clears the crown's own geometry");
-        }
-    }
-}
+#[path = "ribbons_tests.rs"]
+mod tests;
