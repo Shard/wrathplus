@@ -16,7 +16,6 @@ const FILES: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml",
-    "Interface\\FrameXML\\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -34,7 +33,6 @@ const FILES: &[&str] = &[
     "Interface\\FrameXML\\StaticPopup.xml", // the dialog engine
     // The dress-up pane's OnLoad calls `DressUpTexturePath` (`DressUpFrame.lua`).
     "Interface\\FrameXML\\DressUpFrame.xml",
-    "ScrollTemplates.xml",
     // The addon in its toc order, loaded as chain files: a test has no addon registry.
     "Interface\\AddOns\\Blizzard_AuctionUI\\Blizzard_AuctionUI.xml",
     "Interface\\AddOns\\Blizzard_AuctionUI\\Blizzard_AuctionDressUp.xml",
@@ -56,7 +54,7 @@ fn load_ui_with_classes(s: &mut UiScript) {
     load_ui(s);
 }
 
-fn load_ui(script: &UiScript) {
+fn load_ui(script: &mut UiScript) {
     // `common::load_ui`: an entry with a path separator is a stock file read off the player's
     // chain, not from `assets/ui`.
     for file in FILES {

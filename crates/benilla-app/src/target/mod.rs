@@ -43,6 +43,7 @@ mod wrath_relations;
 pub(crate) mod ring;
 mod scan;
 mod script;
+pub(crate) mod unit_tokens;
 pub(crate) use script::ScriptSelect;
 
 /// `Faction.dbc` and our reputation table as one [`SystemParam`], since every reaction function

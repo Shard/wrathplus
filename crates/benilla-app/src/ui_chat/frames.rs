@@ -41,8 +41,9 @@ pub(crate) fn route(
     script.fire_event(event_name(kind), event.script_args());
 }
 
-/// `ChatFrame_OnEvent`'s composition (`ChatFrame.lua:1369-1468`); `None` for a notice the 1.12 UI
-/// does not print (MODE_CHANGE).
+/// The 3.3.5 `ChatFrame_MessageEventHandler`'s composition, for the log line; `None` for a notice
+/// that prints nothing (MODE_CHANGE). The player link stays `|Hplayer:Name|h`: the handler's line id
+/// and chat group (`":"..arg11..":"..chatGroup`) are link payload, not text.
 pub(crate) fn compose(
     event: &ChatEvent,
     kind: ChatEventKind,
@@ -51,8 +52,11 @@ pub(crate) fn compose(
 ) -> Option<String> {
     use ChatEventKind as K;
     Some(match kind {
-        // Verbatim (`ChatFrame.lua:1395-1402`), the XP and honor gains by their `COMBAT_` prefix.
+        // Verbatim: SYSTEM, SKILL, LOOT, MONEY, TRADESKILLS, PET_INFO, and the XP and honor gains by
+        // their `COMBAT_` prefix.
         K::System
+        | K::Tradeskills
+        | K::PetInfo
         | K::TextEmote
         | K::Skill
         | K::Loot
@@ -64,29 +68,40 @@ pub(crate) fn compose(
         | K::BgSystemHorde => event.text.clone(),
         // The combat log is verbatim too, by prefix: `COMBAT_` and `SPELL_` (`:1397-1400`).
         k if k.is_combat_log() => event.text.clone(),
-        // `format(TEXT(CHAT_IGNORED), arg2)` (`:1404`): `CHAT_IGNORED`, not the same-worded
-        // `ERR_IGNORING_YOU_S`.
+        // `format(CHAT_IGNORED, arg2)`: `CHAT_IGNORED`, not the same-worded `ERR_IGNORING_YOU_S`.
         K::Ignored => fill(
             &get("CHAT_IGNORED").unwrap_or_default(),
             &[Arg::S(&event.sender)],
         ),
-        // `format(CHAT_CHANNEL_LIST_GET .. arg1, arg4)` (`:1409`): arg4 whole, arg1 unescaped.
+        K::Filtered => fill(
+            &get("CHAT_FILTERED").unwrap_or_default(),
+            &[Arg::S(&event.sender)],
+        ),
+        // `format(CHAT_CHANNEL_LIST_GET .. arg1, tonumber(arg8), arg4)` with a channel, arg4 whole
+        // and arg1 unescaped; bare arg1 without one.
+        K::ChannelList if event.channel.is_empty() => event.text.clone(),
         K::ChannelList => fill(
             &format!(
                 "{}{}",
                 get("CHAT_CHANNEL_LIST_GET").unwrap_or_default(),
                 event.text
             ),
-            &[Arg::S(&event.channel)],
+            &[
+                Arg::D(i64::from(event.channel_number)),
+                Arg::S(&event.channel),
+            ],
         ),
         K::ChannelNotice | K::ChannelNoticeUser => {
             return compose_notice(event, kind, get);
         }
         // Everything else is the player and monster line branch (`:1425-1467`).
         _ => {
-            // `pflag = TEXT(getglobal("CHAT_FLAG_"..arg6))` (`:1431`); an empty flag is "".
+            // `pflag = _G["CHAT_FLAG_"..arg6]`, an empty flag "", and a GM or DEV sender the Blizzard
+            // icon in place of `CHAT_FLAG_GM`.
             let pflag = if event.flag.is_empty() {
                 String::new()
+            } else if event.flag == "GM" || event.flag == "DEV" {
+                r"|TInterface\ChatFrame\UI-ChatIcon-Blizz.blp:0:2:0:-3|t ".to_string()
             } else {
                 get(&format!("CHAT_FLAG_{}", event.flag)).unwrap_or_default()
             };
@@ -127,9 +142,14 @@ pub(crate) fn compose(
                 &format!("{}{header}{text}", get_pattern(kind, get)),
                 &[Arg::S(&named)],
             );
-            // The channel prefix (`:1462-1466`): arg4, numbered ("2. Trade - City"), zone cut.
+            // The channel prefix: `"|Hchannel:channel:"..arg8.."|h["..arg4.."]|h "`, arg4 numbered
+            // ("2. Trade - City") with the zone cut.
             if !event.channel.is_empty() {
-                format!("[{}] {body}", strip_zone(&event.channel))
+                format!(
+                    "|Hchannel:channel:{}|h[{}]|h {body}",
+                    event.channel_number,
+                    strip_zone(&event.channel)
+                )
             } else {
                 body
             }
@@ -156,24 +176,39 @@ fn strip_zone(channel: &str) -> &str {
     }
 }
 
-/// A channel notice: the notice byte's token ([`notice_token`], the jump table at `0x49c60c`)
-/// names `CHAT_<TOKEN>_NOTICE` (`ChatFrame.lua:1416-1424`), filled with arg4, then for
-/// CHANNEL_NOTICE_USER arg2 and any arg5; a string such as `CHAT_INVITE_NOTICE` reorders them with
-/// `%2$s`. `None` for MODE_CHANGE and bytes past the table, which print nothing.
+/// A channel notice: the notice byte's token ([`notice_token`]) names `CHAT_<TOKEN>_NOTICE_BN`,
+/// else `CHAT_<TOKEN>_NOTICE`, filled as the 3.3.5 handler fills it: CHANNEL_NOTICE with
+/// `(arg8, arg4)`, the slot number for the string's channel link and the display name;
+/// CHANNEL_NOTICE_USER with `(arg8, arg4, arg2, arg5)` for a two-name notice, `(arg4, arg2)` for
+/// INVITE (whose `CHAT_INVITE_NOTICE` reorders them with `%2$s`), else `(arg8, arg4, arg2)`.
+/// arg10, always 0 here, adds no suffix. `None` for MODE_CHANGE and bytes past the table, which
+/// print nothing.
 pub(crate) fn compose_notice(
     event: &ChatEvent,
     kind: ChatEventKind,
     get: &dyn Fn(&str) -> Option<String>,
 ) -> Option<String> {
     let token = notice_token(event.notice_byte()?, event.slot_state)?;
-    let template = get(&format!("CHAT_{token}_NOTICE"))?;
-    let mut args = vec![Arg::S(event.channel.as_str())];
-    if kind == ChatEventKind::ChannelNoticeUser {
-        args.push(Arg::S(&event.sender));
-        if !event.target.is_empty() {
-            args.push(Arg::S(&event.target));
+    // The handler tries `CHAT_<token>_NOTICE_BN` first, whose link names the `CHANNEL` group.
+    let template =
+        get(&format!("CHAT_{token}_NOTICE_BN")).or_else(|| get(&format!("CHAT_{token}_NOTICE")))?;
+    let number = Arg::D(i64::from(event.channel_number));
+    let channel = Arg::S(event.channel.as_str());
+    let args = match kind {
+        ChatEventKind::ChannelNoticeUser if !event.target.is_empty() => {
+            vec![
+                number,
+                channel,
+                Arg::S(&event.sender),
+                Arg::S(&event.target),
+            ]
         }
-    }
+        ChatEventKind::ChannelNoticeUser if token == "INVITE" => {
+            vec![channel, Arg::S(&event.sender)]
+        }
+        ChatEventKind::ChannelNoticeUser => vec![number, channel, Arg::S(&event.sender)],
+        _ => vec![number, channel],
+    };
     let line = fill(&template, &args);
     (!line.is_empty()).then_some(line)
 }

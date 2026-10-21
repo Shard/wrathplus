@@ -300,8 +300,15 @@ fn get_script(lua: &Lua, this: &Table, name: &str) -> mlua::Result<Value> {
 /// not a font object applies as the region's XML pass would.
 fn apply_region_inherits(lua: &Lua, wrapper: &Table, from: &str) -> mlua::Result<()> {
     use mlua::ObjectLike;
-    // Through `SetFontObject`, the binding the XML `inherits=` path uses.
-    if wrapper.call_method::<()>("SetFontObject", from).is_ok() {
+    // Through `SetFontObject`, the binding the XML `inherits=` path uses. A name it would refuse
+    // is not tried: each refusal builds a traceback, a quarter of the stock load when every
+    // template-inheriting region paid one.
+    let is_font = lua
+        .app_data_ref::<Model>()
+        .expect("model")
+        .font_object(from)
+        .is_some();
+    if is_font && wrapper.call_method::<()>("SetFontObject", from).is_ok() {
         return Ok(());
     }
     let is_template = {

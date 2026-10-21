@@ -176,7 +176,7 @@ fn addon_distribution(chat_type: u8) -> &'static str {
 /// `CHAT_MSG_ADDON(prefix, body, distribution, sender)` from one addon line (`0x509dd0`): the text
 /// is a C string, so it ends at its first NUL; the first TAB splits prefix from body (later TABs
 /// stay in the body; no TAB is an empty body). Prefix and body are bytes, never decoded.
-fn addon_args(msg: &Message, sender: String) -> Vec<V> {
+pub(super) fn addon_args(msg: &Message, sender: String) -> Vec<V> {
     let text = msg.text.split(|&b| b == 0).next().unwrap_or_default();
     let (prefix, body) = match text.iter().position(|&b| b == b'\t') {
         Some(tab) => (&text[..tab], &text[tab + 1..]),
@@ -318,8 +318,8 @@ pub(super) fn deliver(
         at: std::time::Instant::now(),
     });
     let mut args = event.script_args();
-    args.push(V::Int(i64::from(state.line)));
-    args.push(V::Str(format!("0x{:016X}", msg.sender_guid)));
+    args[10] = V::Int(i64::from(state.line));
+    args[11] = V::Str(format!("0x{:016X}", msg.sender_guid));
     // The native event is independent of Vanilla ChatEventKind/compose. Stock Wrath
     // ChatFrame_MessageEventHandler owns composition, filters, links, and window routing.
     windows.logs.record(false, &event.text);

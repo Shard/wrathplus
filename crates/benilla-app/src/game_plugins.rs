@@ -244,6 +244,7 @@ impl PluginGroup for GamePlugins {
             .add(UiNetPlugin)
             .add(crate::ui_native::NativeFeedsPlugin)
             .add(UiCastPlugin)
+            .add(crate::ui_spell_targeting::UiSpellTargetingPlugin)
             .add(UiMirrorPlugin)
             .add(crate::combat_text::CombatTextPlugin)
             .add(crate::nameplates::NameplatesPlugin)
@@ -713,8 +714,8 @@ pub(crate) mod schedule_tests {
     ///   orders against the target chain. Such a gesture and a script call in one frame take
     ///   either order;
     /// - the range compare's readers (`ui_action::state::feed_action_state`,
-    ///   `ui_tooltip::spell_feed::feed_spell_tooltips`, `spell::targeting::feed_targeting_to_vm`,
-    ///   the targeting cursor and the object-click commit) against the writers of `Player` and
+    ///   `ui_tooltip::spell_feed::feed_spell_tooltips`,
+    ///   `ui_spell_targeting::feed_targeting_to_vm`, the targeting cursor and the object-click commit) against the writers of `Player` and
     ///   `RemoteMotion` (`camera_saved::load_camera_pose`, `world_focus`'s focus publish and settle
     ///   release, `transport::compose_riders` and `ground_deck_riders`): the readers take the
     ///   movement flags of the caster (`Player::move_flags`) and its target
@@ -1181,6 +1182,8 @@ pub(crate) mod schedule_tests {
          "the battleground probe: dev-only (`WOW_PROBE_BG`, `cfg(feature = \"dev\")`) so it is not in a player build at all, and its `mem::take` is of its OWN pending-events string, not a queue anything else fills. Its one real VM dependency is the Lua event tap, which self-heals: `EVENT_DRAIN` returns a `<tap-gone>` sentinel when the tap's globals are missing — the case this window causes, since a tap installed in the boot VM is discarded when `mint_entry_vm` builds the interface — and the probe re-installs on the next frame"),
         ("ui_death.rs", "feed_death", Because::MemoLatched,
          "`feed.vm: VmMemo<DeathAnnounced>`: a fresh memo makes the first snapshot an edge and re-announces a held offer, confirm and corpse range"),
+        ("ui_script/glue.rs", "stock_login", Because::Deliberate,
+         "the stock glue's login screen: its VM is the glue VM `enter_stock_login` installs at OnEnter(Login), before any Update, and it runs only while that VM hosts the screen (`stock_login_up`); the in-game interface is never up here"),
         ("screenshot.rs", "ask_for_captures", Because::FilledByVm,
          "`pending` holds only the VM's own `Screenshot()` asks, and the take spawns a capture, publishing nothing"),
         ("screenshot.rs", "report_captures", Because::FilledByVm,

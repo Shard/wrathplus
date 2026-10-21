@@ -221,7 +221,10 @@ pub(crate) fn language_name(id: u32) -> &'static str {
 
 /// `ChatEvent`'s methods that need this module (the type lives in `app_core` for the crate split).
 pub(crate) trait ChatEventScript {
-    /// This event's `arg1..arg10` in the reference's order and types; ten values, never nil.
+    /// This event's `arg1..arg12` in the reference's order and types; twelve values, never nil.
+    /// The 3.3.5 handler concatenates arg11 into every player link, so a missing one raises and
+    /// the line never prints. A routed line carries line id 0 and no GUID: the client's own line
+    /// counter for lines it composes C-side is unresolved; the MESSAGECHAT feed sets both.
     fn script_args(&self) -> Vec<ScriptValue>;
 }
 
@@ -248,6 +251,9 @@ impl ChatEventScript for ChatEvent {
             ScriptValue::Str(self.channel_base.clone()),
             // arg10: always 0, see the struct doc.
             ScriptValue::Int(0),
+            // arg11, the line id, and arg12, the sender GUID.
+            ScriptValue::Int(0),
+            ScriptValue::Str(String::new()),
         ]
     }
 }

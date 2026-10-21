@@ -11,7 +11,6 @@ const FILES: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml",
-    "Interface\\FrameXML\\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -27,7 +26,7 @@ const FILES: &[&str] = &[
     "Interface\\FrameXML\\TradeFrame.xml",
 ];
 
-fn load_ui(script: &UiScript) {
+fn load_ui(script: &mut UiScript) {
     for file in FILES {
         common::load_ui(script, file);
     }
@@ -63,8 +62,8 @@ fn state() -> TradeState {
 #[test]
 fn trade_frame_loads_and_key_regions_exist() {
     let _data = benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_ui(&s);
+    let mut s = UiScript::new().unwrap();
+    load_ui(&mut s);
     for name in [
         "TradeFrame",
         "TradePlayerItem1",
@@ -93,7 +92,7 @@ fn trade_frame_loads_and_key_regions_exist() {
 fn trade_show_opens_and_both_columns_populate() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_trade(Some(state()));
     // The stock header reads `UnitName("NPC")` (`TradeFrame.lua:43`); the app points the "npc"
     // unit at the partner.
@@ -111,10 +110,10 @@ fn trade_show_opens_and_both_columns_populate() {
         s.eval::<bool>("return TradeFrame:IsShown()").unwrap(),
         "the window opens on TRADE_SHOW"
     );
-    // Slotted into the left panel by its `UIPanelWindows` row (`UIParent.lua:27`); unregistered,
-    // `ShowUIPanel` only calls `Show()` and the window never lands on screen.
+    // Slotted into the left panel by its `UIPanelWindows` row; unregistered, `ShowUIPanel` only
+    // calls `Show()` and the window never lands on screen.
     assert_eq!(
-        s.eval::<String>("return GetLeftFrame() and GetLeftFrame():GetName() or ''")
+        s.eval::<String>("return GetUIPanel('left') and GetUIPanel('left'):GetName() or ''")
             .unwrap(),
         "TradeFrame",
         "TRADE_SHOW slots the window into the left panel"
@@ -168,7 +167,7 @@ fn trade_show_opens_and_both_columns_populate() {
 fn enchant_slot_shows_the_not_traded_note() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     let mut st = state();
     // Our enchant slot: index 6, slot 7.
     st.player.slots[6] = Some(item(6217, "Copper Rod", 1, 1));
@@ -187,7 +186,7 @@ fn enchant_slot_shows_the_not_traded_note() {
 fn accept_update_drives_the_column_glows() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_trade(Some(state()));
     s.fire_event("TRADE_SHOW", vec![]);
     // `TradeFrame_Update` hides all four highlights.
@@ -228,7 +227,7 @@ fn accept_update_drives_the_column_glows() {
 fn closing_the_window_queues_the_cancel() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_trade(Some(state()));
     s.fire_event("TRADE_SHOW", vec![]);
     let _ = s.take_trade_close();
@@ -250,7 +249,7 @@ fn closing_the_window_queues_the_cancel() {
 fn trade_button_click_queues_accept() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_trade(Some(state()));
     s.fire_event("TRADE_SHOW", vec![]);
     let _ = s.take_trade_accept();
@@ -269,7 +268,7 @@ fn player_money_input_reflects_then_offers() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_money(1_000_000); // SetTradeMoney is purse-gated
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_trade(Some(state())); // state().player.gold == 12345 (1g 23s 45c)
     s.fire_event("TRADE_SHOW", vec![]);
 
@@ -322,7 +321,7 @@ fn player_money_input_reflects_then_offers() {
 fn slot_click_routes_player_to_clear_and_recipient_to_inert() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_trade(Some(state())); // both slot 1s are filled
     s.fire_event("TRADE_SHOW", vec![]);
     let _ = s.take_trade_clear_items();

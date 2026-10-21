@@ -30,8 +30,8 @@ impl Feed {
         s.run(SPY).unwrap();
         s.run(
             r#"
-            for _, e in { "CHAT_MSG_CHANNEL_JOIN", "CHAT_MSG_CHANNEL_LEAVE",
-                          "CHAT_MSG_CHANNEL_NOTICE", "CHAT_MSG_CHANNEL_NOTICE_USER" } do
+            for _, e in ipairs({ "CHAT_MSG_CHANNEL_JOIN", "CHAT_MSG_CHANNEL_LEAVE",
+                          "CHAT_MSG_CHANNEL_NOTICE", "CHAT_MSG_CHANNEL_NOTICE_USER" }) do
                 BenillaChatSpy:RegisterEvent(e)
             end
             -- The text the stock handler hands the window, links and all.
@@ -127,7 +127,7 @@ fn a_members_join_reaches_the_stock_frame_numbered() {
     // `CHAT_CHANNEL_JOIN_GET` behind the `[arg4] ` prefix (`ChatFrame.lua:1451`, `:1463-1465`).
     assert_eq!(
         f.last_added(),
-        "[3. Mychan] |Hplayer:Ann|h[Ann]|h joined channel."
+        "|Hchannel:channel:3|h[3. Mychan]|h |Hplayer:Ann:0:CHANNEL:3|h[Ann]|h joined channel."
     );
     assert_eq!(
         f.spy(),
@@ -169,7 +169,7 @@ fn a_join_resolved_after_its_name_query_is_stamped_too() {
     assert_eq!(f.lines(), before + 1);
     assert_eq!(
         f.last_added(),
-        "[3. Mychan] |Hplayer:Ann|h[Ann]|h left channel."
+        "|Hchannel:channel:3|h[3. Mychan]|h |Hplayer:Ann:0:CHANNEL:3|h[Ann]|h left channel."
     );
 }
 
@@ -192,7 +192,10 @@ fn owner_change_and_kick_notices_print() {
         )
     );
     assert_eq!(f.lines(), before + 1);
-    assert_eq!(f.last_added(), "[3. Mychan] Owner changed to Bob.");
+    assert_eq!(
+        f.last_added(),
+        "|Hchannel:CHANNEL:3|h[3. Mychan]|h Owner changed to Bob."
+    );
 
     f.push(
         n::PLAYER_KICKED,
@@ -204,7 +207,10 @@ fn owner_change_and_kick_notices_print() {
     );
     f.drain();
     assert_eq!(f.lines(), before + 2);
-    assert_eq!(f.last_added(), "[3. Mychan] Player Ann kicked by Bob.");
+    assert_eq!(
+        f.last_added(),
+        "|Hchannel:CHANNEL:3|h[3. Mychan]|h Player Ann kicked by Bob."
+    );
     assert!(f.script().errors().is_empty(), "{:?}", f.script().errors());
 }
 
@@ -250,5 +256,8 @@ fn our_own_join_notice_is_unchanged() {
         )
     );
     assert_eq!(f.lines(), before + 1);
-    assert_eq!(f.last_added(), "Joined Channel: [3. Mychan]");
+    assert_eq!(
+        f.last_added(),
+        "Joined Channel: |Hchannel:CHANNEL:3|h[3. Mychan]|h"
+    );
 }
