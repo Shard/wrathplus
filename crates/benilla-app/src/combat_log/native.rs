@@ -15,9 +15,9 @@
 //! `+0x148`; `SPELL_CAST_FAILED` is our own result with its unfilled `SPELL_FAILED_*` text. The
 //! execute log maps by AzerothCore effect (its dispatcher is not a defined function); a durability
 //! or enchant entry's item name is nil. `UNIT_DIED` (or a totem's `UNIT_DESTROYED`, a gas cloud's
-//! `UNIT_DISSIPATES`) is a unit's health reaching 0. Not built: the aura-broken pair (opcode
-//! `0x14F`, which AzerothCore never sends), building damage, `DAMAGE_SHIELD_MISSED` and an immune
-//! target's `SMSG_SPELLORDAMAGE_IMMUNE` (no traced builder).
+//! `UNIT_DISSIPATES`) is a unit's health reaching 0. A spell-log miss and an immune target are the
+//! damage-shield misses `0x751b80` builds, miss type only. Not built: the aura-broken pair (opcode
+//! `0x14F`, which AzerothCore never sends), building damage, the cast's own miss list.
 use std::collections::{BTreeSet, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -59,12 +59,14 @@ pub(crate) mod event {
     pub(crate) const SPELL_STOLEN: u8 = 27;
     pub(crate) const ENCHANT_APPLIED: u8 = 31;
     pub(crate) const ENCHANT_REMOVED: u8 = 32;
+    pub(crate) const SPELL_PERIODIC_MISSED: u8 = 33;
     pub(crate) const SPELL_PERIODIC_DAMAGE: u8 = 34;
     pub(crate) const SPELL_PERIODIC_HEAL: u8 = 35;
     pub(crate) const SPELL_PERIODIC_ENERGIZE: u8 = 36;
     pub(crate) const SPELL_PERIODIC_LEECH: u8 = 38;
     pub(crate) const SPELL_DISPEL_FAILED: u8 = 39;
     pub(crate) const DAMAGE_SHIELD: u8 = 40;
+    pub(crate) const DAMAGE_SHIELD_MISSED: u8 = 41;
     pub(crate) const DAMAGE_SPLIT: u8 = 42;
     pub(crate) const PARTY_KILL: u8 = 43;
     pub(crate) const UNIT_DIED: u8 = 44;
@@ -206,6 +208,8 @@ const MISS_TYPES: [&str; 12] = [
     "NONE", "MISS", "RESIST", "DODGE", "PARRY", "BLOCK", "EVADE", "IMMUNE", "IMMUNE", "DEFLECT",
     "ABSORB", "REFLECT",
 ];
+/// `SPELL_MISS_IMMUNE`, the type `0x6ce3d0` passes.
+const MISS_IMMUNE: u8 = 7;
 /// The environmental types (`0xad671c`), by AzerothCore `EnviromentalDamage`.
 const ENVIRONMENTAL: [&str; 6] = ["FATIGUE", "DROWNING", "FALLING", "LAVA", "SLIME", "FIRE"];
 
@@ -449,17 +453,30 @@ impl NativeCombatLog {
                 caster,
                 misses,
             }) => {
+                // `0x6d3090` passes `0x751b80` its damage-shield flag as a constant 1: each row
+                // is `DAMAGE_SHIELD_MISSED`, and a row with no miss type logs nothing.
                 for &(target, code) in misses {
-                    let miss = MISS_TYPES.get(usize::from(code)).copied().unwrap_or("MISS");
-                    self.push(
-                        SPELL_MISSED,
-                        *caster,
-                        target,
-                        Some(*spell_id),
-                        vec![V::Str(miss.into())],
-                    );
+                    self.shield_miss(DAMAGE_SHIELD_MISSED, *caster, target, *spell_id, code);
                 }
             }
+            // `0x6ce3d0` (registered for `0x263` by `0x6e83b0`): `0x751b80` with `IMMUNE`, its
+            // damage-shield flag set by a zero log-format byte and its periodic flag otherwise.
+            SessionEvent::SpellOrDamageImmune(SpellOutcomeLog {
+                caster,
+                target,
+                spell_id,
+                log_format,
+            }) => self.shield_miss(
+                if *log_format == 0 {
+                    DAMAGE_SHIELD_MISSED
+                } else {
+                    SPELL_PERIODIC_MISSED
+                },
+                *caster,
+                *target,
+                *spell_id,
+                MISS_IMMUNE,
+            ),
             // `0x750d40`: a resisted proc is `SPELL_MISSED` `RESIST`, group `0x4000`'s integer 0.
             SessionEvent::ProcResist(SpellOutcomeLog {
                 caster,
@@ -534,6 +551,16 @@ impl NativeCombatLog {
             }
             _ => {}
         }
+    }
+
+    /// `0x751b80`'s miss through the template `0x750500`: the miss type only (labelled: the
+    /// template's `0x74d980` amount groups are not traced), and nothing for a zero type.
+    fn shield_miss(&mut self, event: u8, source: u64, dest: u64, spell: u32, code: u8) {
+        if code == 0 {
+            return;
+        }
+        let miss = MISS_TYPES.get(usize::from(code)).copied().unwrap_or("MISS");
+        self.push(event, source, dest, Some(spell), vec![V::Str(miss.into())]);
     }
 
     /// `0x752930`: each removed aura as the extra spell, its byte the aura type (a zero `BUFF`).
