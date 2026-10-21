@@ -30,7 +30,7 @@ use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity, ObjectSt
 use crate::player::Player;
 use crate::ui_auction::AuctionOpen;
 
-/// Auctioneer Fitch's spawn (vmangos `creature` guid 12696, map 0), the `.go xyz` target; the
+/// Auctioneer Fitch's spawn (AzerothCore `creature` guid 79705, map 0), the `.go xyz` target; the
 /// unit itself is found by its npc flag.
 const AUCTIONEER_AT: [f32; 3] = [-8821.53, 659.886, 97.4645];
 /// Her creature template entry, reported only; her `npc_flags` is 4096, auctioneer only, so the

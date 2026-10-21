@@ -26,7 +26,7 @@ fn exp_bar_harness() -> UiScript {
         r"Interface\FrameXML\ReputationFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
     ] {
-        super::test_ui::load_ui(&s, file);
+        super::test_ui::load_ui(&mut s, file);
     }
     // The stock default, detailed tips on (`UIOptionsFrame.lua:100`); no options file loads here.
     s.run("SHOW_NEWBIE_TIPS = \"1\"").unwrap();

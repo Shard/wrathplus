@@ -572,7 +572,7 @@ mod tests {
         let begin = |world: &mut World| {
             world.resource_scope(|world, mut loot: Mut<LootState>| {
                 world.resource_scope(|world, mut latch: Mut<LootLatch>| {
-                    super::super::wrath::begin_wrath_corpse_loot(
+                    crate::loot::begin_wrath_corpse_loot(
                         &mut loot,
                         &mut latch,
                         world.resource::<NetCommands>(),
@@ -637,7 +637,7 @@ mod tests {
         let (mut world, rx) = tabbed_world();
         world.resource_scope(|world, mut loot: Mut<LootState>| {
             world.resource_scope(|world, mut latch: Mut<LootLatch>| {
-                super::super::wrath::begin_wrath_corpse_loot(
+                crate::loot::begin_wrath_corpse_loot(
                     &mut loot,
                     &mut latch,
                     world.resource::<NetCommands>(),
@@ -836,7 +836,7 @@ mod tests {
         world.resource_mut::<crate::target::Selection>().target = Some(corpse);
         assert!(world.resource_scope(|world, mut loot: Mut<LootState>| {
             world.resource_scope(|world, mut latch: Mut<LootLatch>| {
-                super::super::wrath::begin_wrath_corpse_loot(
+                crate::loot::begin_wrath_corpse_loot(
                     &mut loot,
                     &mut latch,
                     world.resource::<NetCommands>(),
@@ -1057,7 +1057,7 @@ mod tests {
             "Interface\\FrameXML\\PartyFrame.xml",
             "Interface\\FrameXML\\TargetFrame.xml",
         ]]) {
-            crate::ui_script::test_ui::load_ui(&s, f);
+            crate::ui_script::test_ui::load_ui(&mut s, f);
         }
 
         let mut app = App::new();

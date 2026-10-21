@@ -37,7 +37,7 @@ use benilla_ui::script::UiScript;
 
 use crate::ui_merchant::MerchantOpen;
 use crate::ui_quest::QuestGiver;
-use crate::ui_session::InteractNpc;
+use crate::app_core::state::InteractNpc;
 use crate::ui_trainer::TrainerOpen;
 
 /// How wide to look around a `.go` landing: the reference's service reach,

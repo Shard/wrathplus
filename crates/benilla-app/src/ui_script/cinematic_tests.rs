@@ -10,18 +10,18 @@ use super::test_ui::load_ui as load_xml;
 fn ui_with_the_cinematic_frame() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\GlobalStrings.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
     // `TakeScreenshot` (`WorldFrame.lua:46`), which the SCREENSHOT binding's body calls.
-    load_xml(&s, r"Interface\FrameXML\WorldFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua"); // StaticPopup's money row
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "Interface\\FrameXML\\CinematicFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\WorldFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua"); // StaticPopup's money row
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\CinematicFrame.xml");
     s.resolve();
     s
 }

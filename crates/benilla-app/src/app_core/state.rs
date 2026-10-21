@@ -33,37 +33,6 @@ pub(crate) struct Spells {
     pub(crate) radii: benilla_formats::SpellRadiusCatalog,
 }
 
-impl Spells {
-    /// The cast time in ms as `GetCastTime 0x6e3340` returns it for argument 1, the tooltip's
-    /// (`52eb4b`): the level-scaled `CastingTimeIndex` row, then spell-mod op 10 (`0x6e33b7`),
-    /// with no clamp, so row 18's negative time survives. A missing row returns 0 before the
-    /// modifier (`0x6e338a`). The cast-speed multiply (`0x6e3422`) is not applied.
-    pub(crate) fn cast_time_unclamped_ms(
-        &self,
-        def: &benilla_formats::SpellDisplay,
-        caster_level: u32,
-        mods: &crate::spell::SpellModifiers,
-    ) -> i32 {
-        self.cast_times
-            .get(def.casting_time_index)
-            .map_or(0, |row| {
-                let resolved = row.resolved_ms(caster_level, def.base_level);
-                mods.apply(def, crate::spell::OP_CAST_TIME, resolved)
-            })
-    }
-
-    /// [`Self::cast_time_unclamped_ms`] for argument 0, the cast validator's (`0x609e16`): a
-    /// result at or below zero reads 0 (`0x6e3461`-`0x6e3470`).
-    pub(crate) fn cast_time_ms(
-        &self,
-        def: &benilla_formats::SpellDisplay,
-        caster_level: u32,
-        mods: &crate::spell::SpellModifiers,
-    ) -> u32 {
-        self.cast_time_unclamped_ms(def, caster_level, mods).max(0) as u32
-    }
-}
-
 #[cfg(test)]
 impl Spells {
     pub(crate) fn empty_for_tests() -> Self {
@@ -804,6 +773,14 @@ impl EmoteSounds {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub(crate) struct CollisionHeight(pub(crate) f32);
 
+impl Default for CollisionHeight {
+    /// The `CMovement` ctor's default, never `0.0`, at which every depth line collapses and the
+    /// unit swims on dry land.
+    fn default() -> Self {
+        Self(crate::app_core::movement::DEFAULT_COLLISION_HEIGHT)
+    }
+}
+
 /// Our target, set the instant we click, as the 1.12 client does without waiting for the server,
 /// and cleared on deselect or when it streams out. `CMSG_SET_SELECTION` carries the guid, which the
 /// server records in our `UNIT_FIELD_TARGET`.
@@ -867,14 +844,39 @@ pub(crate) struct PlayerActions {
 #[derive(Resource, Default)]
 pub(crate) struct GoOpenerCasts(pub(crate) Vec<GoOpener>);
 
+/// One resolved item-use click, as `ui_items::send_item_use` needs it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ItemUse {
+    /// The live instance's guid; `None` falls through to a plain use.
+    pub(crate) guid: Option<u64>,
+    /// Template `StartQuest`: non-zero diverts to the quest offer, ahead of the cast tail.
+    pub(crate) start_quest: u32,
+    /// The wire position (`255` = the player array).
+    pub(crate) bag_index: u8,
+    /// The wire slot, 0-based.
+    pub(crate) slot: u8,
+    /// The template entry: the cooldown store keys item records on `(use_spell, entry)` (the
+    /// client's `[eax+8]==spellId && [eax+0xc]==itemID`).
+    pub(crate) entry: u32,
+    /// The template spell block ordinal the server should cast.
+    pub(crate) spell_index: u8,
+    /// The ON_USE spell, `0x5d8c80`'s answer: the first block with `SpellId != 0` and
+    /// `SpellTrigger == 0`.
+    pub(crate) use_spell: Option<u32>,
+    /// The GameObject a key is used on, `CGItem::Use`'s target argument.
+    pub(crate) on_object: Option<u64>,
+    /// The template's `ITEM_FLAG_CHARTER` (`0x2000`), a signable petition.
+    pub(crate) is_charter: bool,
+}
+
 /// A right-click's resolved opener ([`crate::target::click::resolve_go_action`]).
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum GoOpener {
     /// A known `OPEN_LOCK` spell, cast with a GameObject target block.
     Spell { spell_id: u32, go_guid: u64 },
     /// A carried key: `CMSG_USE_ITEM` with `TARGET_FLAG_GAMEOBJECT`, the object's guid in
-    /// [`crate::ui_items::ItemUse::on_object`].
-    Key(crate::ui_items::ItemUse),
+    /// [`ItemUse::on_object`].
+    Key(ItemUse),
 }
 
 /// One `COMBAT_TEXT_UPDATE` (event `0x21E`, via `0x703f50`), fired at packet parse by every

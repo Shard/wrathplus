@@ -22,7 +22,7 @@ fn picker() -> UiScript {
         "Interface\\FrameXML\\StaticPopup.xml",
         "Interface\\FrameXML\\ColorPickerFrame.xml",
     ] {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_screen_size(1024.0, 768.0);
     s.resolve();

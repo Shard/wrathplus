@@ -12,7 +12,7 @@ use super::test_ui::load_ui as load_xml;
 pub(super) fn trainer_script() -> UiScript {
     let mut s = trainer_script_base();
     load_xml(
-        &s,
+        &mut s,
         "Interface\\AddOns\\Blizzard_TrainerUI\\Blizzard_TrainerUI.xml",
     );
     finish_trainer_load(&mut s);
@@ -54,7 +54,7 @@ fn trainer_script_base() -> UiScript {
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
         "Interface\\FrameXML\\ClassTrainerFrameTemplates.xml",
     ] {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s
 }

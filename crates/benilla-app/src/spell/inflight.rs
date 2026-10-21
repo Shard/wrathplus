@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use crate::creature_anim::{CastEvent, CastEventKind, Casting, PlaySeq};
 use crate::net::{ClientCommand, GuidIndex, NetCommands, SelfGuid};
 use crate::ui_action::Spells;
-use crate::ui_cast::{CastBarEdge, CastBarFeed};
+use super::cast_bar::{CastBarEdge, CastBarFeed};
 
 /// The in-flight window from send until `SMSG_SPELL_START` names the cast time; the server
 /// answers every `CMSG_CAST_SPELL`, so a packet always clears it first.
@@ -262,7 +262,7 @@ pub(super) fn local_self_cancel(mut moved: ResMut<LocalMoveStart>, mut cancel: S
 }
 
 /// What [`local_self_cancel`] reads and writes, shared with the Esc cancel, which is a script call
-/// (`SpellStopCasting`) and lands in call order ([`crate::script_calls`]).
+/// (`SpellStopCasting`) and lands in call order (the UI's `script_calls` pass).
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct SelfCancel<'w, 's> {
     pending: ResMut<'w, PendingCast>,
@@ -389,6 +389,58 @@ impl SelfCancel<'_, '_> {
     }
 }
 
+/// The local-cancel harness both the spell's own tests and `ui_cast`'s Esc tests build on: the
+/// cast lifecycle's resources over a self player at guid 10, and its spell ids.
+#[cfg(test)]
+pub(crate) mod cast_test_support {
+    use super::*;
+    use crate::creature_anim::PlaySeq;
+    use crate::net::{Guid, GuidIndex, NetCommands, SelfGuid, SelfPlayer};
+    use benilla_formats::{SpellCatalog, SpellDisplay};
+    use std::collections::HashMap;
+
+    pub(crate) const ARCANE_MISSILES: u32 = 5143;
+    pub(crate) const HEROIC_STRIKE: u32 = 78;
+
+    pub(crate) fn harness(
+        displays: HashMap<u32, SpellDisplay>,
+    ) -> (App, crossbeam_channel::Receiver<crate::net::ClientCommand>) {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let mut app = App::new();
+        app.add_message::<CastEvent>()
+            .init_resource::<CastBarFeed>()
+            .init_resource::<PendingCast>()
+            .init_resource::<QueuedMeleeSpell>()
+            .init_resource::<ActiveChannel>()
+            .init_resource::<AutoRepeatActive>()
+            .init_resource::<LocalMoveStart>()
+            .init_resource::<GuidIndex>()
+            .init_resource::<SelfGuid>()
+            .init_resource::<PlaySeq>()
+            .insert_resource(NetCommands(tx))
+            .insert_resource(crate::ui_action::Spells {
+                catalog: SpellCatalog::from_displays(displays),
+                ..crate::ui_action::Spells::empty_for_tests()
+            });
+        let self_e = app.world_mut().spawn((Guid(10), SelfPlayer)).id();
+        app.world_mut()
+            .resource_mut::<GuidIndex>()
+            .0
+            .insert(10, self_e);
+        app.world_mut().resource_mut::<SelfGuid>().0 = Some(10);
+        (app, rx)
+    }
+
+    /// The `Casting` an `SMSG_SPELL_START` echo leaves on the self player.
+    pub(crate) fn mark_casting(app: &mut App, spell_id: u32) {
+        let self_e = app.world().resource::<GuidIndex>().0[&10];
+        app.world_mut().entity_mut(self_e).insert(Casting {
+            spell_id,
+            until: None,
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -509,71 +561,16 @@ mod tests {
     /// the real `SpellStopCasting()` and apply what it queued.
     mod local_cancel {
         use super::*;
-        use crate::creature_anim::PlaySeq;
-        use crate::net::{Guid, GuidIndex, NetCommands, SelfGuid, SelfPlayer};
-        use crate::ui_cast::feed_cast_bar;
-        use benilla_formats::{SpellCatalog, SpellDisplay};
-        use benilla_ui::script::{ScriptCall, UiScript};
+        use crate::net::GuidIndex;
+        use benilla_formats::SpellDisplay;
         use bevy::ecs::system::RunSystemOnce;
         use std::collections::HashMap;
 
-        const ARCANE_MISSILES: u32 = 5143;
-        const HEROIC_STRIKE: u32 = 78;
-
-        fn harness(
-            displays: HashMap<u32, SpellDisplay>,
-        ) -> (App, crossbeam_channel::Receiver<crate::net::ClientCommand>) {
-            let (tx, rx) = crossbeam_channel::unbounded();
-            let mut app = App::new();
-            app.add_message::<CastEvent>()
-                .init_resource::<CastBarFeed>()
-                .init_resource::<PendingCast>()
-                .init_resource::<QueuedMeleeSpell>()
-                .init_resource::<ActiveChannel>()
-                .init_resource::<AutoRepeatActive>()
-                .init_resource::<LocalMoveStart>()
-                .init_resource::<GuidIndex>()
-                .init_resource::<SelfGuid>()
-                .init_resource::<PlaySeq>()
-                .insert_resource(NetCommands(tx))
-                .insert_resource(crate::ui_action::Spells {
-                    catalog: SpellCatalog::from_displays(displays),
-                    ..crate::ui_action::Spells::empty_for_tests()
-                });
-            let self_e = app.world_mut().spawn((Guid(10), SelfPlayer)).id();
-            app.world_mut()
-                .resource_mut::<GuidIndex>()
-                .0
-                .insert(10, self_e);
-            app.world_mut().resource_mut::<SelfGuid>().0 = Some(10);
-            (app, rx)
-        }
-
-        /// The `Casting` an `SMSG_SPELL_START` echo leaves on the self player.
-        fn mark_casting(app: &mut App, spell_id: u32) {
-            let self_e = app.world().resource::<GuidIndex>().0[&10];
-            app.world_mut().entity_mut(self_e).insert(Casting {
-                spell_id,
-                until: None,
-            });
-        }
+        use super::super::cast_test_support::*;
 
         fn run(app: &mut App, moved: bool) {
             app.world_mut().resource_mut::<LocalMoveStart>().0 = moved;
             app.world_mut().run_system_once(local_self_cancel).unwrap();
-        }
-
-        /// Apply the `SpellStopCasting()` calls the VM queued, as `crate::script_calls` does.
-        fn apply_stops(app: &mut App) {
-            app.world_mut()
-                .run_system_once(|mut script: NonSendMut<UiScript>, mut cancel: SelfCancel| {
-                    crate::script_calls::in_call_order(&mut script, |_, call| {
-                        if call == ScriptCall::SpellStopCasting {
-                            cancel.stop_casting();
-                        }
-                    });
-                })
-                .unwrap();
         }
 
         #[test]
@@ -720,149 +717,6 @@ mod tests {
             assert!(app.world().resource::<CastBarFeed>().0.is_empty());
         }
 
-        /// Mid-channel `SpellStopCasting()` answers nil and nothing is sent.
-        #[test]
-        fn esc_cannot_stop_a_channel() {
-            let (mut app, rx) = harness(HashMap::new());
-            app.insert_non_send_resource(UiScript::new().unwrap());
-            let now = Instant::now();
-            app.world_mut()
-                .resource_mut::<ActiveChannel>()
-                .start(ARCANE_MISSILES, 5_000, now);
-
-            app.world_mut().run_system_once(feed_cast_bar).unwrap();
-            assert_eq!(
-                app.world()
-                    .non_send_resource::<UiScript>()
-                    .eval::<Option<i64>>("return SpellStopCasting()")
-                    .unwrap(),
-                None,
-                "mid-channel the binding answers nil — the vanilla /stopcasting quirk"
-            );
-            apply_stops(&mut app);
-            assert!(
-                rx.try_recv().is_err(),
-                "no wire cancel — channels break only on the movement path"
-            );
-            assert_eq!(
-                app.world().resource::<ActiveChannel>().current(now),
-                Some(ARCANE_MISSILES)
-            );
-        }
-
-        /// `SpellStopCasting` (`0x6e6e80`) stops the auto-repeat first and spends the press.
-        #[test]
-        fn esc_cancels_the_auto_repeat_first_and_the_cast_on_the_next_press() {
-            const AUTO_SHOT: u32 = 75;
-            let (mut app, rx) = harness(HashMap::new());
-            app.insert_non_send_resource(UiScript::new().unwrap());
-            app.world_mut().resource_mut::<AutoRepeatActive>().0 = Some(AUTO_SHOT);
-            app.world_mut()
-                .resource_mut::<PendingCast>()
-                .arm(FIREBALL, Instant::now(), true);
-            mark_casting(&mut app, FIREBALL);
-
-            // Press 1 stops the auto-repeat only.
-            app.world_mut().run_system_once(feed_cast_bar).unwrap();
-            assert_eq!(
-                app.world()
-                    .non_send_resource::<UiScript>()
-                    .eval::<Option<i64>>("return SpellStopCasting()")
-                    .unwrap(),
-                Some(1)
-            );
-            apply_stops(&mut app);
-            assert!(
-                matches!(
-                    rx.try_recv(),
-                    Ok(crate::net::ClientCommand::CancelAutoRepeat)
-                ),
-                "the auto-repeat cancel ships first — the reference's priority branch"
-            );
-            assert!(rx.try_recv().is_err(), "the cast survives the first press");
-            assert!(app.world().resource::<AutoRepeatActive>().0.is_none());
-            assert!(
-                app.world()
-                    .resource::<PendingCast>()
-                    .in_flight(Instant::now()),
-                "the send guard still holds — one press stopped one thing"
-            );
-            assert!(
-                app.world().resource::<CastBarFeed>().0.is_empty(),
-                "an auto-repeat cancel paints no bar edge"
-            );
-
-            // Press 2 cancels the cast.
-            app.world_mut().run_system_once(feed_cast_bar).unwrap();
-            assert_eq!(
-                app.world()
-                    .non_send_resource::<UiScript>()
-                    .eval::<Option<i64>>("return SpellStopCasting()")
-                    .unwrap(),
-                Some(1)
-            );
-            apply_stops(&mut app);
-            assert!(
-                matches!(
-                    rx.try_recv(),
-                    Ok(crate::net::ClientCommand::CancelCast { spell_id: FIREBALL })
-                ),
-                "the second press reaches the cast half"
-            );
-        }
-
-        /// Esc with a strike queued cancels it and returns 1 (`IsCasting 0x6e3d30` is true), so
-        /// the Esc ladder stops before `ClearTarget()`.
-        #[test]
-        fn esc_unqueues_a_strike_and_eats_the_press() {
-            let (mut app, rx) = harness(HashMap::from([(
-                HEROIC_STRIKE,
-                SpellDisplay {
-                    attributes: 0x5_0014, // the shipped row: on-next-swing (`& 0x404`)
-                    interrupt_flags: 0,   // no movement bit, also shipped
-                    ..Default::default()
-                },
-            )]));
-            app.insert_non_send_resource(UiScript::new().unwrap());
-            app.world_mut()
-                .resource_mut::<QueuedMeleeSpell>()
-                .arm(HEROIC_STRIKE);
-
-            app.world_mut().run_system_once(feed_cast_bar).unwrap();
-            assert_eq!(
-                app.world()
-                    .non_send_resource::<UiScript>()
-                    .eval::<Option<i64>>("return SpellStopCasting()")
-                    .unwrap(),
-                Some(1),
-                "the queued strike makes IsCasting true, so the binding EATS the press — which \
-                 is what spares the target three rungs further down the ladder"
-            );
-            apply_stops(&mut app);
-            assert!(
-                matches!(
-                    rx.try_recv(),
-                    Ok(crate::net::ClientCommand::CancelCast {
-                        spell_id: HEROIC_STRIKE
-                    })
-                ),
-                "AbortCast names the queued strike on the wire, exactly as it would a cast"
-            );
-            assert_eq!(
-                app.world().resource::<QueuedMeleeSpell>().current(),
-                None,
-                "the slot opens locally — the checked ring darkens this frame, not one RTT later"
-            );
-            assert!(
-                matches!(
-                    app.world().resource::<CastBarFeed>().0[..],
-                    [CastBarEdge::Stop]
-                ),
-                "the reference's `0x152` STOP and nothing else: no red INTERRUPTED for a \
-                 spell that never opened a bar"
-            );
-        }
-
         /// Heroic Strike's `InterruptFlags` are 0, so movement leaves it queued.
         #[test]
         fn a_move_edge_leaves_a_queued_strike_queued() {
@@ -884,63 +738,6 @@ mod tests {
                 app.world().resource::<QueuedMeleeSpell>().current(),
                 Some(HEROIC_STRIKE)
             );
-        }
-
-        /// A cast nested over a queued strike (`PushPopNestedCast 0x6e4ad0`) dies on the first
-        /// Esc, the strike on the second; this pins the local order only.
-        #[test]
-        fn esc_takes_the_cast_first_and_the_strike_on_the_next_press() {
-            let (mut app, rx) = harness(HashMap::new());
-            app.insert_non_send_resource(UiScript::new().unwrap());
-            app.world_mut()
-                .resource_mut::<QueuedMeleeSpell>()
-                .arm(HEROIC_STRIKE);
-            app.world_mut()
-                .resource_mut::<PendingCast>()
-                .arm(FIREBALL, Instant::now(), true);
-            mark_casting(&mut app, FIREBALL);
-
-            app.world_mut().run_system_once(feed_cast_bar).unwrap();
-            assert_eq!(
-                app.world()
-                    .non_send_resource::<UiScript>()
-                    .eval::<Option<i64>>("return SpellStopCasting()")
-                    .unwrap(),
-                Some(1)
-            );
-            apply_stops(&mut app);
-            assert!(
-                matches!(
-                    rx.try_recv(),
-                    Ok(crate::net::ClientCommand::CancelCast { spell_id: FIREBALL })
-                ),
-                "the nested cast is what sits in the inflight slot — it dies first"
-            );
-            assert!(rx.try_recv().is_err());
-            assert_eq!(
-                app.world().resource::<QueuedMeleeSpell>().current(),
-                Some(HEROIC_STRIKE),
-                "the strike is the SAVE underneath, untouched by the first press"
-            );
-
-            // Press 2: the pop put the strike back in the slot.
-            app.world_mut().run_system_once(feed_cast_bar).unwrap();
-            assert_eq!(
-                app.world()
-                    .non_send_resource::<UiScript>()
-                    .eval::<Option<i64>>("return SpellStopCasting()")
-                    .unwrap(),
-                Some(1),
-                "still stoppable — so this press is eaten too, and the target still survives"
-            );
-            apply_stops(&mut app);
-            assert!(matches!(
-                rx.try_recv(),
-                Ok(crate::net::ClientCommand::CancelCast {
-                    spell_id: HEROIC_STRIKE
-                })
-            ));
-            assert_eq!(app.world().resource::<QueuedMeleeSpell>().current(), None);
         }
 
         /// `0x6e9b70` sends the cancel and fires no event, clearing nothing local.

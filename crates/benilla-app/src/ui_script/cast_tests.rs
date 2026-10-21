@@ -10,9 +10,9 @@ fn harness() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     // The stock file sets `CastingBarText` to the `FAILED` global (`CastingBarFrame.lua:61`).
-    load_xml(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, "Interface\\FrameXML\\CastingBarFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\CastingBarFrame.xml");
     s
 }
 
@@ -424,21 +424,21 @@ fn managed_positions_track_the_bottom_bar_stack() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, "Interface\\FrameXML\\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml"); // TOOLTIP_DEFAULT_COLOR for the dropdowns
-    load_xml(&s, "Interface\\FrameXML\\UIMenu.xml"); // the kit the chat menus build from
-    load_xml(&s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&s, "Interface\\FrameXML\\UIPanelTemplates.lua");
-    load_xml(&s, "Interface\\FrameXML\\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "Interface\\FrameXML\\ChatFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\FloatingChatFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\CastingBarFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml"); // TOOLTIP_DEFAULT_COLOR for the dropdowns
+    load_xml(&mut s, "Interface\\FrameXML\\UIMenu.xml"); // the kit the chat menus build from
+    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UIPanelTemplates.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\ChatFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\FloatingChatFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\CastingBarFrame.xml");
 
     // The load-time pass with no bars shown: the bare bases.
     s.run("UIParent_ManageFramePositions()").unwrap();

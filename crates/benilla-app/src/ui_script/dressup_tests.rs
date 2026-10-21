@@ -33,7 +33,7 @@ const ROOM_UI: &[&str] = &[
 ];
 
 /// The room with no bag window, for the click sites that never touch a container.
-fn load_room(s: &UiScript) {
+fn load_room(s: &mut UiScript) {
     for file in crate::ui_script::test_ui::production_order(&[
         &[
             "Interface\\FrameXML\\GlobalStrings.lua",
@@ -56,7 +56,7 @@ fn load_room(s: &UiScript) {
 
 /// The room over the stock bag windows; `UIParent.xml` leads because every window parents to it
 /// and `BAG_UI` has no line for it.
-fn load_room_with_bags(s: &UiScript) {
+fn load_room_with_bags(s: &mut UiScript) {
     for file in crate::ui_script::test_ui::production_order(&[
         &[r"Interface\FrameXML\UIParent.xml"],
         BAG_UI,
@@ -88,7 +88,7 @@ fn shown_paper_doll() -> UiScript {
             "Interface\\FrameXML\\DressUpFrame.xml",
         ],
     ]) {
-        super::test_ui::load_ui_strict(&s, file);
+        super::test_ui::load_ui_strict(&mut s, file);
     }
     s.set_unit(
         "player",
@@ -143,7 +143,7 @@ fn ctrl_click_on_a_bag_item_opens_the_room_wearing_it() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_room_with_bags(&s);
+    load_room_with_bags(&mut s);
     let btn = backpack_with_jerky(&mut s);
     assert!(!s.eval::<bool>("return DressUpFrame:IsVisible()").unwrap());
 
@@ -175,7 +175,7 @@ fn shift_click_posts_the_link_with_chat_open_and_splits_with_it_closed() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_room_with_bags(&s);
+    load_room_with_bags(&mut s);
     let btn = backpack_with_jerky(&mut s);
 
     s.set_modifiers(true, false, false);
@@ -215,7 +215,7 @@ fn ctrl_clicking_a_chat_link_previews_it() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_room(&s);
+    load_room(&mut s);
 
     s.set_modifiers(false, true, false);
     s.run(&format!(
@@ -336,7 +336,7 @@ fn reset_re_dresses_close_empties_and_the_arrows_spin_the_pane() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_room(&s);
+    load_room(&mut s);
     s.run("ShowUIPanel(DressUpFrame)").unwrap();
     let _ = s.take_sounds();
     let _ = s.take_dressup_intents();

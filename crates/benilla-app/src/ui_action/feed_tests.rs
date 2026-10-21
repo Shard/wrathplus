@@ -382,7 +382,7 @@ fn pre_resolved_lines_land_on_the_errors_frame_in_the_arms_colour() {
             "Interface\\FrameXML\\Fonts.xml",
             "Interface\\FrameXML\\UIErrorsFrame.xml",
         ] {
-            crate::ui_script::load_ui_for_test(&script, file);
+            crate::ui_script::load_ui_for_test(&mut script, file);
         }
     }
 

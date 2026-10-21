@@ -6,7 +6,7 @@ use super::test_ui::load_ui as load_xml;
 
 /// The pet bar's chain in the production order, then the chat window, whose edit box
 /// `ShowPetActionBar` raises over the sliding bar (PetActionBarFrame.lua:175).
-pub(super) fn load_pet_bar(s: &UiScript) {
+pub(super) fn load_pet_bar(s: &mut UiScript) {
     for file in [
         "Interface\\FrameXML\\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
@@ -111,7 +111,7 @@ fn the_shipped_pet_bar_drives_end_to_end() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_pet_bar(&s);
+    load_pet_bar(&mut s);
     declare_token_strings(&s);
 
     s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
@@ -219,7 +219,7 @@ fn clicks_route_through_the_attack_toggle_fork() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_pet_bar(&s);
+    load_pet_bar(&mut s);
     declare_token_strings(&s);
     s.set_pet_actions(true, true, true, hunter_slots());
     s.fire_event("PET_BAR_UPDATE", vec![]);
@@ -269,7 +269,7 @@ fn a_click_drops_the_ring_and_the_repaint_restores_it() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_pet_bar(&s);
+    load_pet_bar(&mut s);
     declare_token_strings(&s);
 
     let checked = |s: &UiScript| {
@@ -310,7 +310,7 @@ fn a_disabled_bar_greys_rather_than_hides() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_pet_bar(&s);
+    load_pet_bar(&mut s);
     declare_token_strings(&s);
 
     s.set_pet_actions(true, false, true, hunter_slots());
@@ -343,7 +343,7 @@ fn a_disabled_bar_greys_rather_than_hides() {
 fn pet_bar_row(with_multibar: bool) -> (usize, f32) {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_pet_bar(&s);
+    load_pet_bar(&mut s);
     if with_multibar {
         s.run("SHOW_MULTI_ACTIONBAR_1 = 1 MultiActionBar_Update()")
             .unwrap();
@@ -397,7 +397,7 @@ fn dragging_a_pet_spell_between_slots_moves_it_through_the_shipped_handlers() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_pet_bar(&s);
+    load_pet_bar(&mut s);
     declare_token_strings(&s);
     s.set_pet_actions(true, true, true, hunter_slots());
     s.fire_event("PET_BAR_UPDATE", vec![]);
@@ -449,7 +449,7 @@ fn the_lock_stops_the_pet_bar_drag_but_not_its_shift_click() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_pet_bar(&s);
+    load_pet_bar(&mut s);
     declare_token_strings(&s);
     s.set_pet_actions(true, true, true, hunter_slots());
     s.fire_event("PET_BAR_UPDATE", vec![]);
@@ -497,7 +497,7 @@ fn shift_clicking_a_pet_button_picks_it_up_rather_than_casting() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_pet_bar(&s);
+    load_pet_bar(&mut s);
     declare_token_strings(&s);
     s.set_pet_actions(true, true, true, hunter_slots());
     s.fire_event("PET_BAR_UPDATE", vec![]);
@@ -528,7 +528,7 @@ fn the_keybind_pair_pushes_and_casts_without_the_clicks_forks() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_pet_bar(&s);
+    load_pet_bar(&mut s);
     declare_token_strings(&s);
     s.set_pet_actions(true, true, true, hunter_slots());
     s.fire_event("PET_BAR_UPDATE", vec![]);
@@ -588,7 +588,7 @@ fn hovered_pet_bar() -> UiScript {
     // The app's registries: `BONUSACTIONBUTTON1` binds CTRL-1 and `UberTooltips` reads "1".
     crate::ui_script::load_stock_bindings(&mut s);
     s.register_cvars(crate::shipped_cvars::pairs());
-    load_pet_bar(&s);
+    load_pet_bar(&mut s);
     declare_token_strings(&s);
     s.set_pet_actions(true, true, true, hunter_slots());
     s.fire_event("PET_BAR_UPDATE", vec![]);

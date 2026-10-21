@@ -299,7 +299,7 @@ pub(super) fn drive_animations(
         // Its `Emotes.dbc` → `AnimID` column resolves the `UNIT_NPC_EMOTESTATE` idle.
         Option<Res<EmoteSounds>>,
         // Whether the latched loot target is one the self unit kneels at; false while cold.
-        Option<Res<crate::ui_loot::LootKneel>>,
+        Option<Res<crate::loot::LootKneel>>,
         // The key-bone cross-fade's clock: its retiring node is frozen, so it has no playback
         // clock of its own.
         Res<Time>,
@@ -310,7 +310,7 @@ pub(super) fn drive_animations(
         Query<(&ObjectStore, &crate::entities::mount::MountChild)>,
         // The open NPC session's unit (`[0xb4e2d0]`): its state emote is passed over when the
         // row's `EmoteFlags` carry `0x2000` (`0x5fd7e2`-`0x5fd7fd`).
-        Option<Res<crate::ui_session::InteractNpc>>,
+        Option<Res<crate::app_core::state::InteractNpc>>,
     ),
     // The variation roll's LCG, the reference's single CRT `_rand` stream shared by every play.
     mut rng: ResMut<benilla_assets::AnimRng>,

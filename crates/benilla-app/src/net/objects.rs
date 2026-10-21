@@ -86,7 +86,8 @@ pub(crate) struct Scene<'w, 's> {
     items: ResMut<'w, Items>,
     go_templates: ResMut<'w, GameObjectTemplates>,
     death_net: ResMut<'w, DeathNet>,
-    group: ResMut<'w, crate::ui_party::GroupState>,
+    group: Res<'w, crate::app_core::group::GroupState>,
+    deactivated: MessageWriter<'w, super::MemberDeactivated>,
 }
 
 fn on_object_create(In(ev): In<SessionEvent>, mut sc: Scene) {
@@ -248,16 +249,28 @@ fn on_object_destroyed(In(ev): In<SessionEvent>, mut sc: Scene) {
     if let SessionEvent::ObjectDestroyed(guid) = ev {
         forget_corpse(guid, &mut sc.death_net);
         let held = |g: u64| sc.index.0.get(&g).and_then(|e| sc.stores.get(*e).ok());
-        crate::ui_party::net::member_deactivated(
-            guid,
-            &mut sc.group,
-            held(guid),
-            held,
-            &sc.names,
-            &sc.net,
-        );
+        sc.deactivated
+            .write_batch(member_deactivated(guid, &sc.group, held));
         object_destroyed(guid, &mut sc.commands, &mut sc.index);
     }
+}
+
+/// The deactivate hook's input for `guid`, a roster member we hold an object for; `None` off the
+/// roster or without an object, since the reference's hook is a virtual on the object.
+pub(super) fn member_deactivated<'a>(
+    guid: u64,
+    group: &crate::app_core::group::GroupState,
+    held: impl Fn(u64) -> Option<&'a ObjectStore>,
+) -> Option<super::MemberDeactivated> {
+    if !group.members.iter().any(|m| m.guid == guid) {
+        return None;
+    }
+    let member = held(guid)?.clone();
+    let pet = member
+        .0
+        .unit_pet_guid()
+        .and_then(|pet| Some((pet, held(pet)?.clone())));
+    Some(super::MemberDeactivated { guid, member, pet })
 }
 
 /// OUT_OF_RANGE takes the same deactivate as DESTROY in the reference, so a member walking out of
@@ -266,14 +279,8 @@ fn on_objects_removed(In(ev): In<SessionEvent>, mut sc: Scene) {
     if let SessionEvent::ObjectsRemoved(guids) = ev {
         for guid in &guids {
             let held = |g: u64| sc.index.0.get(&g).and_then(|e| sc.stores.get(*e).ok());
-            crate::ui_party::net::member_deactivated(
-                *guid,
-                &mut sc.group,
-                held(*guid),
-                held,
-                &sc.names,
-                &sc.net,
-            );
+            sc.deactivated
+                .write_batch(member_deactivated(*guid, &sc.group, held));
         }
         objects_removed(guids, &mut sc.commands, &mut sc.index);
     }

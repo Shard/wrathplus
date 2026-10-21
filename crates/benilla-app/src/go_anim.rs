@@ -345,7 +345,7 @@ fn release_despawn_pin(
 /// Caller 3, the loot release: the client drops the state to READY as it sends
 /// `CMSG_LOOT_RELEASE`, with no server round-trip, on any close of the loot source.
 fn close_go_lid(
-    loot: Res<crate::ui_loot::LootState>,
+    loot: Res<crate::app_core::loot::LootState>,
     index: Res<GuidIndex>,
     mut gos: Query<&mut GoAnim>,
     mut last_source: Local<Option<u64>>,

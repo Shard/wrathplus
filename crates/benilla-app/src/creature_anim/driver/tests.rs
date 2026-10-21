@@ -1291,7 +1291,7 @@ fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
     use benilla_protocol::types::ObjectFields;
 
     let mut app = app();
-    app.init_resource::<crate::ui_loot::LootKneel>();
+    app.init_resource::<crate::loot::LootKneel>();
     let model = ModelAnimations {
         graph: Handle::default(),
         clips: vec![clip(0, 1, true), clip(50, 2, false), clip(5, 3, true)],
@@ -1324,15 +1324,11 @@ fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
         "the self unit ignores its own descriptor flag"
     );
 
-    app.world_mut()
-        .resource_mut::<crate::ui_loot::LootKneel>()
-        .0 = true;
+    app.world_mut().resource_mut::<crate::loot::LootKneel>().0 = true;
     app.update();
     assert_eq!(gait(&app), Some(50), "the armed latch kneels the self unit");
 
-    app.world_mut()
-        .resource_mut::<crate::ui_loot::LootKneel>()
-        .0 = false;
+    app.world_mut().resource_mut::<crate::loot::LootKneel>().0 = false;
     app.update();
     assert_eq!(
         gait(&app),
@@ -3308,7 +3304,7 @@ fn spawn_vendor(app: &mut App) -> (Entity, Vec<AnimationNodeIndex>) {
 fn the_interaction_face_me_shuffles_its_feet_for_the_whole_turn() {
     let mut app = app();
     app.init_resource::<crate::net::GuidIndex>()
-        .init_resource::<crate::ui_session::InteractNpc>();
+        .init_resource::<crate::app_core::state::InteractNpc>();
     app.add_systems(
         Update,
         crate::motion::drive_display_facing.before(drive_animations),
@@ -3351,7 +3347,7 @@ fn the_interaction_face_me_shuffles_its_feet_for_the_whole_turn() {
 
     // Open its window. 256 ms covers the ease (ten pumps, ~160 ms) and the 250 ms blend-in.
     app.world_mut()
-        .resource_mut::<crate::ui_session::InteractNpc>()
+        .resource_mut::<crate::app_core::state::InteractNpc>()
         .0 = Some(npc);
     let (peak, held) = run(&mut app, 256, 11);
     assert!(held, "the whole turn is ShuffleLeft, got {:?}", gait(&app));
@@ -3382,7 +3378,7 @@ fn the_interaction_face_me_shuffles_its_feet_for_the_whole_turn() {
 
     // Closing it swings the vendor back to its wire facing, shuffling the other way.
     app.world_mut()
-        .resource_mut::<crate::ui_session::InteractNpc>()
+        .resource_mut::<crate::app_core::state::InteractNpc>()
         .0 = None;
     let (peak, held) = run(&mut app, 256, 12);
     assert!(held, "the swing back is ShuffleRight, got {:?}", gait(&app));
@@ -4449,7 +4445,7 @@ mod emote_state {
     use crate::creature_anim::Mode;
     use crate::net::ObjectStore;
     use crate::sound::EmoteSounds;
-    use crate::ui_session::InteractNpc;
+    use crate::app_core::state::InteractNpc;
     use benilla_formats::EmoteSoundCatalog;
 
     /// Emote states: 28 plays AnimID 234 and yields to interaction (`0x2000`); 29 plays 235 and

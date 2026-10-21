@@ -26,7 +26,7 @@ fn load_stable() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     for f in STABLE_UI {
-        load_ui_strict(&s, f);
+        load_ui_strict(&mut s, f);
     }
     s.set_unit(
         "player",

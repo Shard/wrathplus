@@ -29,7 +29,7 @@ use crate::ui_binder::BinderState;
 use crate::ui_gossip::GossipState;
 use crate::ui_session::NpcSession;
 
-/// Innkeeper Keldamyr's spawn (vmangos `creature` guid 46343), the `.go xyz` target.
+/// Innkeeper Keldamyr's spawn (AzerothCore `creature` guid 46343), the `.go xyz` target.
 const INNKEEPER_AT: [f32; 3] = [9802.21, 982.608, 1313.98];
 /// Her map, Kalimdor; `.go xyz` takes the map id as its fourth argument.
 const INNKEEPER_MAP: u32 = 1;

@@ -6,27 +6,9 @@
 
 use benilla_protocol::wrath_loot::InventoryChangeFailure;
 
-use super::{LootAction, LootLatch, LootState};
+use super::{LootAction, LootState};
 use crate::net::{ClientCommand, NetCommands};
 use crate::ui_action::{UiError, UiErrorKeys};
-
-/// Starts one build-12340 corpse-loot request. The latch stays cold until the matching response,
-/// so a failed channel send cannot predict either an open window or a kneel.
-pub(crate) fn begin_wrath_corpse_loot(
-    loot: &mut LootState,
-    latch: &mut LootLatch,
-    net: &NetCommands,
-    guid: u64,
-) -> bool {
-    if loot.source().is_some() || latch.0.is_some() || !loot.wrath.begin(guid) {
-        return false;
-    }
-    if net.0.send(ClientCommand::Loot { guid }).is_err() {
-        loot.wrath.reset();
-        return false;
-    }
-    true
-}
 
 /// The slot types `LootSlot` and the auto-loot sweep take (`0x589140`, `0x588f90`): allow and owner.
 pub(super) fn is_takeable(slot_type: u8) -> bool {
@@ -92,6 +74,8 @@ pub(super) fn inventory_failure(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_core::state::LootLatch;
+    use crate::loot::begin_wrath_corpse_loot;
     use crate::ui_loot::LootStateRows;
     use benilla_protocol::types::LootItem;
     use benilla_protocol::wrath_loot::InventoryChangeFailure;

@@ -6,30 +6,25 @@
 
 use benilla_protocol::types::SpellLogExecute;
 
-use crate::net::{Reputations, SelfGuid};
+use crate::net::{SelfGuid, StandingChanged};
 use crate::ui_chat::combat::{self, Fills};
 use crate::ui_chat::feed::ChatLogFeed;
 use crate::ui_chat::{ChatEventKind, ChatLog};
 
 /// `SMSG_SET_FACTION_STANDING`: "Your %s reputation has increased by %d.". The wire carries the
-/// new total and the sentence the delta, so this runs before the store is overwritten, and an
+/// new total and the sentence the delta, so `net` reads the old one before the overwrite and an
 /// unchanged value prints nothing (`0x62c5f0`). No range gate or classifier: the chat type is the
 /// literal `0x55` `COMBAT_FACTION_CHANGE`. The wire's list id is `Faction.dbc`'s `rep_index`.
-pub(crate) fn faction_standing(
-    deltas: &[(u32, i32)],
-    reputations: &Reputations,
+pub(crate) fn faction_standing<'a>(
+    changes: impl IntoIterator<Item = &'a StandingChanged>,
     factions: Option<&crate::target::ring::Factions>,
     log: &mut ChatLog,
 ) {
     let Some(catalog) = factions.map(|f| f.catalog()) else {
         return;
     };
-    for &(list_id, standing) in deltas {
-        let old = reputations
-            .0
-            .get(list_id as usize)
-            .map_or(0, |(_, standing)| *standing);
-        let delta = standing - old;
+    for &StandingChanged { list_id, old, new } in changes {
+        let delta = new - old;
         if delta == 0 {
             continue;
         }

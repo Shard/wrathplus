@@ -1,14 +1,15 @@
-//! The tests' interface loader: a bare filename is a file we ship under `assets/ui`, a path one off
-//! the player's patch chain ([`super::reference_ui::is_chain_entry`]). It reads the source tree,
-//! not the compiled-in copy. A kit loads in the production order ([`production_rank`]), which
-//! every load checks.
+//! The tests' interface loader. A stock FrameXML file ([`production_rank`]) is part of the session's
+//! interface, which the first one loads whole, as a session does ([`seat_session_ui`]); any other
+//! path is one off the player's patch chain (an on-demand addon's file), and a bare filename a
+//! fixture under `assets/ui`. It reads the source tree, not the compiled-in copy.
 
 use benilla_ui::script::{QuadContent, UiScript};
 
 /// Load one interface file into `s`, panicking on any loader error; returns the frames it built
-/// (0 for a `.lua`). A chain entry needs client data, so a test naming one opens with
+/// (0 for a `.lua` and for a stock FrameXML file, which seats the whole interface). A chain entry
+/// needs client data, so a test naming one opens with
 /// `benilla_formats::wow_data_or_skip!()`.
-pub(crate) fn load_ui(s: &UiScript, entry: &str) -> usize {
+pub(crate) fn load_ui(s: &mut UiScript, entry: &str) -> usize {
     load_entry(s, entry, false, false)
 }
 
@@ -74,17 +75,48 @@ pub(super) fn cooldown_play_any(s: &UiScript) -> Option<(u16, u32)> {
 }
 
 /// [`load_ui`], and a missing template fails too: the loader only warns, and the art is lost.
-pub(super) fn load_ui_strict(s: &UiScript, entry: &str) -> usize {
+pub(super) fn load_ui_strict(s: &mut UiScript, entry: &str) -> usize {
     load_entry(s, entry, true, false)
 }
 
 /// [`load_ui`], and any loader warning fails.
-pub(super) fn load_ui_no_warnings(s: &UiScript, entry: &str) -> usize {
+pub(super) fn load_ui_no_warnings(s: &mut UiScript, entry: &str) -> usize {
     load_entry(s, entry, false, true)
 }
 
-fn load_entry(s: &UiScript, entry: &str, strict_templates: bool, no_warnings: bool) -> usize {
-    follow_production_order(s, entry);
+fn load_entry(s: &mut UiScript, entry: &str, strict_templates: bool, no_warnings: bool) -> usize {
+    // A stock FrameXML file is part of the session's interface, which loads whole.
+    if production_rank(entry).is_some() {
+        seat_session_ui(s);
+        return 0;
+    }
+    load_file(s, entry, strict_templates, no_warnings)
+}
+
+thread_local! {
+    /// The VM sessions whose whole stock interface [`seat_session_ui`] has loaded.
+    static SEATED: std::cell::RefCell<std::collections::HashSet<u64>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
+}
+
+/// The stock interface as a session loads it ([`super::load_default_ui`]: the installed
+/// `FrameXML.toc` whole, the archive's startup addon and the bootstrap, on a VM seeded with its
+/// display mode and player), once per VM: a kit's first stock file loads all of it, and the rest
+/// are already there. A test sees the interface a player has, in the order the client loads it.
+fn seat_session_ui(s: &mut UiScript) {
+    if SEATED.with(|seated| seated.borrow().contains(&s.session())) {
+        return;
+    }
+    let failures = super::load_default_ui(s);
+    assert!(
+        failures.is_empty(),
+        "the session interface failed to load: {failures:#?}"
+    );
+    SEATED.with(|seated| seated.borrow_mut().insert(s.session()));
+}
+
+/// One file's load, the order already checked.
+fn load_file(s: &UiScript, entry: &str, strict_templates: bool, no_warnings: bool) -> usize {
     // The app registers its CVars before any file loads: stock `UIOptionsFrame.xml` reads two
     // camera CVars at `OnLoad` and raises on a nil. A value a test already set stands.
     s.register_cvars(crate::shipped_cvars::pairs());
@@ -98,41 +130,12 @@ fn load_entry(s: &UiScript, entry: &str, strict_templates: bool, no_warnings: bo
     let doc = benilla_ui::framexml::parse(&benilla_ui::source::decode(&bytes))
         .unwrap_or_else(|e| panic!("{entry}: {e}"));
     let provider = |req: &str| -> Option<Vec<u8>> { read(req) };
-    // Seated before the load: `MultiActionBarFrame_OnLoad` indexes `UIOptionsFrameCheckButtons`
-    // during this load walk.
-    if path
-        .rsplit('/')
-        .next()
-        .is_some_and(|l| l.eq_ignore_ascii_case("MultiActionBars.xml"))
-    {
-        s.run(MULTI_ACTION_BAR_STAND_INS)
-            .expect("the multibar stand-ins");
-    }
     let report = benilla_ui::loader::load_in(s, &doc, &path, &provider);
     assert!(
         report.errors.is_empty(),
         "{entry}: loader errors: {:?}",
         report.errors
     );
-    let leaf = path.rsplit('/').next().unwrap_or("");
-    if leaf.eq_ignore_ascii_case("MainMenuBarMicroButtons.xml") {
-        s.run(MICRO_BUTTON_STAND_INS)
-            .expect("the micro-button stand-ins");
-    }
-    // The stock GameMenuFrame.xml sources UIParent.lua again, which drops the stand-ins' wrappers.
-    if (leaf.eq_ignore_ascii_case("UIParent.xml") || leaf.eq_ignore_ascii_case("GameMenuFrame.xml"))
-        && super::reference_ui::is_chain_entry(&path)
-    {
-        s.run(UIPARENT_STAND_INS).expect("the UIParent stand-ins");
-    }
-    if leaf.eq_ignore_ascii_case("GameMenuFrame.xml") && super::reference_ui::is_chain_entry(&path)
-    {
-        s.run(GAME_MENU_STAND_INS).expect("the game menu stand-ins");
-    }
-    if leaf.eq_ignore_ascii_case("UIOptionsFrame.xml") {
-        s.run(UIOPTIONS_STAND_INS)
-            .expect("the stock options window's stand-ins");
-    }
     if no_warnings {
         assert!(
             report.warnings.is_empty(),
@@ -155,9 +158,10 @@ fn load_entry(s: &UiScript, entry: &str, strict_templates: bool, no_warnings: bo
     report.frames
 }
 
-/// Where `entry` falls in the production load, for [`follow_production_order`]: a `FrameXML.toc`
-/// row at its row, a file a row pulls in (`<Include>` or `<Script file=>`, at any depth) just
-/// above the first row that does, and `None` for anything else (a fixture, an on-demand addon's file). Read off the player's own toc.
+/// Where `entry` falls in the production load: a `FrameXML.toc` row at its row, a file a row pulls
+/// in (`<Include>` or `<Script file=>`, at any depth) just above the first row that does, and
+/// `None` for anything else (a fixture, an on-demand addon's file). Read off the player's own toc;
+/// `Some` marks a stock file for [`seat_session_ui`].
 pub(super) fn production_rank(entry: &str) -> Option<usize> {
     static RANKS: std::sync::OnceLock<std::collections::HashMap<String, usize>> =
         std::sync::OnceLock::new();
@@ -224,7 +228,7 @@ pub(crate) fn production_order<'a>(parts: &[&[&'a str]]) -> Vec<&'a str> {
 
 /// Loads `parts` in the production order ([`production_order`]) and returns the frames `counted`
 /// built.
-pub(crate) fn load_kit_counting(s: &UiScript, parts: &[&[&str]], counted: &str) -> usize {
+pub(crate) fn load_kit_counting(s: &mut UiScript, parts: &[&[&str]], counted: &str) -> usize {
     let mut built = 0;
     for file in production_order(parts) {
         let frames = load_ui(s, file);
@@ -234,203 +238,6 @@ pub(crate) fn load_kit_counting(s: &UiScript, parts: &[&[&str]], counted: &str) 
     }
     built
 }
-
-thread_local! {
-    /// Per VM session, the furthest [`production_rank`] a kit has loaded and the file at it.
-    static KIT_AT: std::cell::RefCell<std::collections::HashMap<u64, (usize, String)>> =
-        std::cell::RefCell::new(std::collections::HashMap::new());
-}
-
-/// Panics when `entry` loads after a file the production load runs after it: a kit is a
-/// subsequence of the production load, `FrameXML.toc`'s order, so a test sees
-/// the order effects the player does (event dispatch, child and draw order, which definition
-/// wins).
-fn follow_production_order(s: &UiScript, entry: &str) {
-    let Some(rank) = production_rank(entry) else {
-        return;
-    };
-    KIT_AT.with(|at| {
-        let mut at = at.borrow_mut();
-        if let Some((furthest, file)) = at.get(&s.session()) {
-            assert!(
-                rank >= *furthest,
-                "{entry} loads after {file}, but the production load runs it first: a kit \
-                 follows FrameXML.toc's order"
-            );
-            if rank == *furthest {
-                return;
-            }
-        }
-        at.insert(s.session(), (rank, entry.to_string()));
-    });
-}
-
-/// What a kit owes stock `UIParent.xml`: no-op stand-ins, seated when it loads, for what its
-/// `<OnUpdate>`, `UIParent_OnEvent` and `ShowUIPanel` call from files a kit may stop short of. A
-/// `function X()` is a plain global write, so the real definition replaces a stand-in in any order.
-pub(super) const UIPARENT_STAND_INS: &str = r#"
-    -- Callees of the stock UIParent.xml's <OnUpdate> and of UIParent_OnEvent's arms that live in
-    -- files a kit may stop short of, plus the bag verbs the stock ShowUIPanel calls and the two
-    -- container constants its window walks read: no-op stand-ins, each overwritten by the real
-    -- definition when its file loads (a chunk's `function X()` is a plain global write, unlike a
-    -- frame's non-overwriting publish — which is why the FRAMES below are seated on first use).
-    FCF_OnUpdate = FCF_OnUpdate or function() end
-    FCF_DockUpdate = FCF_DockUpdate or function() end
-    UnitPopup_OnUpdate = UnitPopup_OnUpdate or function() end
-    BattlefieldFrame_OnUpdate = BattlefieldFrame_OnUpdate or function() end
-    MultiActionBar_Update = MultiActionBar_Update or function() end
-    RaidOptionsFrame_UpdatePartyFrames = RaidOptionsFrame_UpdatePartyFrames or function() end
-    LocalizeFrames = LocalizeFrames or function() end
-    updateContainerFrameAnchors = updateContainerFrameAnchors or function() end
-    -- 1.12 keeps UpdateNameplates in UIOptionsFrame.lua, which a kit reaches only at manifest
-    -- l.21; our own OptionsFrame.xml re-declares it below that. Both are plain
-    -- `function X()` writes, so a full kit ends on ours and a short one keeps this no-op.
-    UpdateNameplates = UpdateNameplates or function() end
-    CloseAllBags = CloseAllBags or function() end
-    OpenBackpack = OpenBackpack or function() end
-    CloseBackpack = CloseBackpack or function() end
-    NUM_CONTAINER_FRAMES = NUM_CONTAINER_FRAMES or 0
-    -- The reference's own initial values (`ContainerFrame.lua:11-12`), not zeroes: the tooltip's
-    -- default corner is `-CONTAINER_OFFSET_X - 13, CONTAINER_OFFSET_Y`, so a kit reading zero here
-    -- would seat every default-anchored plate 70 units low.
-    CONTAINER_OFFSET_X = CONTAINER_OFFSET_X or 0
-    CONTAINER_OFFSET_Y = CONTAINER_OFFSET_Y or 70
-    BATTLEFIELD_TAB_OFFSET_Y = BATTLEFIELD_TAB_OFFSET_Y or 210
-    -- The pass writes its `isVar` rows with `setglobal`, but only for a name that already reads
-    -- non-nil (`frame = getglobal(index); if frame then`), so an unseeded one is never written at
-    -- all. These four are the reference's own seeds, from the files that declare them
-    -- (ContainerFrame.lua, PetActionBarFrame.lua, WorldStateFrame.lua).
-    PETACTIONBAR_YPOS = PETACTIONBAR_YPOS or 98
-    PETACTIONBAR_XPOS = PETACTIONBAR_XPOS or 36
-
-    -- The frames these three read UNGUARDED, seated on the call rather than at load: a frame's
-    -- publish to _G is non-overwriting (0x701bd0), so a stand-in seated before the real file loads
-    -- would shadow the real window for good.
-    local function benilla_seat(names)
-        for _, name in ipairs(names) do
-            if not getglobal(name) then local f = CreateFrame("Frame") f:Hide() setglobal(name, f) end
-        end
-    end
-    local real_manage = UIParent_ManageFramePositions
-    function UIParent_ManageFramePositions()
-        benilla_seat({ "MainMenuBar", "MultiBarLeft", "MultiBarRight", "MultiBarBottomLeft",
-            "PetActionBarFrame", "ShapeshiftBarFrame", "ReputationWatchBar", "MainMenuExpBar",
-            "MainMenuBarMaxLevelBar", "CastingBarFrame", "QuestTimerFrame", "QuestWatchFrame",
-            "DurabilityFrame", "DurabilityShield", "DurabilityOffWeapon", "DurabilityRanged",
-            "MinimapCluster", "ChatFrame1", "ChatFrame2", "ShapeshiftBarLeft",
-            "ShapeshiftBarMiddle", "ShapeshiftBarRight", "BattlefieldMinimapTab" })
-        -- …and every FRAME the managed table itself names (`frame:IsObjectType` on a nil is what
-        -- a kit missing one raises) — read off the table, so a row added there needs nothing here.
-        -- The `isVar` rows are skipped: those keys are global NUMBERS the pass writes
-        -- (CONTAINER_OFFSET_X/Y, PETACTIONBAR_YPOS…), and a frame seated under one of those names
-        -- would be arithmetic's problem two files later.
-        local named = {}
-        for name, row in pairs(UIPARENT_MANAGED_FRAME_POSITIONS) do
-            if not row.isVar then table.insert(named, name) end
-            -- …and every row's ANCHOR TARGET (`anchorTo`, l.1668), which is a different set: the
-            -- keys are the frames being MOVED, the targets are what they move relative to, and
-            -- several targets (`ActionButton1`, `MainMenuBarArtFrame`) are declared in files a
-            -- one-window kit never loads. An unresolvable name is a RAISE, so a target the kit is
-            -- missing aborts `UIParent_ManageFramePositions` mid-pass rather than anchoring to
-            -- the parent and carrying on.
-            if row.anchorTo then table.insert(named, row.anchorTo) end
-        end
-        benilla_seat(named)
-        for _, name in ipairs({ "SlidingActionBarTexture0", "SlidingActionBarTexture1" }) do
-            if not getglobal(name) then setglobal(name, UIParent:CreateTexture()) end
-        end
-        return real_manage()
-    end
-    -- The four options/menu windows `IsOptionFrameOpen` (l.997) and `ToggleGameMenu` (l.1467)
-    -- index unguarded. `IsOptionFrameOpen` is on the path of every window close, so a kit that
-    -- loads no options window raised on the first bag click. In the shipped manifest all four
-    -- names are real, and all three options windows are the REFERENCE's own files,
-    -- loaded hidden — including `OptionsFrame`, the video window, which used to be our own
-    -- window's name. Ours is `BenillaOptionsFrame` now and is not in this list: it is not a name
-    -- the reference indexes, and the wrappers in `GameMenuAdapters.xml` are what tell these two
-    -- functions about it. A KIT is a prefix of the manifest and may load none of the four, which
-    -- is what these stand-ins are for.
-    local function benilla_seat_options()
-        benilla_seat({ "GameMenuFrame", "OptionsFrame", "UIOptionsFrame", "SoundOptionsFrame" })
-        if not OptionsFrameCancel then
-            OptionsFrameCancel = CreateFrame("Button")
-            OptionsFrameCancel:Hide()
-        end
-    end
-    local real_option_open = IsOptionFrameOpen
-    function IsOptionFrameOpen()
-        benilla_seat_options()
-        return real_option_open()
-    end
-    local real_toggle_menu = ToggleGameMenu
-    function ToggleGameMenu(clicked)
-        benilla_seat_options()
-        return real_toggle_menu(clicked)
-    end
-"#;
-
-/// What a kit owes stock `GameMenuFrame.xml`: its OnShow and OnHide (`GameMenuFrame.xml:188-195`)
-/// call the micro-button and bag-bar verbs unguarded, from files a kit may stop short of. Plain
-/// global writes, so the real definitions replace them in any order.
-pub(super) const GAME_MENU_STAND_INS: &str = r#"
-    UpdateMicroButtons = UpdateMicroButtons or function() end
-    Disable_BagButtons = Disable_BagButtons or function() end
-    Enable_BagButtons = Enable_BagButtons or function() end
-"#;
-
-/// What a kit owes stock `UIOptionsFrame.xml`: its `VARIABLES_LOADED` arm
-/// (`UIOptionsFrame.lua:193-227`) calls six functions from files a kit may not load, and a kit
-/// fires the event itself. Functions, so seating them at load is safe in any order.
-pub(super) const UIOPTIONS_STAND_INS: &str = r#"
-    BuffButtons_UpdatePositions = BuffButtons_UpdatePositions or function() end
-    FCF_Set_SimpleChat = FCF_Set_SimpleChat or function() end
-    FCF_Set_NormalChat = FCF_Set_NormalChat or function() end
-    FCF_Set_ChatLocked = FCF_Set_ChatLocked or function() end
-    SetChatMouseOverDelay = SetChatMouseOverDelay or function() end
-    MultiActionBar_ShowAllGrids = MultiActionBar_ShowAllGrids or function() end
-    RaidOptionsFrame_UpdatePartyFrames = RaidOptionsFrame_UpdatePartyFrames or function() end
-    -- …and the one its own CHECK BUTTONS reach: three of them register VARIABLES_LOADED for
-    -- themselves (xml l.373, 925, 993), and CheckButton43's arm calls `PartyFrame.lua`'s
-    -- `UpdatePartyMemberBackground`. The other two call the file's own dropdown loaders.
-    UpdatePartyMemberBackground = UpdatePartyMemberBackground or function() end
-"#;
-
-/// What a kit owes stock `MultiActionBars.xml`: its OnLoad (`MultiActionBars.lua:10`) writes five
-/// rows into `UIOptionsFrameCheckButtons`, which `UIOptionsFrame.xml` declares eighteen toc rows
-/// earlier; `or {}` keeps the real table when that file loaded first.
-pub(super) const MULTI_ACTION_BAR_STAND_INS: &str = r#"
-    UIOptionsFrameCheckButtons = UIOptionsFrameCheckButtons or {}
-    -- The five ROWS it writes into, not just the table: the reference's hack assigns
-    -- `UIOptionsFrameCheckButtons["SHOW_MULTIBAR1_TEXT"].setFunc`, which needs the row to exist.
-    -- Empty rows on purpose — the real ones carry `index = 33..36, 40`, and a stand-in that
-    -- restated those numbers would be a transcription of the reference's table in a test helper,
-    -- which `OptionsFrame.xml` does not carry either. Any kit that reads an index has the
-    -- real window loaded and therefore the real table.
-    for _, key in ipairs({ "SHOW_MULTIBAR1_TEXT", "SHOW_MULTIBAR2_TEXT", "SHOW_MULTIBAR3_TEXT",
-                           "SHOW_MULTIBAR4_TEXT", "ALWAYS_SHOW_MULTIBARS_TEXT" }) do
-        UIOptionsFrameCheckButtons[key] = UIOptionsFrameCheckButtons[key] or {}
-    end
-"#;
-
-/// What a kit owes the stock micro-button row: `UpdateMicroButtons`
-/// (`MainMenuBarMicroButtons.lua:20-84`) reads ten panels, `KeyRingButton` and `IsBagOpen`
-/// unguarded. Hidden, unnamed stand-ins are seated on its first call, not at load: a named frame's
-/// publish never overwrites (`0x701bd0`), so an early one would shadow the real frame.
-/// `tests/common/mod.rs` carries the same chunk.
-pub(super) const MICRO_BUTTON_STAND_INS: &str = r#"
-    local real = UpdateMicroButtons
-    function UpdateMicroButtons()
-        for _, name in ipairs({ "CharacterFrame", "SpellBookFrame", "QuestLogFrame", "GameMenuFrame",
-            "OptionsFrame", "SoundOptionsFrame", "UIOptionsFrame", "FriendsFrame", "WorldMapFrame",
-            "HelpFrame" }) do
-            if not getglobal(name) then local f = CreateFrame("Frame") f:Hide() setglobal(name, f) end
-        end
-        if not KeyRingButton then KeyRingButton = CreateFrame("Button") KeyRingButton:Hide() end
-        if not KEYRING_CONTAINER then KEYRING_CONTAINER = -2 end
-        if not IsBagOpen then function IsBagOpen() return nil end end
-        return real()
-    end
-"#;
 
 /// One file's bytes, off the chain for a path or from this crate's `assets/ui` for a bare name;
 /// also the loader's `<Include>`/`<Script file=>` provider.
@@ -680,7 +487,7 @@ pub(super) fn bag_open(s: &UiScript, id: i64) -> bool {
 
 /// The item button in bag `id`'s open window that holds game slot `slot`, found by `GetID`:
 /// `ContainerFrame_GenerateFrame` numbers the buttons backwards (`index = size - j + 1`).
-pub(super) fn bag_slot_button(s: &UiScript, id: i64, slot: u32) -> String {
+pub(super) fn bag_slot_button(s: &mut UiScript, id: i64, slot: u32) -> String {
     let w = bag_window(s, id).unwrap_or_else(|| panic!("bag {id} is not open"));
     s.eval::<String>(&format!(
         "for j = 1, MAX_CONTAINER_ITEMS do \
@@ -797,10 +604,10 @@ mod tests {
     #[test]
     fn a_kit_out_of_the_production_order_fails_at_the_load() {
         let _data = benilla_formats::wow_data_or_skip!();
-        let s = UiScript::new().unwrap();
-        super::load_ui(&s, r"Interface\FrameXML\Fonts.xml");
+        let mut s = UiScript::new().unwrap();
+        super::load_ui(&mut s, r"Interface\FrameXML\Fonts.xml");
         let late = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            super::load_ui(&s, r"Interface\FrameXML\GlobalStrings.lua")
+            super::load_ui(&mut s, r"Interface\FrameXML\GlobalStrings.lua")
         }));
         let message = late.expect_err("GlobalStrings.lua after Fonts.xml loaded");
         let message = message

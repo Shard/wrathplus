@@ -12,22 +12,22 @@ fn harness() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     // The title's `text="QUEST_TIMERS"` resolves at load; an unknown name draws as the key.
-    load_xml(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
     // `SecondsToTime` for every row, `UIParent_ManageFramePositions` for OnShow and OnHide.
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
     // QuestLogFrame.xml brings `MAX_QUESTS` (`QuestLogFrame.lua:2`), the repaint's loop bound.
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, r"Interface\FrameXML\MainMenuBarMicroButtons.xml");
-    load_xml(&s, "Interface\\FrameXML\\ItemButtonTemplate.xml");
-    load_xml(&s, "Interface\\FrameXML\\QuestFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\QuestLogFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\QuestTimerFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MainMenuBarMicroButtons.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\ItemButtonTemplate.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\QuestFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\QuestLogFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\QuestTimerFrame.xml");
     s
 }
 

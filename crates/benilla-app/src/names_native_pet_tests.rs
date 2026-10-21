@@ -1,5 +1,5 @@
 use super::*;
-use crate::ui_native_pet_name::{NativePetNamePackets, UiNativePetNamePlugin};
+use crate::net::wrath_pet_name_capture::{NativePetNamePackets, UiNativePetNamePlugin};
 use benilla_protocol::{wrath_pet_name::Response, SessionEvent};
 use bevy::ecs::system::RunSystemOnce;
 fn response(name: &[u8]) -> Response {
