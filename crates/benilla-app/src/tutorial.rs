@@ -84,11 +84,6 @@ pub(crate) const TARGETING_DELAY_MS: u32 = 10_000;
 const MOVEMENT_SILENCE: Duration = Duration::from_millis(90_000);
 
 pub(crate) use crate::app_core::state::TutorialEvent;
-impl TutorialEvent {
-    pub(crate) const fn trigger(id: u32) -> Self {
-        Self::Trigger { id, delay_ms: 0 }
-    }
-}
 
 /// A send the drains owe the wire.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -585,7 +580,7 @@ impl Plugin for TutorialPlugin {
                     // simply waits for the first frame with an interface.
                     feed_tutorials
                         .in_set(UiFeed)
-                        .run_if(crate::ui_script::ingame_ui_up),
+                        .run_if(crate::app_core::ui_state::ingame_ui_up),
                     drain_tutorials.after(UiInput),
                 ),
             )

@@ -60,12 +60,8 @@ pub(crate) fn lua_bag_pos(bag_index: u8, slot: u8) -> Option<(i64, u32)> {
 /// The inverse of [`wire_pos_for`] over every place an item with sockets can sit: worn and the bag
 /// slots themselves ([`EQUIPMENT_BAG`], 1-based inventory id), the backpack and bags, the bank and
 /// the bank bags; the keyring is left out.
-pub(crate) fn lua_pos_for(
-    layout: benilla_protocol::types::FieldLayout,
-    bag_index: u8,
-    slot: u8,
-) -> Option<(i64, u32)> {
-    let storage = StorageSlots::for_layout(layout);
+pub(crate) fn lua_pos_for(bag_index: u8, slot: u8) -> Option<(i64, u32)> {
+    let storage = StorageSlots::GEOMETRY;
     if bag_index == BAG_PLAYER_INVENTORY {
         return match slot {
             s if s < SLOT_PACK_FIRST => Some((EQUIPMENT_BAG, u32::from(s) + 1)),
@@ -92,12 +88,8 @@ pub(crate) fn lua_pos_for(
     lua_bag_pos(bag_index, slot)
 }
 
-pub(crate) fn wire_pos_for(
-    layout: benilla_protocol::types::FieldLayout,
-    bag: i64,
-    slot1: u32,
-) -> Option<(u8, u8)> {
-    let storage = StorageSlots::for_layout(layout);
+pub(crate) fn wire_pos_for(bag: i64, slot1: u32) -> Option<(u8, u8)> {
+    let storage = StorageSlots::GEOMETRY;
     let slot0 = u8::try_from(slot1.checked_sub(1)?).ok()?;
     match bag {
         0 if slot0 < PACK_SLOTS => Some((BAG_PLAYER_INVENTORY, SLOT_PACK_FIRST + slot0)),
@@ -125,11 +117,7 @@ pub(crate) fn wire_pos_for(
 
 #[cfg(test)]
 fn wire_pos(bag: i64, slot1: u32) -> Option<(u8, u8)> {
-    wire_pos_for(
-        benilla_protocol::types::FieldLayout::Wrath12340,
-        bag,
-        slot1,
-    )
+    wire_pos_for(bag, slot1)
 }
 
 /// One inventory refusal off the wire, with the fills of the only two reasons that format one.
@@ -665,7 +653,6 @@ mod tests {
     /// `lua_pos_for` inverts the Wrath `wire_pos_for` everywhere a socketed item can sit.
     #[test]
     fn lua_pos_for_inverts_the_wrath_wire_positions() {
-        let wrath = benilla_protocol::types::FieldLayout::Wrath12340;
         for (bag, slot) in [
             (EQUIPMENT_BAG, 1),
             (EQUIPMENT_BAG, 19),
@@ -675,11 +662,11 @@ mod tests {
             (BANK_BAG_ID_FIRST, 1),
             (BANK_BAG_ID_FIRST + 6, 36),
         ] {
-            let (b, s) = wire_pos_for(wrath, bag, slot).unwrap();
-            assert_eq!(lua_pos_for(wrath, b, s), Some((bag, slot)), "{bag} {slot}");
+            let (b, s) = wire_pos_for(bag, slot).unwrap();
+            assert_eq!(lua_pos_for(b, s), Some((bag, slot)), "{bag} {slot}");
         }
-        let (b, s) = wire_pos_for(wrath, KEYRING_CONTAINER, 1).unwrap();
-        assert_eq!(lua_pos_for(wrath, b, s), None, "the keyring");
+        let (b, s) = wire_pos_for(KEYRING_CONTAINER, 1).unwrap();
+        assert_eq!(lua_pos_for(b, s), None, "the keyring");
     }
 
     /// `lua_bag_pos` inverts `wire_pos` over the backpack and the four bags, and nowhere else.
@@ -994,20 +981,13 @@ mod find_item_tests {
     use benilla_protocol::ObjectFields;
 
     // Descriptor field indices, raw.
-    const ENTRY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ObjectEntry); // OBJECT_FIELD_ENTRY
-    const CHARGES: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ItemSpellCharges); // ITEM_FIELD_SPELL_CHARGES[0]
-    const NUM_SLOTS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ContainerNumSlots); // CONTAINER_FIELD_NUM_SLOTS
-    const SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ContainerSlot1); // CONTAINER_FIELD_SLOT_1 (2 fields per guid)
-    const INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerInvSlotHead); // PLAYER_FIELD_INV_SLOT_HEAD (2 per guid, 23 slots)
-    const PACK_SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerPackSlot1); // PLAYER_FIELD_PACK_SLOT_1 (2 per guid, 16 slots)
-    const KEYRING_SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerKeyringSlot1); // PLAYER_FIELD_KEYRING_SLOT_1 (2 per guid, player slots 81..)
+    const ENTRY: u16 = benilla_protocol::types::Field::ObjectEntry.index(); // OBJECT_FIELD_ENTRY
+    const CHARGES: u16 = benilla_protocol::types::Field::ItemSpellCharges.index(); // ITEM_FIELD_SPELL_CHARGES[0]
+    const NUM_SLOTS: u16 = benilla_protocol::types::Field::ContainerNumSlots.index(); // CONTAINER_FIELD_NUM_SLOTS
+    const SLOT_1: u16 = benilla_protocol::types::Field::ContainerSlot1.index(); // CONTAINER_FIELD_SLOT_1 (2 fields per guid)
+    const INV_SLOT_HEAD: u16 = benilla_protocol::types::Field::PlayerInvSlotHead.index(); // PLAYER_FIELD_INV_SLOT_HEAD (2 per guid, 23 slots)
+    const PACK_SLOT_1: u16 = benilla_protocol::types::Field::PlayerPackSlot1.index(); // PLAYER_FIELD_PACK_SLOT_1 (2 per guid, 16 slots)
+    const KEYRING_SLOT_1: u16 = benilla_protocol::types::Field::PlayerKeyringSlot1.index(); // PLAYER_FIELD_KEYRING_SLOT_1 (2 per guid, player slots 81..)
 
     const TRINKET: u32 = 12_930;
     const BAG: u32 = 4_500;
@@ -1216,8 +1196,7 @@ mod find_item_tests {
 
     /// A player with items in the bank band (`PLAYER_FIELD_BANK_SLOT_1`).
     fn bank_player(slots: &std::collections::HashMap<u16, u64>) -> ObjectFields {
-        const BANK_SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::PlayerBankSlot1); // PLAYER_FIELD_BANK_SLOT_1 (2 per guid, player slots 39..62)
+        const BANK_SLOT_1: u16 = benilla_protocol::types::Field::PlayerBankSlot1.index(); // PLAYER_FIELD_BANK_SLOT_1 (2 per guid, player slots 39..62)
         let mut pairs = Vec::new();
         for (&idx, &guid) in slots {
             let base = BANK_SLOT_1 + 2 * (idx - 39);
@@ -1236,24 +1215,15 @@ mod count_of_tests {
     use benilla_protocol::ObjectFields;
 
     // Descriptor field indices, raw.
-    const ENTRY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ObjectEntry); // OBJECT_FIELD_ENTRY
-    const STACK: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ItemStackCount); // ITEM_FIELD_STACK_COUNT
-    const NUM_SLOTS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ContainerNumSlots); // CONTAINER_FIELD_NUM_SLOTS
-    const SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ContainerSlot1); // CONTAINER_FIELD_SLOT_1 (2 fields per guid)
-    const INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerInvSlotHead); // player slots 0..22
-    const PACK_SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerPackSlot1); // player slots 23..38
-    const BANK_SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerBankSlot1); // player slots 39..62
-    const BANK_BAG_SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerBankbagSlot1); // player slots 63..68
-    const KEYRING_SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerKeyringSlot1); // player slots 81..112
+    const ENTRY: u16 = benilla_protocol::types::Field::ObjectEntry.index(); // OBJECT_FIELD_ENTRY
+    const STACK: u16 = benilla_protocol::types::Field::ItemStackCount.index(); // ITEM_FIELD_STACK_COUNT
+    const NUM_SLOTS: u16 = benilla_protocol::types::Field::ContainerNumSlots.index(); // CONTAINER_FIELD_NUM_SLOTS
+    const SLOT_1: u16 = benilla_protocol::types::Field::ContainerSlot1.index(); // CONTAINER_FIELD_SLOT_1 (2 fields per guid)
+    const INV_SLOT_HEAD: u16 = benilla_protocol::types::Field::PlayerInvSlotHead.index(); // player slots 0..22
+    const PACK_SLOT_1: u16 = benilla_protocol::types::Field::PlayerPackSlot1.index(); // player slots 23..38
+    const BANK_SLOT_1: u16 = benilla_protocol::types::Field::PlayerBankSlot1.index(); // player slots 39..62
+    const BANK_BAG_SLOT_1: u16 = benilla_protocol::types::Field::PlayerBankbagSlot1.index(); // player slots 63..68
+    const KEYRING_SLOT_1: u16 = benilla_protocol::types::Field::PlayerKeyringSlot1.index(); // player slots 81..112
 
     const AMMO: u32 = 3_030; // the collect-quest item under test
 
@@ -1385,12 +1355,11 @@ mod count_of_tests {
 #[cfg(test)]
 mod storage_tests {
     use super::*;
-    use benilla_protocol::types::FieldLayout;
 
     #[test]
     fn storage_boundaries_and_native_positions_preserve_vanilla() {
-        let (layout, bank, bags, first, key, keys) = (FieldLayout::Wrath12340, 28, 7, 67, 86, 32);
-        let geometry = StorageSlots::for_layout(layout);
+        let (bank, bags, first, key, keys) = (28, 7, 67, 86, 32);
+        let geometry = StorageSlots::GEOMETRY;
         assert_eq!(
             (
                 geometry.bank_slots,
@@ -1411,7 +1380,7 @@ mod storage_tests {
             (4 + i64::from(bags), 36, first + bags - 1, 0),
         ] {
             for slot in [1, u32::from(count)] {
-                let position = wire_pos_for(layout, bag, slot).unwrap();
+                let position = wire_pos_for(bag, slot).unwrap();
                 assert_eq!(position, (wire_bag, wire_first + slot as u8 - 1));
                 // Independently decode the server position into the snapshot container.
                 let snapshot_bag = if position.0 == 255 {
@@ -1429,19 +1398,16 @@ mod storage_tests {
                 // Independently invert this container's byte position into its Lua slot.
                 assert_eq!(u32::from(position.1 - wire_first) + 1, slot);
                 assert_eq!(
-                    wire_pos_for(layout, bag, u32::from(position.1 - wire_first) + 1),
+                    wire_pos_for(bag, u32::from(position.1 - wire_first) + 1),
                     Some(position)
                 );
             }
-            assert_eq!(wire_pos_for(layout, bag, 0), None);
-            assert_eq!(wire_pos_for(layout, bag, u32::from(count) + 1), None);
+            assert_eq!(wire_pos_for(bag, 0), None);
+            assert_eq!(wire_pos_for(bag, u32::from(count) + 1), None);
         }
-        assert_eq!(wire_pos_for(layout, geometry.last_bag() + 1, 1), None);
+        assert_eq!(wire_pos_for(geometry.last_bag() + 1, 1), None);
         for level in [1, 39, 40, 49, 50, 60, 61, 80] {
-            assert_eq!(
-                StorageSlots::for_layout(FieldLayout::Wrath12340).keyring_size(level),
-                32
-            );
+            assert_eq!(StorageSlots::GEOMETRY.keyring_size(level), 32);
         }
     }
 }

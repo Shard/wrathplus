@@ -574,8 +574,8 @@ mod wrath_words {
     use super::*;
     #[test]
     fn native_pickup_and_book_keep_full_word_and_getter_arity() {
-        use crate::script::{PetActionView, PetBookState, ScriptDialect, SpellSlotView, UiScript};
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        use crate::script::{PetActionView, PetBookState, SpellSlotView, UiScript};
+        let mut script = UiScript::new().unwrap();
         assert_eq!(
             script
                 .eval::<u32>("return select('#', GetPetActionInfo(1))")

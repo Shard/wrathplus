@@ -2,6 +2,7 @@
 //! pointer's click and hover, the glue canvas, the realm list and the login intent; their owners
 //! keep the systems and re-export the types.
 
+use crate::realm_select::RealmsSelect;
 use benilla_formats::RealmCategory;
 use benilla_protocol::RealmInfo;
 use bevy::prelude::*;
@@ -109,6 +110,73 @@ pub(crate) struct Realms {
     pub(crate) env_read: bool,
 }
 
+impl Realms {}
+
+impl Realms {}
+
+impl Realms {
+    /// `RealmList.selectedCategory`: nil until the first `RealmListUpdate` makes it 1.
+    pub(crate) fn category(&self) -> usize {
+        self.category.unwrap_or(1)
+    }
+
+    /// The rebuild's tail (`0x46e6f0`): the category holding the realm this session names becomes
+    /// the stored one; with no such realm, or one on no tab, it is left as it was.
+    pub(crate) fn store_current_category(&mut self) {
+        let (Some(categories), Some(want)) = (&self.categories, &self.current) else {
+            return;
+        };
+        // The walk visits every realm, so the last one of the name decides.
+        let Some(realm) = self
+            .realms
+            .iter()
+            .rfind(|r| r.name.eq_ignore_ascii_case(want))
+        else {
+            return;
+        };
+        let byte = match realm.category {
+            0 => match categories.first() {
+                Some(first) => first.id,
+                None => return,
+            },
+            b => u32::from(b),
+        };
+        if let Some(at) = categories.iter().position(|c| c.id == byte) {
+            self.chosen_category = Some(at);
+        }
+    }
+}
+
+impl Realms {
+    /// The highlighted realm, if it is still on the list.
+    pub(crate) fn selected(&self) -> Option<&RealmInfo> {
+        let name = self.selected.as_deref()?;
+        self.realms.iter().find(|r| r.name == name)
+    }
+
+    /// Highlight a realm by name.
+    pub(crate) fn select(&mut self, name: &str) {
+        self.selected = Some(name.to_string());
+    }
+
+    /// `RealmListUpdate` with no clicked name: the highlight is the row `GetRealmInfo` flags
+    /// `currentRealm`, [`Self::current`] case-folded, on the tab in front, or none.
+    pub(crate) fn highlight_current(&mut self) {
+        self.selected = self.current.as_deref().and_then(|want| {
+            self.rows()
+                .into_iter()
+                .map(|i| &self.realms[i])
+                .find(|r| r.name.eq_ignore_ascii_case(want))
+                .map(|r| r.name.clone())
+        });
+    }
+
+    /// `RealmList:Hide()`, and nothing else.
+    pub(crate) fn hide(&mut self) {
+        self.shown = false;
+    }
+}
+
 /// One of the four sort columns, `SortRealms`' string argument.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum SortKey {
@@ -128,6 +196,23 @@ pub(crate) enum SortKey {
 /// (`0x46e430`), so a click persists for the session. Ascending characters is higher count first.
 #[derive(Clone, Copy)]
 pub(crate) struct Sort(pub(crate) [(SortKey, bool); 4]);
+
+impl Sort {
+    /// A column header click (`0x46e9b0`): the front key toggles its direction; any other moves
+    /// to the front keeping its direction, and the records it passes shift down.
+    pub(crate) fn click(&mut self, key: SortKey) {
+        if self.0[0].0 == key {
+            self.0[0].1 = !self.0[0].1;
+            return;
+        }
+        let Some(at) = self.0.iter().position(|(k, _)| *k == key) else {
+            return;
+        };
+        let record = self.0[at];
+        self.0.copy_within(0..at, 1);
+        self.0[0] = record;
+    }
+}
 
 /// Where the IO thread's read loop is, as far as the app can tell; credentials are submitted
 /// only while it is parked pre-logon.
@@ -156,4 +241,18 @@ pub(crate) struct LoginIntent {
     pub(crate) retry_at: Option<f32>,
     /// The env fast path is read once, on the first policy run.
     pub(crate) env_read: bool,
+}
+
+impl LoginIntent {
+    /// Forget the session's credentials and any scheduled retry.
+    pub(crate) fn clear(&mut self) {
+        self.creds = None;
+        self.retry_at = None;
+    }
+
+    /// The account this session authenticated as, from the env fast path or the screen; it
+    /// decides whether the probe shield applies.
+    pub(crate) fn account(&self) -> Option<&str> {
+        self.creds.as_ref().map(|(user, _)| user.as_str())
+    }
 }

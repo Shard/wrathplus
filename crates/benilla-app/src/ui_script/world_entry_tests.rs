@@ -816,11 +816,8 @@ fn the_login_one_shots_wait_for_the_in_game_ui() {
         crate::net::SelfPlayer,
         crate::net::Guid(1),
         crate::net::ObjectStore(
-            benilla_protocol::types::ObjectFields::from_fields(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[],
-            )
-            .into_created(benilla_protocol::types::ObjectType::Player),
+            benilla_protocol::types::ObjectFields::from_fields(&[])
+                .into_created(benilla_protocol::types::ObjectType::Player),
         ),
     ));
 
@@ -1157,7 +1154,7 @@ fn the_ui_is_not_up_in_the_frame_between_the_wire_and_the_state() {
 fn run_ingame_ui_up(world: &mut World) -> bool {
     use bevy::ecs::system::RunSystemOnce;
     world
-        .run_system_once(super::lifecycle::ingame_ui_up)
+        .run_system_once(super::ingame_ui_up)
         .expect("the condition runs")
 }
 

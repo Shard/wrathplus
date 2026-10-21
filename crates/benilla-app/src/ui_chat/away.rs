@@ -12,12 +12,6 @@ use super::event::{ChatEvent, ChatEventKind};
 use super::feed::ChatLog;
 
 pub(crate) use crate::app_core::state::AfkMirror;
-impl AfkMirror {
-    /// Non-zero, as all six of the reference's readers test it.
-    pub(crate) fn is_afk(self) -> bool {
-        self.0 != 0
-    }
-}
 
 /// What a `/afk` or `/dnd` resolves to: the line to print, the mirror's new value, the wire body.
 #[derive(Debug, Clone, PartialEq, Eq)]

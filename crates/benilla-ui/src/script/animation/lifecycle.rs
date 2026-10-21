@@ -70,10 +70,10 @@ pub(super) fn advance(
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
     #[test]
     fn individual_orders_delays_and_repeat_crossings_fire_once() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run("f=CreateFrame('Frame');g=f:CreateAnimationGroup();a=g:CreateAnimation();a:SetDuration(1);b=g:CreateAnimation();b:SetOrder(2);b:SetStartDelay(.5);b:SetDuration(1);events='';for i,v in ipairs({a,b}) do v:SetScript('OnPlay',function() events=events..i..'p' end);v:SetScript('OnFinished',function() events=events..i..'f' end) end;g:Play()").unwrap();
         s.tick(1.25);
         assert_eq!(s.eval::<String>("return events").unwrap(), "1p1f");
@@ -90,7 +90,7 @@ mod tests {
     }
     #[test]
     fn bounce_exact_boundaries_pause_and_child_play_do_not_duplicate() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run("f=CreateFrame('Frame');g=f:CreateAnimationGroup();a=g:CreateAnimation();a:SetDuration(1);events='';a:SetScript('OnPlay',function() events=events..'p' end);a:SetScript('OnFinished',function() events=events..'f' end);g:SetLooping('BOUNCE');g:SetScript('OnLoop',function() events=events..'l' end);a:Play()").unwrap();
         s.tick(1.0);
         assert_eq!(s.eval::<String>("return events").unwrap(), "pflp");
@@ -107,7 +107,7 @@ mod tests {
 
     #[test]
     fn smooth_progress_and_stop_animating() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run("f=CreateFrame('Frame');t=f:CreateTexture();g=t:CreateAnimationGroup();a=g:CreateAnimation('Alpha');a:SetDuration(1);a:SetSmoothing('IN');stops=0;g:SetScript('OnStop',function() stops=stops+1 end);g:Play()").unwrap();
         s.tick(0.5);
         assert!(s.eval::<bool>("return math.abs(a:GetProgress()-0.5)<1e-6 and math.abs(a:GetSmoothProgress()-0.25)<1e-6").unwrap());
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn child_callback_can_stop_without_later_callbacks_or_group_finish() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run("f=CreateFrame('Frame');g=f:CreateAnimationGroup();a=g:CreateAnimation();a:SetDuration(1);b=g:CreateAnimation();b:SetOrder(2);b:SetDuration(1);events='';a:SetScript('OnFinished',function() events=events..'a';g:Stop() end);b:SetScript('OnPlay',function() events=events..'b' end);g:SetScript('OnFinished',function() events=events..'g' end);g:Play()").unwrap();
         s.tick(3.0);
         assert_eq!(s.eval::<String>("return events").unwrap(), "a");

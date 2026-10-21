@@ -379,7 +379,7 @@ fn run_warm_pass(
             .entity(warm_booth.0)
             .insert((WarmRig, WarmBoothCam));
         // The orthographic twin, the projection class the UI model tile atlas draws through.
-        let warm_ortho = crate::ui_models::spawn_warm_tile_cam(&mut commands, &mut lanes.images);
+        let warm_ortho = crate::portrait::spawn_warm_tile_cam(&mut commands, &mut lanes.images);
         commands.entity(warm_ortho.0).insert(WarmRig);
         // The effect lane's stand-in texture, held for the life of the pass.
         warm.effect_tex = Some(lanes.images.add(Image::default()));

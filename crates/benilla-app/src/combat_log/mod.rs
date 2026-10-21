@@ -70,7 +70,7 @@ impl Plugin for CombatLogPlugin {
             Update,
             native::feed
                 .in_set(crate::ui_script::UiFeed)
-                .run_if(crate::ui_script::ingame_ui_up),
+                .run_if(crate::app_core::ui_state::ingame_ui_up),
         );
         app.net_handler(K::WrathAttackerState, on_native_logged)
             .net_handler(K::SpellDamageLog, on_spell_damage_log)
@@ -83,9 +83,9 @@ impl Plugin for CombatLogPlugin {
             .net_handler(K::SpellInstaKillLog, on_native_logged)
             .net_handler(K::SpellDispelLog, on_native_logged)
             .net_handler(K::DispelFailed, on_native_logged)
-            .net_handler(K::ProcResist, on_unlogged)
+            .net_handler(K::ProcResist, on_native_logged)
             .net_handler(K::SpellOrDamageImmune, on_unlogged)
-            .net_handler(K::EnchantmentLog, on_unlogged)
+            .net_handler(K::EnchantmentLog, on_native_logged)
             .net_handler(K::SpellLogExecute, on_spell_log_execute)
             .net_handler(K::WrathEnvironmentalDamage, on_native_logged)
             .net_handler(K::XpGain, on_xp_gain)
@@ -129,6 +129,8 @@ fn on_native_logged(In(ev): In<SessionEvent>, mut l: Sinks) {
             | SessionEvent::SpellDispelLog(_)
             | SessionEvent::DispelFailed(_)
             | SessionEvent::WrathEnvironmentalDamage(_)
+            | SessionEvent::ProcResist(_)
+            | SessionEvent::EnchantmentLog(_)
     ) {
         l.record_native(&ev);
     }
@@ -143,18 +145,13 @@ fn on_spell_log_execute(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
     }
 }
 
-/// The combat-log packets the build-12340 log has no entry for yet, and the 1.12 sentence that
-/// showed them is gone: a resisted proc and an immune target (`SPELL_MISSED` `RESIST`/`IMMUNE` in
-/// 3.3.5), and an item enchant (`ENCHANT_APPLIED`/`ENCHANT_REMOVED`). A listed gap, said at debug
-/// so a live run can count them.
+/// `SMSG_SPELLORDAMAGE_IMMUNE`, which has no traced build-12340 entry: the combat-log table
+/// `0x7538a0` registers no handler for `0x263`, and the 1.12 sentence that showed it is gone. A
+/// labelled gap, said at debug so a live run can count it.
 fn on_unlogged(In(ev): In<SessionEvent>) {
-    let what = match ev {
-        SessionEvent::ProcResist(_) => "ProcResist",
-        SessionEvent::SpellOrDamageImmune(_) => "SpellOrDamageImmune",
-        SessionEvent::EnchantmentLog(_) => "EnchantmentLog",
-        _ => return,
-    };
-    debug!("combat log: no build-12340 entry for {what}");
+    if let SessionEvent::SpellOrDamageImmune(_) = ev {
+        debug!("combat log: no build-12340 entry for SpellOrDamageImmune");
+    }
 }
 
 fn on_spell_damage_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {

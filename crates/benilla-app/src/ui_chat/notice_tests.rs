@@ -4,6 +4,7 @@
 //! joined channels (`0x49aa1e`-`0x49aa48`) and fills arg7-arg9 from that record (`0x49b10c`-
 //! `0x49b12a`). Without that stamp the stock filter (`ChatFrame.lua:1373-1392`) prints nothing.
 
+use crate::ui_chat::feed::ChatLogFeed;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 

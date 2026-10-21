@@ -29,18 +29,6 @@ const TAB_VIEW: u32 = 1;
 const TAB_DEPOSIT: u32 = 2;
 
 pub(crate) use crate::app_core::interaction::GuildBankOpen;
-impl GuildBankOpen {
-    /// The object click on a guild vault (`GAMEOBJECT_TYPE_GUILD_BANK`).
-    pub(crate) fn open(&mut self, banker: u64) {
-        self.banker = Some(banker);
-        self.pending = true;
-    }
-
-    /// The vault in use, for the bank writers that name it.
-    pub(crate) fn banker(&self) -> Option<u64> {
-        self.banker
-    }
-}
 
 #[derive(Resource, Default)]
 pub(crate) struct GuildBank {
@@ -244,11 +232,7 @@ fn command(
             bag_slot,
             count,
         } => {
-            let (container, container_slot) = crate::ui_items::wire_pos_for(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                bag,
-                bag_slot,
-            )?;
+            let (container, container_slot) = crate::ui_items::wire_pos_for(bag, bag_slot)?;
             ClientCommand::NativeGuildBankSwap(Swap {
                 banker,
                 transfer: Transfer::BankToInventory {
@@ -318,11 +302,7 @@ pub(crate) fn feed_guild_bank(
     for request in script.take_wrath_guild_bank_requests() {
         let held = match request {
             WrathGuildBankRequest::PickupItem { .. } => script.cursor_item().and_then(|item| {
-                let (container, slot) = crate::ui_items::wire_pos_for(
-                    benilla_protocol::types::FieldLayout::Wrath12340,
-                    item.bag,
-                    item.slot,
-                )?;
+                let (container, slot) = crate::ui_items::wire_pos_for(item.bag, item.slot)?;
                 Some((container, slot, item.count.map_or(0, |n| n as i32)))
             }),
             _ => None,

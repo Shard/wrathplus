@@ -306,10 +306,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{InvSlotView, ItemTemplateView, ScriptDialect, UiScript, UnitState};
+    use crate::script::{InvSlotView, ItemTemplateView, UiScript, UnitState};
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_unit("player", Some(UnitState { guid: 1, exists: true, ..Default::default() }));
         s.model_mut().unit_guids.player = 1;
         s.set_item_template(
@@ -362,11 +362,11 @@ mod tests {
 
 #[cfg(test)]
 mod widget_tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn minimum_width_anchor_type_focus_field_size_and_region_parent() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run("P = CreateFrame('Frame') T = CreateFrame('GameTooltip', 'WTip', P) T:SetOwner(P, 'ANCHOR_RIGHT') T:SetMinimumWidth(120) T:SetAnchorType('ANCHOR_LEFT', 5, 0) E = CreateFrame('EditBox', 'WBox', P) F = P:CreateFontString() G = P:CreateAnimationGroup() A = G:CreateAnimation('Alpha')").unwrap();
         for check in [
             "select(1, T:GetMinimumWidth()) == 120 and select(2, T:GetMinimumWidth()) == 1",
@@ -386,11 +386,11 @@ mod widget_tests {
 
 #[cfg(test)]
 mod debug_tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn frame_stack_lists_and_battle_net_stays_inert() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run("P = CreateFrame('Frame', 'StackOwner') T = CreateFrame('GameTooltip', 'StackTip', P) T:SetOwner(P, 'ANCHOR_NONE') T:SetFrameStack(true)").unwrap();
         for check in [
             "select('#', BNIsSelf(1)) == 0 and select('#', BNGetMatureLanguageFilter()) == 0",

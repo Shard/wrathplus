@@ -519,7 +519,7 @@ mod tests {
     /// non-finite amount is dropped.
     #[test]
     fn the_flying_era_names_fire_the_ground_verb_and_hold_the_vertical_key() {
-        let mut s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run("JumpOrAscendStart() SitStandOrDescendStart()")
             .unwrap();
         assert!(

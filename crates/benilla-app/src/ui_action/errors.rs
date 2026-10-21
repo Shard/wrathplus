@@ -15,122 +15,10 @@ pub(crate) use crate::app_core::errors::{
     CastErrors, CastFail, Caster, FillArg, MountErrors, PetTameFailures, UiError, UiErrorKeys,
     UiErrorTexts,
 };
-impl CastFail {
-    /// A client-local refusal, with no argument word; always the player's, since the server
-    /// decides every pet refusal.
-    pub(crate) const fn local(spell_id: u32, reason: u8) -> Self {
-        Self {
-            spell_id,
-            reason,
-            arg: None,
-            caster: Caster::Player,
-            redisplay: false,
-        }
-    }
-
-    /// The same entry, marked as a [`Self::redisplay`].
-    pub(crate) const fn requeued(self) -> Self {
-        Self {
-            redisplay: true,
-            ..self
-        }
-    }
-}
-
-impl CastErrors {
-    /// Queue a [`CastFail::local`] refusal.
-    pub(crate) fn push_local(&mut self, spell_id: u32, reason: u8) {
-        self.0.push(CastFail::local(spell_id, reason));
-    }
-
-    /// Queue a client-local refusal with an argument word, the crowd-control `0x8d`.
-    pub(crate) fn push_local_arg(&mut self, spell_id: u32, reason: u8, arg: u32) {
-        self.0.push(CastFail {
-            spell_id,
-            reason,
-            arg: Some(arg),
-            caster: Caster::Player,
-            redisplay: false,
-        });
-    }
-
-    /// Queue the pet's `SMSG_PET_CAST_FAILED` refusal, which carries no argument word
-    /// (vmangos `Packets/Pet.cpp:127-132`).
-    pub(crate) fn push_pet(&mut self, spell_id: u32, reason: u8) {
-        self.0.push(CastFail {
-            spell_id,
-            reason,
-            arg: None,
-            caster: Caster::Pet,
-            redisplay: false,
-        });
-    }
-}
 
 /// Where a message shows: the `kind` field (`+0x04`) of the reference's message record, read from
 /// the catalog ([`benilla_ui::messages`]).
 pub(crate) use benilla_ui::messages::MsgKind;
-
-impl UiError {
-    /// A message with no arguments.
-    pub(crate) fn key(key: &'static str) -> Self {
-        Self {
-            key,
-            args: Vec::new(),
-        }
-    }
-
-    /// One string, the `_S` family.
-    pub(crate) fn s(key: &'static str, s: impl Into<String>) -> Self {
-        Self {
-            key,
-            args: vec![FillArg::S(s.into())],
-        }
-    }
-
-    /// Several strings in push order, the `_SS`/`_SSS` family.
-    pub(crate) fn strings(key: &'static str, args: &[&str]) -> Self {
-        Self {
-            key,
-            args: args.iter().map(|s| FillArg::S((*s).to_string())).collect(),
-        }
-    }
-
-    /// A mixed list, for a template whose specifiers are not all `%s`.
-    pub(crate) fn args(key: &'static str, args: Vec<FillArg>) -> Self {
-        Self { key, args }
-    }
-
-    /// The first string argument.
-    #[cfg(test)]
-    pub(crate) fn arg_s(&self) -> Option<&str> {
-        self.args.iter().find_map(|a| match a {
-            FillArg::S(s) => Some(s.as_str()),
-            FillArg::D(_) => None,
-        })
-    }
-
-    /// The first integer argument.
-    #[cfg(test)]
-    pub(crate) fn arg_d(&self) -> Option<i64> {
-        self.args.iter().find_map(|a| match a {
-            FillArg::D(d) => Some(*d),
-            FillArg::S(_) => None,
-        })
-    }
-}
-
-impl UiErrorTexts {
-    /// The red `UI_ERROR_MESSAGE` arm (`0x4945b0(text, 1)`).
-    pub(crate) fn error(&mut self, text: String) {
-        self.0.push((text, MsgKind::Error));
-    }
-
-    /// The yellow `UI_INFO_MESSAGE` arm (`0x4945b0(text, 0)`).
-    pub(crate) fn info(&mut self, text: String) {
-        self.0.push((text, MsgKind::Info));
-    }
-}
 
 /// Resolve a [`UiError`] to its text, the template filled in push order. Deviation: an absent or
 /// empty result shows nothing, where the reference shows an empty line (no test of the string
@@ -639,18 +527,12 @@ mod attack_actor_tests {
     use super::*;
     use benilla_protocol::ObjectFields;
 
-    const HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitHealth);
-    const MAXHEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitMaxHealth);
-    const FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitFlags);
-    const CHARMEDBY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitCharmedby);
-    const MOUNT: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitMountDisplayId);
-    const PLAYER_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerFlags);
+    const HEALTH: u16 = benilla_protocol::types::Field::UnitHealth.index();
+    const MAXHEALTH: u16 = benilla_protocol::types::Field::UnitMaxHealth.index();
+    const FLAGS: u16 = benilla_protocol::types::Field::UnitFlags.index();
+    const CHARMEDBY: u16 = benilla_protocol::types::Field::UnitCharmedby.index();
+    const MOUNT: u16 = benilla_protocol::types::Field::UnitMountDisplayId.index();
+    const PLAYER_FLAGS: u16 = benilla_protocol::types::Field::PlayerFlags.index();
 
     fn actor(pairs: &[(u16, u32)]) -> ObjectStore {
         // A live, unowned, unmounted, unimpaired unit unless a case says otherwise.

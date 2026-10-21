@@ -58,7 +58,8 @@ use bevy::prelude::*;
 use benilla_ui::script::{JustifyH, JustifyV, Outline};
 
 use crate::entities::{overhead_anchor, BoneAttach, OverheadFallback};
-use crate::ui_pass::{overlay_z, UiQuadAppend, UiQuads};
+use crate::overlay::overlay_z;
+use crate::ui_pass::{UiQuadAppend, UiQuads};
 use crate::ui_text::{layout_text_quads, FontSpec, Justify, UiFontAtlas};
 use benilla_world::view::WorldCamera;
 
@@ -115,7 +116,7 @@ pub(crate) fn read_damage_text_font(script: &benilla_ui::script::UiScript) -> Da
 const MAX_PER_UNIT: usize = 4;
 
 /// World text draws beneath all UI, as the reference draws it in the world scene: the append
-/// lane's bottom band ([`crate::ui_pass::overlay_z`]).
+/// lane's bottom band ([`crate::overlay::overlay_z`]).
 const Z_WORLD_TEXT: u64 = overlay_z::WORLD_TEXT;
 
 /// The first free of the unit's 4 slots; `None` is a hard drop, no eviction (`0x6c73f0`). The
@@ -234,7 +235,7 @@ pub(crate) fn float_combat_text(
         let life = elapsed_ms / cat.dur_ms;
         // The rise enters world z before projection (`6c7d29`, projected at `6c7d96`).
         let world = t.pos + Vec3::Y * (cat.rise * life);
-        let Some(screen) = crate::ui_pass::project_overlay(cam, &cam_tf, world, viewport) else {
+        let Some(screen) = crate::overlay::project_overlay(cam, &cam_tf, world, viewport) else {
             culled.push(i); // behind the camera or off the viewport
             continue;
         };

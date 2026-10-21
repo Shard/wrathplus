@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn sockets_read_the_descriptor_rows_and_the_pending_glyph() {
-        use benilla_protocol::types::{Field, FieldLayout};
+        use benilla_protocol::types::Field;
         let tables = GlyphCatalog::from_rows(
             [
                 GlyphProperty {
@@ -154,14 +154,11 @@ mod tests {
                 order: 0,
             }],
         );
-        let player = ObjectFields::from_fields(
-            FieldLayout::Wrath12340,
-            &[
-                (Field::PlayerGlyphsEnabled, 0b1),
-                (Field::PlayerGlyphSlots1, 21),
-                (Field::PlayerGlyphs1, 182),
-            ],
-        );
+        let player = ObjectFields::from_fields(&[
+            (Field::PlayerGlyphsEnabled, 0b1),
+            (Field::PlayerGlyphSlots1, 21),
+            (Field::PlayerGlyphs1, 182),
+        ]);
         let glyph_spell = |id: u32, glyph: i32| {
             let d = benilla_formats::SpellDisplay {
                 name: format!("Glyph {id}"),

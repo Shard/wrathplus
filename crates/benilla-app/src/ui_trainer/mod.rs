@@ -35,46 +35,6 @@ const TRAINER_TYPE_TRADESKILL: u32 = 2;
 const TRAINER_TYPE_MOUNT: u32 = 1;
 
 pub(crate) use crate::app_core::interaction::TrainerOpen;
-impl TrainerOpen {
-    /// Open (or replace) the window with a trainer's freshly-listed services.
-    pub(crate) fn open(
-        &mut self,
-        trainer: u64,
-        trainer_type: u32,
-        services: Vec<TrainerSpell>,
-        greeting: String,
-    ) {
-        self.trainer = Some(trainer);
-        self.trainer_type = trainer_type;
-        self.services = services;
-        self.greeting = greeting;
-        // A fresh list carries the server's own states, so nothing is pending against it.
-        self.fresh_list = true;
-        self.re_derive = false;
-    }
-
-    /// One of the twelve triggers fired: re-derive on the next feed, if a window is open.
-    pub(crate) fn trigger_re_derive(&mut self) {
-        if self.trainer.is_some() {
-            self.re_derive = true;
-        }
-    }
-
-    /// A client-side close; a re-open re-lists.
-    pub(crate) fn clear(&mut self) {
-        self.trainer = None;
-        self.services.clear();
-        self.trainer_type = 0;
-        self.greeting.clear();
-        self.fresh_list = false;
-        self.re_derive = false;
-    }
-
-    /// Disconnect: drop the open window.
-    pub(crate) fn clear_session(&mut self) {
-        self.clear();
-    }
-}
 
 /// `SMSG_TRAINER_BUY_FAILED` codes, queued for the feed to log.
 #[derive(Resource, Default)]

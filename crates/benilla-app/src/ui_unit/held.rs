@@ -186,8 +186,8 @@ pub(crate) mod tests {
     use crate::net::GuidIndex;
     use crate::target::Selection;
     use crate::ui_party::{GroupState, GROUPTYPE_RAID};
+    use benilla_protocol::types::Field;
     use benilla_protocol::types::{member_status, GroupMemberEntry};
-    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     const ME: u64 = 0x10;
@@ -212,11 +212,11 @@ pub(crate) mod tests {
     const EXTRA: u64 = 0xF130_0000_4B00_0001;
 
     /// `OBJECT_FIELD_TYPE`, `UNIT_FIELD_TARGET`, `_HEALTH`, `_MAXHEALTH` and `_LEVEL`.
-    const OBJECT_TYPE: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectType);
-    const TARGET: u16 = FieldLayout::Wrath12340.index_of(Field::UnitTarget);
-    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
-    const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
-    const LEVEL: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
+    const OBJECT_TYPE: u16 = Field::ObjectType.index();
+    const TARGET: u16 = Field::UnitTarget.index();
+    const HEALTH: u16 = Field::UnitHealth.index();
+    const MAXHEALTH: u16 = Field::UnitMaxHealth.index();
+    const LEVEL: u16 = Field::UnitLevel.index();
 
     fn unit(kind: u32, target: u64, health: u32) -> ObjectStore {
         ObjectStore(ObjectFields::from_pairs(&[

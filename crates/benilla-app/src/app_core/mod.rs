@@ -17,5 +17,6 @@ pub(crate) mod player;
 pub(crate) mod schedule;
 pub(crate) mod session;
 pub(crate) mod state;
+pub(crate) mod ui_state;
 pub(crate) mod ui_flags;
 pub(crate) mod vm_memo;

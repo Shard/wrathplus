@@ -381,18 +381,18 @@ fn findings(fields: &benilla_protocol::types::ObjectFields, shield: ShieldReport
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::types::Field;
     use benilla_protocol::types::ObjectFields;
-    use benilla_protocol::types::{Field, FieldLayout};
 
     /// Build a player descriptor from `(field index, value)` pairs.
     fn player(fields: &[(u16, u32)]) -> ObjectFields {
         ObjectFields::from_pairs(fields)
     }
 
-    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
-    const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
-    const UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
-    const PLAYER_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
+    const HEALTH: u16 = Field::UnitHealth.index();
+    const MAXHEALTH: u16 = Field::UnitMaxHealth.index();
+    const UNIT_FLAGS: u16 = Field::UnitFlags.index();
+    const PLAYER_FLAGS: u16 = Field::PlayerFlags.index();
 
     /// A `WOW_GM=off` run is not warned about GM mode while its `.gm off` is in flight.
     #[test]

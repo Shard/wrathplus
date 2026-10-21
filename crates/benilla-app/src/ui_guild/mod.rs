@@ -1149,45 +1149,35 @@ mod tests {
             .insert(7, Some(identity("Legacy", &["GM", "Off"])));
 
         // A creature or a guildless player: no `PLAYER_GUILDID`.
-        let guildless =
-            ObjectFields::from_fields(benilla_protocol::types::FieldLayout::Wrath12340, &[]);
+        let guildless = ObjectFields::from_fields(&[]);
         assert!(unit_guild(&guildless, &mut guild, &commands).is_none());
         assert_eq!(rx.try_iter().count(), 0, "guild id 0 asks nothing");
 
         // Fields 191/192 = PLAYER_GUILDID/PLAYER_GUILDRANK.
-        let unknown = ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
-                (benilla_protocol::types::Field::PlayerGuildid, 9),
-                (benilla_protocol::types::Field::PlayerGuildrank, 1),
-            ],
-        );
+        let unknown = ObjectFields::from_fields(&[
+            (benilla_protocol::types::Field::PlayerGuildid, 9),
+            (benilla_protocol::types::Field::PlayerGuildrank, 1),
+        ]);
         assert!(
             unit_guild(&unknown, &mut guild, &commands).is_none(),
             "a query in flight is not a blank-named guild"
         );
         assert_eq!(rx.try_iter().count(), 1, "and the miss asked for it");
 
-        let member = ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
-                (benilla_protocol::types::Field::PlayerGuildid, 7),
-                (benilla_protocol::types::Field::PlayerGuildrank, 1),
-            ],
-        );
+        let member = ObjectFields::from_fields(&[
+            (benilla_protocol::types::Field::PlayerGuildid, 7),
+            (benilla_protocol::types::Field::PlayerGuildrank, 1),
+        ]);
         let resolved = unit_guild(&member, &mut guild, &commands).expect("cached");
         assert_eq!(resolved.name, "Legacy");
         assert_eq!(resolved.rank_name, "Off");
         assert_eq!(resolved.rank_index, 1);
 
         // A rank past the ten slots names nothing.
-        let odd_rank = ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
-                (benilla_protocol::types::Field::PlayerGuildid, 7),
-                (benilla_protocol::types::Field::PlayerGuildrank, 99),
-            ],
-        );
+        let odd_rank = ObjectFields::from_fields(&[
+            (benilla_protocol::types::Field::PlayerGuildid, 7),
+            (benilla_protocol::types::Field::PlayerGuildrank, 99),
+        ]);
         assert_eq!(
             unit_guild(&odd_rank, &mut guild, &commands)
                 .unwrap()
@@ -1206,15 +1196,12 @@ mod tests {
         // The negative cache: an empty answer is no such guild.
         guild.identities.insert(8, Some(identity("", &[])));
 
-        let guildless =
-            ObjectFields::from_fields(benilla_protocol::types::FieldLayout::Wrath12340, &[]);
+        let guildless = ObjectFields::from_fields(&[]);
         assert_eq!(unit_guild_name(&guildless, &mut guild, &commands), None);
         assert_eq!(rx.try_iter().count(), 0, "guild id 0 asks nothing");
 
-        let unknown = ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[(benilla_protocol::types::Field::PlayerGuildid, 9)],
-        );
+        let unknown =
+            ObjectFields::from_fields(&[(benilla_protocol::types::Field::PlayerGuildid, 9)]);
         assert_eq!(
             unit_guild_name(&unknown, &mut guild, &commands),
             None,
@@ -1222,10 +1209,8 @@ mod tests {
         );
         assert_eq!(rx.try_iter().count(), 1, "and the miss asked for it");
 
-        let blank = ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[(benilla_protocol::types::Field::PlayerGuildid, 8)],
-        );
+        let blank =
+            ObjectFields::from_fields(&[(benilla_protocol::types::Field::PlayerGuildid, 8)]);
         assert_eq!(unit_guild_name(&blank, &mut guild, &commands), None);
         assert_eq!(
             rx.try_iter().count(),
@@ -1233,13 +1218,10 @@ mod tests {
             "the negative cache re-asks nothing"
         );
 
-        let member = ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
-                (benilla_protocol::types::Field::PlayerGuildid, 7),
-                (benilla_protocol::types::Field::PlayerGuildrank, 1),
-            ],
-        );
+        let member = ObjectFields::from_fields(&[
+            (benilla_protocol::types::Field::PlayerGuildid, 7),
+            (benilla_protocol::types::Field::PlayerGuildrank, 1),
+        ]);
         assert_eq!(
             unit_guild_name(&member, &mut guild, &commands),
             Some("Legacy")

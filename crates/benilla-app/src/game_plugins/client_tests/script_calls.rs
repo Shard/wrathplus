@@ -4,10 +4,10 @@
 use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
 use crate::script_calls::*;
 use crate::target::Selection;
+use benilla_protocol::types::Field;
 use benilla_protocol::types::{
     ActionButton, GroupMemberEntry, ACTION_KIND_MACRO, ACTION_KIND_SPELL,
 };
-use benilla_protocol::types::{Field, FieldLayout};
 use benilla_ui::script::ScriptCall;
 use benilla_ui::script::UiScript;
 use benilla_ui::script::{PetBookState, SpellBookState, SpellSlotView, SpellTabView};
@@ -30,11 +30,11 @@ const HEAL: u32 = 2050;
 const MOB: u64 = 0x31;
 
 /// `UNIT_FIELD_FACTIONTEMPLATE`, `UNIT_FIELD_HEALTH`, `UNIT_FIELD_FLAGS`.
-const TEMPLATE: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFactionTemplate);
+const TEMPLATE: u16 = Field::UnitFactionTemplate.index();
 
-const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+const HEALTH: u16 = Field::UnitHealth.index();
 
-const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+const FLAGS: u16 = Field::UnitFlags.index();
 
 /// The fixture's templates: ours (group 1, friendly toward group 2, enemy of group 4), a
 /// friendly NPC's (group 2) and a hostile mob's (group 4).
@@ -62,10 +62,10 @@ fn frame(selected: bool) -> Frame {
             Guid(guid),
             Transform::from_xyz(x, 0.0, 0.0),
             GlobalTransform::from_translation(Vec3::new(x, 0.0, 0.0)),
-            ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
-            )),
+            ObjectStore(benilla_protocol::ObjectFields::from_fields(&[
+                (Field::UnitHealth, 100),
+                (Field::UnitMaxHealth, 100),
+            ])),
         )
     };
     // We are a player (`OBJECT_FIELD_TYPE` 0x19, `UNIT_FLAG_PVP_ATTACKABLE`), which selects
@@ -73,15 +73,12 @@ fn frame(selected: bool) -> Frame {
     let me = world.spawn((SelfPlayer, unit(ME, 0.0))).id();
     world
         .entity_mut(me)
-        .insert(ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            FieldLayout::Wrath12340,
-            &[
-                (Field::ObjectType, 0x19),
-                (Field::UnitHealth, 100),
-                (Field::UnitMaxHealth, 100),
-                (Field::UnitFlags, 0x8),
-            ],
-        )));
+        .insert(ObjectStore(benilla_protocol::ObjectFields::from_fields(&[
+            (Field::ObjectType, 0x19),
+            (Field::UnitHealth, 100),
+            (Field::UnitMaxHealth, 100),
+            (Field::UnitFlags, 0x8),
+        ])));
     let old = world.spawn(unit(OLD, 5.0)).id();
     let new = world.spawn(unit(NEW, 6.0)).id();
     let index = &mut world.resource_mut::<GuidIndex>().0;

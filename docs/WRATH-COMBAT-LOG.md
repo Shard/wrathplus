@@ -101,7 +101,18 @@ the log (`Attributes & 0x180`, the gate each builder applies). Built:
   (`0x7523d0`, the interrupted spell as the extra spell), SPELL_DURABILITY_DAMAGE(_ALL)
   (`0x7525e0`/`0x752680`), SPELL_RESURRECT (`0x752340`), SPELL_SUMMON or SPELL_CREATE by the
   destination guid's kind (`0x7522a0`).
-- UNIT_DIED (`0x752ed0`): a unit's health reaching 0 after a living reading.
+- UNIT_DIED (`0x752ed0`): a unit's health reaching 0 after a living reading. UNIT_DISSIPATES
+  instead when the unit's creature template has type 13 (gas cloud); UNIT_DESTROYED when its
+  `UNIT_CREATED_BY_SPELL`'s first effect is SUMMON (28) and that effect's `SummonProperties` row
+  has Slot 1-4 (a totem slot). Base arguments only.
+- SPELL_MISSED `RESIST` from `SMSG_PROCRESIST` (`0x260`, handler `0x750d40` in table `0x7538a0`):
+  caster, victim, spell; group `0x4004`, the `0x4000` integer 0.
+- ENCHANT_APPLIED, or ENCHANT_REMOVED for an empty caster, from `SMSG_ENCHANTMENTLOG` (`0x1D7`,
+  `0x751050`): no spell; group `0x1000` the `SpellItemEnchantment` name, then group `0x200` the
+  item; an enchant with no row or with `Flags & 0x2` logs nothing.
+- DAMAGE_SPLIT (`0x752de0`, `MOV EDI,0x2a` into the damage template `0x750660`): an
+  `SMSG_SPELLNONMELEEDAMAGELOG` with hit flag `0x8` (AzerothCore `SPELL_HIT_TYPE_SPLIT`), ahead of
+  the periodic test; the damage group as SPELL_DAMAGE's.
 
 Labelled:
 - the swing miss type by AC victim state, and the school as `1 << index`;
@@ -110,9 +121,20 @@ Labelled:
 - the aura snapshot diff stands in for `0x72f5d0`: a unit's first snapshot logs nothing, a re-sent
   unchanged slot reads as a refresh, and the `AttributesEx6 & 0x400` gate isn't applied;
 - the execute-log dispatcher isn't a defined function, so effects map by AzerothCore's effect ids;
-  a durability entry's item name is nil;
-- UNIT_DESTROYED (totems) and UNIT_DISSIPATES (creature type 13) aren't split from UNIT_DIED.
+  a durability or enchant entry's item name is nil;
+- UNIT_DESTROYED and ENCHANT_* source and destination: `0x752ed0`'s spell-lookup test reads
+  inverted in the decompile, taken as the found record; the enchant's caster is the source and
+  the item's owner the destination, by AzerothCore's field names;
+- a resisted proc raises no floating text (`0x750d40` calls `0x74d550(0x16)` for the local victim).
 
 Not built: SPELL_AURA_BROKEN(_SPELL) (`0x752a40`, opcode `0x14F`, which AzerothCore never sends),
-ENCHANT_APPLIED/REMOVED, SPELL_BUILDING_DAMAGE/HEAL, DAMAGE_SPLIT, DAMAGE_SHIELD_MISSED,
-SPELL_PERIODIC_MISSED/DRAIN, SPELL_LEECH, SPELL_CREATE for items.
+SPELL_BUILDING_DAMAGE/HEAL, SPELL_PERIODIC_MISSED/DRAIN, SPELL_LEECH, SPELL_CREATE for items, and:
+
+- DAMAGE_SHIELD_MISSED (`0x29`): no traced builder allocates it. AzerothCore sends a damage-shield
+  miss as `SMSG_SPELLLOGMISS` (`Unit::DealDamageShieldDamage`), whose builder `0x751b80` picks the
+  event for the miss template `0x750500` in `EDI` (not decompiled); we log it as SPELL_MISSED.
+- `SMSG_SPELLORDAMAGE_IMMUNE` (`0x263`, AzerothCore's damage-shield and proc immunity): table
+  `0x7538a0` registers `0x24E`, `0x1D7`, `0x1F5`, `0x260`, `0x262` and `0x32`, not `0x263`, and no
+  other registration was found. It stays a debug line (`combat_log::on_unlogged`).
+
+The next Ghidra round for both: `0x751b80`'s `EDI` and the scalar refs to `0x263`.

@@ -1,21 +1,6 @@
 use super::*;
-use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
-
-pub(crate) fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, opcode: u16, body: &[u8]) {
-    if let WrathDispatch::Handled { session_events, .. } = adapter.dispatch(opcode, body, 0).unwrap()
-    {
-        crate::net::handlers::dispatch(app.world_mut(), session_events);
-    }
-}
-
-pub(crate) fn captured(app: &App) -> Vec<Packet> {
-    app.world()
-        .resource::<NativeDeathPackets>()
-        .0
-        .iter()
-        .cloned()
-        .collect()
-}
+use crate::net::test_support::death::{captured, dispatch};
+use benilla_protocol::wrath_events::WrathEventAdapter;
 
 #[test]
 fn the_release_location_feeds_the_map_and_map_minus_one_clears_it() {

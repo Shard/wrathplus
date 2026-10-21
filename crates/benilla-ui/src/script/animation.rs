@@ -522,10 +522,10 @@ pub(super) fn tick(lua: &Lua, elapsed: f32) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{ScriptDialect, UiScript};
+    use super::super::UiScript;
     #[test]
     fn alpha_bounce_pause_and_stop_restore_owner() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(r#"f=CreateFrame('Frame','AnimationTest'); g=f:CreateAnimationGroup(); g:SetLooping('BOUNCE'); a=g:CreateAnimation('Alpha'); a:SetChange(-0.7); a:SetDuration(1); a:Play()"#).unwrap();
         s.tick(0.5);
         assert!((s.eval::<f64>("return f:GetAlpha()").unwrap() - 0.65).abs() < 0.001);

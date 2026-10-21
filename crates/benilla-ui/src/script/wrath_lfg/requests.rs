@@ -182,10 +182,10 @@ mod tests {
 
     #[test]
     fn independent_gates_answer_booleans_and_queue_requests() {
-        use crate::script::{ScriptDialect, UiScript};
+        use crate::script::UiScript;
         // Process-wide state: this is the only test that touches the statics.
         set_wrath_lfg_request_clock(Arc::new(|| 1_000_000));
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut seen = Vec::new();
         for _ in 0..4 {
             seen.push(s.eval::<bool>("return RequestLFDPlayerLockInfo()").unwrap());
@@ -202,7 +202,7 @@ mod tests {
             ]
         );
         // A new VM sees the same gate: the player gate is still throttled.
-        let s2 = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s2 = UiScript::new().unwrap();
         assert!(!s2
             .eval::<bool>("return RequestLFDPlayerLockInfo()")
             .unwrap());

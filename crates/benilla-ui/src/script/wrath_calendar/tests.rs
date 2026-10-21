@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use super::date::{add_months, days_in_month, weekday};
 use super::*;
-use crate::script::{ScriptDialect, UiScript};
+use crate::script::UiScript;
 
 const ME: u64 = 7;
 
 fn vm(view: WrathCalendarView) -> UiScript {
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_wrath_calendar(Arc::new(view));
     s
 }

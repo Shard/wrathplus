@@ -94,11 +94,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::ScriptDialect;
-
+    
     #[test]
     fn bindings_read_the_timed_snapshot() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run("assert(select('#', GetRuneType(1)) == 0) local a, b, c = GetRuneCooldown(1) assert(a == 0 and b == 0 and c == true) assert(GetRuneCount(1) == 0)")
             .unwrap();
         let mut runes = [RuneView {

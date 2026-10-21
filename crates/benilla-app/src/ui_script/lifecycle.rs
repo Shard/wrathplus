@@ -224,23 +224,6 @@ fn unpark_boot_vm(world: &mut World) {
     }
 }
 
-/// Run condition for every in-world feed: the in-game UI is up on the VM in the world, since a
-/// feed that fires or drains into a VM with no frames loses what it sends. The reference likewise
-/// processes no world state before its UI is up: world entry (`0x420d63`) runs after the same
-/// iteration's inbound drain (`0x420d55`, its container `0x420c00` entered once per process),
-/// socket threads only enqueue (`0x537b7c`; `SMSG_PONG` at `0x537b56` the one bypass), and the
-/// login request waits for the UI (`0x46c272`).
-///
-/// Two terms, because the latch trails the wire by a frame: `apply_net_updates` drains `Connected`
-/// and the login burst behind it in one pass, and the `InWorld` transition that arms the latch and
-/// parks the VM runs at the next frame's `StateTransition`; the `InWorld` term covers that frame.
-pub(crate) fn ingame_ui_up(
-    pending: Option<Res<PendingEntryUiLoad>>,
-    state: Option<Res<State<crate::char_select::ClientState>>>,
-) -> bool {
-    pending.is_none() && state.is_some_and(|s| *s.get() == crate::char_select::ClientState::InWorld)
-}
-
 /// `PreUpdate`, after [`run_pending_reload`] so a reload never interleaves an armed entry load:
 /// run the armed entry load once the cover has presented, at once when there is no cover (a
 /// capture booting straight `InWorld`). Leaving the world first drops the latch unrun, and
@@ -273,8 +256,6 @@ pub(crate) fn run_pending_entry_load(world: &mut World) {
     world.remove_resource::<PendingEntryUiLoad>();
     let start = std::time::Instant::now();
     load_ingame_ui_on_world_entry(world);
-    // The world entry's own step after the UI load, which a `ReloadUI()` never takes.
-    crate::vplates::clear_at_world_entry(world);
     // Every entry logs the load's cost, whether the cover hid it, and the session every
     // `VmMemo` keys on.
     info!(
@@ -760,35 +741,6 @@ mod tests {
         assert!(world.get_non_send_resource::<ParkedBootVm>().is_none());
     }
 
-    /// The plate bits clear at the world entry (`0x401639`, in the entry setup `0x401570`) and
-    /// not at a `ReloadUI()`, which never runs that setup. A capture world, so no UI is built.
-    #[test]
-    fn the_world_entry_clears_the_plate_bits_and_a_reload_does_not() {
-        use crate::vplates::VPlateMode;
-        let on = VPlateMode {
-            enemies: true,
-            friends: true,
-        };
-        let world_with = |on: VPlateMode| {
-            let mut world = World::new();
-            world.insert_resource(State::new(crate::char_select::ClientState::InWorld));
-            world.insert_resource(crate::run_mode::CaptureMode);
-            world.insert_resource(on);
-            world
-        };
-
-        let mut world = world_with(on);
-        world.insert_resource(PendingEntryUiLoad);
-        run_pending_entry_load(&mut world);
-        assert_eq!(*world.resource::<VPlateMode>(), VPlateMode::default());
-
-        let mut world = world_with(on);
-        world.insert_resource(ReloadUiPending(true));
-        run_pending_reload(&mut world);
-        assert!(!world.resource::<ReloadUiPending>().0, "the reload ran");
-        assert_eq!(*world.resource::<VPlateMode>(), on, "a reload keeps them");
-    }
-
     /// The reference re-makes its Lua state inside `UI_Init` (`0x48fe97`).
     #[test]
     fn the_world_entry_builds_its_own_vm_rather_than_adopting_the_glue_phases() {
@@ -871,7 +823,7 @@ mod tests {
         // The conversion pair moved too: a 10-minute cooldown armed 30 s before the rebuild keeps
         // its real start.
         let clock = world.resource::<UiClock>();
-        let armed = crate::spell::cooldowns::CooldownInfo {
+        let armed = crate::app_core::cooldowns::CooldownInfo {
             start: startup + Duration::from_secs(60),
             remaining_ms: 570_000,
             duration_ms: 600_000,

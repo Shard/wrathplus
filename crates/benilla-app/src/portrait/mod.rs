@@ -26,7 +26,7 @@ use std::collections::HashMap;
 
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::RenderLayers;
-use bevy::camera::{PerspectiveProjection, Projection, RenderTarget};
+use bevy::camera::{OrthographicProjection, PerspectiveProjection, Projection, RenderTarget, ScalingMode};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -882,6 +882,48 @@ pub(crate) fn booth_view_shape() -> impl Bundle {
         // No Bevy light reaches a booth, so skip the per-view cluster rebuild.
         bevy::light::cluster::ClusterConfig::None,
     )
+}
+
+/// The UI model tile atlas's first edge (`ui_models`), which its warm twin camera renders at.
+pub(crate) const ATLAS_MIN: u32 = 512;
+
+/// The UI model tile camera's order: after every booth (`-100 …`), before the UI camera (`1`).
+pub(crate) const TILE_CAMERA_ORDER: isize = -10;
+
+/// `pipe_warm`'s orthographic twin of the UI model tile camera (`ui_models::setup_tiles`), kept in its shape: bevy_pbr keys
+/// mesh pipelines on the projection class (`bevy_pbr-0.18.1` `render/mesh.rs:397`). The real one
+/// is not borrowed, since switching it on would draw the warm models into the live atlas.
+pub(crate) fn spawn_warm_tile_cam(
+    commands: &mut Commands,
+    images: &mut Assets<Image>,
+) -> (Entity, RenderLayers) {
+    let layer = RenderLayers::layer(crate::portrait::WARM_ORTHO_LAYER);
+    // The atlas's minimum size, like the camera it warms; size reaches no pipeline key.
+    let image = images.add(new_target_image_sized(ATLAS_MIN, ATLAS_MIN));
+    let cam = commands
+        .spawn((
+            Name::new("pipe_warm orthographic twin camera"),
+            booth_view_shape(),
+            Camera {
+                order: TILE_CAMERA_ORDER - 1,
+                clear_color: ClearColorConfig::Custom(Color::NONE),
+                ..default()
+            },
+            RenderTarget::Image(image.into()),
+            benilla_world::ffx_glow::FfxGlow::UI_PANE,
+            Projection::Orthographic(OrthographicProjection {
+                near: 0.1,
+                far: 2000.0,
+                scaling_mode: ScalingMode::Fixed {
+                    width: ATLAS_MIN as f32,
+                    height: ATLAS_MIN as f32,
+                },
+                ..OrthographicProjection::default_3d()
+            }),
+            layer.clone(),
+        ))
+        .id();
+    (cam, layer)
 }
 
 /// The warm pass's twin booth: the booth view shape with the custom projection class real bakes
@@ -2327,9 +2369,7 @@ mod tests {
         let mut world = World::new();
         let held = world.spawn_empty().id();
         let summon = |guid: u64| {
-            crate::net::ObjectStore(ObjectFields::from_field_slots(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[
+            crate::net::ObjectStore(ObjectFields::from_field_slots(&[
                     (
                         benilla_protocol::types::Field::UnitSummon,
                         0,

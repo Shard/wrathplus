@@ -145,7 +145,6 @@ mod tests {
     #[test]
     fn the_feed_times_runes_and_fires_the_rune_events() {
         use crate::net::wrath_runes::Rune;
-        use benilla_protocol::types::FieldLayout;
         let mut app = App::new();
         let script = UiScript::new().unwrap();
         script
@@ -164,10 +163,7 @@ mod tests {
             .collect();
         app.world_mut().spawn((
             SelfPlayer,
-            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                FieldLayout::Wrath12340,
-                &regen,
-            )),
+            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&regen)),
         ));
         let step = |app: &mut App, now: f64, runes: Option<[Rune; RUNES]>| {
             app.world_mut()

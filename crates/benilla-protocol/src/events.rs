@@ -194,6 +194,10 @@ pub enum SessionEvent {
         display_id: Option<u32>,
         position: [f32; 3],
         orientation: f32,
+        /// `UPDATEFLAG_ROTATION`'s quaternion `[x, y, z, w]`, unpacked: a GameObject's placement,
+        /// its tilt included; `None` without the flag or for a zero word (AzerothCore's identity,
+        /// an object spawned with no rotation), which faces `orientation`.
+        rotation: Option<[f32; 4]>,
         /// `OBJECT_FIELD_SCALE_X`, the complete render scale; `1.0` when absent.
         scale: f32,
         /// From the `LIVING` block, so not in `fields`; `None` for a GameObject.

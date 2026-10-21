@@ -4,14 +4,14 @@
 //! refuses by not answering (`MiscHandler.cpp:962-972`); the stock pane re-asks from its `OnShow`
 //! while it holds nothing, the only retry.
 //!
-//! The reference fires the pane's events from three field watches (`0x467e70`, callback
-//! `0x5de4b0`): `PLAYER_FIELD_SESSION_KILLS` fires `PLAYER_PVP_KILLS_CHANGED`, and
-//! `PLAYER_BYTES_3` and `PLAYER_FIELD_BYTES2` byte 0 fire `PLAYER_PVP_RANK_CHANGED`. Nothing
-//! watches the weekly, lifetime or highest-rank fields, which `HonorFrame.lua:10-11` repaints only
-//! on `PLAYER_ENTERING_WORLD`.
+//! Build 12340's block is `PLAYER_FIELD_KILLS` (today's and yesterday's honorable kills),
+//! today's and yesterday's contribution, the lifetime kills and `PLAYER_FIELD_BYTES` byte 3; there
+//! is no dishonorable, weekly or rank-bar field. A move of the kills word fires
+//! `PLAYER_PVP_KILLS_CHANGED`, which stock `PVPFrame.lua` answers with `PVPHonor_Update`; honor
+//! moves repaint through `HONOR_CURRENCY_UPDATE`, which the currency feed fires.
 //!
-//! Deviation: the reference watches the whole `PLAYER_BYTES_3` dword, so a drunkenness change also
-//! fires `PLAYER_PVP_RANK_CHANGED`; we watch byte 3 alone, because that repaint is identical.
+//! Unresolved, labelled: the 12340 field watch behind `PLAYER_PVP_KILLS_CHANGED` and
+//! `PLAYER_PVP_RANK_CHANGED` is untraced, so we watch the kills word and fire no rank event.
 
 use bevy::prelude::*;
 
@@ -82,23 +82,26 @@ impl Plugin for UiHonorPlugin {
     }
 }
 
-/// Read the honor block off our own descriptor: `None`, since 12340 has none of 1.12's private
-/// session, yesterday and weekly kill fields that gate the first push.
-fn honor_snapshot(_store: &ObjectStore) -> Option<HonorState> {
-    None
+/// Read the honor block off our own descriptor. An absent field reads 0, as the getters read the
+/// zero-initialised slot.
+fn honor_snapshot(store: &ObjectStore) -> HonorState {
+    let f = &store.0;
+    let kills = f.player_kills().unwrap_or(0);
+    HonorState {
+        today_hk: kills as u16,
+        yesterday_hk: (kills >> 16) as u16,
+        today_honor: f.player_today_contribution().unwrap_or(0),
+        yesterday_honor: f.player_yesterday_contribution().unwrap_or(0),
+        lifetime_hk: f.player_lifetime_honorable_kills().unwrap_or(0),
+        highest_rank: f.player_honor_rank().unwrap_or(0),
+    }
 }
 
-/// `(kills changed, rank changed)` between two snapshots, from the three watched fields only; a
-/// first push fires both. The watched fields are listed so that a new field fires nothing.
-fn events_for(before: Option<&HonorState>, after: &HonorState) -> (bool, bool) {
-    let Some(b) = before else {
-        return (true, true);
-    };
-    // `PLAYER_FIELD_SESSION_KILLS`, both halves.
-    let kills = |h: &HonorState| (h.session_hk, h.session_dk);
-    // `PLAYER_BYTES_3` byte 3 and `PLAYER_FIELD_BYTES2` byte 0; not `highest_rank`, unwatched.
-    let ranks = |h: &HonorState| (h.rank, h.rank_bar);
-    (kills(b) != kills(after), ranks(b) != ranks(after))
+/// Whether `PLAYER_PVP_KILLS_CHANGED` fires between two snapshots: on the first push, and when
+/// `PLAYER_FIELD_KILLS` moves; the other fields fire nothing.
+fn kills_changed(before: Option<&HonorState>, after: &HonorState) -> bool {
+    let kills = |h: &HonorState| (h.today_hk, h.yesterday_hk);
+    before.is_none_or(|b| kills(b) != kills(after))
 }
 
 /// Push the self snapshot and the inspect reply, fire what moved, and drain the pane's request.
@@ -119,17 +122,13 @@ fn feed_honor(
 
     // --- the self snapshot -------------------------------------------------------------------
     if let Ok(store) = self_store.single() {
-        if let Some(fresh) = honor_snapshot(store) {
-            if memo.last.as_ref() != Some(&fresh) {
-                let (kills, ranks) = events_for(memo.last.as_ref(), &fresh);
-                script.set_honor(Some(fresh));
-                memo.last = Some(fresh);
-                if kills {
-                    script.fire_event("PLAYER_PVP_KILLS_CHANGED", vec![]);
-                }
-                if ranks {
-                    script.fire_event("PLAYER_PVP_RANK_CHANGED", vec![]);
-                }
+        let fresh = honor_snapshot(store);
+        if memo.last.as_ref() != Some(&fresh) {
+            let kills = kills_changed(memo.last.as_ref(), &fresh);
+            script.set_honor(Some(fresh));
+            memo.last = Some(fresh);
+            if kills {
+                script.fire_event("PLAYER_PVP_KILLS_CHANGED", vec![]);
             }
         }
     }
@@ -196,55 +195,69 @@ fn feed_honor(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::types::{Field, ObjectFields};
 
     fn state() -> HonorState {
         HonorState {
-            session_hk: 3,
+            today_hk: 3,
+            yesterday_hk: 7,
             lifetime_hk: 900,
-            rank: 8,
             highest_rank: 9,
-            rank_bar: 128,
             ..Default::default()
         }
     }
 
     #[test]
-    fn each_event_fires_only_for_its_own_half() {
+    fn the_snapshot_splits_the_kills_word_and_reads_byte_three() {
+        let at = |field: Field| field.index();
+        let store = ObjectStore(ObjectFields::from_pairs(&[
+            (at(Field::PlayerKills), 0x0007_0003),
+            (at(Field::PlayerTodayContribution), 120),
+            (at(Field::PlayerYesterdayContribution), 340),
+            (at(Field::PlayerLifetimeHonorableKills), 900),
+            (at(Field::PlayerFieldBytes), 0x0900_0000),
+        ]));
+        assert_eq!(
+            honor_snapshot(&store),
+            HonorState {
+                today_honor: 120,
+                yesterday_honor: 340,
+                ..state()
+            }
+        );
+        // A character with no honor fields reads all zeros, as the getters' misses do.
+        assert_eq!(
+            honor_snapshot(&ObjectStore(ObjectFields::from_pairs(&[]))),
+            HonorState::default()
+        );
+    }
+
+    #[test]
+    fn only_the_kills_word_fires_the_kills_event() {
         let base = state();
-
         let mut killed = base;
-        killed.session_hk += 1;
-        assert_eq!(events_for(Some(&base), &killed), (true, false));
+        killed.today_hk += 1;
+        assert!(kills_changed(Some(&base), &killed));
+        // The daily roll moves today's count into yesterday's half.
+        let mut rolled = base;
+        rolled.yesterday_hk = 0;
+        assert!(kills_changed(Some(&base), &rolled));
 
-        let mut ranked = base;
-        ranked.rank = 9;
-        assert_eq!(events_for(Some(&base), &ranked), (false, true));
-
-        // The rank bar is `PLAYER_FIELD_BYTES2` byte 0, a rank event.
-        let mut barred = base;
-        barred.rank_bar = 200;
-        assert_eq!(events_for(Some(&base), &barred), (false, true));
-
-        // Unwatched in the reference (`0x467e70`), so these fire nothing.
         for mutate in [
-            (|h: &mut HonorState| h.last_week_standing = 42) as fn(&mut HonorState),
-            |h: &mut HonorState| h.lifetime_hk = 5_000,
+            (|h: &mut HonorState| h.lifetime_hk = 5_000) as fn(&mut HonorState),
+            |h: &mut HonorState| h.today_honor = 900,
             |h: &mut HonorState| h.yesterday_honor = 900,
             |h: &mut HonorState| h.highest_rank = 18,
         ] {
             let mut quiet = base;
             mutate(&mut quiet);
-            assert_eq!(
-                events_for(Some(&base), &quiet),
-                (false, false),
-                "an unwatched field must fire nothing"
-            );
+            assert!(!kills_changed(Some(&base), &quiet), "{quiet:?}");
         }
     }
 
     /// Otherwise a pane whose numbers arrived before it existed would never paint.
     #[test]
-    fn the_first_push_fires_both() {
-        assert_eq!(events_for(None, &state()), (true, true));
+    fn the_first_push_fires() {
+        assert!(kills_changed(None, &state()));
     }
 }

@@ -147,11 +147,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript, WrathLfgCatalog, WrathLfgDungeon, WrathLfgGroup};
+    use crate::script::{UiScript, WrathLfgCatalog, WrathLfgDungeon, WrathLfgGroup};
     use std::sync::Arc;
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.register_cvars([
             ("lfdSelectedDungeons", ""),
             ("lfdCollapsedHeaders", ""),
@@ -229,7 +229,7 @@ mod tests {
             s.take_cvar_changes().is_empty(),
             "current reads and no-op writes stay clean"
         );
-        let mut replacement = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut replacement = UiScript::new().unwrap();
         replacement.set_cvar_saved_base(changes);
         replacement.register_cvars([("lfdSelectedDungeons", "")]);
         assert_eq!(

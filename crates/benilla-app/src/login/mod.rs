@@ -97,19 +97,6 @@ impl Plugin for LoginPlugin {
 // ── The credential policy ────────────────────────────────────────────────────────────────────────
 
 pub(crate) use crate::app_core::ui_flags::{IoPark, LoginIntent};
-impl LoginIntent {
-    /// Forget the session's credentials and any scheduled retry.
-    pub(crate) fn clear(&mut self) {
-        self.creds = None;
-        self.retry_at = None;
-    }
-
-    /// The account this session authenticated as, from the env fast path or the screen; it
-    /// decides whether the probe shield applies.
-    pub(crate) fn account(&self) -> Option<&str> {
-        self.creds.as_ref().map(|(user, _)| user.as_str())
-    }
-}
 
 /// One login attempt's inputs as a single [`SystemParam`]: the policy's memory, the channel to
 /// the parked IO thread, the abandon generation a Cancel bumps, and the realmlist it dials. A
@@ -354,13 +341,15 @@ fn drive_policy(
     let empty = GlueStrings::default();
     let strings = strings.as_deref().unwrap_or(&empty);
 
-    // The env fast path, once: `WOW_USER` and `WOW_PASS` both set auto-submit, except under the
-    // login smoke, which drives its own credentials. There is no default account.
+    // The launch plan's fast path, once: an account and a password (flags or `WOW_USER` and
+    // `WOW_PASS`) auto-submit, except under the login smoke, which drives its own credentials.
+    // There is no default account.
     if !attempt.intent.env_read {
         attempt.intent.env_read = true;
-        if crate::run_mode::env_login() && std::env::var_os("WOW_LOGIN_SMOKE").is_none() {
-            let user = std::env::var("WOW_USER").unwrap_or_default();
-            let pass = std::env::var("WOW_PASS").unwrap_or_default();
+        let plan = crate::launch_plan::plan();
+        if plan.logs_in() && std::env::var_os("WOW_LOGIN_SMOKE").is_none() {
+            let user = plan.account.clone().unwrap_or_default();
+            let pass = plan.password().unwrap_or_default().to_string();
             // A vmangos login kicks whoever holds the account, so the automated path logs in
             // only as the checkout's declared account (`.probe-identity`); a typed login is not
             // gated.
@@ -599,6 +588,9 @@ struct QuitArm(Option<f32>);
 fn enter_login(mut form: ResMut<LoginForm>, mut preview: ResMut<GluePreview>) {
     let saved = load_saved_account();
     form.save = !saved.is_empty();
+    // `--account` (or `WOW_USER`) fills the box in place of the saved name, without ticking Save
+    // Account Name; the password is typed.
+    let saved = crate::launch_plan::plan().account.unwrap_or(saved);
     form.focus = if saved.is_empty() {
         Field::Account
     } else {
@@ -678,7 +670,7 @@ fn login_input(
                     // `$WOW_HOST` owns the address for the session; say so rather than open an
                     // editor whose Okay would do nothing.
                     dialog.open_error(&format!(
-                        "$WOW_HOST is set for this session, so the realmlist is fixed at {}.",
+                        "--server or $WOW_HOST is set for this session, so the realmlist is fixed at {}.",
                         attempt.realmlist.address(),
                     ));
                 } else {
@@ -888,6 +880,10 @@ fn accept_realmlist(
         return false;
     };
     realmlist.set(&address);
+    // The override file, so the edit outlives an install `realmlist.wtf` on the next launch.
+    if let Err(e) = crate::realmlist::write_realmlist_wtf(&address) {
+        warn!("login: realmlist -> {address}, but realmlist.wtf was not written: {e}");
+    }
     let name = crate::realmlist::CVAR_REALMLIST;
     match script {
         Some(script) => {

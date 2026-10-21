@@ -349,11 +349,11 @@ mod tests {
     }
 
     use crate::script::{
-        BankState, ContainerSlot, ContainerState, InvSlotView, PetStats, ScriptDialect, UiScript,
+        BankState, ContainerSlot, ContainerState, InvSlotView, PetStats, UiScript,
     };
 
     fn wrath() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_player_req_state(PlayerReqState {
             level: 80,
             class_id: 1,

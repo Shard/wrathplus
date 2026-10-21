@@ -86,3 +86,62 @@ fn an_unknown_movie_finishes_without_playing() {
     assert!(played.is_empty());
     assert_eq!(completes(&rx), 1);
 }
+
+/// The Wrathgate (14) and the Fall of the Lich King (16) on the install's own tables and stock
+/// `MovieFrame.lua`. Their `Movie.dbc` rows carry no file name: build 12340 reaches the files
+/// through `MovieVariation.dbc` and `FileData.dbc` (`WOW_WRATHGATE_*.AVI`, `WOW_FOTLK_*.AVI`, at
+/// 800 and 1024), which ship loose under `Data/<locale>/Interface/Cinematics` in Blizzard's own
+/// `digm` video codec. Labelled: benilla has no decoder, so `StartMovie` answers nil and the stock
+/// frame takes its fallback, hiding and calling `GameMovieFinished`; each movie ends with one
+/// `CMSG_COMPLETE_MOVIE`, as the reference does for a movie it cannot open.
+#[test]
+fn the_wrath_movies_take_the_stock_fallback_and_complete_once() {
+    let data = benilla_formats::wow_data_or_skip!();
+    let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+    let movies = benilla_formats::load_movies(&mut chain).expect("Movie.dbc");
+    for id in [14, 16] {
+        assert_eq!(
+            movies.get(id).map(|m| m.file.as_str()),
+            Some(""),
+            "movie {id}"
+        );
+    }
+    let src = chain
+        .read_file("Interface\\FrameXML\\MovieFrame.lua")
+        .expect("MovieFrame.lua in the chain");
+
+    let mut app = App::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    app.insert_resource(NetCommands(tx))
+        .init_resource::<NativeWorldObjectsPackets>()
+        .init_resource::<PendingMovie>()
+        .insert_resource(Movies(movies))
+        .add_systems(Update, feed_movie);
+    let script = UiScript::new().unwrap();
+    script.run(&String::from_utf8_lossy(&src)).unwrap();
+    script
+        .run(
+            r#"
+            local f = CreateFrame("MovieFrame", "MovieFrame")
+            f:Hide()
+            f:SetScript("OnEvent", MovieFrame_OnEvent)
+            MovieFrame_OnLoad(f)
+        "#,
+        )
+        .unwrap();
+    app.world_mut().insert_non_send_resource(script);
+
+    for id in [14, 16] {
+        trigger(&mut app, id);
+        app.update();
+        app.update();
+        assert_eq!(completes(&rx), 1, "movie {id} completes once");
+        let script = app.world().non_send_resource::<UiScript>();
+        assert!(
+            !script.eval::<bool>("return MovieFrame:IsShown()").unwrap(),
+            "movie {id}: the stock fallback hides the frame"
+        );
+        assert!(script.errors().is_empty(), "{:?}", script.errors());
+        assert!(app.world().resource::<PendingMovie>().id.is_none());
+    }
+}

@@ -28,19 +28,8 @@ pub(crate) struct PageText {
 }
 
 pub(crate) use crate::app_core::interaction::{
-    ItemTextOpen, LetterTexts, PageMaterials, ReadSession, ReadSource,
+    ItemTextOpen, LetterTexts, PageMaterials, ReadSource,
 };
-impl LetterTexts {
-    /// Record an answer (`wrath_inventory_capture`).
-    pub(crate) fn insert(&mut self, item_guid: u64, text: Option<String>) {
-        self.texts.insert(item_guid, text);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn text(&mut self, item_guid: u64) -> Option<String> {
-        self.texts.get_or_ask(item_guid, || {}).cloned()
-    }
-}
 
 /// The ask-once page cache, the client's `PageText` dbcache (`0xc0e174`), keyed by page id.
 /// vmangos answers one query with the whole chain; a missing page is still asked for alone.
@@ -68,49 +57,6 @@ impl PageTexts {
                 .0
                 .send(ClientCommand::PageTextQuery { page_id, guid });
         })
-    }
-}
-
-impl ItemTextOpen {
-    /// Open a bag letter; re-opening restarts from `ITEM_TEXT_BEGIN`.
-    pub(crate) fn open_letter(&mut self, item_guid: u64) {
-        self.open(item_guid, ReadSource::Letter);
-    }
-
-    /// Open a page chain; the feed asks the object's template for the first page.
-    pub(crate) fn open_pages(&mut self, object_guid: u64) {
-        self.open(
-            object_guid,
-            ReadSource::Pages {
-                visited: Vec::new(),
-            },
-        );
-    }
-
-    /// The reference's toggle, `0x4e32e0` with flag 0 from both click routes (`0x5d8e5e`,
-    /// `0x5f58e7`): reading the open object again closes it. Returns whether it closed.
-    pub(crate) fn toggle_closed(&mut self, object_guid: u64) -> bool {
-        let open = self
-            .pending
-            .as_ref()
-            .is_some_and(|s| s.object_guid == object_guid);
-        if open {
-            self.pending = None;
-            self.closing = true;
-        }
-        open
-    }
-
-    fn take_closing(&mut self) -> bool {
-        std::mem::take(&mut self.closing)
-    }
-
-    fn open(&mut self, object_guid: u64, source: ReadSource) {
-        self.pending = Some(ReadSession {
-            object_guid,
-            source,
-            told: Default::default(),
-        });
     }
 }
 

@@ -32,52 +32,6 @@ const BUYBACK_SLOT_FIRST: u32 = 74;
 pub(crate) use crate::app_core::catalogs::RepairTables;
 pub(crate) use crate::app_core::interaction::MerchantOpen;
 
-impl MerchantOpen {
-    pub(crate) fn open(&mut self, vendor: u64, items: Vec<VendorItem>) {
-        self.vendor = Some(vendor);
-        self.items = items;
-    }
-
-    pub(crate) fn is_open(&self) -> bool {
-        self.vendor.is_some()
-    }
-
-    /// The item entry at a 1-based row: `CMSG_BUY_ITEM` buys by entry, not by vendor slot.
-    pub(crate) fn entry_at(&self, index_1based: u32) -> Option<u32> {
-        index_1based
-            .checked_sub(1)
-            .and_then(|i| self.items.get(i as usize))
-            .map(|it| it.entry)
-    }
-
-    /// `SMSG_BUY_ITEM`'s new count for the row at 1-based vendor `slot`; the bought item itself
-    /// arrives as an object create.
-    pub(crate) fn update_stock(&mut self, slot: u32, new_count: u32) {
-        if let Some(it) = self.items.iter_mut().find(|it| it.slot == slot) {
-            it.current_count = new_count;
-        }
-    }
-
-    /// Zero every row of `entry`, as the reference's `ITEM_ALREADY_SOLD` arm writes 0 (`0x5dcdbf`)
-    /// into each matching row of its 128-row cache (`0x5dcdcd`).
-    pub(crate) fn sold_out(&mut self, entry: u32) {
-        for it in self.items.iter_mut().filter(|it| it.entry == entry) {
-            it.current_count = 0;
-        }
-    }
-
-    /// A client-side close; a re-open re-lists.
-    pub(crate) fn clear(&mut self) {
-        self.vendor = None;
-        self.items.clear();
-    }
-
-    /// The disconnect clear.
-    pub(crate) fn clear_session(&mut self) {
-        self.clear();
-    }
-}
-
 /// Buy and sell refusals waiting for the feed's message line.
 #[derive(Resource, Default)]
 pub(crate) struct MerchantErrors(pub Vec<MerchantRefusal>);
@@ -855,16 +809,8 @@ fn drain_merchant(
     // reference's fixed count on all three drop paths.
     for (bag, slot, entry) in script.take_merchant_slot_buys() {
         let Some(vendor) = open.vendor else { continue };
-        let (Some(store), Some((bag_index, bag_slot))) = (
-            self_store,
-            wire_pos_for(
-                self_store
-                    .map(|s| s.0.layout())
-                    .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340),
-                bag,
-                slot,
-            ),
-        ) else {
+        let (Some(store), Some((bag_index, bag_slot))) = (self_store, wire_pos_for(bag, slot))
+        else {
             debug!("ui_merchant: slot buy to an unaddressable slot ({bag}, {slot}) — ignored");
             continue;
         };
@@ -924,24 +870,19 @@ pub(crate) fn end_repair_mode_on_right_press(
 #[cfg(test)]
 pub(crate) mod purse_fixture {
     use super::*;
-    const FIELD_PLAYER_FIELD_COINAGE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerCoinage);
-    const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitNpcFlags);
+    const FIELD_PLAYER_FIELD_COINAGE: u16 = benilla_protocol::types::Field::PlayerCoinage.index();
+    const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::types::Field::UnitNpcFlags.index();
     use benilla_protocol::ObjectFields;
 
     pub(crate) const VENDOR: u64 = 0xF130_0000_0000_0043;
     pub(crate) const SWORD: u64 = 0x4000_0000_0000_0707;
     pub(crate) const SWORD_ENTRY: u32 = 2488;
     /// Absolute descriptor indices.
-    const OBJECT_ENTRY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ObjectEntry);
-    const ITEM_DURABILITY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ItemDurability);
-    const ITEM_MAXDURABILITY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ItemMaxdurability);
-    const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
+    const OBJECT_ENTRY: u16 = benilla_protocol::types::Field::ObjectEntry.index();
+    const ITEM_DURABILITY: u16 = benilla_protocol::types::Field::ItemDurability.index();
+    const ITEM_MAXDURABILITY: u16 = benilla_protocol::types::Field::ItemMaxdurability.index();
+    const FIELD_UNIT_FACTIONTEMPLATE: u16 =
+        benilla_protocol::types::Field::UnitFactionTemplate.index();
     /// The string `ERR_NOT_ENOUGH_MONEY` holds in 1.12's `GlobalStrings.lua`.
     pub(crate) const NOT_ENOUGH_MONEY: &str = "You don't have enough money.";
 
@@ -1110,27 +1051,26 @@ pub(crate) mod purse_fixture {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
 
     /// `GetRepairAllCost` sums each item's cost after the open merchant's discount (`0x4faf8a`):
     /// at Honored with a PvP-flagged vendor and honor rank byte 8, 0.2 comes off each item before
     /// its rounding, and the undiscounted total is not what the VM reads.
     #[test]
     fn the_repair_all_total_takes_the_merchants_discount() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
-        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::UnitNpcFlags);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::types::Field::PlayerInvSlotHead.index();
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
+            benilla_protocol::types::Field::UnitFactionTemplate.index();
+        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::types::Field::UnitNpcFlags.index();
         use benilla_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
 
         /// Absolute descriptor indices.
-        const OBJECT_ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
-        const ITEM_DURABILITY: u16 = FieldLayout::Wrath12340.index_of(Field::ItemDurability);
-        const ITEM_MAXDURABILITY: u16 = FieldLayout::Wrath12340.index_of(Field::ItemMaxdurability);
-        const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
+        const OBJECT_ENTRY: u16 = Field::ObjectEntry.index();
+        const ITEM_DURABILITY: u16 = Field::ItemDurability.index();
+        const ITEM_MAXDURABILITY: u16 = Field::ItemMaxdurability.index();
+        const BYTES_0: u16 = Field::UnitBytes0.index();
         const VENDOR: u64 = 0xF130_0000_0000_0042;
         const SWORD: u64 = 0x4000_0000_0000_0007;
         const SWORD_ENTRY: u32 = 2488;
@@ -1213,8 +1153,7 @@ mod tests {
         slot_field: u16,
         money: u32,
     ) -> (Vec<ClientCommand>, Vec<String>, Vec<&'static str>) {
-        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::UnitNpcFlags);
+        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::types::Field::UnitNpcFlags.index();
         use benilla_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
         use purse_fixture::*;
@@ -1262,8 +1201,8 @@ mod tests {
     fn repair_all_does_nothing_at_a_vendor_that_does_not_repair() {
         /// `UNIT_NPC_FLAG_VENDOR` in build 12340.
         const NPC_FLAG_VENDOR: u32 = 0x80;
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::types::Field::PlayerInvSlotHead.index();
         use purse_fixture::*;
 
         let (_, discounted) = sword_prices();
@@ -1292,8 +1231,8 @@ mod tests {
     /// total of 0 and the repair-all goes out.
     #[test]
     fn repair_all_tests_the_purse_against_the_worn_gear_alone() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::types::Field::PlayerInvSlotHead.index();
         use purse_fixture::*;
 
         let (_, discounted) = sword_prices();
@@ -1328,8 +1267,8 @@ mod tests {
     /// An item's cost is discounted at the vendor and full once it closes (`0x4faf30`).
     #[test]
     fn each_items_cost_takes_the_open_vendors_discount() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::types::Field::PlayerInvSlotHead.index();
         use bevy::ecs::system::RunSystemOnce;
         use purse_fixture::*;
 
@@ -1369,15 +1308,15 @@ mod tests {
     /// item is priced but left out of the total (`0x4fbd60`).
     #[test]
     fn each_input_alone_reopens_the_repair_cost_gate() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::types::Field::PlayerInvSlotHead.index();
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
+            benilla_protocol::types::Field::UnitFactionTemplate.index();
         use benilla_protocol::ObjectFields;
         use purse_fixture::*;
 
         /// `ITEM_FIELD_DURABILITY`, absolute.
-        const ITEM_DURABILITY: u16 = FieldLayout::Wrath12340.index_of(Field::ItemDurability);
+        const ITEM_DURABILITY: u16 = Field::ItemDurability.index();
         let main_hand = FIELD_PLAYER_INV_SLOT_HEAD + 2 * 15;
         let backpack_1 = FIELD_PLAYER_INV_SLOT_HEAD + 2 * 23;
         // `PLAYER_FIELD_BANK_SLOT_1`, inventory slot 39.
@@ -1700,10 +1639,10 @@ mod tests {
 #[cfg(test)]
 #[test]
 fn repair_service_uses_native_flags_in_each_layout() {
-    use benilla_protocol::types::{Field, FieldLayout};
-    let (layout, repair, unrelated) = (FieldLayout::Wrath12340, 0x1000, 0x4000);
-    let span = layout
-        .resolve(Field::UnitNpcFlags)
+    use benilla_protocol::types::Field;
+    let (repair, unrelated) = (0x1000, 0x4000);
+    let span = Field::UnitNpcFlags
+        .span()
         .expect("NPC flags exist in both layouts");
     for (bits, expected) in [
         (0, false),
@@ -1711,10 +1650,9 @@ fn repair_service_uses_native_flags_in_each_layout() {
         (unrelated, false),
         (repair | unrelated, true),
     ] {
-        let store = ObjectStore(benilla_protocol::ObjectFields::from_native_pairs(
-            layout,
-            &[(span.index, bits)],
-        ));
+        let store = ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[(
+            span.index, bits,
+        )]));
         assert_eq!(can_repair_store(&store), expected);
     }
 }

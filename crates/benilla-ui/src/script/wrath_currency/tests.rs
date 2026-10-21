@@ -1,8 +1,7 @@
 use super::*;
-use crate::script::ScriptDialect;
 
 fn script() -> UiScript {
-    UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap()
+    UiScript::new().unwrap()
 }
 
 #[test]

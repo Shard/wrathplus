@@ -2,10 +2,14 @@
 //! overlay that replaces a unit's overhead name. This file owns the world side (gate, anchor,
 //! projection, seat, basis); the widgets live in [`benilla_ui::script::nameplate`].
 //!
-//! - Toggles: the `[0xc4da34]` bitmask, bit 0 enemy and bit 3 friendly, both off at boot.
-//! - Gate: never the own unit or a `NOT_SELECTABLE` one; enemy or friendly by `CanAttack` from the
-//!   player (`0x606980`), and a player subject must also pass `CanCooperate` (equal faction-group
-//!   masks); 20 yd; no occlusion; a unit not projected into view loses its plate (`0x60f600`).
+//! - Toggles: the eight `nameplateShow*` CVars ([`VPlateMode`]), which the stock V keys write;
+//!   build 12340 has no plate verbs.
+//! - Gate, build 12340's `0x72b060`: never the own unit, a `NOT_SELECTABLE` or dead one, a critter
+//!   or non-combat pet, or a stealthed enemy; friendly is not `CanAttack` from the player, and for
+//!   a player subject also an equal faction-group mask (`0x729b30`), and a player that is neither
+//!   friendly nor attackable has none; then the category's CVar, and a player-owned totem, pet or
+//!   guardian its sub-gate ([`unit_sort`]); 41 yd, none in an arena; no occlusion; a unit not
+//!   projected into view loses its plate.
 //! - Anchor: the overhead head point (`0x608640`) plus 2/3 yd (`[0x80abfc]`), projected every
 //!   frame (`0x483ee0`), the plate's top centre on it (`0x509ec0`), sized in gx units of the
 //!   screen diagonal (`0x41ad10`), outside uiScale. Deviation: the basis is damped past
@@ -22,10 +26,8 @@ use bevy::ecs::entity::EntityHashSet;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use benilla_protocol::EntityKind;
-use benilla_ui::script::{
-    unit_is_grey, PlateGeometry, PlateState, PLATE_BIT_ENEMY, PLATE_BIT_FRIEND,
-};
+use benilla_protocol::{field, EntityKind};
+use benilla_ui::script::{unit_is_grey, PlateGeometry, PlateState};
 
 use crate::entities::{overhead_anchor, BoneAttach, OverheadFallback};
 use crate::names::NameCache;
@@ -36,28 +38,127 @@ use benilla_world::view::WorldCamera;
 /// The plate border, sharp-resampled so its 128x32 art stays crisp when magnified.
 pub(crate) mod border;
 
-/// The two script bits of `[0xc4da34]`, bit `0x1` enemy plates and bit `0x8` friendly: engine
-/// state, written only by the four plate verbs ([`apply_plate_verbs`]) and cleared at every world
-/// entry ([`clear_at_world_entry`]). Nothing persists it: FrameXML replays its own
-/// `NAMEPLATES_ON`/`FRIENDNAMEPLATES_ON` saved variables through the verbs
-/// (`UIOptionsFrame.lua:768-780`, `UIParent.lua:234`, `:367`).
-#[derive(Resource, Default, Clone, Copy, PartialEq, Eq, Debug)]
+/// The eight `nameplateShow*` CVars the plate gate reads (`[0xbd09b8]`..`[0xbd09d4]`, registered
+/// in `0x51d9b0`): a category on/off for enemies and friends, each with pet, guardian and totem
+/// sub-gates for player-owned units. Defaults are the registered ones, and the CVars persist.
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct VPlateMode {
     pub(crate) enemies: bool,
+    pub(crate) enemy_pets: bool,
+    pub(crate) enemy_guardians: bool,
+    pub(crate) enemy_totems: bool,
     pub(crate) friends: bool,
+    pub(crate) friendly_pets: bool,
+    pub(crate) friendly_guardians: bool,
+    pub(crate) friendly_totems: bool,
+}
+
+impl Default for VPlateMode {
+    fn default() -> Self {
+        Self {
+            enemies: false,
+            enemy_pets: true,
+            enemy_guardians: true,
+            enemy_totems: true,
+            friends: false,
+            friendly_pets: true,
+            friendly_guardians: true,
+            friendly_totems: true,
+        }
+    }
 }
 
 impl VPlateMode {
-    fn bits(self) -> u8 {
-        let bit = |on: bool, b: u8| if on { b } else { 0 };
-        bit(self.enemies, PLATE_BIT_ENEMY) | bit(self.friends, PLATE_BIT_FRIEND)
-    }
-
-    fn from_bits(bits: u8) -> Self {
-        Self {
-            enemies: bits & PLATE_BIT_ENEMY != 0,
-            friends: bits & PLATE_BIT_FRIEND != 0,
+    /// Whether a unit of this reaction and sort may have a plate: the category CVar, then the
+    /// sub-gate for a player-owned totem, pet or guardian (`0x72b1a5`-`0x72b28c`).
+    pub(crate) fn shows(&self, friendly: bool, sort: UnitSort) -> bool {
+        let (base, pets, guardians, totems) = if friendly {
+            (
+                self.friends,
+                self.friendly_pets,
+                self.friendly_guardians,
+                self.friendly_totems,
+            )
+        } else {
+            (
+                self.enemies,
+                self.enemy_pets,
+                self.enemy_guardians,
+                self.enemy_totems,
+            )
+        };
+        base && match sort {
+            UnitSort::Pet => pets,
+            UnitSort::Guardian => guardians,
+            UnitSort::Totem => totems,
+            UnitSort::Player | UnitSort::NonCombat | UnitSort::Creature => true,
         }
+    }
+}
+
+/// The plate CVars' change callback.
+pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut mode: ResMut<VPlateMode>) {
+    let slot = match ev.key().as_str() {
+        "nameplateshowenemies" => &mut mode.enemies,
+        "nameplateshowenemypets" => &mut mode.enemy_pets,
+        "nameplateshowenemyguardians" => &mut mode.enemy_guardians,
+        "nameplateshowenemytotems" => &mut mode.enemy_totems,
+        "nameplateshowfriends" => &mut mode.friends,
+        "nameplateshowfriendlypets" => &mut mode.friendly_pets,
+        "nameplateshowfriendlyguardians" => &mut mode.friendly_guardians,
+        "nameplateshowfriendlytotems" => &mut mode.friendly_totems,
+        _ => return,
+    };
+    *slot = ev.flag();
+}
+
+/// What the plate gate and the overhead names sort a unit into, by build 12340's checks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum UnitSort {
+    Player,
+    /// Creature type 8 (Critter) or 12 (Non-combat Pet): never a plate (`0x72b1c8`, `0x72b1d6`).
+    NonCombat,
+    /// A player-owned totem, creature type 11.
+    Totem,
+    /// A player-owned unit whose only link is its creator (`0x71b600`: no charmer or summoner).
+    Guardian,
+    /// Any other player-owned unit: a summoned or charmed one.
+    Pet,
+    /// Everything else.
+    Creature,
+}
+
+/// Sort a unit off its own fields and its template's creature type (`0x71f300` reads the
+/// template's, past a shapeshift's own). Unresolved, labelled: the owner lookup `0x4f5f20` is
+/// untraced, so the owner is the charmer, else the summoner, else the creator, and a player one
+/// is told by its guid.
+pub(crate) fn unit_sort(
+    is_player: bool,
+    fields: &benilla_protocol::ObjectFields,
+    creature_type: Option<u32>,
+) -> UnitSort {
+    if is_player {
+        return UnitSort::Player;
+    }
+    if matches!(creature_type, Some(8 | 12)) {
+        return UnitSort::NonCombat;
+    }
+    let linked = |g: Option<u64>| g.filter(|&g| g != 0);
+    let (charmer, summoner, creator) = (
+        linked(fields.unit_charmed_by()),
+        linked(fields.unit_summoned_by()),
+        linked(fields.unit_created_by()),
+    );
+    let owner = charmer.or(summoner).or(creator);
+    if !owner.is_some_and(benilla_protocol::guid::is_player) {
+        return UnitSort::Creature;
+    }
+    if creature_type == Some(11) {
+        UnitSort::Totem
+    } else if charmer.is_none() && summoner.is_none() {
+        UnitSort::Guardian
+    } else {
+        UnitSort::Pet
     }
 }
 
@@ -102,8 +203,14 @@ const SKULL_SIZE: f32 = 0.01;
 const RAID_ICON_SIZE: f32 = 0.02;
 /// `[0x80abfc]`.
 const PLATE_LIFT: f32 = 2.0 / 3.0;
-/// 20 yd, hardcoded in the reference.
-const MAX_DIST_SQ: f32 = 20.0 * 20.0;
+/// 41 yd squared, `[0xadaa7c]` = 1681.0, compared at `0x72b33d`; an arena (`Map.dbc` instance
+/// type 4) has no limit (`0x72b2df`).
+const MAX_DIST_SQ: f32 = 1681.0;
+/// `Map.dbc` `InstanceType` 4, an arena.
+const ARENA: u32 = 4;
+/// The creature template `type_flags` bit that never takes a plate (`[unit+0x964]+0xc`,
+/// `0x72b10f`). Unresolved, labelled: its name and the template slot are untraced.
+const TYPE_FLAG_NO_PLATE: u32 = 0x10_0000;
 /// Deviation: the reference dims non-target plates to `0x7F`; raised because that fades them too
 /// far to read.
 const DIM_ALPHA: f32 = 178.0 / 255.0;
@@ -189,42 +296,6 @@ pub(crate) fn text_px(h: f32, basis: f32) -> f32 {
     (h * basis).round().min(32.0)
 }
 
-/// Every frame: fold the plate verbs' writes into the bits, in the order the VM made them.
-pub(crate) fn apply_plate_verbs(
-    script: Option<NonSendMut<benilla_ui::script::UiScript>>,
-    mut mode: ResMut<VPlateMode>,
-) {
-    let Some(mut script) = script else {
-        return;
-    };
-    let writes = script.take_nameplate_bit_writes();
-    if writes.is_empty() {
-        return;
-    }
-    let now = VPlateMode::from_bits(writes.apply(mode.bits()));
-    if *mode != now {
-        info!(
-            "nameplates: enemy {}, friendly {}",
-            if now.enemies { "ON" } else { "OFF" },
-            if now.friends { "ON" } else { "OFF" }
-        );
-        *mode = now;
-    }
-}
-
-/// The world-entry clear of both script bits (`0x60394b`, `0x603952`, in `0x6033c0`), which the
-/// entry setup `0x401570` runs at `0x401639`, after the UI load at `0x401602` (`InitializeGame`,
-/// whose `UI_Init` fires `VARIABLES_LOADED` at `0x4900b2`): the load's replay is cleared, and
-/// the one at `PLAYER_ENTERING_WORLD` decides. A `ReloadUI()` never reaches it.
-pub(crate) fn clear_at_world_entry(world: &mut World) {
-    if let Some(mut script) = world.get_non_send_resource_mut::<benilla_ui::script::UiScript>() {
-        let _ = script.take_nameplate_bit_writes();
-    }
-    if let Some(mut mode) = world.get_resource_mut::<VPlateMode>() {
-        *mode = VPlateMode::default();
-    }
-}
-
 /// The world and reaction inputs of the plate gate, bundled under the 16-param ceiling.
 #[derive(SystemParam)]
 #[allow(clippy::type_complexity)] // one bundled system param
@@ -253,6 +324,9 @@ struct PlateWorld<'w, 's> {
     targeting: Res<'w, crate::spell::SpellTargeting>,
     /// `CanAttack`'s controller lookup, for the plate category.
     relations: crate::target::RelationInputs<'w, 's>,
+    /// The arena exemption from the range limit.
+    map: Option<Res<'w, benilla_world::world_map::CurrentMap>>,
+    maps: Option<Res<'w, benilla_assets::MapCatalogRes>>,
 }
 
 /// Every frame: gate the units, seat each plate and hand the result to the widget layer as
@@ -296,6 +370,12 @@ fn drive_vplates(
         retire_all(script);
         return;
     }
+    let in_arena = world
+        .map
+        .as_deref()
+        .zip(world.maps.as_deref())
+        .and_then(|(map, maps)| maps.0.instance_type(map.0))
+        == Some(ARENA);
     let (Ok((cam, cam_pose)), Ok((self_tf, self_store))) =
         (world.camera.single(), world.self_q.single())
     else {
@@ -337,7 +417,7 @@ fn drive_vplates(
     let scale = window.map_or(1.0, |w| w.scale_factor());
     // Everything below is in window px, divided by this once for the widget layer's units.
     let seam = window.map_or(1.0, |w| {
-        crate::ui_script::seam_scale(w.height(), ui_scale.0)
+        crate::app_core::ui_state::seam_scale(w.height(), ui_scale.0)
     });
     let mut states: Vec<PlateState> = Vec::new();
 
@@ -358,21 +438,23 @@ fn drive_vplates(
         if store.is_some_and(|s| s.0.unit_flags() & (1 << 25) != 0) {
             continue;
         }
-        // `0x60f600`'s first test: health 0 or less (absent reads 0) has no plate. Feign death
-        // keeps health, so it passes here.
+        // Health 0 or less (absent reads 0) has no plate (`0x72b07a`).
         if store.is_none_or(|s| s.0.unit_health().unwrap_or(0) == 0) {
             continue;
         }
-        if (tf.translation - self_tf.translation).length_squared() > MAX_DIST_SQ {
+        let is_player = net.kind == EntityKind::Player;
+        let template = store
+            .and_then(|s| s.0.object_entry())
+            .filter(|_| !is_player)
+            .and_then(|entry| names.creature_record(entry));
+        let sort = store.map_or(UnitSort::Creature, |s| {
+            unit_sort(is_player, &s.0, template.map(|t| t.creature_type))
+        });
+        // Critters and non-combat pets never (`0x72b1c8`, `0x72b1d6`).
+        if sort == UnitSort::NonCombat {
             continue;
         }
-        // A CREATEDBY owner, no SUMMONEDBY owner and flags bit 9 (`0x200`): no plate in either
-        // category (`0x60f70b`-`0x60f72d`); the bit's 1.12 name is unknown.
-        if store.is_some_and(|s| {
-            s.0.unit_created_by().is_some_and(|g| g != 0)
-                && s.0.unit_summoned_by().is_none_or(|g| g == 0)
-                && s.0.unit_flags() & 0x200 != 0
-        }) {
+        if template.is_some_and(|t| t.type_flags & TYPE_FLAG_NO_PLATE != 0) {
             continue;
         }
         // The category is `CanAttack` from the player (a rep faction answers by its at-war bit);
@@ -384,7 +466,6 @@ fn drive_vplates(
             store,
             self_store,
         );
-        let is_player = net.kind == EntityKind::Player;
         let friendly = crate::target::ring::plate_is_friendly(
             world.factions.as_deref(),
             &world.reputations,
@@ -393,12 +474,44 @@ fn drive_vplates(
             is_player,
             world.relations.context(),
         );
-        if friendly && !mode.friends || !friendly && !mode.enemies {
+        // A stealthed unit that is not friendly (`UNIT_FIELD_BYTES_1` byte 2 `0x2`, `0x72b0e6`).
+        if !friendly && store.is_some_and(|s| s.0.unit_is_stealthed()) {
             continue;
         }
-        // Only on the hostile side, a dead-looking unit has no plate (`0x60f733`): a feigning
-        // hunter's plate hides from enemies and stays for friends.
-        if !friendly && store.is_some_and(|s| s.0.unit_reads_dead()) {
+        if !mode.shows(friendly, sort) {
+            continue;
+        }
+        // `UNIT_DYNFLAG_DEAD` (feign death included) takes the plate on either side (`0x72b1e4`).
+        // Unresolved, labelled: the reference keeps it where `0x512a30` passes the unit's
+        // position, an untraced map test; here it never does.
+        if store.is_some_and(|s| s.0.unit_dynamic_flags() & field::UNIT_DYNFLAG_DEAD != 0) {
+            continue;
+        }
+        // A player-owned unit with a creator, no summoner and flags bit 9 (`0x200`): no plate in
+        // either category (`0x72b1bb`); the bit's name is unknown.
+        if matches!(sort, UnitSort::Pet | UnitSort::Guardian | UnitSort::Totem)
+            && store.is_some_and(|s| {
+                s.0.unit_created_by().is_some_and(|g| g != 0)
+                    && s.0.unit_summoned_by().is_none_or(|g| g == 0)
+                    && s.0.unit_flags() & 0x200 != 0
+            })
+        {
+            continue;
+        }
+        // A player that is neither friendly nor attackable has none (`0x72b290`).
+        if is_player
+            && !friendly
+            && !crate::target::ring::can_attack_from_player(
+                world.factions.as_deref(),
+                &world.reputations,
+                store,
+                self_store,
+                world.relations.context(),
+            )
+        {
+            continue;
+        }
+        if !in_arena && (tf.translation - self_tf.translation).length_squared() > MAX_DIST_SQ {
             continue;
         }
         // Behind the camera or outside the viewport there is no plate: `0x60f600` destroys it
@@ -413,7 +526,7 @@ fn drive_vplates(
             &anchor_q.4,
         );
         let Some(screen) =
-            crate::ui_pass::project_overlay(cam, &cam_tf, anchor + Vec3::Y * PLATE_LIFT, viewport)
+            crate::overlay::project_overlay(cam, &cam_tf, anchor + Vec3::Y * PLATE_LIFT, viewport)
         else {
             continue;
         };
@@ -594,22 +707,17 @@ pub(crate) struct VPlatesPlugin;
 
 impl Plugin for VPlatesPlugin {
     fn build(&self, app: &mut App) {
+        app.add_observer(on_cvar);
         app.init_resource::<VPlateMode>()
             .init_resource::<VPlates>()
             .init_resource::<PlateHover>()
             .init_resource::<PlateClicks>()
             .add_systems(
                 Update,
-                (
-                    // A drain of the verbs the tick ran (a binding body, `UpdateNameplates`).
-                    apply_plate_verbs.after(crate::ui_script::UiInput),
-                    // After the targeting chain, itself after `WorldStage::Input`, so this projects
-                    // through this frame's camera; `ui_script::extract::paint_script` runs after
-                    // it, so the plates paint the same frame.
-                    drive_vplates.after(TargetUpdate),
-                )
-                    .chain()
-                    .in_set(VPlateSet),
+                // After the targeting chain, itself after `WorldStage::Input`, so this projects
+                // through this frame's camera; `ui_script::extract::paint_script` runs after it, so
+                // the plates paint the same frame.
+                drive_vplates.after(TargetUpdate).in_set(VPlateSet),
             );
     }
 }
@@ -671,155 +779,72 @@ mod tests {
         assert_eq!(text_px(NAME_H, 10_000.0), 32.0, "atlas-cell cap, raw law");
     }
 
-    /// An app with the drain and a bare VM: the four verbs are all it needs.
-    fn verb_app() -> App {
-        let mut app = App::new();
-        app.add_systems(Update, apply_plate_verbs)
-            .init_resource::<VPlateMode>()
-            .insert_non_send_resource(benilla_ui::script::UiScript::new().unwrap());
-        app
-    }
-
-    fn run(app: &mut App, lua: &str) {
-        app.world()
-            .non_send_resource::<benilla_ui::script::UiScript>()
-            .run(lua)
-            .unwrap();
-        app.update();
-    }
-
-    fn mode(app: &App) -> (bool, bool) {
-        let m = app.world().resource::<VPlateMode>();
-        (m.enemies, m.friends)
-    }
-
-    fn global(app: &App, name: &str) -> Option<i64> {
-        app.world()
-            .non_send_resource::<benilla_ui::script::UiScript>()
-            .lua()
-            .globals()
-            .get::<Option<i64>>(name)
-            .unwrap()
-    }
-
-    /// Both bits start clear: a fresh 1.12 client draws no plates until something shows them.
+    /// The registered defaults show nothing until a category is on, and a category's sub-gates
+    /// pass its player-owned units through.
     #[test]
-    fn the_verbs_move_the_bits_in_call_order() {
-        let mut app = verb_app();
-        app.update();
-        assert_eq!(mode(&app), (false, false), "boot: both clear");
-        run(&mut app, "ShowNameplates()");
-        assert_eq!(mode(&app), (true, false));
-        run(&mut app, "ShowFriendNameplates() HideNameplates()");
-        assert_eq!(mode(&app), (false, true), "each verb its own bit");
-        run(
-            &mut app,
-            "ShowNameplates() HideNameplates() HideFriendNameplates() ShowFriendNameplates()",
-        );
-        assert_eq!(mode(&app), (false, true), "the last write per bit stands");
-    }
-
-    /// The entry clears the bits after the UI load (`0x401639` after `0x401602`), so the
-    /// `VARIABLES_LOADED` replay does not survive it and `PLAYER_ENTERING_WORLD`'s decides.
-    #[test]
-    fn world_entry_clears_both_bits_and_the_loads_replay_with_them() {
-        let mut app = verb_app();
-        run(&mut app, "ShowNameplates() ShowFriendNameplates()");
-        assert_eq!(mode(&app), (true, true));
-        // The load's replay, not yet drained when the entry clears.
-        app.world()
-            .non_send_resource::<benilla_ui::script::UiScript>()
-            .run("ShowNameplates()")
-            .unwrap();
-        clear_at_world_entry(app.world_mut());
-        app.update();
-        assert_eq!(mode(&app), (false, false), "both clear after the entry");
-        run(&mut app, "ShowFriendNameplates()");
-        assert_eq!(
-            mode(&app),
-            (false, true),
-            "and the next verb moves them again"
-        );
-    }
-
-    /// The V, Shift-V and Ctrl-V commands run the stock bodies (`Bindings.xml:516-550`): V and
-    /// Shift-V each show their own kind and hide the other, and turn their own kind off only
-    /// when it is the one showing; Ctrl-V shows both unless both show. Each flips the verb and
-    /// FrameXML's global together, so the saved variable carries what the key did, and none
-    /// writes a CVar.
-    #[test]
-    fn the_v_keys_run_the_stock_bodies() {
-        benilla_formats::wow_data_or_skip!();
-        let mut app = verb_app();
-        crate::ui_script::load_stock_bindings(
-            &mut app
-                .world_mut()
-                .non_send_resource_mut::<benilla_ui::script::UiScript>(),
-        );
-        let key = |app: &mut App, command: &str| {
-            assert!(app
-                .world()
-                .non_send_resource::<benilla_ui::script::UiScript>()
-                .execute_binding(command, true)
-                .unwrap());
-            app.update();
-        };
-        let state = |app: &App| {
-            (
-                mode(app),
-                global(app, "NAMEPLATES_ON"),
-                global(app, "FRIENDNAMEPLATES_ON"),
-            )
-        };
-
-        key(&mut app, "NAMEPLATES");
-        assert_eq!(state(&app), ((true, false), Some(1), None), "V: enemies on");
-        key(&mut app, "FRIENDNAMEPLATES");
-        assert_eq!(
-            state(&app),
-            ((false, true), None, Some(1)),
-            "Shift-V: friends on, enemies off"
-        );
-        key(&mut app, "NAMEPLATES");
-        assert_eq!(
-            state(&app),
-            ((true, false), Some(1), None),
-            "V with friends showing: enemies on, friends off"
-        );
-        key(&mut app, "NAMEPLATES");
-        assert_eq!(state(&app), ((false, false), None, None), "V again: off");
-        key(&mut app, "ALLNAMEPLATES");
-        assert_eq!(
-            state(&app),
-            ((true, true), Some(1), Some(1)),
-            "Ctrl-V: both on"
-        );
-        key(&mut app, "NAMEPLATES");
-        assert_eq!(
-            state(&app),
-            ((true, false), Some(1), None),
-            "V with both on turns friends off"
-        );
-        key(&mut app, "ALLNAMEPLATES");
-        key(&mut app, "FRIENDNAMEPLATES");
-        assert_eq!(
-            state(&app),
-            ((false, true), None, Some(1)),
-            "Shift-V with both on turns enemies off"
-        );
-        key(&mut app, "ALLNAMEPLATES");
-        key(&mut app, "ALLNAMEPLATES");
-        assert_eq!(
-            state(&app),
-            ((false, false), None, None),
-            "Ctrl-V with both on: both off"
-        );
+    fn the_plate_cvars_gate_by_category_then_sub_gate() {
+        let mut mode = VPlateMode::default();
+        for sort in [UnitSort::Player, UnitSort::Creature, UnitSort::Pet] {
+            assert!(
+                !mode.shows(false, sort) && !mode.shows(true, sort),
+                "{sort:?}"
+            );
+        }
+        mode.enemies = true;
+        assert!(mode.shows(false, UnitSort::Creature));
         assert!(
-            app.world_mut()
-                .non_send_resource_mut::<benilla_ui::script::UiScript>()
-                .take_cvar_changes()
-                .is_empty(),
-            "no CVar: nothing reaches config.toml"
+            mode.shows(false, UnitSort::Totem),
+            "the sub-gates default on"
+        );
+        assert!(!mode.shows(true, UnitSort::Player), "friends stay off");
+        mode.enemy_totems = false;
+        assert!(!mode.shows(false, UnitSort::Totem));
+        assert!(mode.shows(false, UnitSort::Pet), "each sub-gate its own");
+        mode.friends = true;
+        mode.friendly_guardians = false;
+        assert!(mode.shows(true, UnitSort::Pet));
+        assert!(!mode.shows(true, UnitSort::Guardian));
+    }
+
+    /// `0x71f300`'s creature type and the owner links: critters and non-combat pets first, then a
+    /// player owner's totem, guardian (creator only) or pet; an NPC's own summons are creatures.
+    #[test]
+    fn units_sort_by_type_then_player_owner() {
+        use benilla_protocol::types::Field;
+        const PLAYER: u64 = 0x0000_0000_0000_0042;
+        const NPC: u64 = 0xF130_0000_1234_0001;
+        let at = |f: Field| f.index();
+        let fields = |links: &[(Field, u64)]| {
+            let pairs: Vec<(u16, u32)> = links
+                .iter()
+                .flat_map(|&(f, g)| [(at(f), g as u32), (at(f) + 1, (g >> 32) as u32)])
+                .collect();
+            benilla_protocol::ObjectFields::from_pairs(&pairs)
+        };
+        let none = fields(&[]);
+        assert_eq!(unit_sort(true, &none, None), UnitSort::Player);
+        assert_eq!(unit_sort(false, &none, Some(8)), UnitSort::NonCombat);
+        assert_eq!(unit_sort(false, &none, Some(12)), UnitSort::NonCombat);
+        assert_eq!(unit_sort(false, &none, Some(7)), UnitSort::Creature);
+        let totem = fields(&[
+            (Field::UnitCreatedby, PLAYER),
+            (Field::UnitSummonedby, PLAYER),
+        ]);
+        assert_eq!(unit_sort(false, &totem, Some(11)), UnitSort::Totem);
+        let guardian = fields(&[(Field::UnitCreatedby, PLAYER)]);
+        assert_eq!(unit_sort(false, &guardian, Some(7)), UnitSort::Guardian);
+        let pet = fields(&[
+            (Field::UnitCreatedby, PLAYER),
+            (Field::UnitSummonedby, PLAYER),
+        ]);
+        assert_eq!(unit_sort(false, &pet, Some(1)), UnitSort::Pet);
+        let charmed = fields(&[(Field::UnitCharmedby, PLAYER)]);
+        assert_eq!(unit_sort(false, &charmed, Some(7)), UnitSort::Pet);
+        let npc_totem = fields(&[(Field::UnitCreatedby, NPC)]);
+        assert_eq!(
+            unit_sort(false, &npc_totem, Some(11)),
+            UnitSort::Creature,
+            "an NPC's totem takes only the category gate"
         );
     }
 

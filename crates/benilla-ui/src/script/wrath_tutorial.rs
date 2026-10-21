@@ -140,7 +140,7 @@ mod tests {
 
     fn vm() -> super::super::UiScript {
         let mut script =
-            super::super::UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340)
+            super::super::UiScript::new()
                 .unwrap();
         script.seed_cvars([super::super::SeededCvar {
             name: "flaggedTutorials".into(),

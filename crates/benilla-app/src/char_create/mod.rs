@@ -20,7 +20,7 @@ use bevy::prelude::*;
 use crate::char_select::{ClientState, Roster};
 use crate::entities::CharCreate;
 use crate::glue_strings::GlueStrings;
-use crate::net::{CharActionResultMessage, CharPick, CharRequest};
+use crate::net::{CharPick, CharRequest};
 use crate::portrait::{CreateLook, GlueLook, GluePreview};
 use crate::sound::GlueSound;
 
@@ -174,7 +174,10 @@ fn debug_pick(
             sel.dials[i] = want.min(n - 1);
         }
     }
-    preview.scene = Some(crate::portrait::GlueScene::Race(sel.race));
+    preview.scene = Some(crate::portrait::GlueScene::Race {
+        race: sel.race,
+        class: sel.class,
+    });
     preview.look = Some(GlueLook::Create(sel.look()));
     info!(
         "char create: pick instrument set race {} sex {} class {} dials {:?}",
@@ -500,7 +503,10 @@ fn create_input(
         }
     }
     if changed_look {
-        preview.scene = Some(crate::portrait::GlueScene::Race(sel.race));
+        preview.scene = Some(crate::portrait::GlueScene::Race {
+            race: sel.race,
+            class: sel.class,
+        });
         preview.look = Some(GlueLook::Create(sel.look()));
     }
 }
@@ -633,13 +639,12 @@ fn paid_flow(
 
 // ── Result ───────────────────────────────────────────────────────────────────────────────────────
 
-/// Surface each create result in the status line; a success returns to select with the row armed.
-/// Native results ride the same system: the transport publishes the refreshed roster before a
-/// success (`9bab9156`), and a refusal shows its 12340 status key
+/// Surface each native create result (`SMSG_CHAR_CREATE`, AzerothCore `ResponseCodes`) in the
+/// status line; a success returns to select with the row armed. The transport publishes the
+/// refreshed roster before a success (`9bab9156`), and a refusal shows its 12340 status key
 /// ([`crate::char_select::wrath_char_result_key`]).
 #[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn create_result(
-    mut msgs: MessageReader<CharActionResultMessage>,
     native: Option<MessageReader<crate::net::WrathCharActionResultMessage>>,
     mut sel: ResMut<CreateSelection>,
     mut roster: ResMut<Roster>,
@@ -683,158 +688,100 @@ fn create_result(
             text.0 = strings.text(key, "Character creation failed").to_string();
         }
     }
-    for msg in msgs.read() {
-        if msg.action != CharAction::Create {
-            continue;
-        }
-        sel.creating = false;
-        info!(
-            "char create: result {:#04x} — {}",
-            msg.code,
-            char_result_text(&strings, msg.code)
-        );
-        if msg.code == benilla_protocol::types::CHAR_CREATE_SUCCESS {
-            // `net::io` re-enumerates and emits the fresh roster before the result, so the new
-            // row is selected against the list already in hand; no later roster update comes.
-            roster.note_created(sel.name.text.clone());
-            next.set(ClientState::CharSelect);
-        } else if let Ok(mut text) = status.single_mut() {
-            text.0 = char_result_text(&strings, msg.code).to_string();
-        }
-    }
-}
-
-/// A `SMSG_CHAR_CREATE` result code (vmangos `ResponseCodes`, `CHAR_CREATE_SUCCESS = 0x2E`) to its
-/// GlueStrings key, read off the player's chain, with a built-in caption only when the key is
-/// missing. `0x50` has no 1.12 string and takes the default arm; `0x4B` is `CHAR_NAME_RESERVED`,
-/// whose enUS text equals `CHAR_CREATE_NAME_IN_USE`'s.
-fn char_result_text<'a>(strings: &'a GlueStrings, code: u8) -> &'a str {
-    let (key, fallback): (&str, &'a str) = match code {
-        0x2E => ("CHAR_CREATE_SUCCESS", "Character created"),
-        0x2F => ("CHAR_CREATE_ERROR", "Error creating character"),
-        0x30 => ("CHAR_CREATE_FAILED", "Character creation failed"),
-        0x31 => ("CHAR_CREATE_NAME_IN_USE", "That name is unavailable"),
-        0x32 => (
-            "CHAR_CREATE_DISABLED",
-            "Creation of that race and/or class is currently disabled.",
-        ),
-        0x33 => (
-            "CHAR_CREATE_PVP_TEAMS_VIOLATION",
-            "You cannot have both a Horde and an Alliance character on the same PvP server",
-        ),
-        0x34 => (
-            "CHAR_CREATE_SERVER_LIMIT",
-            "You already have the maximum number of characters allowed on this realm.",
-        ),
-        0x35 => (
-            "CHAR_CREATE_ACCOUNT_LIMIT",
-            "You already have the maximum number of characters allowed on this account.",
-        ),
-        0x36 => (
-            "CHAR_CREATE_SERVER_QUEUE",
-            "This server is currently queued and new character creation is temporarily disabled. \
-             Please try again during off peak hours.",
-        ),
-        0x37 => (
-            "CHAR_CREATE_ONLY_EXISTING",
-            "Only players who already have characters on this realm are currently allowed to \
-             create characters.",
-        ),
-        0x45 => ("CHAR_NAME_NO_NAME", "Enter a name for your character"),
-        0x46 => ("CHAR_NAME_TOO_SHORT", "Names must be at least 2 characters"),
-        0x47 => (
-            "CHAR_NAME_TOO_LONG",
-            "Names must be no more than 12 characters",
-        ),
-        0x48 => (
-            "CHAR_NAME_INVALID_CHARACTER",
-            "Names can only contain letters",
-        ),
-        0x49 => (
-            "CHAR_NAME_MIXED_LANGUAGES",
-            "Names must contain only one language",
-        ),
-        0x4A => ("CHAR_NAME_PROFANE", "That name contains profanity"),
-        0x4B => ("CHAR_NAME_RESERVED", "That name is unavailable"),
-        0x4C => (
-            "CHAR_NAME_INVALID_APOSTROPHE",
-            "You cannot use an apostrophe as the first or last character of your name",
-        ),
-        0x4D => (
-            "CHAR_NAME_MULTIPLE_APOSTROPHES",
-            "You can only have one apostrophe",
-        ),
-        0x4E => (
-            "CHAR_NAME_THREE_CONSECUTIVE",
-            "You cannot use the same letter three times consecutively",
-        ),
-        0x4F => (
-            "CHAR_NAME_INVALID_SPACE",
-            "You cannot use a space as the first or last character of your name",
-        ),
-        _ => ("CHAR_CREATE_INVALID_NAME", "Invalid character name"),
-    };
-    strings.text(key, fallback)
 }
 
 #[cfg(test)]
 mod tests {
-    /// The chain is assembled by the loader's own helper, `GlueLocalization.lua`'s `Localize()`
-    /// over `GlueStrings.lua`, so this asserts what the running client shows.
+    use super::*;
+
+    /// Every 3.3.5 create result (AzerothCore `ResponseCodes` `0x2e..=0x45`) names a
+    /// `CHAR_CREATE_*` key in the 12340 status table. The shipped GlueStrings carry `0x2e..=0x3d`;
+    /// the paid-service rows `0x3e..=0x45` (race and faction change, mail, gold, forced login) have
+    /// no glue string in 12340, so the status line shows the built-in caption for them. Asserted on
+    /// the loader's own table (`Localize()` over `GlueStrings.lua`).
     #[test]
     fn every_char_create_result_resolves_in_the_real_glue_strings() {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-        let strings = crate::glue_strings::table_from_chain(&mut chain);
-
-        // The shipped `0x36` string has a second sentence.
-        assert_eq!(
-            char_result_text(&strings, 0x36),
-            "This server is currently queued and new character creation is temporarily disabled. \
-             Please try again during off peak hours."
-        );
-
-        // 1.12 has no `CHAR_NAME_CONSECUTIVE_SPACES`, so `0x50` takes the default arm.
-        assert_eq!(
-            char_result_text(&strings, 0x50),
-            char_result_text(&strings, 0xFE),
-            "0x50 has no 1.12 string and must fall to the default arm, not invent one"
-        );
-        assert_eq!(char_result_text(&strings, 0xFE), "Invalid character name");
-
-        for code in [
-            0x2Eu8, 0x2F, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x45, 0x46, 0x47, 0x48,
-            0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F,
-        ] {
-            let shown = char_result_text(&strings, code);
-            assert!(!shown.is_empty(), "code {code:#04x} shows nothing");
-        }
-    }
-
-    /// The two keys share their enUS text, so the key is asserted by name through a sentinel.
-    #[test]
-    fn the_reserved_name_code_names_the_reserved_key_not_the_in_use_one() {
-        let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let map = crate::glue_strings::table_from_chain(&mut chain).into_map();
-
-        let reserved = map.get("CHAR_NAME_RESERVED").expect("CHAR_NAME_RESERVED");
-        let in_use = map
-            .get("CHAR_CREATE_NAME_IN_USE")
-            .expect("CHAR_CREATE_NAME_IN_USE");
+        for code in 0x2Eu8..=0x45 {
+            let key = crate::char_select::wrath_char_result_key(code).expect("a table row");
+            assert!(key.starts_with("CHAR_CREATE_"), "{code:#04x}: {key}");
+            assert_eq!(
+                map.contains_key(key),
+                code <= 0x3D,
+                "{code:#04x}: {key} shipped, against the 12340 split"
+            );
+        }
         assert_eq!(
-            reserved, in_use,
-            "if these ever differ, the mix-up becomes visible"
+            crate::char_select::wrath_char_result_key(0x32),
+            Some("CHAR_CREATE_NAME_IN_USE")
         );
-
-        let mut probe = map.clone();
-        probe.insert("CHAR_NAME_RESERVED".into(), "RESERVED-SENTINEL".into());
-        let strings = GlueStrings::from_map(probe);
-        assert_eq!(char_result_text(&strings, 0x4B), "RESERVED-SENTINEL");
-        assert_eq!(char_result_text(&strings, 0x31), in_use.as_str());
+        assert_eq!(
+            crate::char_select::wrath_char_result_key(0x5F),
+            Some("CHAR_NAME_RESERVED")
+        );
     }
 
-    use super::*;
+    /// The server's native answer reaches the screen: a success returns to select with the new
+    /// name armed, a refusal ends Creating and shows its 12340 key's text.
+    #[test]
+    fn a_native_create_result_ends_creating_and_answers_the_screen() {
+        use crate::net::WrathCharActionResultMessage as Native;
+        let run = |code: u8| {
+            let (tx, _rx) = crossbeam_channel::unbounded();
+            let mut app = App::new();
+            app.add_plugins((MinimalPlugins, bevy::state::app::StatesPlugin))
+                .insert_state(ClientState::CharCreate)
+                .init_resource::<Roster>()
+                .init_resource::<paid::PaidChange>()
+                .init_resource::<crate::glue::dialog::GlueDialog>()
+                .insert_resource(GlueStrings::from_map(
+                    [(
+                        "CHAR_CREATE_NAME_IN_USE".to_string(),
+                        "That name is unavailable".to_string(),
+                    )]
+                    .into(),
+                ))
+                .insert_resource(CharPick(tx))
+                .add_message::<Native>()
+                .add_message::<crate::glue::dialog::GlueDialogAnswer>()
+                .add_systems(Update, create_result);
+            let mut sel = CreateSelection {
+                creating: true,
+                ..Default::default()
+            };
+            sel.name.set_text("Newbie");
+            app.insert_resource(sel);
+            app.world_mut().spawn((Text::new(""), parts::StatusLine));
+            app.world_mut().write_message(Native {
+                action: CharAction::Create,
+                code,
+            });
+            app.update();
+            app.update(); // the state transition applies
+            let creating = app.world().resource::<CreateSelection>().creating;
+            let state = *app.world().resource::<State<ClientState>>().get();
+            let created = app.world().resource::<Roster>().just_created.clone();
+            let line = app
+                .world_mut()
+                .query_filtered::<&Text, With<parts::StatusLine>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone();
+            (creating, state, created, line)
+        };
+        let (creating, state, created, _) = run(benilla_protocol::wrath_world::CHAR_CREATE_SUCCESS);
+        assert!(!creating);
+        assert_eq!(state, ClientState::CharSelect);
+        assert_eq!(created.as_deref(), Some("Newbie"));
+        let (creating, state, created, line) = run(0x32);
+        assert!(!creating);
+        assert_eq!(state, ClientState::CharCreate);
+        assert_eq!(created, None);
+        assert_eq!(line, "That name is unavailable");
+    }
 
     #[test]
     fn race_columns_match_the_reference_screen() {

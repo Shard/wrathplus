@@ -10,17 +10,13 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use crossbeam_channel::Receiver;
 
-const FIELD_UNIT_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::types::Field::UnitFlags);
+const FIELD_UNIT_FLAGS: u16 = benilla_protocol::types::Field::UnitFlags.index();
 
-const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::types::Field::UnitHealth);
+const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::Field::UnitHealth.index();
 
-const FIELD_UNIT_LEVEL: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::types::Field::UnitLevel);
+const FIELD_UNIT_LEVEL: u16 = benilla_protocol::types::Field::UnitLevel.index();
 
-const FIELD_UNIT_MAXHEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::types::Field::UnitMaxHealth);
+const FIELD_UNIT_MAXHEALTH: u16 = benilla_protocol::types::Field::UnitMaxHealth.index();
 
 const ME: u64 = 0x0000_0000_0000_0007;
 
@@ -33,6 +29,7 @@ fn create(guid: u64) -> SessionEvent {
         display_id: None,
         position: [3.0, 0.0, 0.0],
         orientation: 0.0,
+        rotation: None,
         scale: 1.0,
         speeds: None,
         mover: None,

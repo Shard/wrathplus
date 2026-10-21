@@ -190,11 +190,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn voice_answers_its_null_manager_and_ui_globals_their_state() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run(
             r##"
             assert(select("#", VoiceEnumerateCaptureDevices(1)) == 0)

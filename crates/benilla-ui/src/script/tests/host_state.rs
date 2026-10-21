@@ -1,5 +1,5 @@
-//! The host's state lives off `_G`: 1.12.1's global table has no name for the clock, the zone
-//! caches, the game clock or the error-handler slot (`reference/1.12-globals.tsv`), and the
+//! The host's state lives off `_G`: the client's global table has no name for the clock, the zone
+//! caches, the game clock or the error-handler slot, and the
 //! getters over them read the client's own state, which Lua cannot reach. So a global an addon
 //! assigns under one of benilla's old host names is a global no getter reads.
 
@@ -263,8 +263,8 @@ fn the_engine_reads_the_handler_slot_not_the_geterrorhandler_global() {
 /// Wrath 0x51ba50 supplies factionName in slot 3, as Minimap.lua and ZoneText.lua read it.
 #[test]
 fn wrath_zone_pvp_tuple_keeps_faction_in_the_stock_consumer_slot() {
-    use crate::script::{ScriptDialect, ZoneTexts};
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    use crate::script::{ZoneTexts};
+    let mut s = UiScript::new().unwrap();
     assert_eq!(s.arity("GetZonePVPInfo()").unwrap(), 0);
     for kind in ["friendly", "hostile", "contested"] {
         s.set_zone_texts(ZoneTexts {
@@ -289,8 +289,8 @@ fn wrath_zone_pvp_tuple_keeps_faction_in_the_stock_consumer_slot() {
 /// Wrath 0x51ba50's special areas: two values, isSubZone 1 only when the leaf carried the flag.
 #[test]
 fn wrath_zone_pvp_special_areas_return_type_and_leaf_flag() {
-    use crate::script::{ScriptDialect, ZoneTexts};
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    use crate::script::{ZoneTexts};
+    let mut s = UiScript::new().unwrap();
     for kind in ["sanctuary", "arena", "combat"] {
         for leaf in [false, true] {
             s.set_zone_texts(ZoneTexts {

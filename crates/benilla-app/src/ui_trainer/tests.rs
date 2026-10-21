@@ -1064,22 +1064,18 @@ fn the_group_header_keys_resolve_in_the_real_global_strings() {
 
 #[test]
 fn trainer_rederive_edges_preserve_skill_halves_and_class_gates_in_both_layouts() {
-    use benilla_protocol::types::FieldLayout;
-    let layout = FieldLayout::Wrath12340;
     let native_edge = |field: Field, offset: u16| {
-        let span = layout
-            .resolve(field)
+        let span = field
+            .span()
             .expect("trainer dependency exists in both layouts");
         assert!(offset < span.width);
-        let (resolved, resolved_offset) = layout
-            .field_at(ObjectType::Player, span.index + offset)
-            .unwrap();
+        let (resolved, resolved_offset) =
+            benilla_protocol::types::Field::at(ObjectType::Player, span.index + offset).unwrap();
         assert_eq!((resolved, resolved_offset), (field, offset));
         FieldChanged {
             entity: Entity::PLACEHOLDER,
             guid: 42,
             kind: ObjectType::Player,
-            layout,
             field: resolved,
             offset: resolved_offset,
             old: 0,
@@ -1119,13 +1115,12 @@ fn wrath_profession_eligibility_reads_free_descriptor_slots_not_vanilla_flag() {
     service.is_primary_prof_first_rank = true;
     service.wrath_point_cost = Some([0, 1]);
     assert!(!service.can_learn_primary_prof);
-    let layout = benilla_protocol::types::FieldLayout::Wrath12340;
-    let index = layout
-        .resolve(benilla_protocol::types::Field::PlayerCharacterPoints2)
+    let index = benilla_protocol::types::Field::PlayerCharacterPoints2
+        .span()
         .unwrap()
         .index;
     for (free, eligible) in [(0, false), (1, true), (2, true)] {
-        let store = benilla_protocol::ObjectFields::from_native_pairs(layout, &[(index, free)]);
+        let store = benilla_protocol::ObjectFields::from_pairs(&[(index, free)]);
         assert_eq!(
             profession_slot_available(&service, store.player_free_professions()),
             eligible

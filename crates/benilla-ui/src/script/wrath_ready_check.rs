@@ -136,10 +136,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{PartyState, RaidMemberInfo, ScriptDialect};
+    use crate::script::{PartyState, RaidMemberInfo};
     #[test]
     fn assistant_initiator_status_confirm_preemption_and_finish_are_native() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_party(PartyState {
             own_guid: 7,
             leader_guid: 99,

@@ -32,26 +32,18 @@ impl ObjectFields {
     /// (0 permanent, 1 temporary, 2-6 random properties), each an id, duration and charges
     /// (`Item.h:117-119`). Signed: the tooltip looks up `abs(id)` and paints a negative one red.
     pub fn item_enchant(&self, slot: u8) -> Option<i32> {
-        (u16::from(slot)
-            < self
-                .layout
-                .resolve(Field::ItemEnchantment)
-                .map_or(0, |s| s.width / 3))
-        .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot)))?
-        .map(|id| id as i32)
-        .filter(|&id| id != 0)
+        (u16::from(slot) < Field::ItemEnchantment.span().map_or(0, |s| s.width / 3))
+            .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot)))?
+            .map(|id| id as i32)
+            .filter(|&id| id != 0)
     }
     /// `ITEM_FIELD_ENCHANTMENT + 3*slot + 2`: charges left, shown as `" (N Charges)"` if nonzero.
     /// The tooltip skips the duration; a countdown comes from `SMSG_ITEM_ENCHANT_TIME_UPDATE`.
     pub fn item_enchant_charges(&self, slot: u8) -> u32 {
-        (u16::from(slot)
-            < self
-                .layout
-                .resolve(Field::ItemEnchantment)
-                .map_or(0, |s| s.width / 3))
-        .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot) + 2))
-        .flatten()
-        .unwrap_or(0)
+        (u16::from(slot) < Field::ItemEnchantment.span().map_or(0, |s| s.width / 3))
+            .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot) + 2))
+            .flatten()
+            .unwrap_or(0)
     }
     /// `ITEM_FIELD_RANDOM_PROPERTIES_ID` (field 44): the `ItemRandomProperties.dbc` suffix, 0 if
     /// none; only the name uses it (`0x5d8b00`), the roll's enchants fill enchant slots 2-6.
@@ -305,7 +297,7 @@ impl ObjectFields {
     /// `PLAYER_SKILL_INFO_<slot+1>_*`: one skill slot; vmangos writes the id and value together
     /// (`SetSkill`), so an absent value or bonus reads 0.
     pub fn player_skill(&self, slot: u8) -> Option<PlayerSkillSlot> {
-        if u16::from(slot) >= self.layout.resolve(Field::PlayerSkillInfo11)?.width / 3 {
+        if u16::from(slot) >= Field::PlayerSkillInfo11.span()?.width / 3 {
             return None;
         }
         let base = 3 * u16::from(slot);
@@ -441,12 +433,24 @@ impl ObjectFields {
     pub fn player_pvp_rank(&self) -> Option<u8> {
         self.get(Field::PlayerBytes3).map(|b| (b >> 16) as u8)
     }
-    /// `PLAYER_FIELD_YESTERDAY_CONTRIBUTION` (private): yesterday's honor (`HonorMgr.cpp:918`).
+    /// `PLAYER_FIELD_KILLS` (private, field 1225): today's honorable kills in the low half and
+    /// yesterday's in the high, which `GetPVPSessionStats` (`0x611a20`) and
+    /// `GetPVPYesterdayStats` (`0x611ad0`) read as `u16`s at `+0x10d4`/`+0x10d6`.
+    pub fn player_kills(&self) -> Option<u32> {
+        self.get(Field::PlayerKills)
+    }
+    /// `PLAYER_FIELD_TODAY_CONTRIBUTION` (private): today's honor, `GetPVPSessionStats`'s second
+    /// return (`+0x10d8`).
+    pub fn player_today_contribution(&self) -> Option<u32> {
+        self.get(Field::PlayerTodayContribution)
+    }
+    /// `PLAYER_FIELD_YESTERDAY_CONTRIBUTION` (private): yesterday's honor, `GetPVPYesterdayStats`'s
+    /// second return (`+0x10dc`).
     pub fn player_yesterday_contribution(&self) -> Option<u32> {
         self.get(Field::PlayerYesterdayContribution)
     }
-    /// `PLAYER_FIELD_LIFETIME_HONORBALE_KILLS` (private, vmangos's spelling): lifetime honorable
-    /// kills (`HonorMgr.cpp:934`).
+    /// `PLAYER_FIELD_LIFETIME_HONORABLE_KILLS` (private): lifetime honorable kills,
+    /// `GetPVPLifetimeStats`'s first return (`0x611b80`, `+0x10e0`).
     pub fn player_lifetime_honorable_kills(&self) -> Option<u32> {
         self.get(Field::PlayerLifetimeHonorableKills)
     }

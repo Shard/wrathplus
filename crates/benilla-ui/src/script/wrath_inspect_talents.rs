@@ -362,7 +362,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 mod tests {
     use super::*;
     use crate::script::talent::{TalentPrereqView, TalentTabView, TalentView};
-    use crate::script::{ScriptDialect, TalentUiState, UiScript};
+    use crate::script::{TalentUiState, UiScript};
 
     fn page(rank: u32, spent: u32, unspent: u32) -> TalentUiState {
         TalentUiState {
@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn player_and_inspect_branches_answer_the_12340_shapes() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_talents(page(1, 5, 7));
         assert_eq!(
             s.eval::<i64>("return select('#', GetTalentTabInfo(1))")

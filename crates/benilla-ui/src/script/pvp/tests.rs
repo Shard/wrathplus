@@ -4,27 +4,16 @@
 use super::*;
 use crate::script::{UiScript, UnitState};
 
-/// Every number distinct, so a swapped return cannot pass: the tens digit is the block (session
-/// 1x to lifetime 5x), the units digit the position in it.
+/// Every number distinct, so a swapped return cannot pass: the tens digit is the block (today 1x,
+/// yesterday 2x, lifetime 5x), the units digit the position in it.
 fn honor_state() -> HonorState {
     HonorState {
-        session_hk: 11,
-        session_dk: 12,
+        today_hk: 11,
+        today_honor: 12,
         yesterday_hk: 21,
-        yesterday_dk: 22,
-        yesterday_honor: 23,
-        this_week_hk: 31,
-        this_week_honor: 32,
-        last_week_hk: 41,
-        last_week_dk: 42,
-        last_week_honor: 43,
-        last_week_standing: 44,
+        yesterday_honor: 22,
         lifetime_hk: 51,
-        lifetime_dk: 52,
         highest_rank: 11,
-        rank: 9,
-        // 51/255 is exactly 0.2, which the engine's multiply does not produce.
-        rank_bar: 51,
     }
 }
 
@@ -96,54 +85,38 @@ fn seat_name_globals(s: &UiScript) {
     }
 }
 
-/// `HonorFrame.lua`'s own destructuring, line for line; the arities differ per period.
+/// Stock `PVPHonor_Update`'s own destructuring (`PVPFrame.lua`), two values per period.
 #[test]
 fn the_reference_destructuring_lands_every_value_in_the_right_slot() {
     let s = seated();
 
     assert_eq!(
-        s.eval::<(i64, i64)>("local hk, dk = GetPVPSessionStats() return hk, dk")
+        s.eval::<(i64, i64)>("local hk, cp = GetPVPSessionStats() return hk, cp")
             .unwrap(),
         (11, 12)
     );
     assert_eq!(
-        s.eval::<(i64, i64, i64)>(
-            "local hk, dk, contribution = GetPVPYesterdayStats() return hk, dk, contribution"
+        s.eval::<(i64, i64)>(
+            "local hk, contribution = GetPVPYesterdayStats() return hk, contribution"
         )
         .unwrap(),
-        (21, 22, 23)
+        (21, 22)
     );
     assert_eq!(
         s.eval::<(i64, i64)>(
-            "local hk, contribution = GetPVPThisWeekStats() return hk, contribution"
+            "local hk, highestRank = GetPVPLifetimeStats() return hk, highestRank"
         )
         .unwrap(),
-        (31, 32)
-    );
-    assert_eq!(
-        s.eval::<(i64, i64, i64, i64)>(
-            "local hk, dk, contribution, rank = GetPVPLastWeekStats() \
-             return hk, dk, contribution, rank"
-        )
-        .unwrap(),
-        (41, 42, 43, 44),
-        "the fourth return is last week's STANDING"
-    );
-    assert_eq!(
-        s.eval::<(i64, i64, i64)>(
-            "local hk, dk, highestRank = GetPVPLifetimeStats() return hk, dk, highestRank"
-        )
-        .unwrap(),
-        (51, 52, 11)
+        (51, 11)
     );
 }
 
-/// `0x51a843 cmp al,5; jb`: 4 vanishes, 5 survives.
+/// `0x611b80`: a highest rank of 4 vanishes, 5 survives.
 #[test]
 fn a_lifetime_rank_below_five_is_reported_as_zero() {
     let mut s = seated();
-    let third = |s: &UiScript| {
-        s.eval::<i64>("local _, _, highest = GetPVPLifetimeStats() return highest")
+    let second = |s: &UiScript| {
+        s.eval::<i64>("local _, highest = GetPVPLifetimeStats() return highest")
             .unwrap()
     };
     for (highest, reported) in [(0u8, 0i64), (1, 0), (4, 0), (5, 5), (6, 6), (18, 18)] {
@@ -151,19 +124,17 @@ fn a_lifetime_rank_below_five_is_reported_as_zero() {
             highest_rank: highest,
             ..honor_state()
         }));
-        assert_eq!(third(&s), reported, "highest lifetime rank {highest}");
+        assert_eq!(second(&s), reported, "highest lifetime rank {highest}");
     }
 
-    // A number, not nil: the pane passes it to `GetPVPRankInfo`, which raises on a non-number.
+    // A number, not nil: a caller passing it to `GetPVPRankInfo` would raise on a non-number.
     s.set_honor(Some(HonorState {
         highest_rank: 3,
         ..honor_state()
     }));
-    assert_eq!(s.arity("GetPVPLifetimeStats()").unwrap(), 3);
+    assert_eq!(s.arity("GetPVPLifetimeStats()").unwrap(), 2);
     assert!(s
-        .eval::<bool>(
-            "local _, _, highest = GetPVPLifetimeStats() return type(highest) == 'number'"
-        )
+        .eval::<bool>("local _, highest = GetPVPLifetimeStats() return type(highest) == 'number'")
         .unwrap());
 }
 
@@ -173,10 +144,8 @@ fn every_getter_returns_exactly_the_reference_arity() {
     let s = seated();
     for (call, width) in [
         ("GetPVPSessionStats()", 2),
-        ("GetPVPYesterdayStats()", 3),
-        ("GetPVPThisWeekStats()", 2),
-        ("GetPVPLastWeekStats()", 4),
-        ("GetPVPLifetimeStats()", 3),
+        ("GetPVPYesterdayStats()", 2),
+        ("GetPVPLifetimeStats()", 2),
         ("GetPVPRankProgress()", 1),
         ("GetPVPRankInfo(9)", 2),
         ("GetPVPRankInfo(0)", 2),
@@ -186,52 +155,39 @@ fn every_getter_returns_exactly_the_reference_arity() {
     }
 }
 
-/// The reference feeds these straight into `format()`, where a nil would raise.
+/// Every miss pushes two zeros (`0x611a20`, `0x611ad0`, `0x611b80`), and the rank bar is gone
+/// from 12340: `GetPVPRankProgress` (`0x608560`) is a constant 0 even over a held snapshot.
 #[test]
 fn the_self_getters_answer_zeroed_before_the_first_push() {
     let s = UiScript::new().expect("VM");
-    assert_eq!(
-        s.eval::<(i64, i64, i64, i64)>("return GetPVPLastWeekStats()")
-            .unwrap(),
-        (0, 0, 0, 0)
-    );
+    for call in [
+        "GetPVPSessionStats()",
+        "GetPVPYesterdayStats()",
+        "GetPVPLifetimeStats()",
+    ] {
+        assert_eq!(
+            s.eval::<(i64, i64)>(&format!("return {call}")).unwrap(),
+            (0, 0),
+            "{call}"
+        );
+    }
     assert_eq!(s.eval::<f64>("return GetPVPRankProgress()").unwrap(), 0.0);
+    assert_eq!(
+        seated().eval::<f64>("return GetPVPRankProgress()").unwrap(),
+        0.0
+    );
 }
 
-/// Written to fail against `byte / 255.0`: the constant is checked at its bits, and 51 and 255
-/// must not land on 0.2 and 1.0.
+/// 1.12's weekly getters are not registered in build 12340.
 #[test]
-fn the_rank_bar_multiplies_by_the_f32_reciprocal_and_never_clamps() {
-    // The four bytes at `0x8026c8`.
-    assert_eq!(f64::from(f32::from_bits(0x3B80_8081)), RANK_BAR_SCALE);
-    assert_ne!(RANK_BAR_SCALE, 1.0 / 255.0, "the f32 is NOT 1/255");
-
-    let mut s = seated();
-    let bar = |s: &UiScript| s.eval::<f64>("return GetPVPRankProgress()").unwrap();
-
-    assert_eq!(bar(&s), 51.0 * RANK_BAR_SCALE);
-    assert_ne!(bar(&s), 0.2, "a divisor would land exactly on 0.2");
-    assert_ne!(bar(&s), 51.0 / 255.0);
-
-    for byte in [0u8, 1, 51, 128, 254, 255] {
-        s.set_honor(Some(HonorState {
-            rank_bar: byte,
-            ..honor_state()
-        }));
-        assert_eq!(bar(&s), f64::from(byte) * RANK_BAR_SCALE, "byte {byte}");
+fn the_weekly_getters_are_gone() {
+    let s = UiScript::new().expect("VM");
+    for name in ["GetPVPThisWeekStats", "GetPVPLastWeekStats"] {
+        assert!(
+            s.eval::<bool>(&format!("return {name} == nil")).unwrap(),
+            "{name} must not exist"
+        );
     }
-
-    s.set_honor(Some(HonorState {
-        rank_bar: 0,
-        ..honor_state()
-    }));
-    assert_eq!(bar(&s), 0.0);
-    s.set_honor(Some(HonorState {
-        rank_bar: 255,
-        ..honor_state()
-    }));
-    assert!(bar(&s) > 1.0, "255 * K = 1.0000000091389835, unclamped");
-    assert_ne!(bar(&s), 1.0);
 }
 
 /// Runs the panes' own `NONE` fallback, not just the nil.

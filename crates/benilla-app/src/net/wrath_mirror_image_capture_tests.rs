@@ -1,12 +1,6 @@
 use super::*;
-use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
-
-pub(crate) fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, body: &[u8]) {
-    if let WrathDispatch::Handled { session_events, .. } = adapter.dispatch(0x402, body, 0).unwrap()
-    {
-        crate::net::handlers::dispatch(app.world_mut(), session_events);
-    }
-}
+use crate::net::test_support::mirror_image::dispatch;
+use benilla_protocol::wrath_events::WrathEventAdapter;
 
 #[test]
 fn ordered_replies_keep_zero_duplicates_and_reject_malformed() {
@@ -41,17 +35,17 @@ fn ordered_replies_keep_zero_duplicates_and_reject_malformed() {
 #[test]
 fn a_mirror_image_unit_asks_for_its_look_once_per_object() {
     use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore};
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_protocol::ObjectFields;
     let (tx, rx) = crossbeam_channel::unbounded();
     let mut app = App::new();
     app.insert_resource(NetCommands(tx));
     register(&mut app);
     let unit = |flags2: u32| {
-        ObjectStore(ObjectFields::from_fields(
-            FieldLayout::Wrath12340,
-            &[(Field::ObjectType, 0x09), (Field::UnitFlags2, flags2)],
-        ))
+        ObjectStore(ObjectFields::from_fields(&[
+            (Field::ObjectType, 0x09),
+            (Field::UnitFlags2, flags2),
+        ]))
     };
     let image = app.world_mut().spawn((Guid(7), unit(0x10))).id();
     let plain = app.world_mut().spawn((Guid(8), unit(0))).id();

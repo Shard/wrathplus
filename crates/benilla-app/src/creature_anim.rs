@@ -315,13 +315,6 @@ pub(crate) struct Casting {
     pub(crate) until: Option<Instant>,
 }
 
-impl PlaySeq {
-    pub(crate) fn next(&mut self) -> u64 {
-        self.0 += 1;
-        self.0
-    }
-}
-
 /// A cast lifecycle edge on a streamed unit, off the wire.
 #[derive(Message, Clone, Copy)]
 pub(crate) struct CastEvent {

@@ -33,6 +33,51 @@ pub(crate) struct Spells {
     pub(crate) radii: benilla_formats::SpellRadiusCatalog,
 }
 
+impl Spells {
+    /// The cast time in ms as `GetCastTime 0x6e3340` returns it for argument 1, the tooltip's
+    /// (`52eb4b`): the level-scaled `CastingTimeIndex` row, then spell-mod op 10 (`0x6e33b7`),
+    /// with no clamp, so row 18's negative time survives. A missing row returns 0 before the
+    /// modifier (`0x6e338a`). The cast-speed multiply (`0x6e3422`) is not applied.
+    pub(crate) fn cast_time_unclamped_ms(
+        &self,
+        def: &benilla_formats::SpellDisplay,
+        caster_level: u32,
+        mods: &crate::spell::SpellModifiers,
+    ) -> i32 {
+        self.cast_times
+            .get(def.casting_time_index)
+            .map_or(0, |row| {
+                let resolved = row.resolved_ms(caster_level, def.base_level);
+                mods.apply(def, crate::spell::OP_CAST_TIME, resolved)
+            })
+    }
+
+    /// [`Self::cast_time_unclamped_ms`] for argument 0, the cast validator's (`0x609e16`): a
+    /// result at or below zero reads 0 (`0x6e3461`-`0x6e3470`).
+    pub(crate) fn cast_time_ms(
+        &self,
+        def: &benilla_formats::SpellDisplay,
+        caster_level: u32,
+        mods: &crate::spell::SpellModifiers,
+    ) -> u32 {
+        self.cast_time_unclamped_ms(def, caster_level, mods).max(0) as u32
+    }
+}
+
+#[cfg(test)]
+impl Spells {
+    pub(crate) fn empty_for_tests() -> Self {
+        Spells {
+            catalog: benilla_formats::SpellCatalog::from_displays(HashMap::new()),
+            forms: HashMap::new(),
+            ranges: benilla_formats::SpellRangeCatalog::default(),
+            cast_times: Default::default(),
+            durations: Default::default(),
+            radii: Default::default(),
+        }
+    }
+}
+
 /// The reference's learned-ability latches: at learn time `0x4b25e0` stores a spell's id by its
 /// `Effect[0]`, and the unlearn path `0x4b2c50` clears it. The skin cursor requires the latch
 /// (`0x482589`), so a player who never learned Skinning gets no skin cursor.
@@ -79,14 +124,109 @@ pub(crate) struct Roster {
     /// The guid picked; kept in-world so a reconnect's roster is answered with it, cleared by a
     /// logout so the roster is shown.
     pub(crate) pending_pick: Option<u64>,
-    /// `WOW_CHAR`: auto-pick this name on the first roster only.
+    /// `--character` (or `WOW_CHAR`): select this name on the first roster only
+    /// ([`crate::launch_plan`]).
     pub(crate) env_char: Option<String>,
+    /// `--enter-world` (or `WOW_CHAR`): press Enter World on the selected row, first roster only.
+    pub(crate) env_enter: bool,
     /// A just-created character's name, whose row gets selected (the reference's
     /// `SELECT_LAST_CHARACTER`, keyed by name to survive the create/enum race).
     pub(crate) just_created: Option<String>,
     /// The realm-list entry this session connected to, refreshed with each roster.
     pub(crate) realm: Option<benilla_protocol::RealmInfo>,
     pub(crate) env_read: bool,
+}
+
+impl Roster {
+    /// A roster with a pick in flight, for tests outside this module.
+    #[cfg(test)]
+    pub(crate) fn with_pending_pick(chars: Vec<Character>, guid: u64) -> Self {
+        Self {
+            chars,
+            pending_pick: Some(guid),
+            ..Self::default()
+        }
+    }
+
+    /// Note a character the create screen just made, and select its row now: `net::io` emits the
+    /// fresh roster before the create result, so no later roster comes. If the row is not in hand
+    /// yet, the arm stays for [`apply_roster_policy`].
+    pub(crate) fn note_created(&mut self, name: String) {
+        self.just_created = Some(name);
+        self.select_created_by_name();
+    }
+
+    /// Select the armed just-created row by name, disarming only on a hit. Case-insensitive:
+    /// vmangos's `normalizePlayerName` turns a typed `ZZBULL` into `Zzbull`.
+    pub(crate) fn select_created_by_name(&mut self) {
+        let Some(name) = self.just_created.as_deref() else {
+            return;
+        };
+        if let Some(row) = self
+            .chars
+            .iter()
+            .position(|c| c.name.eq_ignore_ascii_case(name))
+        {
+            self.select(Some(row));
+            self.just_created = None;
+        }
+    }
+
+    /// Select a row, the reference's `SelectCharacter`; every selection goes through here so the
+    /// facing reset is never skipped.
+    pub(crate) fn select(&mut self, row: Option<usize>) {
+        self.selected = row;
+        self.select_seq = self.select_seq.wrapping_add(1);
+    }
+
+    /// A click on a row: `CharacterSelectButton_OnClick` selects only when `id` differs from
+    /// `selectedIndex` (`CharacterSelect.lua:305-310`, and `OnDoubleClick` at 312-318), so clicking
+    /// the current row keeps its dragged facing.
+    pub(crate) fn click_row(&mut self, row: usize) {
+        if self.selected != Some(row) {
+            self.select(Some(row));
+        }
+    }
+
+    pub(crate) fn selected(&self) -> Option<usize> {
+        self.selected
+    }
+
+    pub(crate) fn selected_char(&self) -> Option<&Character> {
+        self.selected.and_then(|i| self.chars.get(i))
+    }
+
+    /// The pending pick's map, for the loading screen's art before `SMSG_LOGIN_VERIFY_WORLD`.
+    pub(crate) fn pending_map(&self) -> Option<u32> {
+        self.pending_row().map(|c| c.map)
+    }
+
+    /// The pending pick's level: the reference suppresses the loading tip when it arrived as 0 in
+    /// `SMSG_CHAR_ENUM` (`0x5b42a0` sets `[selChar+0x10a]`); vmangos always sends a real level.
+    pub(crate) fn pending_level(&self) -> Option<u8> {
+        self.pending_row().map(|c| c.level)
+    }
+
+    /// The picked character's `(map, wow xyz)`, a round trip before `SMSG_LOGIN_VERIFY_WORLD`; the
+    /// streamers aim at it during world entry.
+    pub(crate) fn pending_entry(&self) -> Option<(u32, [f32; 3])> {
+        self.pending_row()
+            .map(|c| (c.map, [c.position.x, c.position.y, c.position.z]))
+    }
+
+    /// The roster row for the pick in flight: the only description of the character until the
+    /// self descriptor streams in, so the in-game UI seats `UnitName("player")` from it.
+    pub(crate) fn pending_row(&self) -> Option<&Character> {
+        self.pending_pick
+            .and_then(|g| self.chars.iter().find(|c| c.guid == g))
+    }
+
+    /// The roster position of the pick in flight, by guid rather than the live selection: what
+    /// the reference persists as `lastCharacterIndex` at Enter World.
+    pub(crate) fn pending_index(&self) -> Option<usize> {
+        let guid = self.pending_pick?;
+        self.chars.iter().position(|c| c.guid == guid)
+    }
 }
 
 /// The `"npc"` unit: the open `ui_session::NpcSession`'s world entity and guid, read by the portrait booth
@@ -114,6 +254,15 @@ pub(crate) struct LootConfig {
 /// unconditionally (`0x48f2c9`), so closing an old window keeps a newer `CMSG_LOOT`'s latch.
 #[derive(Resource, Default)]
 pub(crate) struct LootLatch(pub(crate) Option<u64>);
+
+impl LootLatch {
+    /// Drops the latch only if it still names `guid`.
+    pub(crate) fn clear_for(&mut self, guid: u64) {
+        if self.0 == Some(guid) {
+            self.0 = None;
+        }
+    }
+}
 
 /// Whether the pointer is over any UI (the egui dev overlay or a player-UI frame), combined by
 /// [`arbitrate_pointer_over_ui`]; gameplay reads it, so it is not the dev plugin's.
@@ -167,6 +316,134 @@ pub(crate) struct QuestGiver {
     pub(crate) refused_count: u32,
 }
 
+impl QuestGiver {
+    /// The quest the panel shows; a greeting lists several and names none.
+    pub(crate) fn shown_quest(&self) -> Option<u32> {
+        self.view.as_ref().and_then(|v| match v {
+            QuestView::Detail(d) => Some(d.quest_id),
+            QuestView::Progress(p) => Some(p.quest_id),
+            QuestView::Reward(o) => Some(o.quest_id),
+            QuestView::Greeting(_) => None,
+        })
+    }
+
+    /// Open (or replace) the window with a fresh wire view for `npc`.
+    pub(crate) fn open(&mut self, npc: u64, view: QuestView) {
+        self.npc = Some(npc);
+        self.view = Some(view);
+        // `0x500bd0` clears the already-acted latch (`0x500d91`) and the chosen reward
+        // (`0x500d8c`) on every panel publish.
+        self.acted = false;
+        self.chosen_reward = 0;
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn is_open(&self) -> bool {
+        self.view.is_some()
+    }
+
+    /// The one-shot turn-in fanfare, which the reference plays from the packet, not from Lua.
+    pub(crate) fn take_completed_fanfare(&mut self) -> bool {
+        std::mem::take(&mut self.completed_fanfare)
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.npc = None;
+        self.view = None;
+    }
+
+    pub(crate) fn set_status(&mut self, npc: u64, status: u32) {
+        self.statuses.insert(npc, status);
+    }
+
+    pub(crate) fn set_wrath_status(&mut self, npc: u64, status: u8) {
+        self.wrath_statuses.insert(npc, u32::from(status));
+    }
+
+    pub(crate) fn wrath_statuses(&self) -> &HashMap<u64, u32> {
+        &self.wrath_statuses
+    }
+
+    /// Every stored dialog status, which [`crate::quest_markers`] renders.
+    pub(crate) fn statuses(&self) -> &HashMap<u64, u32> {
+        &self.statuses
+    }
+
+    /// Drop the status of every guid `live` rejects: the reference keeps it on the unit
+    /// (`unit+0xcb8`), so it dies with the object, and a map needs the prune.
+    pub(crate) fn retain_statuses(&mut self, live: impl Fn(u64) -> bool) {
+        self.statuses.retain(|&npc, _| live(npc));
+        self.wrath_statuses.retain(|&npc, _| live(npc));
+        // The refusals follow the same lifetime.
+        self.refused.retain(|&npc, _| live(npc));
+    }
+
+    /// Drop one guid's status when it stops being a questgiver, as the reference's teardown does.
+    pub(crate) fn clear_status(&mut self, npc: u64) {
+        self.statuses.remove(&npc);
+        self.wrath_statuses.remove(&npc);
+    }
+
+    /// Re-ask every visible questgiver's status, as the reference does after
+    /// `SMSG_SET_FACTION_STANDING`, `SMSG_GROUP_LIST`, a turn-in and `SMSG_QUESTUPDATE_*`. A
+    /// counter, folded into the marker query's generation, so no bump is lost to ordering.
+    pub(crate) fn bump_reask(&mut self) {
+        self.reask = self.reask.wrapping_add(1);
+    }
+
+    pub(crate) fn reask_epoch(&self) -> u32 {
+        self.reask
+    }
+
+    pub(crate) fn refuse_status(&mut self, npc: u64, status: u32) {
+        self.refused.insert(npc, status);
+        self.refused_count = self.refused_count.saturating_add(1);
+    }
+
+    pub(crate) fn refused_for(&self, npc: u64) -> Option<u32> {
+        self.refused.get(&npc).copied()
+    }
+
+    pub(crate) fn refused_count(&self) -> u32 {
+        self.refused_count
+    }
+
+    /// One guid's stored dialog status; the markers read the whole map instead.
+    #[allow(dead_code)]
+    pub(crate) fn status(&self, npc: u64) -> Option<u32> {
+        self.statuses.get(&npc).copied()
+    }
+
+    /// The open panel's title if it shows `quest_id`: the `%s` of a refusal naming the quest.
+    pub(crate) fn view_title(&self, quest_id: u32) -> Option<String> {
+        match self.view.as_ref()? {
+            QuestView::Detail(d) if d.quest_id == quest_id => Some(d.title.clone()),
+            QuestView::Progress(p) if p.quest_id == quest_id => Some(p.title.clone()),
+            QuestView::Reward(o) if o.quest_id == quest_id => Some(o.title.clone()),
+            _ => None,
+        }
+    }
+
+    /// Queue a message for [`feed_quest`]; its key's catalog row picks the surface.
+    pub(crate) fn push_message(&mut self, msg: UiError) {
+        self.messages.push(msg);
+    }
+
+    pub(crate) fn take_messages(&mut self) -> Vec<UiError> {
+        std::mem::take(&mut self.messages)
+    }
+
+    pub(crate) fn clear_session(&mut self) {
+        self.clear();
+        self.statuses.clear();
+        self.wrath_statuses.clear();
+        self.messages.clear();
+        self.close_on_cancel = 0;
+        self.acted = false;
+        self.chosen_reward = 0;
+    }
+}
+
 /// This frame's binding activity, which engine-side consumers read instead of raw keys: the
 /// [`Input`]s the running bodies' Lua calls set.
 #[derive(Resource, Default)]
@@ -189,6 +466,92 @@ pub(crate) struct BindingsState {
     /// pass, so a window deactivate empties it and a key held across an alt-tab resumes, as in
     /// the reference. Keyboard only: mouse edges cannot repeat.
     pub(crate) down: Vec<KeyCode>,
+}
+
+impl BindingsState {
+    /// Execute the movement commands supported by Wrath's native, VM-less binding route. Keeping
+    /// this command-shaped preserves the same state edges as the Lua binding functions.
+    pub(crate) fn apply_native_movement(&mut self, command: &str, pressed: bool) -> bool {
+        let fired = match command {
+            "JUMP" => Some(Input::Jump),
+            "ATTACKTARGET" => Some(Input::AttackTarget),
+            "TARGETNEARESTENEMY" => Some(Input::TargetNearestEnemy),
+            "TARGETPREVIOUSENEMY" => Some(Input::TargetPreviousEnemy),
+            _ => None,
+        };
+        if let Some(input) = fired {
+            if pressed {
+                self.fired.push(input);
+                self.just.push(input);
+            }
+            // `JUMP` is `JumpOrAscendStart`/`AscendStop`: the key also holds the ascend.
+            if input == Input::Jump {
+                self.apply_held(Input::Ascend, pressed);
+            }
+            return true;
+        }
+        let input = match command {
+            "MOVEFORWARD" => Input::MoveForward,
+            "MOVEBACKWARD" => Input::MoveBackward,
+            "TURNLEFT" => Input::TurnLeft,
+            "TURNRIGHT" => Input::TurnRight,
+            "STRAFELEFT" => Input::StrafeLeft,
+            "STRAFERIGHT" => Input::StrafeRight,
+            _ => return false,
+        };
+        self.apply_held(input, pressed);
+        true
+    }
+
+    pub(crate) fn apply_held(&mut self, input: Input, pressed: bool) {
+        if pressed {
+            if !self.pressed(input) {
+                self.just.push(input);
+                self.held.push(input);
+            }
+        } else {
+            self.held.retain(|&held| held != input);
+        }
+    }
+}
+
+impl BindingsState {
+    /// Is a held bit set right now (the reference's `[InputControl+4]`)?
+    pub(crate) fn pressed(&self, i: Input) -> bool {
+        self.held.contains(&i)
+    }
+
+    /// Did this bit's Start, or this one-shot, come this frame (the key-down edge)?
+    pub(crate) fn just_pressed(&self, i: Input) -> bool {
+        self.just.contains(&i)
+    }
+
+    /// Did this one-shot fire this frame?
+    pub(crate) fn fired(&self, i: Input) -> bool {
+        self.fired.contains(&i)
+    }
+
+    /// Total amount for a one-shot this frame (0.0 when idle): the camera zoom's yards.
+    pub(crate) fn amount(&self, i: Input) -> f32 {
+        self.amounts
+            .iter()
+            .filter(|&&(a, _)| a == i)
+            .map(|&(_, v)| v)
+            .sum()
+    }
+
+    /// Both mouse bits held by their Lua Starts, the both-button run: MOVEANDSTEER's body
+    /// (`Bindings.xml:3-11`) runs `CameraOrSelectOrMoveStart` and `TurnOrActionStart`.
+    pub(crate) fn steering(&self) -> bool {
+        self.pressed(Input::TurnOrAction) && self.pressed(Input::CameraOrSelectOrMove)
+    }
+
+    /// [`Self::steering`] began this frame.
+    pub(crate) fn steering_began(&self) -> bool {
+        self.steering()
+            && (self.just_pressed(Input::TurnOrAction)
+                || self.just_pressed(Input::CameraOrSelectOrMove))
+    }
 }
 
 /// The physical input a latch waits on: a keyboard key by its code, not its name, so its release
@@ -276,6 +639,37 @@ pub(crate) struct PetBar {
     pub(crate) expires: Option<Instant>,
 }
 
+impl PetBar {
+    /// `PetHasActionBar()`: a nonzero cached guid, with no alive or control check (`0x4bdc20`).
+    pub(crate) fn has_bar(&self) -> bool {
+        self.guid() != 0
+    }
+
+    /// The authoritative packet owner's GUID; native state is never copied into the legacy bar.
+    pub(crate) fn guid(&self) -> u64 {
+        self.native
+            .as_ref()
+            .map_or(self.spells.pet_guid, |pet| pet.guid)
+    }
+
+    pub(crate) fn bar_disabled(&self) -> bool {
+        self.native
+            .as_ref()
+            .map_or_else(|| self.spells.bar_disabled(), |pet| pet.flags & 0x0800 != 0)
+    }
+
+    /// No pet: every field back to its default, the cooldown list emptied with its counters kept
+    /// ([`crate::spell::Cooldowns::clear_silent`]), for the teardown packet and the session end.
+    pub(crate) fn clear(&mut self) {
+        let mut cooldowns = std::mem::take(&mut self.cooldowns);
+        cooldowns.clear_silent();
+        *self = Self {
+            cooldowns,
+            ..Default::default()
+        };
+    }
+}
+
 /// The live world-state table, keyed and valued by raw wire dwords.
 #[derive(Resource, Default)]
 pub(crate) struct WorldStates {
@@ -284,14 +678,115 @@ pub(crate) struct WorldStates {
     pub(crate) scope: Option<(u32, u32)>,
 }
 
+impl WorldStates {
+    /// Bumped per write and per init, not per pair, the edge readers rebuild on: the reference's
+    /// handler re-runs the world-map landmark builder once per packet (`0x48fa0d` to `0x4a67a0`).
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// The reference's getter (`0x4c5810`): a missing key reads 0 (`0x4c5867`). Signed, as the
+    /// reference prints it through `"%d"`.
+    pub(crate) fn get(&self, key: u32) -> i32 {
+        self.values.get(&key).copied().unwrap_or(0) as i32
+    }
+
+    /// Every pair, unordered, for instruments only (`capture::ProbeBgPlugin`); the reference
+    /// never enumerates the table.
+    pub(crate) fn pairs(&self) -> impl Iterator<Item = (u32, i32)> + '_ {
+        self.values.iter().map(|(&k, &v)| (k, v as i32))
+    }
+
+    /// The `(map, area)` of the last init, `[0xb71e84]`/`[0xb71ea8]`; `None` before any init, the
+    /// reference's `-1`.
+    pub(crate) fn scope(&self) -> Option<(u32, u32)> {
+        self.scope
+    }
+
+    /// An init's leading half (`0x4c5650`): drops every entry, then records the filter. The caller
+    /// applies the pairs after.
+    pub(crate) fn init_scope(&mut self, map: u32, area: u32) {
+        self.values.clear();
+        self.scope = Some((map, area));
+        self.generation = self.generation.wrapping_add(1);
+    }
+
+    /// Writes `(id, value)` pairs, the reference's setter (`0x4c5870`) for both opcodes. Init's
+    /// trailing `(0, 0)` is written as data; a zero value is stored, not deleted (`edx` is never
+    /// tested in `[0x4c5870, 0x4c5a31)`); a repeated key overwrites in place (`0x4c58bb`).
+    pub(crate) fn write(&mut self, states: &[(u32, u32)]) {
+        self.values.extend(states.iter().copied());
+        self.generation = self.generation.wrapping_add(1);
+    }
+}
+
 /// The FactionTemplate.dbc catalog; absent if it failed to load, and the faction legs then read
 /// neutral.
 #[derive(Resource)]
 pub(crate) struct Factions(pub(crate) FactionCatalog);
 
+impl Factions {
+    pub(crate) fn catalog(&self) -> &FactionCatalog {
+        &self.0
+    }
+
+    /// Wrap a catalog, for tests; a running client builds the resource once, from the DBC.
+    #[cfg(test)]
+    pub(crate) fn from_catalog(catalog: FactionCatalog) -> Self {
+        Self(catalog)
+    }
+}
+
 /// The emote-audio catalog (also the chat sender's `/name` → text-id resolver).
 #[derive(Resource)]
 pub(crate) struct EmoteSounds(pub(crate) EmoteSoundCatalog);
+
+impl EmoteSounds {
+    /// Resolve a `/command` name (case-insensitive) to its EmotesText id.
+    pub(crate) fn text_id(&self, name: &str) -> Option<u32> {
+        self.0.text_id(name)
+    }
+
+    /// An `Emotes.dbc` id's `AnimID`.
+    pub(crate) fn anim(&self, emote_id: u32) -> Option<u32> {
+        self.0.anim(emote_id)
+    }
+
+    /// An `Emotes.dbc` row's raw `AnimID` for the `UNIT_NPC_EMOTESTATE` resolver, `0` included.
+    pub(crate) fn state_anim(&self, emote_id: u32) -> Option<u32> {
+        self.0.state_anim(emote_id)
+    }
+
+    /// A text emote's `Emotes.dbc` id (`EmotesText.dbc` `EmoteID`); 0 is chat-only (`/thank`).
+    pub(crate) fn text_emote(&self, text_id: u32) -> Option<u32> {
+        self.0.text_emote(text_id)
+    }
+
+    /// The `Emotes.dbc` id in one of the five hard-coded gesture slots.
+    pub(crate) fn gesture(&self, slot: usize) -> Option<u32> {
+        self.0.gesture(slot)
+    }
+
+    /// An `Emotes.dbc` id's raw `EmoteFlags`, read by the posture-eligibility gate (`0x47db40`).
+    pub(crate) fn emote_flags(&self, emote_id: u32) -> Option<u32> {
+        self.0.emote_flags(emote_id)
+    }
+
+    /// The stand state a posture emote (`EmoteSpecProc == 1`) sets, as in `DoEmote`'s state
+    /// branch (`0x5ef560` → `0x5ed430`).
+    pub(crate) fn posture_state(&self, emote_id: u32) -> Option<u32> {
+        self.0.posture_state(emote_id)
+    }
+
+    /// The `$ESD` anim event's kit for a looping state emote: `EventSoundID` only when
+    /// `EmoteSpecProc == 2` (`row[+0x10] == 2` in the handler `0x6239f0`), so a one-shot emote id
+    /// in the state field stays silent.
+    pub(crate) fn state_event_sound(&self, emote_id: u32) -> Option<u32> {
+        (self.0.spec_proc(emote_id) == Some(2))
+            .then(|| self.0.event_sound(emote_id))
+            .flatten()
+    }
+}
 
 /// A unit's collision height in yards, the reference's `CMovement+0xb4`: the `h` whose fractions
 /// are the depth lines (swim `0.75·h`, splash `0.4·h`, foam gate `max(2·h, 1.0)`; `0x6030c0`,
@@ -329,6 +824,15 @@ pub(crate) struct Selection {
 #[derive(Resource, Default)]
 pub(crate) struct ConsoleEcho {
     pub(crate) capture: Option<Vec<String>>,
+}
+
+impl ConsoleEcho {
+    pub(crate) fn print(&mut self, line: String) {
+        match &mut self.capture {
+            Some(lines) => lines.push(line),
+            None => info!("console: {line}"),
+        }
+    }
 }
 
 /// `UNIT_FLAG_IN_COMBAT`, bit 19 of `UNIT_FIELD_FLAGS` (vmangos `UnitDefines.h:564`), read by the
@@ -392,6 +896,8 @@ pub(crate) struct AuraDurations {
     pub(crate) by_slot: HashMap<u8, DurationStamp>,
 }
 
+impl AuraDurations {}
+
 pub(crate) struct DurationStamp {
     /// Seconds: the full duration on an apply or refresh, only the remainder on a relog
     /// (`Map::ExistingPlayerLogin`) or a cast pushback (`Unit::DelaySpellAuraHolder`).
@@ -423,6 +929,13 @@ pub(crate) struct LearnedInTab(pub(crate) Vec<u32>);
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AfkMirror(pub(crate) u32);
 
+impl AfkMirror {
+    /// Non-zero, as all six of the reference's readers test it.
+    pub(crate) fn is_afk(self) -> bool {
+        self.0 != 0
+    }
+}
+
 /// A site's ask of the tutorial system, written from wherever the reference's site lives.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TutorialEvent {
@@ -430,6 +943,12 @@ pub(crate) enum TutorialEvent {
     Trigger { id: u32, delay_ms: u32 },
     /// `SetTutorialFlag(id)` (`0x4b54c0`): the acknowledge-and-send leg.
     Acknowledge { id: u32 },
+}
+
+impl TutorialEvent {
+    pub(crate) const fn trigger(id: u32) -> Self {
+        Self::Trigger { id, delay_ms: 0 }
+    }
 }
 
 /// `Attack`, the auto-attack pseudo-spell: it toggles melee rather than casting. The use path

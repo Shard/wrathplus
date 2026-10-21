@@ -96,6 +96,7 @@ fn on_object_create(In(ev): In<SessionEvent>, mut sc: Scene) {
         display_id,
         position,
         orientation,
+        rotation,
         scale,
         speeds,
         mover,
@@ -112,6 +113,7 @@ fn on_object_create(In(ev): In<SessionEvent>, mut sc: Scene) {
             display_id,
             position,
             orientation,
+            rotation,
             scale,
             speeds,
             mover,
@@ -341,6 +343,7 @@ fn object_create(
     display_id: Option<u32>,
     position: [f32; 3],
     orientation: f32,
+    rotation: Option<[f32; 4]>,
     scale: f32,
     speeds: Option<MoveSpeeds>,
     mover: Option<benilla_protocol::MoverState>,
@@ -374,8 +377,8 @@ fn object_create(
             at: std::time::Instant::now(),
         });
     // The placement, and on a type-11 lift the basis its keyframe offsets rotate through.
-    // 12340 descriptors carry no `GAMEOBJECT_ROTATION`.
-    let go_quat: Option<[f32; 4]> = None;
+    // 12340 carries it in the create block's `UPDATEFLAG_ROTATION`, not a descriptor field.
+    let go_quat = rotation;
     // A type-11 lift's seed: keyframes keyed by the entry, rotated by the quat, based at the
     // create position. One whose create carried no progress u32 has no clock and stays frozen.
     let elevator_seed = (matches!(go_type, Some(11)) && transport_anchor.is_some())

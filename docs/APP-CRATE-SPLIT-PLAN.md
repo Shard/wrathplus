@@ -448,6 +448,19 @@ Taken by App Migration: the `ui_items`, `ui_loot` and `ui_action` helpers world 
 | Reputation lines | `combat_log::chat::faction_standing` from `net::session` | **A drained message carrying the old and new standing.** Today it runs before the store is overwritten; the message keeps that, and `combat_log` composes the lines. |
 | Doc links | `ui_trade::answer_trade_request`, `char_select::char_login_refusal_text`, `ui_action::show_messages`, `ui_loot::drain_loot` named from `net`, `sound` | **Plain text.** Intra-doc links count as references; they become prose. The `sound` one is done; the two in `net.rs` land with the step-4 batch. |
 
+#### Native UI's groups (claimed 2026-10-21)
+
+Taken by Native UI: the UI-side design groups of the table above that App Migration did not claim.
+Each lands as a behaviour-neutral unit with the usual gates, in this order.
+
+| Group | References | Mechanism | Status |
+|---|---|---|---|
+| Run conditions | `ui_script::{ingame_ui_up, seam_scale, load_stock_bindings}` | **Move down.** `ingame_ui_up` reads only `PendingEntryUiLoad` and `ClientState`, both already core, so the run condition itself moves to `app_core::ui_state` (no new resource, no frame of lag); `seam_scale` is pure and goes with it; world callers name the core path, `ui_script` re-exports both. `load_stock_bindings`' one world caller was a `vplates` test; the 12340 nameplate port (Assets, 71fed466) replaced it with a client test, closing the edge. | done |
+| Drawing helpers | `ui_pass::{project_overlay, tile_quad_mesh, overlay_z, ui_render_layers}`, `ui_models::spawn_warm_tile_cam` | **Move down.** The four `ui_pass` helpers are a new world-layer `overlay` module (`ui_pass` re-exports `ui_render_layers`, which it still uses); `spawn_warm_tile_cam` goes to `portrait` beside its twin `spawn_warm_booth`, with the tile atlas's first edge and camera order. chat_bubble, combat_text, minimap::composite, pipe_warm and vplates name the new paths. | in review |
+| Cast-bar feedback | `ui_cast::feed_cast_bar` from world | **Drained message.** World writes a cast-bar message; `ui_cast` drains it in its set, the same frame. | claimed |
+| Other action requests | `ui_session::feed_interact_npc`, `ui_pet::pet_stop_on_old_target_clear`, `ui_world_map::world_enter_selection`, `script_calls::{apply_script_calls, in_call_order}` | **Drained message** per row: world writes the request, the UI system that owns the session drains it in its existing set; frame order checked per row. | claimed |
+| `VmMemo` (17) | `ui_script::VmMemo` users in area, cinematic, cursor, death, minimap, sound, spell, video, vplates | **Move the caller up.** Each world user is a Lua feed that already takes `UiScript`; the feed systems move to UI-side modules beside their world state, and `VmMemo` stays in `ui`. | claimed |
+
 When the pure moves and the in-flight items land, the move phase can start with `core` and `net`;
 `world` and `ui` wait for the design items above.
 
@@ -495,14 +508,27 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
   `ConsoleEcho`, `PlaySeq`, `BodyTwist`, `Channel`, `MoveModes`, `ChatEvent`, `ChatEventKind`,
   `Family`, `Variant`, `NativeSavedInstances` and `QuestPois` (item 5's feed). These were matched by
   name and need a check per row. Fix per row: the impl moves with the type when it is pure (the
-  plan's rule), or becomes an extension trait in the feature.
+  plan's rule), or becomes an extension trait in the feature. Done (Wire B, taken over from Assets):
+  21 impls moved whole with their types, with the pure items they needed (`UnitClass`, `ListOutcome`,
+  `CooldownInfo`, `GROUPTYPE_RAID`, `GROUP_MEMBER_SUBGROUP`, the loot-candidate and fall constants).
+  The other 17 moved too except 13 methods that need their feature (the Lua VM, `SpellModifiers`,
+  `BindingInput`, `ArcEdges`, `move_trace`, the chat broadcast and combat queues, `LootAction`, the
+  push-container map). Those are eight extension traits beside the feature: `BindingsScriptInput`,
+  `ChatEventScript`, `ChatLogFeed`, `CooldownsSpell`, `LootStateRows`, `PlayerArc`, `PlayerSettle` and
+  `QuestPoisView`. Assets' pure moves 2 added 26 more (the `interaction` and `ui_flags` types,
+  `AuraDurations`, `AfkMirror`, `TutorialEvent`, and the chat types after Experience trimmed them):
+  all moved, `SetHealerOutcome` with them, except `GossipGreeting`, `AuraDurationsTrace`,
+  `RealmsCategory` and `RealmsSelect` (realm_select's helpers and `net::{RealmChoice, RealmRequest}`).
+  The matcher now finds no inherent impl on a moved type.
 - *Visibility*: 428 distinct `crate::<core|net module>::…` symbols named from upper layers (254 core,
   174 net; an upper bound, since it counts re-export paths and module paths). The plan's estimate was
   about 115 and 114. Each still widens to `pub` only when the compiler names it.
 - *`cfg(test)` helpers across the boundary*: upper-layer tests use 7 core or net `tests::` helpers from
   9 files (`net::…::tests::dispatch` and similar, from `game_plugins::client_tests`), and one core test
   uses `test_support`. `#[cfg(test)]` items are invisible to another crate, so these need a
-  `test-support` cargo feature on the lower crate, or the helper moving to the root's `client_tests`.
+  `test-support` cargo feature on the lower crate, or the helper moving to the root's `client_tests`. Done (Wire B): `benilla-app` has a `test-support` feature; `net::test_support` (the per-family
+  `dispatch`/`captured` helpers and the vehicle fixture guid) and the root `test_support` compile under
+  `cfg(any(test, feature = "test-support"))`, and every cross-layer user imports from there.
 - `env!("CARGO_MANIFEST_DIR")`, `include_str!` and `include_dir!` in moved files resolve against the new
   crate's directory. None failed in this pass; the move commit still needs to check them.
 
@@ -517,7 +543,7 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
    `SelfGuid` and `ServerSaidMessage` are in `app_core::session`, and `game_plugins` installs
    `MotionPlugin` right after `NetPlugin`, with `net`'s `motion` re-exports dropped and their callers
    repointed by the script below.
-2. The symbol-map rewrite for the move step: `scripts/split/canonical-paths.py`, a dry run by
+2. The symbol-map rewrite for the move step: `uv run scripts/split/canonical-paths.py`, a dry run by
    default. It rewrites `crate::<old>::X` through every re-export to the defining path, splits
    `use` lists, and with `--via <module> --drop-reexports` deletes that module's re-exports.
    `--home` limits it to one destination. Done (Wire B); its first run moved net's 11 `motion`
@@ -546,7 +572,7 @@ Mechanics for moving layer `X` with modules `m1 … mn`:
 4. In `benilla-app/src/lib.rs`: replace `mod m1;` with `pub use benilla_app_X::m1;` for each.
    `crate::m1::Foo` paths in the modules still in `benilla-app` keep resolving through the
    re-export, so nothing above the moved layer is edited.
-5. First run `scripts/split/canonical-paths.py --via <each upper module> --apply`, so no moved file
+5. First run `uv run scripts/split/canonical-paths.py --via <each upper module> --apply`, so no moved file
    names an item through an upper layer's re-export. Then, inside the moved files, rewrite
    references to lower crates:
    `sed -i '' -E 's/crate::(core_mod_a|core_mod_b|…)::/benilla_app_core::\1::/g'` over the new

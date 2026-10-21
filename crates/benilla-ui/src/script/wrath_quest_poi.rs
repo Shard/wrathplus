@@ -373,11 +373,11 @@ mod tests {
     use super::*;
     use crate::script::{
         ContainerSlot, ContainerState, QuestLogEntryView, QuestLogObjectiveView, QuestLogState,
-        ScriptDialect, UiScript,
+        UiScript,
     };
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_quest_log(QuestLogState {
             entries: vec![
                 QuestLogEntryView { title: "Zone".into(), is_header: true, ..Default::default() },

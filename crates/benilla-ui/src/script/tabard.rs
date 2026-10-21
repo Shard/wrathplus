@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn the_guild_tabard_answers_six_paths_or_six_nils() {
-        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert_eq!(s.arity("GetGuildTabardFileNames()").unwrap(), 6);
         assert!(s
             .eval::<bool>("return GetGuildTabardFileNames() == nil")

@@ -298,10 +298,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     fn vm() -> UiScript {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run(
             "UnitExists = function(u) return u == 'focus' or u == 'pet' end \
              UnitCanAttack = function(_, u) return u == 'focus' end \

@@ -584,7 +584,7 @@ mod tests {
 
     #[test]
     fn wrath_quest_metadata_is_native_and_snapshot_driven() {
-        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert_eq!(s.eval::<u32>("return GetRewardXP()").unwrap(), 0);
         assert!(s
             .eval::<bool>("return not QuestGetAutoAccept() and GetRewardTitle() == nil")

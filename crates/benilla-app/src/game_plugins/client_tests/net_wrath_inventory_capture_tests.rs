@@ -1,7 +1,7 @@
 //! Whole-client tests of `crate::net::wrath_inventory_capture`, from `net/wrath_inventory_capture_tests.rs`.
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::wrath_inventory_capture::tests::{captured, dispatch};
+use crate::net::test_support::inventory::{captured, dispatch};
 use benilla_protocol::wrath_events::WrathEventAdapter;
 use benilla_protocol::SessionEvent;
 use benilla_protocol::SessionEventKind;

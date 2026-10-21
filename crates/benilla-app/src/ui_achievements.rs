@@ -29,21 +29,29 @@ fn load(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
     if !matches!(chain.profile(), benilla_formats::DataProfile::Wrath { .. }) {
         return;
     }
+    if let Some(metadata) = metadata_from(&mut chain) {
+        commands.insert_resource(AchievementMetadata(metadata));
+    }
+}
+
+/// The static achievement catalogs as the VM reads them, from the client's DBCs; `None` without
+/// Achievement.dbc or Achievement_Criteria.dbc.
+pub(crate) fn metadata_from(chain: &mut benilla_formats::Chain) -> Option<WrathAchievementMetadata> {
     use benilla_formats::achievements::{
         load_achievement_categories, load_achievement_criteria, load_achievement_icons,
         load_achievements,
     };
     // Icons and categories are optional: without them the window shows no icons or categories.
-    let icons = load_achievement_icons(&mut chain).unwrap_or_else(|e| {
+    let icons = load_achievement_icons(chain).unwrap_or_else(|e| {
         warn!("achievement icons unavailable: {e:#}");
         Default::default()
     });
-    let categories = load_achievement_categories(&mut chain).map_err(|e| {
+    let categories = load_achievement_categories(chain).map_err(|e| {
         warn!("achievement categories unavailable: {e:#}");
     });
     match (
-        load_achievements(&mut chain),
-        load_achievement_criteria(&mut chain),
+        load_achievements(chain),
+        load_achievement_criteria(chain),
     ) {
         (Ok(achievements), Ok(criteria)) => {
             let mut metadata = WrathAchievementMetadata::default();
@@ -97,13 +105,16 @@ fn load(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
                     },
                 );
             }
-            commands.insert_resource(AchievementMetadata(metadata));
+            Some(metadata)
         }
-        (achievements, criteria) => warn!(
-            "achievement metadata unavailable: achievements={:?}, criteria={:?}",
-            achievements.err(),
-            criteria.err()
-        ),
+        (achievements, criteria) => {
+            warn!(
+                "achievement metadata unavailable: achievements={:?}, criteria={:?}",
+                achievements.err(),
+                criteria.err()
+            );
+            None
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 //! Our avatar's mover state, which the wire writes and the world drives; `player` keeps the
 //! systems and re-exports the types from its old paths.
 
-use benilla_protocol::JumpInfo;
+use benilla_protocol::{JumpInfo, MoveMode};
 use bevy::prelude::*;
 
 /// The mover modes the server grants, as typed state: the outbound flag word is rebuilt from these
@@ -32,6 +32,59 @@ pub(crate) struct MoveModes {
     /// Build 12340's CAN_FLY (`SMSG_MOVE_SET_CAN_FLY`): the jump key may start flight
     /// (`0x989890`); the bit rides every outbound packet while granted.
     pub(crate) can_fly: bool,
+}
+
+impl MoveModes {
+    /// Grant or revoke one acked mode; `levitating` has no opcode and arrives by the wire merge.
+    pub(crate) fn set(&mut self, mode: MoveMode, apply: bool) {
+        match mode {
+            MoveMode::Root => self.rooted = apply,
+            MoveMode::WaterWalk => self.water_walking = apply,
+            MoveMode::FeatherFall => self.feather_fall = apply,
+            MoveMode::Hover => self.hover = apply,
+            MoveMode::CanFly => self.can_fly = apply,
+        }
+    }
+
+    /// The granted modes as `MOVEMENTFLAGS` bits, which every outbound packet must carry: the
+    /// reference's wire word is its live state (`[cmov+0x40]`), and a mode we drop is cleared by
+    /// the server's next echo.
+    pub(crate) fn wire_flags(&self) -> u32 {
+        use crate::creature_anim::move_flags as f;
+        let mut flags = 0;
+        if self.rooted {
+            flags |= f::ROOT;
+        }
+        if self.water_walking {
+            flags |= f::WATER_WALKING;
+        }
+        if self.feather_fall {
+            flags |= f::SAFE_FALL;
+        }
+        if self.hover {
+            flags |= f::HOVER;
+        }
+        if self.levitating {
+            flags |= f::LEVITATING;
+        }
+        if self.can_fly {
+            flags |= f::CAN_FLY;
+        }
+        flags
+    }
+
+    /// Lift the granted modes out of a server-authored flag word; the reference's merge mask
+    /// `0x75a0_7dff` holds all five. Deviation: root is not merged, because a bare pose unrooting
+    /// us while the server still roots us streams motion into `CHEAT_TYPE_ROOT_MOVE`; vmangos keeps
+    /// a rooted mover's root bit (`MovementHandler.cpp:1064`), so the reference's merge of it is a
+    /// no-op anyway.
+    pub(crate) fn merge_from_wire(&mut self, wire: u32) {
+        use crate::creature_anim::move_flags as f;
+        self.water_walking = wire & f::WATER_WALKING != 0;
+        self.feather_fall = wire & f::SAFE_FALL != 0;
+        self.hover = wire & f::HOVER != 0;
+        self.levitating = wire & f::LEVITATING != 0;
+    }
 }
 
 /// Our avatar: until `active` the camera free-flies, then we drive the body the server placed.
@@ -214,6 +267,132 @@ pub(crate) struct Player {
     pub(crate) ride: Option<PlayerRide>,
 }
 
+impl Player {
+    /// The mover pitch (radians, +up), the aiming unit's angle the vehicle aim getters read.
+    pub(crate) fn mover_pitch(&self) -> f32 {
+        self.mover_pitch
+    }
+
+    /// A player whose last streamed movement word is `flags`, for the gates that read it.
+    #[cfg(test)]
+    pub(crate) fn with_move_flags(flags: u32) -> Self {
+        Self {
+            move_flags: flags,
+            ..Self::default()
+        }
+    }
+
+    /// Take the jump a hover grant owes, clearing the latch: `Jump(0)` refuses only ROOT and
+    /// FALLING (`0x7c625c`), skipping the hover test (`0x7c6236`), and a refused jump is dropped,
+    /// not retried.
+    /// A vehicle aim request (`VehicleAimRequestNormAngle`): the driven unit's mover pitch, within
+    /// the mouse-look clamp.
+    pub(crate) fn set_aim_pitch(&mut self, pitch: f32) {
+        if pitch.is_finite() {
+            self.mover_pitch =
+                pitch.clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
+        }
+    }
+
+    pub(crate) fn take_wire_jump(&mut self) -> bool {
+        let fire = self.hover_launch && !self.modes.rooted && self.airborne_since.is_none();
+        self.hover_launch = false;
+        fire
+    }
+
+    /// Take the knockback, clearing the latch; the mover may still decline it (the settle hold, a
+    /// root), and then it is dropped, not deferred, and no ack is sent.
+    pub(crate) fn take_knockback(&mut self) -> Option<PendingKnockback> {
+        self.knockback.take()
+    }
+
+    /// Turn the aim by `radians`, the scripted mouse turn (`capture::probe_look`): the same
+    /// `face_yaw` a real mouse turn writes and the facing stream diffs.
+    pub(crate) fn turn_aim(&mut self, radians: f32) {
+        self.face_yaw += radians;
+    }
+
+    /// Set the mover pitch, the scripted dive (`capture::probe_pitch`), under `SetPitch`'s ±89°
+    /// clamp (`0x7c6f70`) but without its 2^-20 deadband (`[0x8026bc]`); returns the value stored.
+    pub(crate) fn aim_pitch(&mut self, radians: f32) -> f32 {
+        self.mover_pitch = radians.clamp(-MOUSELOOK_PITCH_CLAMP, MOUSELOOK_PITCH_CLAMP);
+        // Mouse-look pushes on a camera-pitch edge; parking the edge here keeps a still camera
+        // from overwriting the script next frame.
+        self.aim_pitch_seen = self.mover_pitch;
+        self.mover_pitch
+    }
+
+    /// The facing (Bevy yaw) sent as orientation, not the rendered `model_yaw`; the 3D-audio
+    /// listener faces it, not the camera (`0x483430`).
+    pub(crate) fn facing(&self) -> f32 {
+        self.face_yaw
+    }
+
+    /// Build 12340's `IsFalling` (`0x612430`): `FALLING` (`0x1000`) without `ROOT` (`0x800`), our
+    /// mover airborne and not rooted.
+    pub(crate) fn is_falling(&self) -> bool {
+        self.airborne_since.is_some() && !self.modes.rooted
+    }
+
+    /// The movement flags as last streamed; the water foam tests `& 0xf` (translating) and `& 0x30`
+    /// (turning) on them, as the reference's ripple driver `0x5fa760` does.
+    pub(crate) fn move_flags(&self) -> u32 {
+        self.move_flags
+    }
+
+    /// The states on this resource that stop WASD, comma-joined, or `"none"`: an instrument for the
+    /// log after a session boundary, not a gate. A stun lives on the descriptor and does not show.
+    pub(crate) fn movement_suppressors(&self) -> String {
+        let named = [
+            (!self.active, "inactive"),
+            (self.detached, "free-fly"),
+            (self.modes.rooted, "root"),
+            (self.control_lost, "control-lost"),
+            (self.server_riding, "server-ride"),
+            (self.foreign_mover.is_some(), "possession"),
+            (self.reseat, "reseat-pending"),
+        ];
+        let list: Vec<&str> = named
+            .into_iter()
+            .filter_map(|(set, name)| set.then_some(name))
+            .collect();
+        if list.is_empty() {
+            "none".to_string()
+        } else {
+            list.join(",")
+        }
+    }
+
+    /// The commanded planar speed (yd/s), the reference's `[[player+0x118]+0x84]` from `0x7c4c90`:
+    /// exactly 0 with no direction bit set, and live, not averaged like the weather wind's
+    /// (`0x67c150`). The precipitation slab's tilt reads it (`0x67bf8b`).
+    pub(crate) fn planar_speed(&self) -> f32 {
+        if self.move_flags & 0xf == 0 {
+            return 0.0;
+        }
+        self.horiz_vel.with_y(0.0).length()
+    }
+
+    /// The guid of the transport we stand on, for instruments.
+    pub(crate) fn riding(&self) -> Option<u64> {
+        self.ride.as_ref().map(|r| r.guid)
+    }
+
+    /// The transport we stand on as its entity, whose transform is the deck frame a rider's effects
+    /// are stored in (`benilla_world::ride_frame`).
+    pub(crate) fn ride_entity(&self) -> Option<Entity> {
+        self.ride.as_ref().map(|r| r.entity)
+    }
+
+    /// Whether a server spline drives the avatar ([`super::server_ride`]), for instruments. Not
+    /// `UnitOnTaxi`, which reads [`crate::player::UNIT_FLAG_TAXI_FLIGHT`] (`0x517a86`).
+    pub(crate) fn server_riding(&self) -> bool {
+        self.server_riding
+    }
+}
+
+impl Player {}
+
 /// The player's attachment to a transport's frame ([`Player::ride`]).
 #[derive(PartialEq)]
 pub(crate) struct PlayerRide {
@@ -242,3 +421,16 @@ pub(crate) struct PendingKnockback {
     /// (negative is up).
     pub(crate) launch: JumpInfo,
 }
+
+/// The mouse-look pitch clamp, ±89° (`0x8089d8`, on the camera-to-`SetPitch` path); the ±π/2 clamp
+/// belongs to the pitch-key integrator `0x7c4f80`, whose keys are unbound by default.
+pub(crate) const MOUSELOOK_PITCH_CLAMP: f32 = 1.553_343;
+
+/// The FALLINGFAR distance leg (yd): a jump arc (launch vz ≠ 0) latches it once this far below
+/// its launch height (`0x633240`, `[0x80dff8]`), and the anim swaps to Fall(40); a flat jump never
+/// does.
+pub(crate) const FALL_FAR_DROP: f32 = 0.111_11;
+
+/// The FALLINGFAR timer leg (s): a step-off fall (launch vz = 0) latches it after 500 ms airborne
+/// (`0x633240`, `0x1f4`), about 2.41 yd of free fall from rest.
+pub(crate) const FALL_FAR_TIME: f32 = 0.5;

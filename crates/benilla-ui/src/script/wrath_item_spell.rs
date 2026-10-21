@@ -60,9 +60,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{ItemTemplateView, ScriptDialect, SpellInfoView, UiScript};
+    use super::super::{ItemTemplateView, SpellInfoView, UiScript};
     fn script() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_spell_catalog([
             SpellInfoView {
                 spell_id: 10,

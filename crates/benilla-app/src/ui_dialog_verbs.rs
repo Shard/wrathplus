@@ -84,6 +84,7 @@ impl InstanceBoot {
     }
 }
 
+pub(crate) use crate::app_core::interaction::SetHealerOutcome;
 pub(crate) use crate::app_core::interaction::AREA_SPIRIT_HEALER_AURA;
 
 /// The acquire radius, `[0x8044d0]` = 20.0, compared squared in the enumerate callback `0x4924c0`.
@@ -92,72 +93,9 @@ const SPIRIT_GUIDE_ACQUIRE_YD: f32 = 20.0;
 /// inside 20 yd is kept until 22.
 const SPIRIT_GUIDE_RETAIN_YD: f32 = SPIRIT_GUIDE_ACQUIRE_YD * 1.1;
 
-/// What [`AreaSpiritHealer::set_healer`] owes the frame; the reference does both in `0x4921c0`.
-#[derive(Default, PartialEq, Eq, Debug)]
-pub(crate) struct SetHealerOutcome {
-    /// A wave was pending and the healer changed (`0x4921fc`): `AREA_SPIRIT_HEALER_OUT_OF_RANGE`
-    /// fires and `CMSG_CANCEL_AURA` goes out for 2584; this, not Lua, closes the dialog.
-    pub(crate) cancel_aura: bool,
-    /// A newly adopted non-zero healer: `CMSG_AREA_SPIRIT_HEALER_QUERY` with it.
-    pub(crate) query: Option<u64>,
-}
-
 pub(crate) use crate::app_core::interaction::{
     AreaSpiritHealer, MeetingStone, MeetingStoneUse, StoneText,
 };
-impl AreaSpiritHealer {
-    /// `SMSG_AREA_SPIRIT_HEALER_TIME`: arms the clock only for the cached healer (`0x4922a0`) and
-    /// a positive time, and owes `AREA_SPIRIT_HEALER_IN_RANGE`.
-    pub(crate) fn on_time(&mut self, healer: u64, ms: u32, now: Instant) {
-        if self.healer == Some(healer) && ms > 0 {
-            self.deadline = Some(now + std::time::Duration::from_millis(u64::from(ms)));
-            self.in_range = true;
-        }
-    }
-
-    /// `0x4921c0`: an unchanged guid returns before anything else (`0x4921cf`/`0x4921dd`), so the
-    /// poll calls it every frame; a change cancels a pending wave (`0x4921fc`), zeroes the
-    /// deadline (`0x492211`) and queries a non-zero healer (`0x492217`).
-    pub(crate) fn set_healer(&mut self, new: Option<u64>) -> SetHealerOutcome {
-        // The reference's zero guid is our `None`.
-        let new = new.filter(|&g| g != 0);
-        if self.healer == new {
-            return SetHealerOutcome::default();
-        }
-        self.healer = new;
-        let cancel_aura = self.deadline.take().is_some();
-        if cancel_aura {
-            // The cancel closes the dialog, so an `_IN_RANGE` still owed is stale.
-            self.in_range = false;
-        }
-        SetHealerOutcome {
-            cancel_aura,
-            query: new,
-        }
-    }
-
-    /// The spirit-guide click (`0x5df950`): `0x4921c0(0)` then `0x4921c0(guid)`, a cache-bust that
-    /// makes the second call query even for the healer already cached.
-    pub(crate) fn click_guide(&mut self, guid: u64) -> SetHealerOutcome {
-        let bust = self.set_healer(None);
-        let set = self.set_healer(Some(guid));
-        SetHealerOutcome {
-            cancel_aura: bust.cancel_aura || set.cancel_aura,
-            query: set.query,
-        }
-    }
-
-    /// The cached healer: `AcceptAreaSpiritHeal`'s guid and the poll's retain subject.
-    pub(crate) fn healer(&self) -> Option<u64> {
-        self.healer
-    }
-
-    fn secs(&self, now: Instant) -> u32 {
-        self.deadline
-            .map(|d| d.saturating_duration_since(now).as_secs())
-            .map_or(0, |s| u32::try_from(s).unwrap_or(u32::MAX))
-    }
-}
 
 /// The two battleground queue slots (`0xbea4b8`, `0x40` bytes each, written by
 /// `SMSG_BATTLEFIELD_STATUS` `0x54ae40`), each stamped with the moment its status landed, and the
@@ -344,26 +282,6 @@ impl BattlefieldQueue {
 
 /// `SStrPrintf`'s buffer at the rebuild: 256 bytes, so 255 of text.
 const STONE_TEXT_BYTES: usize = 255;
-
-impl MeetingStone {
-    /// `SMSG 0x295` (`0x4ca230`): the area is stored at once; the line and event wait for the feed.
-    pub(crate) fn apply(&mut self, area: u32, status: u8) {
-        let old = self.area;
-        self.area = area;
-        self.updates.push((old, status));
-    }
-
-    /// One of the four display-only replies.
-    pub(crate) fn apply_notice(&mut self, notice: MeetingStoneNotice) {
-        self.notices.push(notice);
-    }
-
-    /// The leave-world sweep (`0x4c9f80`): the text goes, the area stays.
-    fn leave_world(&mut self) {
-        self.text = StoneText::None;
-        self.dirty = true;
-    }
-}
 
 /// A `GlobalStrings` value as the client's `GetText` reads it: `""` when the global is missing
 /// (`0x882748`, the shared empty string, never NULL).
@@ -906,10 +824,10 @@ fn cancel_gate_could_apply(attributes_ex: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
 
     /// `UNIT_FIELD_LEVEL`, absolute field 34.
-    const LEVEL_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
+    const LEVEL_FIELD: u16 = Field::UnitLevel.index();
 
     #[test]
     fn setting_the_same_healer_is_a_complete_no_op() {
@@ -1001,11 +919,11 @@ mod tests {
     }
 
     /// `UNIT_FIELD_FLAGS`, absolute field 46; `UNIT_FLAG_PVP` (`0x1000`) passes `can_assist`.
-    const UNIT_FLAGS_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+    const UNIT_FLAGS_FIELD: u16 = Field::UnitFlags.index();
     /// `UNIT_NPC_FLAGS`, absolute field 147.
-    const NPC_FLAGS_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::UnitNpcFlags);
+    const NPC_FLAGS_FIELD: u16 = Field::UnitNpcFlags.index();
     /// `PLAYER_FLAGS`, absolute field 190; bit `0x10` is GHOST.
-    const PLAYER_FLAGS_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
+    const PLAYER_FLAGS_FIELD: u16 = Field::PlayerFlags.index();
 
     fn fields(pairs: &[(u16, u32)]) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_pairs(pairs))
@@ -1055,8 +973,7 @@ mod tests {
     }
 
     /// `UNIT_FIELD_FACTIONTEMPLATE`, absolute field 35.
-    const FACTION_TEMPLATE_FIELD: u16 =
-        FieldLayout::Wrath12340.index_of(Field::UnitFactionTemplate);
+    const FACTION_TEMPLATE_FIELD: u16 = Field::UnitFactionTemplate.index();
 
     macro_rules! catalog_or_skip {
         () => {{
