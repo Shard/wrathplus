@@ -310,8 +310,10 @@ fn a_units_run_rebuilds_only_the_melee_range_views() {
         .world_mut()
         .spawn((
             speeds,
-            ObjectStore(ObjectFields::from_fields(&[(benilla_protocol::types::Field::UnitHealth, 100)],
-            )),
+            ObjectStore(ObjectFields::from_fields(&[(
+                benilla_protocol::types::Field::UnitHealth,
+                100,
+            )])),
         ))
         .id();
     feed.app

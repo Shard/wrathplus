@@ -906,7 +906,8 @@ fn flagged_friendly_player_plate_is_green() {
 fn an_exalted_npc_target_reads_revered_and_its_plate_is_green() {
     use crate::net::ObjectStore;
     use crate::target::{stormwind_fixture, HUMAN_WARRIOR};
-    const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::Field::UnitFactionTemplate.index();
+    const FIELD_UNIT_FACTIONTEMPLATE: u16 =
+        benilla_protocol::types::Field::UnitFactionTemplate.index();
     use benilla_protocol::ObjectFields;
 
     let data = benilla_formats::wow_data_or_skip!();
@@ -914,8 +915,10 @@ fn an_exalted_npc_target_reads_revered_and_its_plate_is_green() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&s);
-    let me = ObjectStore(ObjectFields::from_fields(&[(benilla_protocol::types::Field::UnitBytes0, HUMAN_WARRIOR)],
-    ));
+    let me = ObjectStore(ObjectFields::from_fields(&[(
+        benilla_protocol::types::Field::UnitBytes0,
+        HUMAN_WARRIOR,
+    )]));
 
     for total in [21_000, 42_000] {
         let (factions, template, reps) = stormwind_fixture(&mut chain, total);

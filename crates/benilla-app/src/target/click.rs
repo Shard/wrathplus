@@ -585,10 +585,7 @@ impl Dispatch<'_, '_> {
             .stores
             .get(entity)
             .map(|(s, _)| s.0.unit_npc_services())
-            .unwrap_or_else(|_| {
-                benilla_protocol::types::NpcFlags::from_bits(0,
-                )
-            });
+            .unwrap_or_else(|_| benilla_protocol::types::NpcFlags::from_bits(0));
         let me = self.me();
         let self_store = self.self_store();
         // Peeked, not taken: the cursor clears only once a sale goes out. The reference sends the
@@ -606,9 +603,7 @@ impl Dispatch<'_, '_> {
                 })
             });
         let ghost = self_store.is_some_and(|s| s.0.player_is_ghost());
-        let status = {
-                self.service.quest.wrath_statuses().get(&guid).copied()
-            };
+        let status = { self.service.quest.wrath_statuses().get(&guid).copied() };
         let Some(arm) = service_arm_native(npc_flags, status) else {
             // `0x5f05ca`: no consulted bit does nothing, gesture included.
             debug!("right-click interact: {guid:#x} matches no service bit — nothing sent");
@@ -902,8 +897,11 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
             // Silent after the select: the click's `0x60c247 call 0x5ecb70` has no `DisplayError`,
             // and the red `ERR_ATTACK_*` lines are `0x612df0`'s (the Attack action, pet attack,
             // TryCast). The predicate is `0x612df0`'s; `0x5ecb70`'s own set is not transcribed.
-            if super::attack_gate::attack_actor_blocked(dispatch.self_store(), me.map(|(_, g, _)| g))
-                .is_some()
+            if super::attack_gate::attack_actor_blocked(
+                dispatch.self_store(),
+                me.map(|(_, g, _)| g),
+            )
+            .is_some()
             {
                 // refused: the selection stands, no swing, nothing said
             } else {
@@ -1412,11 +1410,7 @@ pub(crate) fn service_arm(bits: u32, status: Option<u32>) -> Option<ServiceArm> 
     .into_iter()
     .filter(|&(legacy, _)| bits & legacy != 0)
     .fold(0, |word, (_, bit)| word | bit);
-    service_arm_native(
-        benilla_protocol::types::NpcFlags::from_bits(native,
-        ),
-        status,
-    )
+    service_arm_native(benilla_protocol::types::NpcFlags::from_bits(native), status)
 }
 
 /// What a taken [`ServiceArm`] does.

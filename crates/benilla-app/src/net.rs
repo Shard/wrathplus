@@ -2458,9 +2458,8 @@ mod tests {
         apply_fields_for_test(
             &mut world,
             unit,
-            ObjectFields::from_pairs(&[(FIELD_UNIT_HEALTH, 100), (FIELD_UNIT_LEVEL, 9)],
-            )
-            .into_created(ObjectType::Unit),
+            ObjectFields::from_pairs(&[(FIELD_UNIT_HEALTH, 100), (FIELD_UNIT_LEVEL, 9)])
+                .into_created(ObjectType::Unit),
         );
         assert!(drain(&mut world).is_empty(), "a create is not an edge");
 
@@ -2468,8 +2467,7 @@ mod tests {
         apply_fields_for_test(
             &mut world,
             unit,
-            ObjectFields::from_pairs(&[(FIELD_UNIT_LEVEL, 9), (FIELD_UNIT_HEALTH, 0)],
-            ),
+            ObjectFields::from_pairs(&[(FIELD_UNIT_LEVEL, 9), (FIELD_UNIT_HEALTH, 0)]),
         );
         assert_eq!(
             drain(&mut world),
@@ -2489,9 +2487,7 @@ mod tests {
         apply_fields_for_test(
             &mut world,
             unit,
-            ObjectFields::from_pairs(&[(FIELD_UNIT_LEVEL, 10)],
-            )
-            .into_created(ObjectType::Unit),
+            ObjectFields::from_pairs(&[(FIELD_UNIT_LEVEL, 10)]).into_created(ObjectType::Unit),
         );
         let edges = drain(&mut world);
         assert_eq!(edges.len(), 1);
@@ -2535,8 +2531,7 @@ mod tests {
                 let Some(span) = field.span() else {
                     continue;
                 };
-                let mut store =
-                    ObjectFields::from_pairs(&[(span.index, 1)]).into_created(kind);
+                let mut store = ObjectFields::from_pairs(&[(span.index, 1)]).into_created(kind);
                 let delta = ObjectFields::from_pairs(&[(span.index, 2)]);
                 let mut edges = Vec::new();
                 merge_store_fields(&mut store, delta, entity, 42, |edge| edges.push(edge));

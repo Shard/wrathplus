@@ -42,8 +42,10 @@ fn a_mirror_image_unit_asks_for_its_look_once_per_object() {
     app.insert_resource(NetCommands(tx));
     register(&mut app);
     let unit = |flags2: u32| {
-        ObjectStore(ObjectFields::from_fields(&[(Field::ObjectType, 0x09), (Field::UnitFlags2, flags2)],
-        ))
+        ObjectStore(ObjectFields::from_fields(&[
+            (Field::ObjectType, 0x09),
+            (Field::UnitFlags2, flags2),
+        ]))
     };
     let image = app.world_mut().spawn((Guid(7), unit(0x10))).id();
     let plain = app.world_mut().spawn((Guid(8), unit(0))).id();

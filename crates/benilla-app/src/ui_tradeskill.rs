@@ -866,11 +866,10 @@ mod tests {
         };
         // A human (race 1) warrior with Alchemy 75/150.
         let store = ObjectStore(ObjectFields::from_field_slots(&[
-                (Field::PlayerSkillInfo11, 0, 171),
-                (Field::PlayerSkillInfo11, 1, 75 | 150 << 16),
-                (Field::UnitBytes0, 0, 1 | 1 << 8),
-            ],
-        ));
+            (Field::PlayerSkillInfo11, 0, 171),
+            (Field::PlayerSkillInfo11, 1, 75 | 150 << 16),
+            (Field::UnitBytes0, 0, 1 | 1 << 8),
+        ]));
         let known = [1, 2, 7].into_iter().collect();
         assert_eq!(
             own_trade_link(&alchemy(true), &spells, &known, &store, 0x2a, 2259).as_deref(),

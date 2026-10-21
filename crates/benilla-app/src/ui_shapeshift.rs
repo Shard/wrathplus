@@ -364,8 +364,7 @@ mod tests {
             active_icon_id: 0,
             ..Default::default()
         };
-        let no_auras = ObjectStore(ObjectFields::from_fields(&[],
-        ));
+        let no_auras = ObjectStore(ObjectFields::from_fields(&[]));
         assert!(form_active(2457, &battle_stance, 17, Some(&no_auras)));
         assert!(!form_active(2457, &battle_stance, 1, Some(&no_auras)));
         assert!(

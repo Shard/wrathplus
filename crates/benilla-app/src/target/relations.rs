@@ -150,8 +150,10 @@ mod tests {
         let human = fx::corpse(fx::HUMAN, false);
         assert!(!corpse_friendly(&human, None, Some(&me)), "no catalog");
         assert!(!corpse_friendly(&human, Some(&factions), None), "no player");
-        let no_template = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(benilla_protocol::types::Field::UnitFactionTemplate, 999)],
-        ));
+        let no_template = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(
+            benilla_protocol::types::Field::UnitFactionTemplate,
+            999,
+        )]));
         assert!(
             !corpse_friendly(&human, Some(&factions), Some(&no_template)),
             "a template the table lacks"
@@ -184,13 +186,12 @@ mod tests {
     fn possession_is_the_flag_and_the_charmer_else_the_creator() {
         let store = |flags: u32, charmed_by: u32, created_by: u32| {
             ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&[
-                    (benilla_protocol::types::Field::UnitFlags, 0, flags),
-                    (benilla_protocol::types::Field::UnitCharmedby, 0, charmed_by),
-                    (benilla_protocol::types::Field::UnitCharmedby, 1, 0),
-                    (benilla_protocol::types::Field::UnitCreatedby, 0, created_by),
-                    (benilla_protocol::types::Field::UnitCreatedby, 1, 0),
-                ],
-            ))
+                (benilla_protocol::types::Field::UnitFlags, 0, flags),
+                (benilla_protocol::types::Field::UnitCharmedby, 0, charmed_by),
+                (benilla_protocol::types::Field::UnitCharmedby, 1, 0),
+                (benilla_protocol::types::Field::UnitCreatedby, 0, created_by),
+                (benilla_protocol::types::Field::UnitCreatedby, 1, 0),
+            ]))
         };
         let me = Some(0x77);
         let flag = UNIT_FLAG_POSSESSED;

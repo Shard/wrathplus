@@ -371,8 +371,10 @@ fn a_pet_gcd_sweeps_the_spellbooks_pet_tab_button() {
         // Our class, so the book reads a token (`0x4b4463`); no `ChrClasses` row, so "PET".
         world.spawn((
             crate::net::SelfPlayer,
-            ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(Field::UnitBytes0, 3 << 8)],
-            )),
+            ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(
+                Field::UnitBytes0,
+                3 << 8,
+            )])),
         ));
         world.insert_resource(crate::chr_classes::ChrClassTable(Default::default()));
         world.resource_mut::<PetBar>().spells.spells = vec![PetActionEntry::from(

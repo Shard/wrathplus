@@ -1431,8 +1431,8 @@ fn spell_chain_targets(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::ACTION_KIND_SPELL;
     use benilla_protocol::types::Field;
+    use benilla_protocol::types::ACTION_KIND_SPELL;
 
     /// A catalog holding one row, so the announce tests can name a real `Attributes` value.
     fn catalog_with(id: u32, display: benilla_formats::SpellDisplay) -> Spells {
@@ -2282,8 +2282,10 @@ mod tests {
         assert_eq!(go_cooldowns(10, own, None, display, mods()).0, 3000);
         let pet = go_cooldowns(20, owned(SUMMONEDBY, 10), None, display, mods());
         assert_eq!(pet.1, 3000, "the pet leg takes the player's op 11");
-        let item = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(Field::ObjectEntry, 6948)],
-        ));
+        let item = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(
+            Field::ObjectEntry,
+            6948,
+        )]));
         let used = go_cooldowns(
             10,
             ObjectStore::default(),

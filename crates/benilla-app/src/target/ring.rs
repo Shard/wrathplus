@@ -805,18 +805,19 @@ pub(crate) mod tests {
         let factions = Factions(benilla_formats::load_faction_catalog(&mut chain).expect("dbc"));
         // Field indices: 35 = UNIT_FIELD_FACTIONTEMPLATE, 46 = UNIT_FIELD_FLAGS.
         let unit = |tpl: u32| {
-            ObjectStore(ObjectFields::from_fields(&[(benilla_protocol::types::Field::UnitFactionTemplate, tpl)],
-            ))
+            ObjectStore(ObjectFields::from_fields(&[(
+                benilla_protocol::types::Field::UnitFactionTemplate,
+                tpl,
+            )]))
         };
         // Us: a player-controlled Human, faction template 1.
         let me = ObjectStore(ObjectFields::from_fields(&[
-                (benilla_protocol::types::Field::UnitFactionTemplate, 1),
-                (
-                    benilla_protocol::types::Field::UnitFlags,
-                    UNIT_FLAG_PVP_ATTACKABLE,
-                ),
-            ],
-        ));
+            (benilla_protocol::types::Field::UnitFactionTemplate, 1),
+            (
+                benilla_protocol::types::Field::UnitFlags,
+                UNIT_FLAG_PVP_ATTACKABLE,
+            ),
+        ]));
         let quiet = Reputations::default(); // nothing at war
         let category = |unit: &ObjectStore, reps: &Reputations| {
             plate_is_friendly(
@@ -871,13 +872,16 @@ pub(crate) mod tests {
     fn the_reputation_rank_is_capped_at_revered() {
         use crate::net::ObjectStore;
         use crate::target::{stormwind_fixture, HUMAN_WARRIOR};
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::Field::UnitFactionTemplate.index();
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
+            benilla_protocol::types::Field::UnitFactionTemplate.index();
         use benilla_protocol::ObjectFields;
 
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-        let me = ObjectStore(ObjectFields::from_fields(&[(benilla_protocol::types::Field::UnitBytes0, HUMAN_WARRIOR)],
-        ));
+        let me = ObjectStore(ObjectFields::from_fields(&[(
+            benilla_protocol::types::Field::UnitBytes0,
+            HUMAN_WARRIOR,
+        )]));
         // Both sides of the Honored, Revered and Exalted thresholds, and the wire's own ceiling.
         for (total, want) in [
             (8_999, 4),
@@ -919,16 +923,17 @@ pub(crate) mod tests {
         // 35 = UNIT_FIELD_FACTIONTEMPLATE, 46 = UNIT_FIELD_FLAGS, 147 = UNIT_NPC_FLAGS.
         let npc = |tpl: u32, npc_flags: u32| {
             ObjectStore(ObjectFields::from_fields(&[
-                    (benilla_protocol::types::Field::UnitFactionTemplate, tpl),
-                    (benilla_protocol::types::Field::UnitNpcFlags, npc_flags),
-                ],
-            ))
+                (benilla_protocol::types::Field::UnitFactionTemplate, tpl),
+                (benilla_protocol::types::Field::UnitNpcFlags, npc_flags),
+            ]))
         };
         let me = ObjectStore(ObjectFields::from_fields(&[
-                (benilla_protocol::types::Field::UnitFactionTemplate, 1), // Human
-                (benilla_protocol::types::Field::UnitFlags, UNIT_FLAG_PVP_ATTACKABLE),
-            ],
-        ));
+            (benilla_protocol::types::Field::UnitFactionTemplate, 1), // Human
+            (
+                benilla_protocol::types::Field::UnitFlags,
+                UNIT_FLAG_PVP_ATTACKABLE,
+            ),
+        ]));
         let quiet = Reputations::default(); // nothing at war
         let mut slots = vec![(0u8, 0i32); 64];
         slots[36] = (benilla_formats::faction_flags::AT_WAR, 0); // Cenarion Circle = slot 36
@@ -1007,13 +1012,12 @@ pub(crate) mod tests {
         let reps = Reputations::default();
         let player = |tpl: u32| {
             ObjectStore(ObjectFields::from_fields(&[
-                    (benilla_protocol::types::Field::UnitFactionTemplate, tpl),
-                    (
-                        benilla_protocol::types::Field::UnitFlags,
-                        UNIT_FLAG_PVP_ATTACKABLE,
-                    ),
-                ],
-            ))
+                (benilla_protocol::types::Field::UnitFactionTemplate, tpl),
+                (
+                    benilla_protocol::types::Field::UnitFlags,
+                    UNIT_FLAG_PVP_ATTACKABLE,
+                ),
+            ]))
         };
         let category = |subject: &ObjectStore, me: &ObjectStore| {
             plate_is_friendly(
@@ -1059,8 +1063,10 @@ pub(crate) mod tests {
         }
         // …while NPCs keep theirs: `CanCooperate` is never asked for an NPC.
         let npc = |tpl: u32| {
-            ObjectStore(ObjectFields::from_fields(&[(benilla_protocol::types::Field::UnitFactionTemplate, tpl)],
-            ))
+            ObjectStore(ObjectFields::from_fields(&[(
+                benilla_protocol::types::Field::UnitFactionTemplate,
+                tpl,
+            )]))
         };
         let npc_category = |subject: &ObjectStore, me: &ObjectStore| {
             plate_is_friendly(
@@ -1093,20 +1099,18 @@ pub(crate) mod tests {
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let factions = Factions(benilla_formats::load_faction_catalog(&mut chain).expect("dbc"));
         let me = ObjectStore(ObjectFields::from_fields(&[
-                (benilla_protocol::types::Field::UnitFactionTemplate, 1),
-                (
-                    benilla_protocol::types::Field::UnitFlags,
-                    UNIT_FLAG_PVP_ATTACKABLE,
-                ),
-            ],
-        ));
+            (benilla_protocol::types::Field::UnitFactionTemplate, 1),
+            (
+                benilla_protocol::types::Field::UnitFlags,
+                UNIT_FLAG_PVP_ATTACKABLE,
+            ),
+        ]));
         let reps = Reputations::default();
         let mob = |flags: u32| {
             ObjectStore(ObjectFields::from_fields(&[
-                    (benilla_protocol::types::Field::UnitFactionTemplate, 14),
-                    (benilla_protocol::types::Field::UnitFlags, flags),
-                ],
-            ))
+                (benilla_protocol::types::Field::UnitFactionTemplate, 14),
+                (benilla_protocol::types::Field::UnitFlags, flags),
+            ]))
         };
 
         // Template 14, Monster: hostile by the comparator.

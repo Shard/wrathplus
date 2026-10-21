@@ -666,8 +666,10 @@ mod tests {
             false
         ));
         // A cat-form player (`UNIT_FIELD_BYTES_2` byte 3 is form 1).
-        let cat_druid = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(Field::UnitBytes2, 1 << 24)],
-        ));
+        let cat_druid = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(
+            Field::UnitBytes2,
+            1 << 24,
+        )]));
         let cat = Some(
             CreatureTypeSources {
                 names: Some(&NameCache::default()),

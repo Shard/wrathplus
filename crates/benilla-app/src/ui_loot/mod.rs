@@ -877,10 +877,10 @@ impl LootStateRows for LootState {
 mod tests {
     use super::*;
     use benilla_protocol::types::loot_type;
+    use benilla_protocol::types::Field;
     use benilla_protocol::types::GroupMemberEntry;
     use benilla_protocol::types::ItemInfo;
     use benilla_protocol::types::ObjectFields;
-    use benilla_protocol::types::Field;
     use benilla_protocol::EntityKind;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -1062,8 +1062,10 @@ mod tests {
             let kind = if unit { 0x9 } else { 0x21 };
             let e = app
                 .world_mut()
-                .spawn(crate::net::ObjectStore(ObjectFields::from_fields(&[(Field::ObjectType, kind)],
-                )))
+                .spawn(crate::net::ObjectStore(ObjectFields::from_fields(&[(
+                    Field::ObjectType,
+                    kind,
+                )])))
                 .id();
             app.world_mut()
                 .resource_mut::<crate::net::GuidIndex>()

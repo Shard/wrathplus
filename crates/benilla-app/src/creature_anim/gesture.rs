@@ -259,8 +259,10 @@ mod tests {
         let speaker = app.world_mut().spawn(ObjectStore::default()).id();
         let fighter = app
             .world_mut()
-            .spawn(ObjectStore(ObjectFields::from_fields(&[(benilla_protocol::types::Field::UnitFlags, 0x800)],
-            )))
+            .spawn(ObjectStore(ObjectFields::from_fields(&[(
+                benilla_protocol::types::Field::UnitFlags,
+                0x800,
+            )])))
             .id();
         {
             let mut index = app.world_mut().resource_mut::<GuidIndex>();

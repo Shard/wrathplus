@@ -626,11 +626,10 @@ mod tests {
             SelfPlayer,
             Guid(ME),
             ObjectStore(ObjectFields::from_fields(&[
-                    (benilla_protocol::types::Field::UnitHealth, 100),
-                    (benilla_protocol::types::Field::UnitMaxHealth, 100),
-                    (benilla_protocol::types::Field::UnitBytes1, stand_state),
-                ],
-            )),
+                (benilla_protocol::types::Field::UnitHealth, 100),
+                (benilla_protocol::types::Field::UnitMaxHealth, 100),
+                (benilla_protocol::types::Field::UnitBytes1, stand_state),
+            ])),
         ));
         let vendor = app
             .world_mut()

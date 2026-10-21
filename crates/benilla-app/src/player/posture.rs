@@ -227,11 +227,10 @@ mod setter_tests {
             Embodied,
             Transform::default(),
             ObjectStore(ObjectFields::from_fields(&[
-                    (benilla_protocol::types::Field::UnitHealth, 100),
-                    (benilla_protocol::types::Field::UnitMaxHealth, 100),
-                    (benilla_protocol::types::Field::UnitBytes1, stand_state),
-                ],
-            )),
+                (benilla_protocol::types::Field::UnitHealth, 100),
+                (benilla_protocol::types::Field::UnitMaxHealth, 100),
+                (benilla_protocol::types::Field::UnitBytes1, stand_state),
+            ])),
         ));
         (app, rx)
     }

@@ -32,24 +32,18 @@ impl ObjectFields {
     /// (0 permanent, 1 temporary, 2-6 random properties), each an id, duration and charges
     /// (`Item.h:117-119`). Signed: the tooltip looks up `abs(id)` and paints a negative one red.
     pub fn item_enchant(&self, slot: u8) -> Option<i32> {
-        (u16::from(slot)
-            < 
-                Field::ItemEnchantment.span()
-                .map_or(0, |s| s.width / 3))
-        .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot)))?
-        .map(|id| id as i32)
-        .filter(|&id| id != 0)
+        (u16::from(slot) < Field::ItemEnchantment.span().map_or(0, |s| s.width / 3))
+            .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot)))?
+            .map(|id| id as i32)
+            .filter(|&id| id != 0)
     }
     /// `ITEM_FIELD_ENCHANTMENT + 3*slot + 2`: charges left, shown as `" (N Charges)"` if nonzero.
     /// The tooltip skips the duration; a countdown comes from `SMSG_ITEM_ENCHANT_TIME_UPDATE`.
     pub fn item_enchant_charges(&self, slot: u8) -> u32 {
-        (u16::from(slot)
-            < 
-                Field::ItemEnchantment.span()
-                .map_or(0, |s| s.width / 3))
-        .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot) + 2))
-        .flatten()
-        .unwrap_or(0)
+        (u16::from(slot) < Field::ItemEnchantment.span().map_or(0, |s| s.width / 3))
+            .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot) + 2))
+            .flatten()
+            .unwrap_or(0)
     }
     /// `ITEM_FIELD_RANDOM_PROPERTIES_ID` (field 44): the `ItemRandomProperties.dbc` suffix, 0 if
     /// none; only the name uses it (`0x5d8b00`), the roll's enchants fill enchant slots 2-6.

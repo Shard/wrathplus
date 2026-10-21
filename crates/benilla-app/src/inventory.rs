@@ -121,9 +121,7 @@ pub(crate) fn slot_guid(
         }
         BANK_CONTAINER => store.player_bank_slot(slot0).filter(|g| *g != 0),
         KEYRING_CONTAINER => store.player_keyring_slot(slot0).filter(|g| *g != 0),
-        b if (BANK_BAG_ID_FIRST..=StorageSlots::GEOMETRY.last_bag())
-            .contains(&b) =>
-        {
+        b if (BANK_BAG_ID_FIRST..=StorageSlots::GEOMETRY.last_bag()).contains(&b) => {
             let bag_guid = store
                 .player_bank_bag_slot((bag - BANK_BAG_ID_FIRST) as u8)
                 .filter(|g| *g != 0)?;
@@ -136,14 +134,11 @@ pub(crate) fn slot_guid(
         // array's accessor caps at 23.
         EQUIPMENT_BAG
             if (StorageSlots::GEOMETRY.bank_bag_first
-                ..StorageSlots::GEOMETRY.bank_bag_first
-                    + StorageSlots::GEOMETRY.bank_bags)
+                ..StorageSlots::GEOMETRY.bank_bag_first + StorageSlots::GEOMETRY.bank_bags)
                 .contains(&slot0) =>
         {
             store
-                .player_bank_bag_slot(
-                    slot0 - StorageSlots::GEOMETRY.bank_bag_first,
-                )
+                .player_bank_bag_slot(slot0 - StorageSlots::GEOMETRY.bank_bag_first)
                 .filter(|g| *g != 0)
         }
         EQUIPMENT_BAG => store.player_inv_slot(slot0).filter(|g| *g != 0),

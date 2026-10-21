@@ -775,9 +775,9 @@ fn bag_family_name(
                 + super::StorageSlots::GEOMETRY.bank_bags)
             .contains(&s) =>
         {
-            store.0.player_bank_bag_slot(
-                s - super::StorageSlots::GEOMETRY.bank_bag_first,
-            )
+            store
+                .0
+                .player_bank_bag_slot(s - super::StorageSlots::GEOMETRY.bank_bag_first)
         }
         // 255, the player's own array, names no bag.
         _ => None,

@@ -111,8 +111,7 @@ fn feed_cost_per_invalidation() {
                 if slot == 0 { skill } else { 300 } | 300 << 16,
             ));
         }
-        ObjectStore(ObjectFields::from_field_slots(&slots,
-        ))
+        ObjectStore(ObjectFields::from_field_slots(&slots))
     };
     let player = app
         .world_mut()
@@ -122,10 +121,9 @@ fn feed_cost_per_invalidation() {
     const TARGET: u64 = 0xF130_0000_0000_0042;
     let target_fields = |reach: f32| {
         ObjectStore(ObjectFields::from_fields(&[(
-                benilla_protocol::types::Field::UnitCombatreach,
-                reach.to_bits(),
-            )],
-        ))
+            benilla_protocol::types::Field::UnitCombatreach,
+            reach.to_bits(),
+        )]))
     };
     let target = app.world_mut().spawn(target_fields(1.5)).id();
     app.world_mut()

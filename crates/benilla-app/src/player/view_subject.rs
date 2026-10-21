@@ -122,8 +122,7 @@ mod tests {
             .spawn((
                 SelfPlayer,
                 Transform::default(),
-                ObjectStore(benilla_protocol::ObjectFields::from_fields(&[],
-                )),
+                ObjectStore(benilla_protocol::ObjectFields::from_fields(&[])),
             ))
             .id();
         app.update();

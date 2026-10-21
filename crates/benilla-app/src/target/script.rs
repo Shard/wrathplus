@@ -385,21 +385,20 @@ mod tests {
         // `UNIT_FIELD_TARGET` 16, the latter two each a 2-field guid.
         let unit = |kind: u32, summon: u64, target: u64| {
             ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&[
-                    (benilla_protocol::types::Field::ObjectType, 0, kind),
-                    (benilla_protocol::types::Field::UnitSummon, 0, summon as u32),
-                    (
-                        benilla_protocol::types::Field::UnitSummon,
-                        1,
-                        (summon >> 32) as u32,
-                    ),
-                    (benilla_protocol::types::Field::UnitTarget, 0, target as u32),
-                    (
-                        benilla_protocol::types::Field::UnitTarget,
-                        1,
-                        (target >> 32) as u32,
-                    ),
-                ],
-            ))
+                (benilla_protocol::types::Field::ObjectType, 0, kind),
+                (benilla_protocol::types::Field::UnitSummon, 0, summon as u32),
+                (
+                    benilla_protocol::types::Field::UnitSummon,
+                    1,
+                    (summon >> 32) as u32,
+                ),
+                (benilla_protocol::types::Field::UnitTarget, 0, target as u32),
+                (
+                    benilla_protocol::types::Field::UnitTarget,
+                    1,
+                    (target >> 32) as u32,
+                ),
+            ]))
         };
         const PLAYER: u32 = 0x19;
         const CREATURE: u32 = 0x09;

@@ -163,8 +163,7 @@ mod tests {
             .collect();
         app.world_mut().spawn((
             SelfPlayer,
-            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&regen,
-            )),
+            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&regen)),
         ));
         let step = |app: &mut App, now: f64, runes: Option<[Rune; RUNES]>| {
             app.world_mut()

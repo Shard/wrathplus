@@ -201,10 +201,7 @@ fn answers_map_to_their_sends() {
 #[test]
 fn controlling_units_hold_a_charm_or_a_summon() {
     use benilla_protocol::types::{Field, ObjectFields};
-    let unit = |slots: &[(Field, u16, u32)]| {
-        ObjectStore(ObjectFields::from_field_slots(slots,
-        ))
-    };
+    let unit = |slots: &[(Field, u16, u32)]| ObjectStore(ObjectFields::from_field_slots(slots));
     let charmer = unit(&[(Field::UnitCharm, 0, 5)]);
     let summoner = unit(&[(Field::UnitCharm, 0, 0), (Field::UnitSummon, 0, 6)]);
     let neither = unit(&[(Field::UnitCharm, 0, 0)]);

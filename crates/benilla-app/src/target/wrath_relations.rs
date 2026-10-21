@@ -377,11 +377,10 @@ mod tests {
         let actor = unit(true, PC, 0, 0);
         let at = |field: Field| field.span().unwrap().index;
         let duellist = ObjectStore(ObjectFields::from_pairs(&[
-                (at(Field::ObjectType), 0x19),
-                (at(Field::UnitFlags), PC),
-                (at(Field::PlayerDuelTeam), 1),
-            ],
-        ));
+            (at(Field::ObjectType), 0x19),
+            (at(Field::UnitFlags), PC),
+            (at(Field::PlayerDuelTeam), 1),
+        ]));
         let pet = unit(false, PC, 0, 7);
         let stores = HashMap::from([(7u64, duellist)]);
         let lookup = ByGuid::new(|guid| stores.get(&guid));

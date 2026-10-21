@@ -1086,14 +1086,13 @@ mod tests {
     /// `UNIT_FIELD_HEALTH` (22), on [`fx::factions`]' rows: template 1 the caster's Human, 2 an Orc.
     fn unit_store(template: u32, flags: u32, health: u32) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_fields(&[
-                (
-                    benilla_protocol::types::Field::UnitFactionTemplate,
-                    template,
-                ),
-                (benilla_protocol::types::Field::UnitFlags, flags),
-                (benilla_protocol::types::Field::UnitHealth, health),
-            ],
-        ))
+            (
+                benilla_protocol::types::Field::UnitFactionTemplate,
+                template,
+            ),
+            (benilla_protocol::types::Field::UnitFlags, flags),
+            (benilla_protocol::types::Field::UnitHealth, health),
+        ]))
     }
 
     /// A living player of the caster's faction: assistable, not attackable.
@@ -1250,15 +1249,14 @@ mod tests {
     /// (10) and `UNIT_FIELD_CREATEDBY` (14) the guids `charmed_by` and `created_by`, 0 for none.
     fn owned(flags: u32, charmed_by: u32, created_by: u32) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&[
-                (benilla_protocol::types::Field::UnitFactionTemplate, 0, 2),
-                (benilla_protocol::types::Field::UnitFlags, 0, flags),
-                (benilla_protocol::types::Field::UnitHealth, 0, 100),
-                (benilla_protocol::types::Field::UnitCharmedby, 0, charmed_by),
-                (benilla_protocol::types::Field::UnitCharmedby, 1, 0),
-                (benilla_protocol::types::Field::UnitCreatedby, 0, created_by),
-                (benilla_protocol::types::Field::UnitCreatedby, 1, 0),
-            ],
-        ))
+            (benilla_protocol::types::Field::UnitFactionTemplate, 0, 2),
+            (benilla_protocol::types::Field::UnitFlags, 0, flags),
+            (benilla_protocol::types::Field::UnitHealth, 0, 100),
+            (benilla_protocol::types::Field::UnitCharmedby, 0, charmed_by),
+            (benilla_protocol::types::Field::UnitCharmedby, 1, 0),
+            (benilla_protocol::types::Field::UnitCreatedby, 0, created_by),
+            (benilla_protocol::types::Field::UnitCreatedby, 1, 0),
+        ]))
     }
 
     /// The word's plain unit bit (`0x0002`), which `0x6e61a0` takes the player for (`0x850e`), and

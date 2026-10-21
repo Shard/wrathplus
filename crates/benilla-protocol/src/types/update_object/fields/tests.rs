@@ -7,10 +7,8 @@ fn wrath_resources_preserve_sparse_updates_zero_and_recreate_without_vanilla_ali
         pairs.push((25 + slot, 100 + u32::from(slot)));
         pairs.push((33 + slot, 1000 + u32::from(slot)));
     }
-    let mut created =
-        ObjectFields::from_pairs(&pairs).into_created(ObjectType::Unit);
-    created.merge(ObjectFields::from_pairs(&[(26, 437), (31, 0), (39, 1250)],
-    ));
+    let mut created = ObjectFields::from_pairs(&pairs).into_created(ObjectType::Unit);
+    created.merge(ObjectFields::from_pairs(&[(26, 437), (31, 0), (39, 1250)]));
     let result = created.wrath_powers().unwrap();
     assert_eq!(result[0], (100, 1000));
     assert_eq!(result[1], (437, 1001));
@@ -324,8 +322,7 @@ fn corpse_descriptor_indices_and_packing() {
 #[test]
 fn a_creature_has_no_player_block_to_be_absent_from() {
     // PLAYER_FIELD_MOD_DAMAGE_DONE_PCT[0], past a unit's descriptor.
-    const MOD_DAMAGE_DONE_PCT: u16 =
-        Field::PlayerModDamageDonePct.index();
+    const MOD_DAMAGE_DONE_PCT: u16 = Field::PlayerModDamageDonePct.index();
     // UNIT_FIELD_BASEATTACKTIME, well inside it.
     const BASEATTACKTIME: u16 = Field::UnitBaseattacktime.index();
 
@@ -621,15 +618,13 @@ fn native_semantic_reads_keep_sparse_and_create_zero_fill() {
     fields.merge(ObjectFields::from_pairs(&[(health, 0)]));
     assert_eq!(fields.get(Field::UnitHealth), Some(0));
     assert_eq!(fields.created_as(), Some(ObjectType::Unit));
-    let fields = ObjectFields::from_pairs(&[])
-        .into_created(ObjectType::Unit);
+    let fields = ObjectFields::from_pairs(&[]).into_created(ObjectType::Unit);
     assert_eq!(fields.get_at(Field::UnitPower, 7), None);
 }
 
 #[test]
 fn semantic_guid_and_float_reads_obey_span_boundaries() {
-    let fields = ObjectFields::from_pairs(&[(0, 7), (1, 3), (4, 1.5f32.to_bits())],
-    );
+    let fields = ObjectFields::from_pairs(&[(0, 7), (1, 3), (4, 1.5f32.to_bits())]);
     assert_eq!(
         fields.get_field_guid(Field::ObjectGuid, 0),
         Some((3u64 << 32) | 7)
@@ -642,17 +637,16 @@ fn semantic_guid_and_float_reads_obey_span_boundaries() {
 #[test]
 fn unit_accessors_read_native_wrath_without_vanilla_aliases() {
     let fields = ObjectFields::from_pairs(&[
-            (22, 999), // Wrath channel object: not vanilla health.
-            (24, 81),
-            (25, 14),
-            (32, 100),
-            (33, 70),
-            (54, 22),
-            (64, 1.25f32.to_bits()),
-            (65, 2.5f32.to_bits()),
-            (67, 1234),
-        ],
-    )
+        (22, 999), // Wrath channel object: not vanilla health.
+        (24, 81),
+        (25, 14),
+        (32, 100),
+        (33, 70),
+        (54, 22),
+        (64, 1.25f32.to_bits()),
+        (65, 2.5f32.to_bits()),
+        (67, 1234),
+    ])
     .into_created(ObjectType::Unit);
     assert_eq!(fields.unit_health(), Some(81));
     assert_eq!(fields.unit_max_health(), Some(100));
@@ -669,8 +663,7 @@ fn semantic_guids_preserve_low_half_presence_and_optional_high_half() {
     let fields = ObjectFields::from_pairs(&[(owner, 42)]);
     assert_eq!(fields.unit_summoned_by(), Some(42));
     assert_eq!(fields.get_field_guid(Field::UnitSummonedby, 1), None);
-    let high_only =
-        ObjectFields::from_pairs(&[(owner + 1, 3)]).into_created(ObjectType::Unit);
+    let high_only = ObjectFields::from_pairs(&[(owner + 1, 3)]).into_created(ObjectType::Unit);
     assert_eq!(high_only.unit_summoned_by(), None);
     assert_eq!(high_only.get_field_guid(Field::UnitSummonedby, 0), None);
     let fields = fields.into_created(ObjectType::Unit);
@@ -681,14 +674,13 @@ fn semantic_guids_preserve_low_half_presence_and_optional_high_half() {
 #[test]
 fn native_item_container_and_corpse_readers_use_their_layout() {
     let item = ObjectFields::from_pairs(&[
-            (14, 3),
-            (16, (-2i32) as u32),
-            (55, 789),
-            (56, 800),
-            (60, 17),
-            (61, 20),
-        ],
-    )
+        (14, 3),
+        (16, (-2i32) as u32),
+        (55, 789),
+        (56, 800),
+        (60, 17),
+        (61, 20),
+    ])
     .into_created(ObjectType::Item);
     assert_eq!(item.item_stack_count(), Some(3));
     assert_eq!(item.item_spell_charges(0), Some(-2));
@@ -700,13 +692,12 @@ fn native_item_container_and_corpse_readers_use_their_layout() {
     assert_eq!(bag.container_num_slots(), Some(36));
     assert_eq!(bag.container_slot(0), Some(123));
     let corpse = ObjectFields::from_pairs(&[
-            (6, 123),
-            (10, 456),
-            (11, 99 | (4 << 24)),
-            (30, 1 << 8),
-            (33, 8),
-        ],
-    );
+        (6, 123),
+        (10, 456),
+        (11, 99 | (4 << 24)),
+        (30, 1 << 8),
+        (33, 8),
+    ]);
     assert_eq!(corpse.corpse_owner(), Some(123));
     assert_eq!(corpse.corpse_display_id(), Some(456));
     assert_eq!(corpse.corpse_item(0), Some((99, 4)));
@@ -719,13 +710,12 @@ fn native_item_container_and_corpse_readers_use_their_layout() {
 fn native_wrath_quest_log_preserves_last_slot_and_u16_counters() {
     // AzerothCore UpdateFields.h: PLAYER_QUEST_LOG_1 starts at158, five dwords per slot.
     let fields = ObjectFields::from_pairs(&[
-            (278, 987),
-            (279, 1),
-            (280, 300 | (65535 << 16)),
-            (281, 64 | (1024 << 16)),
-            (282, 12345),
-        ],
-    );
+        (278, 987),
+        (279, 1),
+        (280, 300 | (65535 << 16)),
+        (281, 64 | (1024 << 16)),
+        (282, 12345),
+    ]);
     assert_eq!(fields.player_quest_log_slots(), 25);
     let quest = fields.player_quest_log(24).unwrap();
     assert_eq!(quest.quest_id, 987);
@@ -742,16 +732,10 @@ fn native_wrath_quest_log_preserves_last_slot_and_u16_counters() {
 fn player_public_and_private_bytes_do_not_collide() {
     let (public, private, private2) = (153, 1197, 1229);
     assert_eq!(Field::PlayerBytes.span().unwrap().index, public);
-    assert_eq!(
-        Field::PlayerFieldBytes.span().unwrap().index,
-        private
-    );
-    assert_eq!(
-        Field::PlayerFieldBytes2.span().unwrap().index,
-        private2
-    );
-    let fields = ObjectFields::from_pairs(&[(public, 0x04030201), (private, 0x09080706), (private2, 42)],
-    );
+    assert_eq!(Field::PlayerFieldBytes.span().unwrap().index, private);
+    assert_eq!(Field::PlayerFieldBytes2.span().unwrap().index, private2);
+    let fields =
+        ObjectFields::from_pairs(&[(public, 0x04030201), (private, 0x09080706), (private2, 42)]);
     assert_eq!(fields.player_bytes(), Some(0x04030201));
     assert_eq!(fields.get(Field::PlayerFieldBytes), Some(0x09080706));
     assert_eq!(fields.get(Field::PlayerFieldBytes2), Some(42));
@@ -785,23 +769,20 @@ fn native_power_arrays_preserve_all_slots() {
     assert_eq!(fields.unit_max_power(slots as u8), None);
     if true {
         assert_eq!(fields.wrath_powers().unwrap()[6], (106, 1006));
-        fields.merge(ObjectFields::from_pairs(&[(current.index + 6, 0)],
-        ));
+        fields.merge(ObjectFields::from_pairs(&[(current.index + 6, 0)]));
         assert_eq!(fields.wrath_powers().unwrap()[6], (0, 1006));
         assert_eq!(fields.wrath_powers().unwrap()[0], (100, 1000));
     }
     let flags = Field::UnitDynamicFlags.span().unwrap();
-    fields.merge(ObjectFields::from_pairs(&[(flags.index, unit::UNIT_DYNFLAG_DEAD)],
-    ));
+    fields.merge(ObjectFields::from_pairs(&[(
+        flags.index,
+        unit::UNIT_DYNFLAG_DEAD,
+    )]));
     assert_eq!(fields.unit_shown_power((slots - 1) as u8), Some(0));
     assert_eq!(fields.unit_shown_power(slots as u8), None);
-    assert!(ObjectFields::from_pairs(&[(
-            Field::UnitPower.span()
-                .unwrap()
-                .index,
-            1
-        )]
-    )
-    .wrath_powers()
-    .is_none());
+    assert!(
+        ObjectFields::from_pairs(&[(Field::UnitPower.span().unwrap().index, 1)])
+            .wrath_powers()
+            .is_none()
+    );
 }

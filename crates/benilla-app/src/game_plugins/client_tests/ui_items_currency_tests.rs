@@ -20,10 +20,9 @@ fn real_feed_preserves_optional_native_balances_and_clears_logout() {
         .spawn((
             SelfPlayer,
             ObjectStore(fields(&[
-                    (Field::PlayerHonorCurrency, 0, 0),
-                    (Field::PlayerArenaCurrency, 0, u32::MAX),
-                ],
-            )),
+                (Field::PlayerHonorCurrency, 0, 0),
+                (Field::PlayerArenaCurrency, 0, u32::MAX),
+            ])),
         ))
         .id();
     schedule.run(app.world_mut());

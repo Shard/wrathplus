@@ -201,14 +201,13 @@ mod tests {
 
     fn store(typemask: u32, reach: f32) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_fields(&[
-                (benilla_protocol::types::Field::ObjectType, typemask),
-                (benilla_protocol::types::Field::UnitHealth, 100),
-                (
-                    benilla_protocol::types::Field::UnitCombatreach,
-                    reach.to_bits(),
-                ),
-            ],
-        ))
+            (benilla_protocol::types::Field::ObjectType, typemask),
+            (benilla_protocol::types::Field::UnitHealth, 100),
+            (
+                benilla_protocol::types::Field::UnitCombatreach,
+                reach.to_bits(),
+            ),
+        ]))
     }
 
     fn remote(flags: u32) -> RemoteMotion {

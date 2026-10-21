@@ -15,12 +15,7 @@ fn scalar_accessors_read_distinct_native_fields_in_both_dialects() {
                 u64::from(0x3f00_0000 + u32::from(s.index) * 257)
                     | (u64::from(0x3f00_0000 + u32::from(s.index + 1) * 257) << 32)
             });
-            assert_eq!(
-                $read(&fields),
-                $expected(raw, guid),
-                "{}",
-                $name
-            );
+            assert_eq!($read(&fields), $expected(raw, guid), "{}", $name);
         };
     }
     check!(
@@ -903,17 +898,16 @@ fn fixture(values: &[(Field, u16, u32)]) -> ObjectFields {
 #[test]
 fn dialect_packed_bytes_never_borrow_neighbor_meanings() {
     let fields = fixture(&[
-            (Field::UnitBytes0, 0, 0x0403_0201),
-            (Field::UnitBytes1, 0, 0xa107_9908),
-            (Field::UnitBytes2, 0, 0x1200_0002),
-            (Field::PlayerBytes, 0, 0x1817_1615),
-            (Field::PlayerBytes2, 0, 0x0207_0019),
-            (Field::PlayerBytes3, 0, 0x1c1b_1a03),
-            (Field::PlayerFieldBytes, 0, 0x1e1d_050a),
-            (Field::PlayerFieldBytes2, 0, 0x40),
-            (Field::PlayerFlags, 0, 0xc31),
-        ],
-    );
+        (Field::UnitBytes0, 0, 0x0403_0201),
+        (Field::UnitBytes1, 0, 0xa107_9908),
+        (Field::UnitBytes2, 0, 0x1200_0002),
+        (Field::PlayerBytes, 0, 0x1817_1615),
+        (Field::PlayerBytes2, 0, 0x0207_0019),
+        (Field::PlayerBytes3, 0, 0x1c1b_1a03),
+        (Field::PlayerFieldBytes, 0, 0x1e1d_050a),
+        (Field::PlayerFieldBytes2, 0, 0x40),
+        (Field::PlayerFlags, 0, 0xc31),
+    ]);
     assert_eq!(fields.unit_race(), Some(1));
     assert_eq!(fields.unit_class(), Some(2));
     assert_eq!(fields.unit_gender(), Some(3));
@@ -947,20 +941,16 @@ fn dialect_packed_bytes_never_borrow_neighbor_meanings() {
 #[test]
 fn native_go_and_dynamicobject_fields_do_not_alias_movement_or_parent_rotation() {
     let fields = fixture(&[
-            (Field::GameobjectBytes1, 0, 0xabcd_0b02),
-            (Field::GameobjectDynamic, 0, 0xbeef_0035),
-            (Field::GameobjectParentrotation, 0, 8f32.to_bits()),
-        ],
-    );
+        (Field::GameobjectBytes1, 0, 0xabcd_0b02),
+        (Field::GameobjectDynamic, 0, 0xbeef_0035),
+        (Field::GameobjectParentrotation, 0, 8f32.to_bits()),
+    ]);
     assert_eq!(fields.gameobject_state(), Some(2));
     assert_eq!(fields.gameobject_type_id(), 11);
     assert_eq!(fields.gameobject_dynamic_flags(), 0x35);
     let created = ObjectFields::from_pairs(&[]).into_created(ObjectType::GameObject);
     assert_eq!(created.gameobject_state(), Some(0));
-    assert_eq!(
-        ObjectFields::from_pairs(&[]).gameobject_state(),
-        None
-    );
+    assert_eq!(ObjectFields::from_pairs(&[]).gameobject_state(), None);
 }
 
 #[test]
@@ -998,21 +988,20 @@ fn native_array_accessors_obey_spans_and_distinct_elements() {
         assert_eq!(read(&fields, (span.width / 2) as u8), None);
     }
     let fields = fixture(&[
-            (Field::PlayerVisibleItems, 36, 765),
-            (Field::PlayerVisibleItems, 37, 0x0016_0015),
-            (Field::PlayerVisibleItems, 220, 22),
-            (Field::PlayerVisibleItems, 226, 23),
-            (Field::ItemEnchantment, 0, 31),
-            (Field::ItemEnchantment, 2, 32),
-            (Field::ItemSpellCharges, 4, (-33i32) as u32),
-            (Field::PlayerSkillInfo11, 381, 0x0004_0029),
-            (Field::PlayerSkillInfo11, 382, 0x0064_0032),
-            (Field::PlayerSkillInfo11, 383, 0xfffd_fffe),
-            (Field::PlayerBuybackPrice1, 11, 34),
-            (Field::PlayerBuybackTimestamp1, 11, 35),
-            (Field::PlayerExploredZones1, 63, 36),
-        ],
-    );
+        (Field::PlayerVisibleItems, 36, 765),
+        (Field::PlayerVisibleItems, 37, 0x0016_0015),
+        (Field::PlayerVisibleItems, 220, 22),
+        (Field::PlayerVisibleItems, 226, 23),
+        (Field::ItemEnchantment, 0, 31),
+        (Field::ItemEnchantment, 2, 32),
+        (Field::ItemSpellCharges, 4, (-33i32) as u32),
+        (Field::PlayerSkillInfo11, 381, 0x0004_0029),
+        (Field::PlayerSkillInfo11, 382, 0x0064_0032),
+        (Field::PlayerSkillInfo11, 383, 0xfffd_fffe),
+        (Field::PlayerBuybackPrice1, 11, 34),
+        (Field::PlayerBuybackTimestamp1, 11, 35),
+        (Field::PlayerExploredZones1, 63, 36),
+    ]);
     assert_eq!(fields.player_visible_item_entry(18), Some(765));
     assert_eq!(fields.player_visible_item_entry(19), None);
     assert_eq!(fields.player_visible_item_enchant(18, 0), Some(21));
@@ -1046,21 +1035,20 @@ fn native_array_accessors_obey_spans_and_distinct_elements() {
 #[test]
 fn unit_composites_and_legacy_only_values_keep_native_semantics() {
     let fields = fixture(&[
-            (Field::UnitCharm, 0, 41),
-            (Field::UnitSummon, 0, 42),
-            (Field::UnitSummonedby, 0, 43),
-            (Field::UnitCreatedby, 0, 44),
-            (Field::UnitPetnumber, 0, 45),
-            (Field::UnitPetexperience, 0, 46),
-            (Field::UnitPetnextlevelexp, 0, 47),
-            (Field::UnitDynamicFlags, 0, 0x2d),
-            (Field::UnitHealth, 0, 0),
-            (Field::UnitMaxHealth, 0, 999),
-            (Field::UnitVirtualItemSlotId, 2, 999),
-            (Field::UnitAttackPowerMods, 0, 0xfffe_0036),
-            (Field::UnitRangedAttackPowerMods, 0, 0xfffc_0037),
-        ],
-    );
+        (Field::UnitCharm, 0, 41),
+        (Field::UnitSummon, 0, 42),
+        (Field::UnitSummonedby, 0, 43),
+        (Field::UnitCreatedby, 0, 44),
+        (Field::UnitPetnumber, 0, 45),
+        (Field::UnitPetexperience, 0, 46),
+        (Field::UnitPetnextlevelexp, 0, 47),
+        (Field::UnitDynamicFlags, 0, 0x2d),
+        (Field::UnitHealth, 0, 0),
+        (Field::UnitMaxHealth, 0, 999),
+        (Field::UnitVirtualItemSlotId, 2, 999),
+        (Field::UnitAttackPowerMods, 0, 0xfffe_0036),
+        (Field::UnitRangedAttackPowerMods, 0, 0xfffc_0037),
+    ]);
     assert_eq!(fields.unit_pet_guid(), Some(41));
     assert_eq!(fields.unit_owner(OwnerFallback::CreatedBy), Some(44));
     assert_eq!(fields.unit_owner(OwnerFallback::SummonedBy), Some(43));
@@ -1189,13 +1177,12 @@ fn corpse_quest_resource_and_object_accessors_preserve_both_native_shapes() {
     }
     let fields = fixture(&values);
     let corpse = fixture(&[
-            (Field::CorpseBytes1, 0, 0x0403_0200),
-            (Field::CorpseBytes2, 0, 0x0807_0605),
-            (Field::CorpseFlags, 0, 0x3d),
-            (Field::CorpseDynamicFlags, 0, 1),
-            (Field::CorpseItem, 18, 0x1300_0065),
-        ],
-    );
+        (Field::CorpseBytes1, 0, 0x0403_0200),
+        (Field::CorpseBytes2, 0, 0x0807_0605),
+        (Field::CorpseFlags, 0, 0x3d),
+        (Field::CorpseDynamicFlags, 0, 1),
+        (Field::CorpseItem, 18, 0x1300_0065),
+    ]);
     let look = corpse.corpse_look().unwrap();
     assert_eq!(
         (
@@ -1306,14 +1293,12 @@ fn pet_permissions_use_only_their_native_dialect_field_and_bit() {
         }
     }
     let both = fixture(&[
-            (Field::UnitFlags, 0, u32::MAX),
-            (Field::UnitBytes2, 0, u32::MAX),
-        ],
-    );
+        (Field::UnitFlags, 0, u32::MAX),
+        (Field::UnitBytes2, 0, u32::MAX),
+    ]);
     assert!(both.unit_pet_can_be_renamed());
     assert!(both.unit_pet_can_be_abandoned());
-    let zero = fixture(&[(Field::UnitFlags, 0, 0), (Field::UnitBytes2, 0, 0)],
-    );
+    let zero = fixture(&[(Field::UnitFlags, 0, 0), (Field::UnitBytes2, 0, 0)]);
     assert!(!zero.unit_pet_can_be_renamed());
     assert!(!zero.unit_pet_can_be_abandoned());
 }
@@ -1342,11 +1327,10 @@ fn replicated_pvp_states_do_not_borrow_old_flags_or_neighbor_bytes() {
     }
     for (word, expected) in [(0, false), (u32::MAX, true)] {
         let fields = fixture(&[
-                (Field::UnitFlags, 0, word),
-                (Field::PlayerFlags, 0, word),
-                (Field::UnitBytes2, 0, word),
-            ],
-        );
+            (Field::UnitFlags, 0, word),
+            (Field::PlayerFlags, 0, word),
+            (Field::UnitBytes2, 0, word),
+        ]);
         assert_eq!(fields.unit_is_pvp(), expected);
         assert_eq!(fields.unit_is_ffa_pvp(), expected);
     }
@@ -1378,22 +1362,18 @@ fn pvp_state_byte_is_lossless_wrath_only_and_sanctuary_is_not_a_neighbor_bit() {
         }
     }
     let zero = fixture(&[(Field::UnitBytes2, 0, 0)]);
-    assert_eq!(
-        zero.unit_pvp_state_flags(),
-        Some(0)
-    );
+    assert_eq!(zero.unit_pvp_state_flags(), Some(0));
     assert!(!zero.unit_is_in_sanctuary());
 }
 
 #[test]
 fn arena_team_ids_read_each_slots_first_word_on_wrath_only() {
     let wrath = ObjectFields::from_field_slots(&[
-            (Field::PlayerArenaTeamInfo11, 0, 11),
-            (Field::PlayerArenaTeamInfo11, 1, 99),
-            (Field::PlayerArenaTeamInfo11, 7, 0),
-            (Field::PlayerArenaTeamInfo11, 14, 33),
-        ],
-    );
+        (Field::PlayerArenaTeamInfo11, 0, 11),
+        (Field::PlayerArenaTeamInfo11, 1, 99),
+        (Field::PlayerArenaTeamInfo11, 7, 0),
+        (Field::PlayerArenaTeamInfo11, 14, 33),
+    ]);
     assert_eq!(
         (0..4)
             .map(|s| wrath.player_arena_team_id(s))
@@ -1405,12 +1385,11 @@ fn arena_team_ids_read_each_slots_first_word_on_wrath_only() {
 #[test]
 fn glyph_sockets_read_their_slot_glyph_and_unlock_bits_on_wrath_only() {
     let wrath = ObjectFields::from_field_slots(&[
-            (Field::PlayerGlyphSlots1, 0, 21),
-            (Field::PlayerGlyphSlots1, 5, 26),
-            (Field::PlayerGlyphs1, 1, 251),
-            (Field::PlayerGlyphsEnabled, 0, 0b11),
-        ],
-    );
+        (Field::PlayerGlyphSlots1, 0, 21),
+        (Field::PlayerGlyphSlots1, 5, 26),
+        (Field::PlayerGlyphs1, 1, 251),
+        (Field::PlayerGlyphsEnabled, 0, 0b11),
+    ]);
     assert_eq!(
         (
             wrath.player_glyph_slot(0),
@@ -1429,10 +1408,9 @@ fn glyph_sockets_read_their_slot_glyph_and_unlock_bits_on_wrath_only() {
 #[test]
 fn daily_quest_slots_are_native_only() {
     let wrath = ObjectFields::from_field_slots(&[
-            (Field::PlayerDailyQuests1, 0, 11389),
-            (Field::PlayerDailyQuests1, 24, 13240),
-        ],
-    );
+        (Field::PlayerDailyQuests1, 0, 11389),
+        (Field::PlayerDailyQuests1, 24, 13240),
+    ]);
     assert_eq!(
         (
             wrath.player_daily_quest(0),

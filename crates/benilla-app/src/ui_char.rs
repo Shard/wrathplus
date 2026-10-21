@@ -1066,8 +1066,8 @@ fn weapon_enchant(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::ObjectFields;
     use benilla_protocol::types::Field;
+    use benilla_protocol::types::ObjectFields;
     use bevy::ecs::system::RunSystemOnce;
 
     const BANK_BAG_LIVE_FIRST: u32 = 68;
@@ -1147,12 +1147,10 @@ mod tests {
             .insert_resource(NetCommands(tx));
         let fields = match bag {
             Some(g) => ObjectFields::from_pairs(&[
-                    (F_BANK_BAG_1, g as u32),
-                    (F_BANK_BAG_1 + 1, (g >> 32) as u32),
-                ],
-            ),
-            None => ObjectFields::from_pairs(&[(F_BANK_BAG_1, 0), (F_BANK_BAG_1 + 1, 0)],
-            ),
+                (F_BANK_BAG_1, g as u32),
+                (F_BANK_BAG_1 + 1, (g >> 32) as u32),
+            ]),
+            None => ObjectFields::from_pairs(&[(F_BANK_BAG_1, 0), (F_BANK_BAG_1 + 1, 0)]),
         };
         app.world_mut().spawn((SelfPlayer, ObjectStore(fields)));
         if let Some(g) = bag {
@@ -1196,8 +1194,8 @@ mod tests {
             let mut q = app
                 .world_mut()
                 .query_filtered::<&mut ObjectStore, With<SelfPlayer>>();
-            q.single_mut(app.world_mut()).unwrap().0 = ObjectFields::from_pairs(&[(first, BAG as u32), (first + 1, (BAG >> 32) as u32)],
-            );
+            q.single_mut(app.world_mut()).unwrap().0 =
+                ObjectFields::from_pairs(&[(first, BAG as u32), (first + 1, (BAG >> 32) as u32)]);
             app.world_mut()
                 .resource_mut::<PendingItemOps>()
                 .add([(EQUIPMENT_BAG, live, BAG, 1)]);
@@ -1286,12 +1284,11 @@ mod tests {
                 .query_filtered::<&mut ObjectStore, With<SelfPlayer>>();
             let mut store = q.single_mut(app.world_mut()).unwrap();
             *store = ObjectStore(ObjectFields::from_pairs(&[
-                    (F_BANK_BAG_1, a as u32),
-                    (F_BANK_BAG_1 + 1, (a >> 32) as u32),
-                    (F_BANK_BAG_1 + 2, b as u32),
-                    (F_BANK_BAG_1 + 3, (b >> 32) as u32),
-                ],
-            ));
+                (F_BANK_BAG_1, a as u32),
+                (F_BANK_BAG_1 + 1, (a >> 32) as u32),
+                (F_BANK_BAG_1 + 2, b as u32),
+                (F_BANK_BAG_1 + 3, (b >> 32) as u32),
+            ]));
         };
         set_slots(&mut app, BAG, BAG2);
         crate::items::test_spawn_item(

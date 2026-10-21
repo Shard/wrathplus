@@ -973,8 +973,7 @@ mod tests {
     }
 
     /// `UNIT_FIELD_FACTIONTEMPLATE`, absolute field 35.
-    const FACTION_TEMPLATE_FIELD: u16 =
-        Field::UnitFactionTemplate.index();
+    const FACTION_TEMPLATE_FIELD: u16 = Field::UnitFactionTemplate.index();
 
     macro_rules! catalog_or_skip {
         () => {{

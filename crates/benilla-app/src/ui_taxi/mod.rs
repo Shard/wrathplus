@@ -347,7 +347,8 @@ mod tests {
     /// flight master unresolved the fares show 0 (`0x4dc423`).
     #[test]
     fn the_map_shows_discounted_fares_and_the_express_sends_the_raw_sum() {
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::Field::UnitFactionTemplate.index();
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
+            benilla_protocol::types::Field::UnitFactionTemplate.index();
         use bevy::ecs::system::RunSystemOnce;
 
         const MASTER: u64 = 0xF130_0000_0000_0099;
@@ -372,13 +373,10 @@ mod tests {
             .insert_non_send_resource(UiScript::new().unwrap());
         app.world_mut().spawn((
             SelfPlayer,
-            ObjectStore(ObjectFields::from_fields(&[
-                    (
-                        benilla_protocol::types::Field::UnitBytes0,
-                        crate::target::HUMAN_WARRIOR,
-                    ),
-                ],
-            )),
+            ObjectStore(ObjectFields::from_fields(&[(
+                benilla_protocol::types::Field::UnitBytes0,
+                crate::target::HUMAN_WARRIOR,
+            )])),
         ));
         let master = app
             .world_mut()

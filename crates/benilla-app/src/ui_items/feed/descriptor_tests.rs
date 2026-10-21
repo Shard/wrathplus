@@ -17,9 +17,9 @@ fn pending_slot(current: Option<u32>, max: Option<u32>) -> ContainerSlot {
         .collect();
     let mut world = World::new();
     let entity = world
-        .spawn(ObjectStore(
-            benilla_protocol::ObjectFields::from_pairs(&native),
-        ))
+        .spawn(ObjectStore(benilla_protocol::ObjectFields::from_pairs(
+            &native,
+        )))
         .id();
     world.insert_resource(crate::net::GuidIndex(HashMap::from([(42, entity)])));
     let mut state = SystemState::<Objects>::new(&mut world);

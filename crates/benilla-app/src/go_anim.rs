@@ -233,9 +233,8 @@ fn go_state_edge(edge: &crate::net::FieldChanged) -> Option<u32> {
     if edge.kind != ObjectType::GameObject {
         return None;
     }
-    (edge.named_field(Field::GameobjectBytes1)
-            && (edge.old & 0xff) != (edge.new & 0xff))
-            .then_some(edge.new & 0xff)
+    (edge.named_field(Field::GameobjectBytes1) && (edge.old & 0xff) != (edge.new & 0xff))
+        .then_some(edge.new & 0xff)
 }
 
 /// Caller 1, the wire (`0x5f89e0`): seeds the state at first sight, then follows the
@@ -695,9 +694,9 @@ mod tests {
     fn state_edges_use_real_layout_fields_and_normalize_wrath_bytes() {
         use benilla_protocol::types::{Field, ObjectType};
         let native_field = Field::GameobjectBytes1;
-        let span = native_field.span()
-            .expect("native state dependency exists");
-        let (field, offset) = benilla_protocol::types::Field::at(ObjectType::GameObject, span.index).unwrap();
+        let span = native_field.span().expect("native state dependency exists");
+        let (field, offset) =
+            benilla_protocol::types::Field::at(ObjectType::GameObject, span.index).unwrap();
         assert_eq!((field, offset), (native_field, 0));
         let packed = 0x87654300;
         let mut edge = crate::net::FieldChanged {
@@ -728,7 +727,8 @@ mod tests {
         edge.offset = 1;
         assert_eq!(super::go_state_edge(&edge), None);
         let span = Field::GameobjectFlags.span().unwrap();
-        (edge.field, edge.offset) = benilla_protocol::types::Field::at(ObjectType::GameObject, span.index).unwrap();
+        (edge.field, edge.offset) =
+            benilla_protocol::types::Field::at(ObjectType::GameObject, span.index).unwrap();
         assert_eq!(
             super::go_state_edge(&edge),
             None,

@@ -186,8 +186,8 @@ pub(crate) mod tests {
     use crate::net::GuidIndex;
     use crate::target::Selection;
     use crate::ui_party::{GroupState, GROUPTYPE_RAID};
-    use benilla_protocol::types::{member_status, GroupMemberEntry};
     use benilla_protocol::types::Field;
+    use benilla_protocol::types::{member_status, GroupMemberEntry};
     use benilla_protocol::ObjectFields;
 
     const ME: u64 = 0x10;

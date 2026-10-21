@@ -215,8 +215,7 @@ mod tests {
             .world_mut()
             .spawn((
                 SelfPlayer,
-                ObjectStore(ObjectFields::from_pairs(&[(index, 8.25f32.to_bits())],
-                )),
+                ObjectStore(ObjectFields::from_pairs(&[(index, 8.25f32.to_bits())])),
             ))
             .id();
         app.update();

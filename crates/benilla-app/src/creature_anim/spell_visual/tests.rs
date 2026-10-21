@@ -1193,9 +1193,8 @@ fn a_kit_with_a_chain_char_proc_asks_for_a_beam_from_both_dispatcher_sites() {
     let channeller = app
         .world_mut()
         .spawn(crate::net::ObjectStore(
-            benilla_protocol::ObjectFields::from_fields(&[(Field::UnitChannelSpell, BEAM_SPELL)],
-            )
-            .into_created(benilla_protocol::types::ObjectType::Unit),
+            benilla_protocol::ObjectFields::from_fields(&[(Field::UnitChannelSpell, BEAM_SPELL)])
+                .into_created(benilla_protocol::types::ObjectType::Unit),
         ))
         .id();
     app.update();
@@ -1268,8 +1267,8 @@ const BLACKCROW: RealRanged = RealRanged {
 
 /// `PLAYER_VISIBLE_ITEM_18_ENTRYID`, the item entry in equipment slot 17 (`EQUIPMENT_SLOT_RANGED`):
 /// two dwords per slot, the entry first.
-const VISIBLE_RANGED_ENTRY_FIELD: u16 = benilla_protocol::types::Field::PlayerVisibleItems.index()
-    + 2 * 17;
+const VISIBLE_RANGED_ENTRY_FIELD: u16 =
+    benilla_protocol::types::Field::PlayerVisibleItems.index() + 2 * 17;
 
 /// Keeps the item layer's ask-once channel alive, so an unexpected `ItemQuery` (a template not
 /// landed, which starves the weapon lookup) is observable.
@@ -1681,8 +1680,7 @@ fn native_scalar_fx_edges_preserve_class_and_mount_gates() {
         ),
         (ObjectType::Unit, Field::UnitFlags, false, false, false),
     ] {
-        let span = field.span()
-            .expect("FX dependency exists in both layouts");
+        let span = field.span().expect("FX dependency exists in both layouts");
         let (resolved, offset) = benilla_protocol::types::Field::at(kind, span.index).unwrap();
         assert_eq!((resolved, offset), (field, 0));
         let mut edge = crate::net::FieldChanged {

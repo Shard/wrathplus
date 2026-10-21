@@ -133,8 +133,7 @@ mod tests {
     use crate::items::TestDeps;
 
     /// Raw indices: `PLAYER_FIELD_INV_SLOT_HEAD + 2×15` (the main hand), `UNIT_FIELD_FLAGS`, and
-    const INV_SLOT_MAINHAND: u16 =
-        Field::PlayerInvSlotHead.index() + 2 * 15;
+    const INV_SLOT_MAINHAND: u16 = Field::PlayerInvSlotHead.index() + 2 * 15;
     const UNIT_FLAGS: u16 = Field::UnitFlags.index();
     /// `UNIT_FIELD_BYTES_2`, whose fourth byte is the form.
     const UNIT_BYTES_2: u16 = Field::UnitBytes2.index();

@@ -383,8 +383,10 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
         .spawn((
             Guid(FOE),
             Transform::default(),
-            ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
-            )),
+            ObjectStore(benilla_protocol::ObjectFields::from_fields(&[
+                (Field::UnitHealth, 100),
+                (Field::UnitMaxHealth, 100),
+            ])),
         ))
         .id();
     world.resource_mut::<GuidIndex>().0.insert(FOE, foe);
@@ -409,14 +411,8 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
         .spawn((
             Guid(PET),
             owned_pet_with(&[
-                (
-                    benilla_protocol::types::Field::UnitHealth.index(),
-                    100,
-                ),
-                (
-                    benilla_protocol::types::Field::UnitMaxHealth.index(),
-                    100,
-                ),
+                (benilla_protocol::types::Field::UnitHealth.index(), 100),
+                (benilla_protocol::types::Field::UnitMaxHealth.index(), 100),
             ]),
         ))
         .id();

@@ -768,8 +768,7 @@ mod self_res_tests {
         for (guid, entry) in [(0xA0_u64, 10_u32), (0xA1, 11), (0xA2, 12)] {
             objs.spawn(
                 guid,
-                ObjectFields::from_fields(&[(benilla_protocol::types::Field::ObjectEntry, entry)],
-                ),
+                ObjectFields::from_fields(&[(benilla_protocol::types::Field::ObjectEntry, entry)]),
             );
         }
         let objects = objs.get();

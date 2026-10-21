@@ -60,10 +60,7 @@ pub(crate) fn lua_bag_pos(bag_index: u8, slot: u8) -> Option<(i64, u32)> {
 /// The inverse of [`wire_pos_for`] over every place an item with sockets can sit: worn and the bag
 /// slots themselves ([`EQUIPMENT_BAG`], 1-based inventory id), the backpack and bags, the bank and
 /// the bank bags; the keyring is left out.
-pub(crate) fn lua_pos_for(
-    bag_index: u8,
-    slot: u8,
-) -> Option<(i64, u32)> {
+pub(crate) fn lua_pos_for(bag_index: u8, slot: u8) -> Option<(i64, u32)> {
     let storage = StorageSlots::GEOMETRY;
     if bag_index == BAG_PLAYER_INVENTORY {
         return match slot {
@@ -91,10 +88,7 @@ pub(crate) fn lua_pos_for(
     lua_bag_pos(bag_index, slot)
 }
 
-pub(crate) fn wire_pos_for(
-    bag: i64,
-    slot1: u32,
-) -> Option<(u8, u8)> {
+pub(crate) fn wire_pos_for(bag: i64, slot1: u32) -> Option<(u8, u8)> {
     let storage = StorageSlots::GEOMETRY;
     let slot0 = u8::try_from(slot1.checked_sub(1)?).ok()?;
     match bag {
@@ -123,9 +117,7 @@ pub(crate) fn wire_pos_for(
 
 #[cfg(test)]
 fn wire_pos(bag: i64, slot1: u32) -> Option<(u8, u8)> {
-    wire_pos_for(bag,
-        slot1,
-    )
+    wire_pos_for(bag, slot1)
 }
 
 /// One inventory refusal off the wire, with the fills of the only two reasons that format one.
@@ -1415,10 +1407,7 @@ mod storage_tests {
         }
         assert_eq!(wire_pos_for(geometry.last_bag() + 1, 1), None);
         for level in [1, 39, 40, 49, 50, 60, 61, 80] {
-            assert_eq!(
-                StorageSlots::GEOMETRY.keyring_size(level),
-                32
-            );
+            assert_eq!(StorageSlots::GEOMETRY.keyring_size(level), 32);
         }
     }
 }

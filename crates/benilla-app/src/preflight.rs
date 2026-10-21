@@ -381,8 +381,8 @@ fn findings(fields: &benilla_protocol::types::ObjectFields, shield: ShieldReport
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::ObjectFields;
     use benilla_protocol::types::Field;
+    use benilla_protocol::types::ObjectFields;
 
     /// Build a player descriptor from `(field index, value)` pairs.
     fn player(fields: &[(u16, u32)]) -> ObjectFields {

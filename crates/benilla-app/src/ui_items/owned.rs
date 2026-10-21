@@ -121,7 +121,8 @@ mod tests {
     use std::collections::HashMap;
 
     fn fields(pairs: &[(Field, u32)]) -> ObjectFields {
-        ObjectFields::from_pairs(&pairs
+        ObjectFields::from_pairs(
+            &pairs
                 .iter()
                 .map(|(f, v)| ((*f).span().unwrap().index, *v))
                 .collect::<Vec<_>>(),
@@ -147,8 +148,7 @@ mod tests {
     }
     fn put(player: &mut ObjectFields, field: Field, slot: u16, guid: u32) {
         let first = field.span().unwrap().index;
-        player.merge(ObjectFields::from_pairs(&[(first + 2 * slot, guid)],
-        ));
+        player.merge(ObjectFields::from_pairs(&[(first + 2 * slot, guid)]));
     }
     fn item(entry: u32, stack: u32) -> ObjectFields {
         fields(&[

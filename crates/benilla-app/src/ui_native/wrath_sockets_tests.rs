@@ -108,10 +108,15 @@ fn a_worn_items_gems_are_listed_by_its_inventory_slot() {
     // Socket 1 (enchant slot 2) holds enchant 3312, socket 3 (slot 4) an enchant with no gem.
     objs.spawn(
         chest,
-        ObjectFields::from_field_slots(&[(Field::ItemEnchantment, 6, 3312), (Field::ItemEnchantment, 12, 99)],
-        ),
+        ObjectFields::from_field_slots(&[
+            (Field::ItemEnchantment, 6, 3312),
+            (Field::ItemEnchantment, 12, 99),
+        ]),
     );
-    objs.spawn(plain, ObjectFields::from_field_slots(&[(Field::ObjectEntry, 0, 1)]));
+    objs.spawn(
+        plain,
+        ObjectFields::from_field_slots(&[(Field::ObjectEntry, 0, 1)]),
+    );
     let gems = GemCatalog::from_rows(HashMap::from([(3312, 40112)]), HashMap::new());
     let objects = objs.get();
     assert_eq!(

@@ -65,8 +65,10 @@ fn write_power(store: &mut ObjectFields, power_type: u8, value: u32) {
         return;
     };
     if u16::from(power_type) < span.width {
-        store.merge(ObjectFields::from_pairs(&[(span.index + u16::from(power_type), value)],
-        ));
+        store.merge(ObjectFields::from_pairs(&[(
+            span.index + u16::from(power_type),
+            value,
+        )]));
     }
 }
 
@@ -169,11 +171,10 @@ mod tests {
         let power = Field::UnitPower.span().unwrap();
         let maximum = Field::UnitMaxPower.span().unwrap();
         let mut store = ObjectFields::from_pairs(&[
-                (power.index, 50),
-                (power.index + 6, 100),
-                (maximum.index + 6, 1000),
-            ],
-        );
+            (power.index, 50),
+            (power.index + 6, 100),
+            (maximum.index + 6, 1000),
+        ]);
         write_power(&mut store, 6, 439);
         assert_eq!(store.unit_power(6), Some(439));
         assert_eq!(store.unit_max_power(6), Some(1000));

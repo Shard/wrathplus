@@ -664,10 +664,7 @@ fn an_unresolvable_active_icon_hides_rather_than_falling_back() {
 
 #[test]
 fn the_menu_fork_reads_dialect_permissions_and_preserves_ownership() {
-    use benilla_protocol::{
-        types::{Field},
-        ObjectFields,
-    };
+    use benilla_protocol::{types::Field, ObjectFields};
     let make = |flags, bytes, owner| {
         let pairs = [
             (Field::UnitFlags, flags),

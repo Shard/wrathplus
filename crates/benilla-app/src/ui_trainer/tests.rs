@@ -1065,11 +1065,12 @@ fn the_group_header_keys_resolve_in_the_real_global_strings() {
 #[test]
 fn trainer_rederive_edges_preserve_skill_halves_and_class_gates_in_both_layouts() {
     let native_edge = |field: Field, offset: u16| {
-        let span = field.span()
+        let span = field
+            .span()
             .expect("trainer dependency exists in both layouts");
         assert!(offset < span.width);
-        let (resolved, resolved_offset) = benilla_protocol::types::Field::at(ObjectType::Player, span.index + offset)
-            .unwrap();
+        let (resolved, resolved_offset) =
+            benilla_protocol::types::Field::at(ObjectType::Player, span.index + offset).unwrap();
         assert_eq!((resolved, resolved_offset), (field, offset));
         FieldChanged {
             entity: Entity::PLACEHOLDER,
@@ -1114,7 +1115,8 @@ fn wrath_profession_eligibility_reads_free_descriptor_slots_not_vanilla_flag() {
     service.is_primary_prof_first_rank = true;
     service.wrath_point_cost = Some([0, 1]);
     assert!(!service.can_learn_primary_prof);
-    let index = benilla_protocol::types::Field::PlayerCharacterPoints2.span()
+    let index = benilla_protocol::types::Field::PlayerCharacterPoints2
+        .span()
         .unwrap()
         .index;
     for (free, eligible) in [(0, false), (1, true), (2, true)] {

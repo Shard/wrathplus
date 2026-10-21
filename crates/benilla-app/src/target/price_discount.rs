@@ -64,8 +64,7 @@ mod tests {
     use benilla_protocol::types::Field;
     use benilla_protocol::ObjectFields;
 
-    const FIELD_UNIT_FACTIONTEMPLATE: u16 =
-        Field::UnitFactionTemplate.index();
+    const FIELD_UNIT_FACTIONTEMPLATE: u16 = Field::UnitFactionTemplate.index();
     /// `UNIT_FIELD_BYTES_0`, absolute descriptor index.
     const BYTES_0: u16 = Field::UnitBytes0.index();
 

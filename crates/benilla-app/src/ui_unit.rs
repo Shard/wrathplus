@@ -1145,7 +1145,6 @@ pub(crate) fn faction_group_localized(
         .map(str::to_string)
 }
 
-
 /// Build-12340 UnitFrame.lua listens for these per-resource events, not modern UNIT_POWER_UPDATE.
 fn fire_wrath_power_transitions(
     script: &mut UiScript,
@@ -1739,7 +1738,8 @@ mod tests {
     fn native_test_edges(guid: u64, field: benilla_protocol::types::Field) -> FieldEdges {
         use benilla_protocol::types::ObjectType;
         let span = field.span().expect("native watched field");
-        let (resolved, offset) = benilla_protocol::types::Field::at(ObjectType::Player, span.index).unwrap();
+        let (resolved, offset) =
+            benilla_protocol::types::Field::at(ObjectType::Player, span.index).unwrap();
         assert_eq!(resolved, field);
         FieldEdges::semantic_of(&[(guid, resolved, offset)])
     }
@@ -1750,8 +1750,7 @@ mod tests {
         for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
             for bit in 0..32 {
                 let index = field.span().unwrap().index;
-                let store = ObjectStore(ObjectFields::from_pairs(&[(index, 1u32 << bit)],
-                ));
+                let store = ObjectStore(ObjectFields::from_pairs(&[(index, 1u32 << bit)]));
                 let state = snapshot(&store, 1, None, 0, None, Default::default());
                 let expected = (
                     field == Field::UnitBytes2 && bit == 8,
@@ -1771,8 +1770,8 @@ mod tests {
 
     #[test]
     fn wrath_power_snapshot_and_events_keep_inactive_and_runic_values() {
-        use benilla_protocol::types::ObjectFields;
         use benilla_protocol::types::Field;
+        use benilla_protocol::types::ObjectFields;
         let power = Field::UnitPower.span().unwrap();
         let maximum = Field::UnitMaxPower.span().unwrap();
         let bytes = Field::UnitBytes0.span().unwrap();
@@ -3125,9 +3124,8 @@ mod tests {
                 SelfPlayer,
                 Guid(0x77),
                 ObjectStore(
-                    benilla_protocol::ObjectFields::from_fields(&[],
-                    )
-                    .into_created(benilla_protocol::types::ObjectType::Player),
+                    benilla_protocol::ObjectFields::from_fields(&[])
+                        .into_created(benilla_protocol::types::ObjectType::Player),
                 ),
             ))
             .id();
@@ -3459,8 +3457,7 @@ mod tests {
         );
 
         // The record gate: rank 0 until the creature query answers.
-        let store = ObjectStore(ObjectFields::from_fields(&[],
-        ));
+        let store = ObjectStore(ObjectFields::from_fields(&[]));
         let mut s = UnitState::default();
         enrich_unit(&mut s, GUID ^ (1 << 24), &names, &store, None, None);
         assert_eq!(s.rank, 0, "an un-queried creature has no classification");
@@ -3729,18 +3726,13 @@ mod tests {
             .spawn((
                 SelfPlayer,
                 Guid(PLAYER),
-                ObjectStore(
-                    ObjectFields::from_fields(&[],
-                    )
-                    .into_created(ObjectType::Player),
-                ),
+                ObjectStore(ObjectFields::from_fields(&[]).into_created(ObjectType::Player)),
             ))
             .id();
         let other = app
             .world_mut()
             .spawn(ObjectStore(
-                ObjectFields::from_fields(&[])
-                    .into_created(ObjectType::Unit),
+                ObjectFields::from_fields(&[]).into_created(ObjectType::Unit),
             ))
             .id();
         let is_nil = |app: &mut App| {
@@ -4038,10 +4030,9 @@ mod tests {
             .spawn((
                 Guid(MOB),
                 ObjectStore(benilla_protocol::types::ObjectFields::from_pairs(&[(
-                        benilla_protocol::types::Field::UnitLevel.index(),
-                        12,
-                    )],
-                )),
+                    benilla_protocol::types::Field::UnitLevel.index(),
+                    12,
+                )])),
             ))
             .id();
         app.world_mut()

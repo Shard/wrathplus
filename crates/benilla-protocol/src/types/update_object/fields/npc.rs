@@ -110,17 +110,11 @@ mod tests {
         for bit in 0..32 {
             let bits = 1u32 << bit;
             let flags = NpcFlags::from_bits(bits);
-            assert_eq!(
-                flags.has(NpcService::GuildBanker),
-                bits == 0x800000
-            );
+            assert_eq!(flags.has(NpcService::GuildBanker), bits == 0x800000);
             assert_eq!(flags.bits(), bits);
         }
         assert!(!NpcFlags::from_bits(0).has(NpcService::GuildBanker));
-        assert_eq!(
-            NpcFlags::from_bits(u32::MAX).has(NpcService::GuildBanker),
-            true
-        );
+        assert!(NpcFlags::from_bits(u32::MAX).has(NpcService::GuildBanker));
     }
 
     #[test]
@@ -132,17 +126,11 @@ mod tests {
             for bit in 0..32 {
                 let bits = 1u32 << bit;
                 let flags = NpcFlags::from_bits(bits);
-                assert_eq!(
-                    flags.has(service),
-                    bits == mask
-                );
+                assert_eq!(flags.has(service), bits == mask);
                 assert_eq!(flags.bits(), bits);
             }
             assert!(!NpcFlags::from_bits(0).has(service));
-            assert_eq!(
-                NpcFlags::from_bits(u32::MAX).has(service),
-                true
-            );
+            assert!(NpcFlags::from_bits(u32::MAX).has(service));
         }
     }
 
@@ -202,8 +190,7 @@ mod tests {
         ] {
             let bits = wrath;
             let span = Field::UnitNpcFlags.span().unwrap();
-            let fields =
-                ObjectFields::from_pairs(&[(span.index, bits | 0x80000000)]);
+            let fields = ObjectFields::from_pairs(&[(span.index, bits | 0x80000000)]);
             let flags = fields.unit_npc_services();
             assert_eq!(flags.bits(), bits | 0x80000000);
             assert!(flags.has(service));

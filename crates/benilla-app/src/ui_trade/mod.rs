@@ -735,9 +735,7 @@ fn drain_trade(
         if !trade.is_open() {
             continue;
         }
-        let Some((wire_bag, wire_slot)) = crate::ui_items::wire_pos_for(bag,
-            slot,
-        ) else {
+        let Some((wire_bag, wire_slot)) = crate::ui_items::wire_pos_for(bag, slot) else {
             info!(target: "trade", "set item: slot {id} <- bag {bag}/{slot} has no wire position — dropped");
             continue;
         };

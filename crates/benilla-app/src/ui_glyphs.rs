@@ -155,11 +155,10 @@ mod tests {
             }],
         );
         let player = ObjectFields::from_fields(&[
-                (Field::PlayerGlyphsEnabled, 0b1),
-                (Field::PlayerGlyphSlots1, 21),
-                (Field::PlayerGlyphs1, 182),
-            ],
-        );
+            (Field::PlayerGlyphsEnabled, 0b1),
+            (Field::PlayerGlyphSlots1, 21),
+            (Field::PlayerGlyphs1, 182),
+        ]);
         let glyph_spell = |id: u32, glyph: i32| {
             let d = benilla_formats::SpellDisplay {
                 name: format!("Glyph {id}"),

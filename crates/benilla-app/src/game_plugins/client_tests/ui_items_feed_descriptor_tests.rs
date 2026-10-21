@@ -3,18 +3,16 @@
 //!
 //! Instance data remains available while the item-template query is pending.
 
+use crate::inventory::BANK_CONTAINER;
+use crate::inventory::KEYRING_CONTAINER;
 use crate::net::ObjectStore;
 use crate::net::SelfPlayer;
 use crate::ui_items::feed::*;
-use crate::inventory::BANK_CONTAINER;
-use crate::inventory::KEYRING_CONTAINER;
 use benilla_protocol::types::Field;
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 
-fn native_fields(
-    values: &[(Field, u16, u32)],
-) -> benilla_protocol::ObjectFields {
+fn native_fields(values: &[(Field, u16, u32)]) -> benilla_protocol::ObjectFields {
     let pairs: Vec<_> = values
         .iter()
         .map(|&(field, offset, value)| (field.span().unwrap().index + offset, value))
@@ -35,23 +33,22 @@ fn real_container_feed_includes_last_storage_slots_and_bag_lifecycle() {
         .spawn((
             SelfPlayer,
             ObjectStore(native_fields(&[
-                    (Field::UnitLevel, 0, 1),
-                    (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1), 101),
-                    (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1) + 1, 0),
-                    (Field::PlayerBankbagSlot1, 2 * u16::from(bag_count - 1), 102),
-                    (
-                        Field::PlayerBankbagSlot1,
-                        2 * u16::from(bag_count - 1) + 1,
-                        0,
-                    ),
-                    (Field::PlayerKeyringSlot1, 2 * u16::from(key_count - 1), 103),
-                    (
-                        Field::PlayerKeyringSlot1,
-                        2 * u16::from(key_count - 1) + 1,
-                        0,
-                    ),
-                ],
-            )),
+                (Field::UnitLevel, 0, 1),
+                (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1), 101),
+                (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1) + 1, 0),
+                (Field::PlayerBankbagSlot1, 2 * u16::from(bag_count - 1), 102),
+                (
+                    Field::PlayerBankbagSlot1,
+                    2 * u16::from(bag_count - 1) + 1,
+                    0,
+                ),
+                (Field::PlayerKeyringSlot1, 2 * u16::from(key_count - 1), 103),
+                (
+                    Field::PlayerKeyringSlot1,
+                    2 * u16::from(key_count - 1) + 1,
+                    0,
+                ),
+            ])),
         ))
         .id();
     for (guid, entry, count, container) in [
@@ -138,17 +135,16 @@ fn real_container_feed_includes_last_storage_slots_and_bag_lifecycle() {
         .run("SEEN={}")
         .unwrap();
     app.world_mut().get_mut::<ObjectStore>(player).unwrap().0 = native_fields(&[
-            (Field::UnitLevel, 0, 1),
-            (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1), 0),
-            (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1) + 1, 0),
-            (Field::PlayerBankbagSlot1, 2 * u16::from(bag_count - 1), 0),
-            (
-                Field::PlayerBankbagSlot1,
-                2 * u16::from(bag_count - 1) + 1,
-                0,
-            ),
-        ],
-    );
+        (Field::UnitLevel, 0, 1),
+        (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1), 0),
+        (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1) + 1, 0),
+        (Field::PlayerBankbagSlot1, 2 * u16::from(bag_count - 1), 0),
+        (
+            Field::PlayerBankbagSlot1,
+            2 * u16::from(bag_count - 1) + 1,
+            0,
+        ),
+    ]);
     schedule.run(app.world_mut());
     let script = app.world().non_send_resource::<UiScript>();
     let seen = script.eval::<Vec<String>>("return SEEN").unwrap();

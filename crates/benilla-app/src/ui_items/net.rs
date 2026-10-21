@@ -199,7 +199,8 @@ mod tests {
 #[cfg(test)]
 mod open_container_tests {
     use super::*;
-    const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::Field::PlayerInvSlotHead.index();
+    const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+        benilla_protocol::types::Field::PlayerInvSlotHead.index();
 
     /// `PLAYER_FIELD_BANK_BAG_SLOT_1`, field 612 (private to the fields module).
     const BANK_BAG_SLOT_1: u16 = benilla_protocol::types::Field::PlayerBankbagSlot1.index();

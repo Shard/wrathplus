@@ -577,10 +577,8 @@ mod tests {
         use crate::items::TestDeps;
 
         // `PLAYER_FIELD_INV_SLOT_HEAD + 2 * slot` for equipment slots 15 and 16.
-        const INV_MAINHAND: u16 =
-            Field::PlayerInvSlotHead.index() + 2 * 15;
-        const INV_OFFHAND: u16 =
-            Field::PlayerInvSlotHead.index() + 2 * 16;
+        const INV_MAINHAND: u16 = Field::PlayerInvSlotHead.index() + 2 * 15;
+        const INV_OFFHAND: u16 = Field::PlayerInvSlotHead.index() + 2 * 16;
         const DISARMED: u32 = 0x0020_0000;
 
         // A class-2 weapon requirement.
@@ -601,8 +599,7 @@ mod tests {
                 let entry = 500 + i as u32;
                 deps.spawn_item(
                     *guid,
-                    ObjectFields::from_fields(&[(Field::ObjectEntry, entry)],
-                    ),
+                    ObjectFields::from_fields(&[(Field::ObjectEntry, entry)]),
                 );
                 deps.items.insert_template(
                     entry,
@@ -633,10 +630,8 @@ mod tests {
     fn the_equipped_item_search_masks_by_hand_and_rejects_broken_gear() {
         use crate::items::TestDeps;
 
-        const INV_MAINHAND: u16 =
-            Field::PlayerInvSlotHead.index() + 2 * 15;
-        const INV_OFFHAND: u16 =
-            Field::PlayerInvSlotHead.index() + 2 * 16;
+        const INV_MAINHAND: u16 = Field::PlayerInvSlotHead.index() + 2 * 15;
+        const INV_OFFHAND: u16 = Field::PlayerInvSlotHead.index() + 2 * 16;
         // `ITEM_FIELD_DURABILITY` / `_MAXDURABILITY`, instance fields.
         const ITEM_DURABILITY: u16 = Field::ItemDurability.index();
         const ITEM_MAX_DURABILITY: u16 = Field::ItemMaxdurability.index();
@@ -715,10 +710,8 @@ mod tests {
     fn a_main_hand_only_ability_is_dead_while_that_hand_is_disarmed() {
         use crate::items::TestDeps;
 
-        const INV_MAINHAND: u16 =
-            Field::PlayerInvSlotHead.index() + 2 * 15;
-        const INV_OFFHAND: u16 =
-            Field::PlayerInvSlotHead.index() + 2 * 16;
+        const INV_MAINHAND: u16 = Field::PlayerInvSlotHead.index() + 2 * 15;
+        const INV_OFFHAND: u16 = Field::PlayerInvSlotHead.index() + 2 * 16;
         const DISARMED: u32 = 0x0020_0000;
 
         let fits = |ex3: u32, disarmed: bool| {
@@ -733,8 +726,7 @@ mod tests {
                 let entry = 500 + i as u32;
                 deps.spawn_item(
                     guid,
-                    ObjectFields::from_fields(&[(Field::ObjectEntry, entry)],
-                    ),
+                    ObjectFields::from_fields(&[(Field::ObjectEntry, entry)]),
                 );
                 deps.items.insert_template(
                     entry,
@@ -895,8 +887,7 @@ mod tests {
             mana_cost: 100,
             ..Default::default()
         };
-        let store = ObjectStore(ObjectFields::from_fields(&[(Field::UnitPower, 80)],
-        ));
+        let store = ObjectStore(ObjectFields::from_fields(&[(Field::UnitPower, 80)]));
 
         let mut mods = SpellModifiers::default();
         mods.set_class_family(3);
@@ -1049,10 +1040,14 @@ mod tests {
             ..Default::default()
         };
 
-        let healthy = ObjectStore(ObjectFields::from_fields(&[(Field::UnitHealth, 100), (Field::UnitAuraState, 0)],
-        ));
-        let low = ObjectStore(ObjectFields::from_fields(&[(Field::UnitHealth, 10), (Field::UnitAuraState, 0x2)],
-        ));
+        let healthy = ObjectStore(ObjectFields::from_fields(&[
+            (Field::UnitHealth, 100),
+            (Field::UnitAuraState, 0),
+        ]));
+        let low = ObjectStore(ObjectFields::from_fields(&[
+            (Field::UnitHealth, 10),
+            (Field::UnitAuraState, 0x2),
+        ]));
         let mut objs = crate::ui_items::TestObjects::new();
         let objects = objs.get();
         let carried = crate::inventory::carried_counts(&me.0, &objects);

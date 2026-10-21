@@ -23,8 +23,7 @@ fn item_countdowns_live_on_the_item_and_a_queued_enchant_waits_for_it() {
     let create = |guid| SessionEvent::ItemCreate {
         guid,
         container: false,
-        fields: ObjectFields::from_fields(&[(benilla_protocol::types::Field::ObjectEntry, 117)],
-        ),
+        fields: ObjectFields::from_fields(&[(benilla_protocol::types::Field::ObjectEntry, 117)]),
     };
     let cells = |world: &World, guid: u64| -> Option<Countdowns> {
         let e = *world.resource::<GuidIndex>().0.get(&guid)?;

@@ -1823,13 +1823,12 @@ mod native_descriptor_tests {
     #[test]
     fn final_quest_slot_preserves_unclamped_counters_and_timer() {
         let fields = ObjectFields::from_pairs(&[
-                (278, 783),
-                (279, 1),
-                (280, 3 | (65535 << 16)),
-                (281, 70 << 16),
-                (282, 12345),
-            ],
-        );
+            (278, 783),
+            (279, 1),
+            (280, 3 | (65535 << 16)),
+            (281, 70 << 16),
+            (282, 12345),
+        ]);
         let quest = fields.player_quest_log(24).unwrap();
         assert_eq!(quest.quest_id, 783);
         assert_eq!(quest.counters, [3, 65535, 0, 70]);

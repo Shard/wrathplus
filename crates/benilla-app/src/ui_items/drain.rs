@@ -603,10 +603,7 @@ pub(super) fn drain_container_moves(
 /// The equip deferral's positions (`0x5e0c40`): slots 0..=22 (equipment and equipped bags) and
 /// bank bags (Vanilla 63..=68, Wrath 67..=73) of the player's own array;
 /// the backpack and keyring are not.
-fn is_equip_position_for(
-    bag_index: u8,
-    slot: u8,
-) -> bool {
+fn is_equip_position_for(bag_index: u8, slot: u8) -> bool {
     let storage = super::StorageSlots::GEOMETRY;
     bag_index == BAG_PLAYER_INVENTORY
         && (slot <= 22
@@ -640,8 +637,7 @@ pub(crate) fn send_container_move(
         // at the other end, which the swap equips; an unequip to an empty slot asks nothing.
         if !suppress
             && mv.count.is_none()
-            && is_equip_position_for(dst.0, dst.1)
-                != is_equip_position_for(src.0, src.1)
+            && is_equip_position_for(dst.0, dst.1) != is_equip_position_for(src.0, src.1)
         {
             let (item_bag, item_slot) = if is_equip_position_for(dst.0, dst.1) {
                 (mv.src_bag, mv.src_slot)
@@ -1004,7 +1000,8 @@ mod tests {
     /// through `PickupInventoryItem`.
     fn click_to_repair_the_sword(money: u32, worn: bool) -> RepairClick {
         use crate::ui_merchant::purse_fixture::{player, record_errors, seat, SWORD_ENTRY};
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::Field::PlayerInvSlotHead.index();
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::types::Field::PlayerInvSlotHead.index();
         let (mut app, rx) = open_the_clam();
         while rx.try_recv().is_ok() {} // drain the clam's own send
         seat(app.world_mut());

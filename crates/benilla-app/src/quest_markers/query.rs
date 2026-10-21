@@ -330,11 +330,10 @@ mod tests {
             for target_ffa in [false, true] {
                 let fields = |flags, bytes, services| {
                     ObjectFields::from_pairs(&[
-                            (Field::UnitFlags.span().unwrap().index, flags),
-                            (Field::UnitBytes2.span().unwrap().index, bytes),
-                            (Field::UnitNpcFlags.span().unwrap().index, services),
-                        ],
-                    )
+                        (Field::UnitFlags.span().unwrap().index, flags),
+                        (Field::UnitBytes2.span().unwrap().index, bytes),
+                        (Field::UnitNpcFlags.span().unwrap().index, services),
+                    ])
                 };
                 let (tx, rx) = crossbeam_channel::unbounded();
                 let mut app = App::new();
@@ -980,8 +979,7 @@ mod tests {
         const NPC: u64 = 0x2222;
         const FIELD_LEVEL: u16 = Field::UnitLevel.index();
         const FIELD_NPC_FLAGS: u16 = Field::UnitNpcFlags.index();
-        const FIELD_GAMEOBJECT_FLAGS: u16 =
-            Field::GameobjectFlags.index();
+        const FIELD_GAMEOBJECT_FLAGS: u16 = Field::GameobjectFlags.index();
 
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut app = App::new();

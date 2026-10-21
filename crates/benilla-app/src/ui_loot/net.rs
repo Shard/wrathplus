@@ -428,8 +428,10 @@ mod tests {
                     scale: 1.0,
                 },
                 // `UNIT_FIELD_HEALTH` (22) at 0.
-                crate::net::ObjectStore(benilla_protocol::types::ObjectFields::from_fields(&[(Field::UnitHealth, 0)],
-                )),
+                crate::net::ObjectStore(benilla_protocol::types::ObjectFields::from_fields(&[(
+                    Field::UnitHealth,
+                    0,
+                )])),
             ))
             .id();
         world
@@ -964,7 +966,8 @@ mod tests {
     #[test]
     fn looting_a_hostile_body_while_swinging_never_swings_at_it() {
         use crate::net::{ObjectStore, SelfPlayer};
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::Field::UnitFactionTemplate.index();
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
+            benilla_protocol::types::Field::UnitFactionTemplate.index();
         const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::Field::UnitHealth.index();
         use benilla_protocol::types::{ObjectFields, ObjectType};
         const UNIT_FIELD_BYTES_0: u16 = Field::UnitBytes0.index();

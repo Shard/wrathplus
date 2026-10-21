@@ -73,8 +73,10 @@ fn scene() -> Rig {
         .spawn((
             Guid(FOE),
             Transform::default(),
-            crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
-            )),
+            crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(&[
+                (Field::UnitHealth, 100),
+                (Field::UnitMaxHealth, 100),
+            ])),
         ))
         .id();
     world.resource_mut::<GuidIndex>().0.insert(FOE, foe);

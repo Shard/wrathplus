@@ -9,8 +9,7 @@ pub use layout::{Field, FieldSpan};
 // Native index anchors for watchers and fixtures, derived from the 12340 layout.
 /// `CORPSE_FIELD_DYNAMIC_FLAGS`; bit 0 is lootable insignia. On a unit, index 36 is
 /// `UNIT_FIELD_BYTES_0`, so a field edge carries its object class.
-pub const FIELD_CORPSE_DYNAMIC_FLAGS: u16 =
-    Field::CorpseDynamicFlags.index();
+pub const FIELD_CORPSE_DYNAMIC_FLAGS: u16 = Field::CorpseDynamicFlags.index();
 // UNIT fields. The client reads FLAGS, COMBATREACH, DYNAMIC_FLAGS and NPC_FLAGS at unit block
 // bytes 0xa0, 0x1f0, 0x224 and 0x234.
 /// The unit's target; the client turns an idle unit to face it, and no packet carries that facing.
@@ -30,8 +29,7 @@ pub const FIELD_UNIT_MAXHEALTH: u16 = Field::UnitMaxHealth.index();
 #[cfg(test)]
 const FIELD_UNIT_MAXPOWER1: u16 = Field::UnitMaxPower.index();
 pub const FIELD_UNIT_LEVEL: u16 = Field::UnitLevel.index();
-pub const FIELD_UNIT_FACTIONTEMPLATE: u16 =
-    Field::UnitFactionTemplate.index();
+pub const FIELD_UNIT_FACTIONTEMPLATE: u16 = Field::UnitFactionTemplate.index();
 pub const FIELD_UNIT_BYTES_1: u16 = Field::UnitBytes1.index();
 pub const FIELD_UNIT_FLAGS: u16 = Field::UnitFlags.index();
 /// Aura-state bits, tested as `1 << (state - 1)` by the usable check (client `[unit+0x110]+0x1dc`).
@@ -40,8 +38,7 @@ pub const FIELD_UNIT_FLAGS: u16 = Field::UnitFlags.index();
 /// The client sizes the mover collision box from it (`0x60b270`), so a shapeshift keeps the box.
 /// The ridden mount's `CreatureDisplayInfo` id, 0 when unmounted; this field, not the aura, is the
 /// mounted state (`Unit::IsMounted`; client `[unit+0x110]+0x1fc`).
-pub const FIELD_UNIT_MOUNTDISPLAYID: u16 =
-    Field::UnitMountDisplayId.index();
+pub const FIELD_UNIT_MOUNTDISPLAYID: u16 = Field::UnitMountDisplayId.index();
 /// Nonzero on a pet or charm; the rank getter `0x605620` then forces rank 0, so an enslaved mob
 /// shows no elite dragon, tooltip rank word or boss skull.
 /// Unix time of the pet's last rename (`Pet.cpp:285`). The name itself comes from
@@ -134,22 +131,20 @@ pub mod quest_slot_state {
 }
 // Inventory fields. The PLAYER slot arrays are private, and each slot is a 2-field guid.
 
-pub const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
-    Field::PlayerInvSlotHead.index(); // 23 slots × 2 (equipment 0–18, bags 19–22)
+pub const FIELD_PLAYER_INV_SLOT_HEAD: u16 = Field::PlayerInvSlotHead.index(); // 23 slots × 2 (equipment 0–18, bags 19–22)
 pub const FIELD_PLAYER_FIELD_COINAGE: u16 = Field::PlayerCoinage.index(); // copper
-                                                                                                    // The watched reputation slot, signed: slot 0 is a real faction, so only -1 means none.
-                                                                                                    // The rested pool in base kill-XP units: a kill drains it 1:1 while granting +100%
-                                                                                                    // (`Player::GetXPRestBonus`), so the doubled span on the XP bar is twice this value.
-                                                                                                    // EXPLORED_ZONES_1 is the discovery bitset, 4096 bits indexed by `AreaTable.dbc` exploreFlag. Just
-                                                                                                    // below it sit block, dodge, parry and crit chance (FLOAT, UNIT_END + 0x396..0x399).
+                                                                          // The watched reputation slot, signed: slot 0 is a real faction, so only -1 means none.
+                                                                          // The rested pool in base kill-XP units: a kill drains it 1:1 while granting +100%
+                                                                          // (`Player::GetXPRestBonus`), so the doubled span on the XP bar is twice this value.
+                                                                          // EXPLORED_ZONES_1 is the discovery bitset, 4096 bits indexed by `AreaTable.dbc` exploreFlag. Just
+                                                                          // below it sit block, dodge, parry and crit chance (FLOAT, UNIT_END + 0x396..0x399).
 /// The bitset's slot count (`Size: 128` in AzerothCore's `UpdateFields.h`).
 pub const PLAYER_EXPLORED_ZONES_SLOTS: u16 = 128;
 // PLAYER stat block. POSSTAT, NEGSTAT and the resistance buff mods are floats in vmangos but go out
 // as INT (`Object::BuildValuesUpdate` narrows them). Read them signed: the server's cast of a
 // negative float wraps on x86 and saturates to 0 on aarch64.
 // (`Player.cpp:3336`, `Player.cpp:7274`)
-pub const FIELD_PLAYER_SKILL_INFO_1_1: u16 =
-    Field::PlayerSkillInfo11.index(); // ×384: 128 skills × 3 dwords
+pub const FIELD_PLAYER_SKILL_INFO_1_1: u16 = Field::PlayerSkillInfo11.index(); // ×384: 128 skills × 3 dwords
 
 // Unspent talent points and free primary professions, `UnitCharacterPoints("player")`.
 // Tracking masks the minimap tests: bit `1 << (n - 1)` for creature type or `LockType.dbc` id `n`,
@@ -209,9 +204,7 @@ pub struct ObjectFields {
     descriptor_end: u16,
 }
 
-
 impl ObjectFields {
-
     /// Marks a CREATE snapshot of `object_type`, so absent fields in its descriptor read 0.
     pub fn into_created(mut self, object_type: ObjectType) -> Self {
         self.descriptor_end = Field::descriptor_len(object_type);
@@ -243,7 +236,8 @@ impl ObjectFields {
         let pairs: Vec<_> = slots
             .iter()
             .map(|&(field, offset, value)| {
-                let span = field.span()
+                let span = field
+                    .span()
                     .unwrap_or_else(|| panic!("{field:?} is not in the 12340 layout"));
                 assert!(offset < span.width, "{field:?}+{offset} is past its width");
                 (span.index + offset, value)
@@ -278,7 +272,8 @@ impl ObjectFields {
     }
 
     pub fn field_present(&self, field: Field, offset: u16) -> bool {
-        field.span()
+        field
+            .span()
             .is_some_and(|span| offset < span.width && self.contains(span.index + offset))
     }
 

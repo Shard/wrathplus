@@ -549,10 +549,9 @@ mod tests {
                     scale: 1.0,
                 },
                 ObjectStore(ObjectFields::from_field_slots(&[
-                        (benilla_protocol::types::Field::UnitTarget, 0, 7),
-                        (benilla_protocol::types::Field::UnitTarget, 1, 0),
-                    ],
-                )),
+                    (benilla_protocol::types::Field::UnitTarget, 0, 7),
+                    (benilla_protocol::types::Field::UnitTarget, 1, 0),
+                ])),
                 Transform::from_translation(wow_to_bevy([5.0, 0.0, 0.0])),
             ))
             .id();

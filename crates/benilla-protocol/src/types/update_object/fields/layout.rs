@@ -91,11 +91,7 @@ mod tests {
                     (offset < span.width).then_some((field, offset))
                 });
                 assert_eq!(Field::at(class, index), table[usize::from(index)]);
-                assert_eq!(
-                    Field::at(class, index),
-                    expected,
-                    "{class:?} {index}"
-                );
+                assert_eq!(Field::at(class, index), expected, "{class:?} {index}");
             }
             assert_eq!(Field::at(class, Field::descriptor_len(class)), None);
             assert_eq!(Field::at(class, u16::MAX), None);

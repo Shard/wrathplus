@@ -701,9 +701,9 @@ pub(super) fn classify(
             reputations,
             Some(self_store),
         ) {
-            let status = hovered.guid.and_then(|g| {
-                    quest.wrath_statuses().get(&g).copied()
-                });
+            let status = hovered
+                .guid
+                .and_then(|g| quest.wrath_statuses().get(&g).copied());
             // No matching bit clears the cursor (`je 0x4826cb`) without reaching the attack leg:
             // Point, never the sword.
             return service_cursor_native(store.0.unit_npc_services(), status)
@@ -841,8 +841,7 @@ mod tests {
             (0x20000, Some(ServiceArm::Banker), Some(CursorKind::Buy)),
         ] {
             let index = Field::UnitNpcFlags.span().unwrap().index;
-            let fields =
-                benilla_protocol::ObjectFields::from_pairs(&[(index, bits)]);
+            let fields = benilla_protocol::ObjectFields::from_pairs(&[(index, bits)]);
             let flags = fields.unit_npc_services();
             assert_eq!(service_arm_native(flags, None), arm, "native {bits:#x}");
             assert_eq!(

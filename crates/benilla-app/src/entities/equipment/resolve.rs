@@ -692,10 +692,7 @@ mod tests {
         let at = |field: Field| field.index();
         /// `CORPSE_FIELD_ITEM`, each slot `DisplayInfoID | InventoryType << 24`.
         fn item(slot: u16, display: u32, inv: u32) -> (u16, u32) {
-            (
-                Field::CorpseItem.index() + slot,
-                display | (inv << 24),
-            )
+            (Field::CorpseItem.index() + slot, display | (inv << 24))
         }
         // `CORPSE_FIELD_BYTES_1` (race and sex in bytes 1 and 2), `CORPSE_FIELD_BYTES_2` and
         // `CORPSE_FIELD_FLAGS`.
@@ -991,8 +988,11 @@ mod tests {
             .unwrap()
             .bypass_change_detection()
             .0
-            .merge(ObjectFields::from_field_slots(&[(Field::PlayerVisibleItems, 0, 101)],
-            ));
+            .merge(ObjectFields::from_field_slots(&[(
+                Field::PlayerVisibleItems,
+                0,
+                101,
+            )]));
         app.update();
         assert_eq!(
             app.world().get::<Equipment>(player).unwrap().helm,
@@ -1107,8 +1107,7 @@ mod tests {
         /// Raw field indices; byte 0 of `UNIT_FIELD_BYTES_2` is the sheath state.
         const UNIT_FLAGS: u16 = Field::UnitFlags.index();
         const UNIT_BYTES_2: u16 = Field::UnitBytes2.index();
-        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 =
-            Field::PlayerVisibleItems.index() + 2 * 15;
+        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 = Field::PlayerVisibleItems.index() + 2 * 15;
         /// `UNIT_FLAG_DISARMED`.
         const DISARMED: u32 = 0x0020_0000;
 
@@ -1229,8 +1228,7 @@ mod tests {
         use crate::creature_anim::Wielded;
 
         const UNIT_FLAGS: u16 = Field::UnitFlags.index();
-        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 =
-            Field::PlayerVisibleItems.index() + 2 * 15;
+        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 = Field::PlayerVisibleItems.index() + 2 * 15;
         const DISARMED: u32 = 0x0020_0000;
 
         let mut app = App::new();

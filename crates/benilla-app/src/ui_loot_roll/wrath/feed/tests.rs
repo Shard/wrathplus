@@ -206,9 +206,9 @@ fn inventory(app: &mut App) {
     }
     let entity = app
         .world_mut()
-        .spawn(ObjectStore(
-            benilla_protocol::ObjectFields::from_pairs(&pairs),
-        ))
+        .spawn(ObjectStore(benilla_protocol::ObjectFields::from_pairs(
+            &pairs,
+        )))
         .id();
     app.world_mut()
         .resource_mut::<GuidIndex>()

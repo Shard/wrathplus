@@ -491,10 +491,9 @@ impl Rig {
                 objs.spawn(
                     Layout::guid(kind, slot),
                     ObjectFields::from_fields(&[(
-                            benilla_protocol::types::Field::ObjectEntry,
-                            Layout::entry(kind),
-                        )],
-                    ),
+                        benilla_protocol::types::Field::ObjectEntry,
+                        Layout::entry(kind),
+                    )]),
                 );
             }
         }
@@ -503,10 +502,9 @@ impl Rig {
             objs.spawn(
                 0x2_0000 + i as u64,
                 ObjectFields::from_fields(&[
-                        (benilla_protocol::types::Field::ObjectEntry, entry),
-                        (benilla_protocol::types::Field::UnitCreatedby, 5),
-                    ],
-                ),
+                    (benilla_protocol::types::Field::ObjectEntry, entry),
+                    (benilla_protocol::types::Field::UnitCreatedby, 5),
+                ]),
             );
         }
         Some(Rig {
@@ -901,8 +899,10 @@ fn a_reagent_moving_requeues_the_views_that_list_it() {
     };
 
     // The names stream in: every reagent line appears, and each view that has one is due.
-    let empty = mat_of(ObjectStore(ObjectFields::from_fields(&[(benilla_protocol::types::Field::UnitHealth, 100)],
-    )));
+    let empty = mat_of(ObjectStore(ObjectFields::from_fields(&[(
+        benilla_protocol::types::Field::UnitHealth,
+        100,
+    )])));
     let unnamed = states(t, &empty.store);
     let before: Vec<_> = listing
         .iter()
@@ -985,10 +985,9 @@ fn a_pet_view_reads_no_player_form_equipment_reach_or_unit_field_but_the_ranged_
     } = &mut rig;
     let objects = objs.get();
     let pet = ObjectFields::from_fields(&[
-            (benilla_protocol::types::Field::UnitLevel, 30),
-            (benilla_protocol::types::Field::UnitBaseMana, 900),
-        ],
-    );
+        (benilla_protocol::types::Field::UnitLevel, 30),
+        (benilla_protocol::types::Field::UnitBaseMana, 900),
+    ]);
     let m = mat(
         layout,
         Inputs::default(),
