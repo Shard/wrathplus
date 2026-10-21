@@ -2,7 +2,6 @@
 //! The corpse-guid latch's hooks on the object lifecycle live with their caller, the wire layer's
 //! object arms (`net::objects`).
 
-use crate::ui_chat::feed::ChatLogFeed;
 use benilla_protocol::{MoveMode, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
@@ -16,7 +15,6 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::CorpseReclaimDelay, on_corpse_reclaim_delay)
         .net_handler(K::ResurrectRequest, on_resurrect_request)
         .net_handler(K::SpiritHealerConfirm, on_spirit_healer_confirm)
-        .net_handler(K::DurabilityDamageDeath, on_durability_damage_death)
         .net_handler(K::MoveMode, on_move_mode)
         .net_handler(K::Disconnected, on_session_end);
 }
@@ -58,12 +56,6 @@ fn on_resurrect_request(In(ev): In<SessionEvent>, mut death_net: ResMut<DeathNet
 fn on_spirit_healer_confirm(In(ev): In<SessionEvent>, mut death_net: ResMut<DeathNet>) {
     if let SessionEvent::SpiritHealerConfirm { npc } = ev {
         spirit_healer_confirm(npc, &mut death_net);
-    }
-}
-
-fn on_durability_damage_death(In(ev): In<SessionEvent>, mut log: ResMut<crate::ui_chat::ChatLog>) {
-    if let SessionEvent::DurabilityDamageDeath = ev {
-        durability_damage_death(&mut log);
     }
 }
 
@@ -138,19 +130,6 @@ fn resurrect_request(
 /// fires `CONFIRM_XP_LOSS` per arrival.
 fn spirit_healer_confirm(npc: u64, death_net: &mut DeathNet) {
     death_net.ask_spirit_healer(npc);
-}
-
-/// `SMSG_DURABILITY_DAMAGE_DEATH`, the 10% death durability loss: a combat-log line at chat type
-/// `0x19` `COMBAT_MISC_INFO` with no arguments (`0x628e60`), not an error; the body is ignored.
-fn durability_damage_death(log: &mut crate::ui_chat::ChatLog) {
-    log.push_combat(crate::ui_chat::combat::PendingCombat {
-        kind: crate::ui_chat::ChatEventKind::CombatMiscInfo,
-        family: crate::ui_chat::combat::DURABILITYDAMAGE_DEATH,
-        fills: crate::ui_chat::combat::Fills::default(),
-        subject: 0,
-        item: None,
-        tries: 0,
-    });
 }
 
 /// The acked movement modes, root, water-walk, feather-fall, hover and can-fly, addressed to our own

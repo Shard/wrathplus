@@ -4,7 +4,6 @@
 //! [`Lifecycle`] and [`Scene`].
 
 use crate::spell::cooldowns::CooldownsSpell;
-use crate::ui_aura::AuraDurationsTrace;
 use std::time::{Duration, Instant};
 
 use benilla_formats::LearnAnnouncement;
@@ -1098,7 +1097,7 @@ fn spell_go(
     // `0x6e7d73`/`0x6e7dcc` push the resolved SpellRec, so the word takes a number's colour (a
     // bit-15-clear spell's "Miss" is spell gold), and the CVar gates in `0x607140` apply.
     if !misses.is_empty() && display.is_none_or(|d| d.speed == 0.0) {
-        if let Some(color) = crate::combat_log::text::classify_source(
+        if let Some(color) = crate::combat_text::center::classify_source(
             caster, index, self_guid, stores,
         )
         .and_then(|source| {

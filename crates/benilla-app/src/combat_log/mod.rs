@@ -16,6 +16,7 @@ use crate::net::{
     GuidIndex, NetCommands, NetHandlerApp, ObjectStore, SelfGuid, ServerSoundMessage,
 };
 use crate::ui_chat::combat::LogPeriodicSpells;
+use crate::ui_chat::feed::ChatLogFeed;
 use crate::ui_chat::ChatLog;
 use crate::ui_unit::{CombatTextEvent, UnitCombatFeedback};
 
@@ -83,6 +84,7 @@ impl Plugin for CombatLogPlugin {
             .net_handler(K::SpellInstaKillLog, on_native_logged)
             .net_handler(K::SpellDispelLog, on_native_logged)
             .net_handler(K::DispelFailed, on_native_logged)
+            .net_handler(K::DurabilityDamageDeath, on_durability_damage_death)
             .net_handler(K::ProcResist, on_native_logged)
             .net_handler(K::SpellOrDamageImmune, on_native_logged)
             .net_handler(K::EnchantmentLog, on_native_logged)
@@ -97,7 +99,8 @@ impl Plugin for CombatLogPlugin {
             .net_handler(K::UnitAuras, on_native_only)
             .net_handler(K::ObjectDestroyed, on_native_only)
             .net_handler(K::ObjectsRemoved, on_native_only)
-            .net_handler(K::WrathSpellLog, on_native_only);
+            .net_handler(K::WrathSpellLog, on_native_only)
+            .net_handler(K::WrathSpellFailure, on_native_only);
     }
 }
 
@@ -128,8 +131,8 @@ fn on_faction_standing(
 }
 
 /// The kinds only the build-12340 log reads: casts, aura snapshots, a unit leaving (its aura
-/// snapshot goes) and a spell steal, beside `net::wrath_spell_log_capture`'s receipt. Our
-/// refused casts record from their sole owner ([`crate::spell::native_failure`]).
+/// snapshot goes), a spell steal beside `net::wrath_spell_log_capture`'s receipt, and a failed
+/// cast's `SPELL_CAST_FAILED` (`0x751ad0`) beside [`crate::spell::native_failure`]'s receipt.
 fn on_native_only(In(ev): In<SessionEvent>, native: Option<ResMut<native::NativeCombatLog>>) {
     if let (
         Some(mut native),
@@ -138,7 +141,8 @@ fn on_native_only(In(ev): In<SessionEvent>, native: Option<ResMut<native::Native
         | SessionEvent::UnitAuras { .. }
         | SessionEvent::ObjectDestroyed(_)
         | SessionEvent::ObjectsRemoved(_)
-        | SessionEvent::WrathSpellLog { .. },
+        | SessionEvent::WrathSpellLog { .. }
+        | SessionEvent::WrathSpellFailure(_),
     ) = (native, &ev)
     {
         native.record(&ev);
@@ -161,6 +165,22 @@ fn on_native_logged(In(ev): In<SessionEvent>, mut l: Sinks) {
     ) {
         l.record_native(&ev);
     }
+}
+
+/// `SMSG_DURABILITY_DAMAGE_DEATH`, the 10% death durability loss: a combat-log line at chat type
+/// `0x19` `COMBAT_MISC_INFO` with no arguments (`0x628e60`), not an error; the body is ignored.
+fn on_durability_damage_death(In(ev): In<SessionEvent>, mut log: ResMut<ChatLog>) {
+    if !matches!(ev, SessionEvent::DurabilityDamageDeath) {
+        return;
+    }
+    log.push_combat(crate::ui_chat::combat::PendingCombat {
+        kind: crate::ui_chat::ChatEventKind::CombatMiscInfo,
+        family: crate::ui_chat::combat::DURABILITYDAMAGE_DEATH,
+        fills: crate::ui_chat::combat::Fills::default(),
+        subject: 0,
+        item: None,
+        tries: 0,
+    });
 }
 
 /// `SMSG_SPELLLOGEXECUTE`: its native entry, then the created-item and fed-pet lines

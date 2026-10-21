@@ -40,6 +40,7 @@
 //! The combat-log and spell handlers feed the spawns; the quads append to [`UiQuads`] after the
 //! script extract ([`crate::ui_pass::UiQuadAppend`]).
 
+pub(crate) mod center;
 mod law;
 
 /// Re-exported for the emitter arms' tests; live code gets it through [`damage_color`].

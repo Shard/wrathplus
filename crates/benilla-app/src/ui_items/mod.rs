@@ -13,13 +13,9 @@ use benilla_protocol::types::{BAG_PLAYER_INVENTORY, SLOT_BAG_FIRST, SLOT_PACK_FI
 use benilla_ui::script::EQUIPMENT_BAG;
 use bevy::prelude::*;
 
-#[cfg(test)]
-use crate::net::Objects;
 use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
-#[cfg(test)]
-use benilla_protocol::ObjectFields;
 
 pub(crate) use crate::inventory::{
     carried_counts, collect_inventory, count_of, find_item, has_key, slot_guid, slot_guid_count,
@@ -150,38 +146,9 @@ pub(crate) fn item_icon(
         .and_then(|d| d.icon.clone())
 }
 
-/// A test's object index: a world to seed with items, and the [`Objects`] lookup over it. Seed
-/// first, then read: `get()` borrows the world while its answer lives, so call sites write
-/// `&objs.get()` inline.
+pub(crate) use crate::items::ItemSubClasses;
 #[cfg(test)]
-pub(crate) struct TestObjects {
-    world: World,
-    state: bevy::ecs::system::SystemState<Objects<'static, 'static>>,
-}
-
-#[cfg(test)]
-impl TestObjects {
-    pub(crate) fn new() -> Self {
-        let mut world = World::new();
-        world.init_resource::<crate::net::GuidIndex>();
-        let state = bevy::ecs::system::SystemState::new(&mut world);
-        Self { world, state }
-    }
-
-    /// One item instance in the index, as the wire's `ItemCreate` makes it.
-    pub(crate) fn spawn(&mut self, guid: u64, fields: ObjectFields) {
-        crate::items::test_spawn_item(&mut self.world, guid, fields, false);
-    }
-
-    /// The same for a container instance (`TYPEMASK_CONTAINER`).
-    pub(crate) fn spawn_container(&mut self, guid: u64, fields: ObjectFields) {
-        crate::items::test_spawn_item(&mut self.world, guid, fields, true);
-    }
-
-    pub(crate) fn get(&mut self) -> Objects<'_, '_> {
-        self.state.get(&self.world)
-    }
-}
+pub(crate) use crate::items::TestObjects;
 
 /// The wire's player-array bag index, `INVENTORY_SLOT_BAG_0`; with it, [`ItemUse::slot`] is the
 /// equipment index (0-18 worn, 19-22 the equipped bags).
@@ -471,10 +438,6 @@ pub(super) fn find_equip_slot(inventory_type: u32, has_relic_slot: bool) -> Vec<
 /// `ItemSet.dbc`: the tooltip SET block's rows (name, members, bonuses, skill).
 #[derive(Resource)]
 pub(crate) struct ItemSets(pub(crate) benilla_formats::ItemSetCatalog);
-
-/// `ItemSubClass.dbc`: the slot and type line's alternate-proficiency and hidden-name gates.
-#[derive(Resource)]
-pub(crate) struct ItemSubClasses(pub(crate) benilla_formats::ItemSubClassCatalog);
 
 /// `ItemBagFamily.dbc`: reason 16's `%s`, what a specialised bag accepts ("Only Arrows can be
 /// placed in that.").

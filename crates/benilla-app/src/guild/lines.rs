@@ -2,7 +2,7 @@
 //! event, invite, decline and command-result handlers (`0x5e7180`, `0x5e6f65`, `0x5e6f9a`,
 //! `0x5e7520`) pass them to `CGGameUI::DisplayError 0x496720`, and the catalog row picks the
 //! surface and the sound. The `GUILD_MOTD` line is the FrameXML's (`ChatFrame.lua:1335-1340`) and
-//! `/ginfo`'s are not catalog rows (built in [`super::feed`]), so neither is here.
+//! `/ginfo`'s are not catalog rows (built in `ui_guild`'s feed), so neither is here.
 
 use benilla_protocol::types::{
     guild_command, guild_command_error, guild_event, GuildCommandResult, GuildEventNotice,

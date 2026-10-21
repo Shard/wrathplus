@@ -6,6 +6,7 @@
 pub(crate) mod anim;
 pub(crate) mod catalogs;
 pub(crate) mod chat;
+pub(crate) mod console;
 pub(crate) mod cooldowns;
 pub(crate) mod death;
 pub(crate) mod errors;
@@ -17,6 +18,7 @@ pub(crate) mod player;
 pub(crate) mod schedule;
 pub(crate) mod session;
 pub(crate) mod state;
+pub(crate) mod tutorial;
 pub(crate) mod ui_state;
 pub(crate) mod ui_flags;
 pub(crate) mod vm_memo;
