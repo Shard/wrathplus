@@ -20,7 +20,7 @@ pub(crate) fn setup_script(world: &mut World) {
 /// strings the feeds resolve lines from and the emote tokens `/`-commands are built from
 /// (`ui_chat::commands`), no frames and no font objects. Installed at `Startup` and at every
 /// [`end_ui_session`].
-fn install_boot_vm(world: &mut World) {
+pub(super) fn install_boot_vm(world: &mut World) {
     let Some(script) = new_vm(world) else {
         return;
     };
@@ -29,7 +29,7 @@ fn install_boot_vm(world: &mut World) {
 
 /// A fresh VM on the process clock with the addon asset probes wired, or `None` (the world's VM
 /// removed) when the VM cannot start.
-fn new_vm(world: &mut World) -> Option<UiScript> {
+pub(super) fn new_vm(world: &mut World) -> Option<UiScript> {
     let created = UiScript::new();
     let mut script = match created {
         Ok(s) => s,
@@ -274,7 +274,7 @@ pub(crate) fn run_pending_entry_load(world: &mut World) {
 /// `WorldMapFrame_OnLoad` sizes the full-screen `BlackoutWorld` from `GetScreenWidth()` and
 /// `GetScreenHeight()` and never again (`WorldMapFrame.lua:19-28`). With no atlas yet (it bakes on
 /// the first `Update`) the per-frame pass seats the measurer.
-fn seat_raster_seam_for_load(world: &mut World, script: &mut UiScript) {
+pub(super) fn seat_raster_seam_for_load(world: &mut World, script: &mut UiScript) {
     let ui_scale = world
         .get_resource::<super::UiScaleCvar>()
         .map_or(1.0, |c| c.0);

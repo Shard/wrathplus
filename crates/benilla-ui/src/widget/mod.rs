@@ -469,7 +469,8 @@ impl WidgetArena {
                 FrameKind::Model
                 | FrameKind::PlayerModel
                 | FrameKind::DressUpModel
-                | FrameKind::TabardModel => KindState::Model(kinds::ModelState::default()),
+                | FrameKind::TabardModel
+                | FrameKind::ModelFFX => KindState::Model(kinds::ModelState::default()),
                 FrameKind::Minimap => KindState::Minimap(kinds::MinimapState::default()),
                 FrameKind::GameTooltip => KindState::Tooltip(kinds::TooltipState::default()),
                 _ => KindState::None,
@@ -488,6 +489,7 @@ impl WidgetArena {
                 | FrameKind::PlayerModel
                 | FrameKind::DressUpModel
                 | FrameKind::TabardModel
+                | FrameKind::ModelFFX
         );
         let (index, generation) = self.frames.insert(frame);
         let handle = FrameHandle { index, generation };
