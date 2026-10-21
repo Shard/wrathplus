@@ -500,8 +500,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::ScriptDialect;
-
+    
     fn m(guid: u64, name: &str, online: bool, week_games: u32, rating: u32) -> ArenaMemberView {
         ArenaMemberView {
             guid,
@@ -519,7 +518,7 @@ mod tests {
     }
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut team = ArenaTeamView {
             descriptor: [77, 2, 0, 3, 8, 5, 1500],
             stats: ArenaTeamStatsView {
@@ -551,7 +550,7 @@ mod tests {
 
     #[test]
     fn in_arena_team_reads_the_descriptor_slots() {
-        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert!(!s.eval::<bool>("return IsInArenaTeam()").unwrap());
         let mut team = ArenaTeamView::default();
         team.descriptor[0] = 9;

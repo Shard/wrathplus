@@ -2,6 +2,7 @@
 //! The corpse-guid latch's hooks on the object lifecycle live with their caller, the wire layer's
 //! object arms (`net::objects`).
 
+use crate::ui_chat::feed::ChatLogFeed;
 use benilla_protocol::{MoveMode, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
@@ -146,6 +147,9 @@ fn durability_damage_death(log: &mut crate::ui_chat::ChatLog) {
         kind: crate::ui_chat::ChatEventKind::CombatMiscInfo,
         family: crate::ui_chat::combat::DURABILITYDAMAGE_DEATH,
         fills: crate::ui_chat::combat::Fills::default(),
+        subject: 0,
+        item: None,
+        tries: 0,
     });
 }
 

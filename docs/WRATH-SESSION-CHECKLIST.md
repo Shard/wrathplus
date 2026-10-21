@@ -160,6 +160,8 @@ at Wrath before its verdict counts.
 | L5 | Titles and barber | Set a title; barber shop change | Title shown; appearance changes | H: appearance tests | Model |
 | L6 | Companions and mounts | Summon and dismiss a pet, mount | Companion tab, dismiss sends 048D | H: companion tests | Models |
 | L7 | Help request | File, edit, abandon a GM ticket; report lag | Help frame, ticket status | P: `WOW_PROBE_GMTICKET` | Frame |
+| L8 | Every major window | Open each from its micro button, key or NPC: character tabs, spellbook, talents, quest log, bags, world map, friends/who/guild, dungeon finder, PvP, achievements, calendar, macros, key bindings, mail, merchant, trade skill, auction, bank; and the pet, possess and vehicle bars | Each opens with no Lua error | H: `installed_wrath_opens_every_major_window` (census command; 23 windows, 3 bars) | See L9 |
+| L9 | The server state those windows need | Play to it, then open the window: level 10 (talents, PvP); level 15 (dungeon finder); a backpack (bags); guild membership (guild tab); at least one earned achievement, which `SMSG_ALL_ACHIEVEMENT_DATA` must report (achievements); a pet with an action bar (pet bar); a possess spell, e.g. Mind Control (possess bar); a vehicle with a UI seat, e.g. a Death Knight start-area vehicle (vehicle bar); a mailbox, vendor, profession, auctioneer and banker (their windows) | The stock toggle opens nothing below its gate; with the state, the window opens | H seeds each one; only play proves the server sends it | Each window opens |
 
 ## M. World presentation
 

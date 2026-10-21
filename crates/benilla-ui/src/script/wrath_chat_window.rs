@@ -291,10 +291,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     fn wrath() -> UiScript {
-        UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap()
+        UiScript::new().unwrap()
     }
 
     #[test]

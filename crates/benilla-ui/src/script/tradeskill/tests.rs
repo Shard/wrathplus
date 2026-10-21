@@ -879,7 +879,7 @@ fn the_link_verbs_answer_the_clients_shapes() {
 /// the description and recipe link read the visible row.
 #[test]
 fn wrath_filters_description_and_recipe_link() {
-    let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     let mut state = two_recipe_state();
     state.recipes[0].description = Some("Weave a bolt.".into());
     s.set_trade_skill(Some(state));
@@ -926,7 +926,7 @@ fn wrath_filters_description_and_recipe_link() {
 
 #[test]
 fn wrath_linked_window_and_list_link_read_the_pushed_state() {
-    let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     let link = "|cffffd000|Htrade:2259:75:150:2A:D|h[Alchemy]|h|r";
     s.set_trade_skill(Some(TradeSkillState {
         linked: Some("Brewmaster".into()),

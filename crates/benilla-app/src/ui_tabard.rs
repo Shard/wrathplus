@@ -7,7 +7,6 @@
 
 use bevy::prelude::*;
 
-use benilla_formats::GuildEmblem;
 use benilla_protocol::types::GUILD_EMBLEM_RESULT_MESSAGES;
 use benilla_ui::script::{TabardHost, TabardIntent, UiScript, TABARD_COUNTS, TABARD_CREATION_COST};
 
@@ -74,17 +73,6 @@ impl NpcSession for TabardOpen {
 }
 
 pub(crate) use crate::app_core::interaction::TabardDesign;
-impl TabardDesign {
-    pub(crate) fn preview(&self) -> Option<GuildEmblem> {
-        self.0.map(|d| GuildEmblem {
-            emblem_style: d[0],
-            emblem_color: d[1],
-            border_style: d[2],
-            border_color: d[3],
-            background_color: d[4],
-        })
-    }
-}
 
 /// The save's fourteen checks in the reference's order (`0x5e03f0`), each a `UI_ERROR_MESSAGE`
 /// key: the ten range checks share one, and the money check is the client's own

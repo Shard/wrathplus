@@ -342,10 +342,10 @@ pub(super) fn money(lua: &mlua::Lua, quantity: i32) -> mlua::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     fn fixture() -> UiScript {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         let mut metadata = WrathAchievementMetadata::default();
         for (id, flags, reference) in [(1, 0, 0), (2, 2, 0), (3, 0xa0, 1), (4, 0, 99), (5, 1, 1)] {
             metadata.achievements.insert(

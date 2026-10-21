@@ -1,7 +1,7 @@
 //! Whole-client tests of `crate::ui_native::wrath_quests_completed_capture`, from `ui_native/wrath_quests_completed_capture_tests.rs`.
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::wrath_quests_completed_capture::tests::dispatch;
+use crate::net::test_support::quests_completed::dispatch;
 use crate::ui_native::wrath_quests_completed_capture::*;
 use benilla_protocol::wrath_events::WrathEventAdapter;
 use benilla_protocol::SessionEvent;

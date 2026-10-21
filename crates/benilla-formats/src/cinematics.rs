@@ -276,9 +276,11 @@ impl CinematicPath {
 mod tests {
     use super::*;
 
-    /// The eight original race intros, `ChrRaces.dbc` `CinematicSequence`, which the server sends
-    /// on a first login.
-    const RACE_INTROS: [u32; 8] = [2, 21, 41, 61, 81, 101, 121, 141];
+    /// Every intro build 12340's data names, which the server sends on a first login: the ten
+    /// playable races' `ChrRaces.dbc` `CinematicSequenceID` (column 12; Blood Elf 162 and Draenei
+    /// 163 after the original eight) and the Death Knight's `ChrClasses.dbc` one (column 58, 165),
+    /// which a Death Knight gets instead of its race's.
+    const INTROS: [u32; 11] = [2, 21, 41, 61, 81, 101, 121, 141, 162, 163, 165];
 
     #[test]
     fn model_paths_map_mdx_to_the_archive_m2() {
@@ -297,10 +299,10 @@ mod tests {
         let data = crate::wow_data_or_skip!();
         let mut chain = crate::open_chain(&data).expect("open chain");
         let cat = load_cinematics(&mut chain).expect("load cinematic tables");
-        assert!(cat.sequence_count() >= RACE_INTROS.len());
-        assert!(cat.camera_count() >= RACE_INTROS.len());
+        assert!(cat.sequence_count() >= INTROS.len());
+        assert!(cat.camera_count() >= INTROS.len());
 
-        for id in RACE_INTROS {
+        for id in INTROS {
             let seq = cat.sequence(id).unwrap_or_else(|| panic!("sequence {id}"));
             assert_eq!(seq.cameras.len(), 1, "sequence {id} camera count");
             assert_eq!(seq.sound_id, 0, "sequence {id} sound");
@@ -318,6 +320,30 @@ mod tests {
         assert!((cam.origin[2] - 406.476).abs() < 0.01);
         // Radians, not degrees: 4.71239 = 3π/2 to five decimals.
         assert!((cam.origin_facing - std::f32::consts::FRAC_PI_2 * 3.0).abs() < 1e-4);
+
+        // The three Wrath-era intros: one shot each, with their own narration kits.
+        for (id, camera, model, narration) in [
+            (162, 243, "Cameras\\FlyByBloodElf.mdx", 9156),
+            (163, 244, "Cameras\\FlybyDraenei.mdx", 9155),
+            (165, 246, "Cameras\\FlyByDeathKnight.mdx", 12938),
+        ] {
+            let shot = cat.shots(id);
+            assert_eq!(shot.len(), 1, "sequence {id}");
+            assert_eq!(
+                (shot[0].id, shot[0].model.as_str(), shot[0].sound_id),
+                (camera, model, narration),
+                "sequence {id}"
+            );
+        }
+        // Their narration kits' one file each (`SoundEntries.dbc`, type 31) reads off the chain;
+        // the Death Knight's ships in `patch-enUS.MPQ`, the other two in the expansion speech.
+        for name in ["BloodElf", "Draenei", "DeathKnight"] {
+            let path = format!("Sound\\CinematicVoices\\{name}Narration.mp3");
+            let bytes = chain
+                .read_file(&path)
+                .unwrap_or_else(|e| panic!("{path}: {e}"));
+            assert!(bytes.len() > 100_000, "{path} is a real narration");
+        }
     }
 
     #[test]
@@ -325,7 +351,7 @@ mod tests {
         let data = crate::wow_data_or_skip!();
         let mut chain = crate::open_chain(&data).expect("open chain");
         let cat = load_cinematics(&mut chain).expect("load cinematic tables");
-        for id in RACE_INTROS {
+        for id in INTROS {
             let row = cat.shots(id)[0].clone();
             let path = CinematicPath::load(&mut chain, &row)
                 .unwrap_or_else(|e| panic!("sequence {id} path: {e:#}"));
@@ -368,7 +394,7 @@ mod tests {
         let data = crate::wow_data_or_skip!();
         let mut chain = crate::open_chain(&data).expect("open chain");
         let cat = load_cinematics(&mut chain).expect("load cinematic tables");
-        for id in RACE_INTROS {
+        for id in INTROS {
             let row = cat.shots(id)[0].clone();
             let path = CinematicPath::load(&mut chain, &row).expect("path");
             // The reach over the whole shot, not the first frame: the troll intro starts 39 yd out.

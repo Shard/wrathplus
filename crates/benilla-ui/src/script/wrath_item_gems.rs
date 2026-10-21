@@ -70,11 +70,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{InvSlotView, ScriptDialect, UiScript, UnitState, EQUIPMENT_BAG};
+    use crate::script::{InvSlotView, UiScript, UnitState, EQUIPMENT_BAG};
 
     #[test]
     fn gems_read_the_host_table() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.model_mut().unit_guids.player = 1;
         s.set_unit("player", Some(UnitState { guid: 1, exists: true, ..Default::default() }));
         let mut slots: crate::script::InventorySlots = Default::default();

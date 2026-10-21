@@ -73,11 +73,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn every_load_fails_on_the_next_tick_and_getters_raise() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             r#"seen = {} local f = CreateFrame("Frame")
             f:RegisterEvent("KNOWLEDGE_BASE_SETUP_LOAD_FAILURE")

@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use benilla_formats::RealmCategory;
 use benilla_protocol::RealmInfo;
 
-use super::Realms;
+use super::{Realms, RealmsSelect};
 
 /// `MAX_REALM_CATEGORY_TABS` (`RealmList.lua:4`).
 pub(super) const MAX_TABS: usize = 8;
@@ -55,109 +55,6 @@ fn stored_index(buckets: &[Vec<usize>], visible: usize) -> usize {
         .map_or(0, |(i, _)| i)
 }
 
-impl Realms {
-    /// Every category's realms; see [`place`].
-    fn buckets(&self) -> Vec<Vec<usize>> {
-        place(self.categories.as_deref(), &self.realms)
-    }
-
-    /// The realms of the tab in front, unsorted: `GetNumRealms` and `GetRealmInfo` with
-    /// `RealmList.selectedCategory`.
-    pub(super) fn category_realms(&self) -> Vec<usize> {
-        let mut buckets = self.buckets();
-        let at = stored_index(&buckets, self.category());
-        if at < buckets.len() {
-            std::mem::take(&mut buckets[at])
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// `RealmList.selectedCategory`: nil until the first `RealmListUpdate` makes it 1.
-    pub(super) fn category(&self) -> usize {
-        self.category.unwrap_or(1)
-    }
-
-    /// The tab labels, `GetRealmCategories` (`0x46f1f0`): the names of the categories holding a
-    /// realm. `RealmList_UpdateTabs` hides the strip unless there are two or more, so the one name
-    /// the reference still pushes when none hold a realm (`0x46f255`) is left out.
-    pub(super) fn tabs(&self) -> Vec<&str> {
-        let Some(categories) = &self.categories else {
-            return Vec::new();
-        };
-        self.buckets()
-            .iter()
-            .zip(categories)
-            .filter(|(b, _)| !b.is_empty())
-            .map(|(_, c)| c.name.as_str())
-            .collect()
-    }
-
-    /// `GetSelectedCategory` (`0x46f400`): the ordinal of the first non-empty category at or after
-    /// the stored one, else 1.
-    pub(super) fn selected_category(&self) -> usize {
-        let from = self.chosen_category.unwrap_or(0);
-        self.buckets()
-            .iter()
-            .enumerate()
-            .filter(|(_, b)| !b.is_empty())
-            .enumerate()
-            .find(|(_, (i, _))| *i >= from)
-            .map_or(1, |(ordinal, _)| ordinal + 1)
-    }
-
-    /// `RealmList_OnShow`: the tab `GetSelectedCategory` names comes to the front, when a tab
-    /// button carries that ordinal.
-    pub(super) fn front_selected_category(&mut self) {
-        let ordinal = self.selected_category();
-        if ordinal <= MAX_TABS {
-            self.category = Some(ordinal);
-        }
-    }
-
-    /// `RealmListTab_OnClick`: the tab comes to the front and the list redraws. The redraw has no
-    /// clicked name to keep (`RealmListUpdate` clears `selectedName`), so the highlight falls back
-    /// to the realm this session is on, when that realm is on the new tab.
-    pub(super) fn click_tab(&mut self, ordinal: usize) {
-        self.category = Some(ordinal);
-        self.refresh_in = super::REFRESH_SECS;
-        self.highlight_current();
-        self.clamp_offset();
-    }
-
-    /// `ChangeRealm` stores the front tab's category (`0x46f188`), unconditionally, before it
-    /// dials; `GetSelectedCategory` reads it when the list next opens.
-    pub(super) fn store_front_category(&mut self) {
-        self.chosen_category = Some(stored_index(&self.buckets(), self.category()));
-    }
-
-    /// The rebuild's tail (`0x46e6f0`): the category holding the realm this session names becomes
-    /// the stored one; with no such realm, or one on no tab, it is left as it was.
-    pub(super) fn store_current_category(&mut self) {
-        let (Some(categories), Some(want)) = (&self.categories, &self.current) else {
-            return;
-        };
-        // The walk visits every realm, so the last one of the name decides.
-        let Some(realm) = self
-            .realms
-            .iter()
-            .rfind(|r| r.name.eq_ignore_ascii_case(want))
-        else {
-            return;
-        };
-        let byte = match realm.category {
-            0 => match categories.first() {
-                Some(first) => first.id,
-                None => return,
-            },
-            b => u32::from(b),
-        };
-        if let Some(at) = categories.iter().position(|c| c.id == byte) {
-            self.chosen_category = Some(at);
-        }
-    }
-}
-
 /// Read the client Region's category set once, after the archive chain opens.
 pub(super) fn load_categories(
     mut realms: ResMut<Realms>,
@@ -191,6 +88,89 @@ pub(super) fn load_categories(
             "realm list: Cfg_Categories.dbc failed to load, so every realm lists on one untabbed \
              page: {e:#}"
         ),
+    }
+}
+
+/// `Realms`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait RealmsCategory {
+    /// Every category's realms; see [`place`].
+    fn buckets(&self) -> Vec<Vec<usize>>;
+    /// The realms of the tab in front, unsorted: `GetNumRealms` and `GetRealmInfo` with
+    /// `RealmList.selectedCategory`.
+    fn category_realms(&self) -> Vec<usize>;
+    /// `RealmList_OnShow`: the tab `GetSelectedCategory` names comes to the front, when a tab
+    /// button carries that ordinal.
+    fn front_selected_category(&mut self);
+    /// `RealmListTab_OnClick`: the tab comes to the front and the list redraws. The redraw has no
+    /// clicked name to keep (`RealmListUpdate` clears `selectedName`), so the highlight falls back
+    /// to the realm this session is on, when that realm is on the new tab.
+    fn click_tab(&mut self, ordinal: usize);
+    /// `ChangeRealm` stores the front tab's category (`0x46f188`), unconditionally, before it
+    /// dials; `GetSelectedCategory` reads it when the list next opens.
+    fn store_front_category(&mut self);
+    /// The tab labels, `GetRealmCategories` (`0x46f1f0`): the names of the categories holding a
+    /// realm. `RealmList_UpdateTabs` hides the strip unless there are two or more, so the one name
+    /// the reference still pushes when none hold a realm (`0x46f255`) is left out.
+    fn tabs(&self) -> Vec<&str>;
+    /// `GetSelectedCategory` (`0x46f400`): the ordinal of the first non-empty category at or after
+    /// the stored one, else 1.
+    fn selected_category(&self) -> usize;
+}
+
+impl RealmsCategory for Realms {
+    fn buckets(&self) -> Vec<Vec<usize>> {
+        place(self.categories.as_deref(), &self.realms)
+    }
+
+    fn category_realms(&self) -> Vec<usize> {
+        let mut buckets = self.buckets();
+        let at = stored_index(&buckets, self.category());
+        if at < buckets.len() {
+            std::mem::take(&mut buckets[at])
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn front_selected_category(&mut self) {
+        let ordinal = self.selected_category();
+        if ordinal <= MAX_TABS {
+            self.category = Some(ordinal);
+        }
+    }
+
+    fn click_tab(&mut self, ordinal: usize) {
+        self.category = Some(ordinal);
+        self.refresh_in = super::REFRESH_SECS;
+        self.highlight_current();
+        self.clamp_offset();
+    }
+
+    fn store_front_category(&mut self) {
+        self.chosen_category = Some(stored_index(&self.buckets(), self.category()));
+    }
+
+    fn tabs(&self) -> Vec<&str> {
+        let Some(categories) = &self.categories else {
+            return Vec::new();
+        };
+        self.buckets()
+            .iter()
+            .zip(categories)
+            .filter(|(b, _)| !b.is_empty())
+            .map(|(_, c)| c.name.as_str())
+            .collect()
+    }
+
+    fn selected_category(&self) -> usize {
+        let from = self.chosen_category.unwrap_or(0);
+        self.buckets()
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| !b.is_empty())
+            .enumerate()
+            .find(|(_, (i, _))| *i >= from)
+            .map_or(1, |(ordinal, _)| ordinal + 1)
     }
 }
 

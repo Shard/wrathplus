@@ -150,7 +150,7 @@ impl Plugin for CinematicPlugin {
                 feed_ui
                     .in_set(WorldStage::Input)
                     .after(drive)
-                    .run_if(crate::ui_script::ingame_ui_up),
+                    .run_if(crate::app_core::ui_state::ingame_ui_up),
             )
             // The cursor and the bars, after the driver settled this frame's state.
             .add_systems(

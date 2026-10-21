@@ -1,7 +1,7 @@
 //! Whole-client tests of `crate::net::wrath_vehicle`, from `net/wrath_vehicle.rs` (`tests`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::wrath_vehicle::tests::CAR;
+use crate::net::test_support::vehicle::CAR;
 use crate::net::wrath_vehicle::*;
 use benilla_protocol::wrath_vehicle::VehicleEvent;
 use benilla_protocol::SessionEvent;

@@ -1155,7 +1155,7 @@ fn the_ui_is_not_up_in_the_frame_between_the_wire_and_the_state() {
 fn run_ingame_ui_up(world: &mut World) -> bool {
     use bevy::ecs::system::RunSystemOnce;
     world
-        .run_system_once(super::lifecycle::ingame_ui_up)
+        .run_system_once(super::ingame_ui_up)
         .expect("the condition runs")
 }
 

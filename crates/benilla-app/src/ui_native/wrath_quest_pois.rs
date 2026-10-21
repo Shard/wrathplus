@@ -9,46 +9,10 @@
 //! quest-log slot (`crate::ui_quest_log`), whose diff toasts it.
 pub(crate) use crate::net::wrath_quest_pois::QuestPois;
 use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfPlayer};
-use benilla_protocol::wrath_quest::{Command, MAX_POI_QUERY};
+use benilla_protocol::wrath_quest::Command;
 use benilla_ui::script::{UiScript, WrathQuestPoi, WrathQuestPoiBlob};
 use bevy::prelude::*;
 use std::collections::BTreeSet;
-
-impl QuestPois {
-    /// The logged quests to ask for, in log order, in packets of at most [`MAX_POI_QUERY`]; they
-    /// count as asked from here.
-    fn queries(&mut self, logged: &[u32]) -> Vec<Vec<u32>> {
-        let missing: Vec<u32> = logged
-            .iter()
-            .copied()
-            .filter(|q| !self.known.contains_key(q) && self.asked.insert(*q))
-            .collect();
-        missing.chunks(MAX_POI_QUERY).map(<[u32]>::to_vec).collect()
-    }
-
-    /// The logged quests' POIs, in log order; an unanswered or POI-less quest has no entry.
-    pub(crate) fn view(&self, logged: &[u32]) -> Vec<WrathQuestPoi> {
-        logged
-            .iter()
-            .filter_map(|&quest_id| {
-                let pois = self.known.get(&quest_id).filter(|p| !p.is_empty())?;
-                Some(WrathQuestPoi {
-                    quest_id,
-                    blobs: pois
-                        .iter()
-                        .map(|p| WrathQuestPoiBlob {
-                            objective_index: p.objective,
-                            map_id: p.map,
-                            area_id: p.area,
-                            floor: p.floor,
-                            points: p.points.clone(),
-                        })
-                        .collect(),
-                })
-            })
-            .collect()
-    }
-}
 
 pub(crate) fn register(app: &mut App) {
     app.add_systems(
@@ -146,6 +110,36 @@ fn feed_quest_pois(
     }
     if std::mem::take(&mut pois.fresh) {
         script.fire_event("QUEST_POI_UPDATE", vec![]);
+    }
+}
+
+/// `QuestPois`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait QuestPoisView {
+    /// The logged quests' POIs, in log order; an unanswered or POI-less quest has no entry.
+    fn view(&self, logged: &[u32]) -> Vec<WrathQuestPoi>;
+}
+
+impl QuestPoisView for QuestPois {
+    fn view(&self, logged: &[u32]) -> Vec<WrathQuestPoi> {
+        logged
+            .iter()
+            .filter_map(|&quest_id| {
+                let pois = self.known.get(&quest_id).filter(|p| !p.is_empty())?;
+                Some(WrathQuestPoi {
+                    quest_id,
+                    blobs: pois
+                        .iter()
+                        .map(|p| WrathQuestPoiBlob {
+                            objective_index: p.objective,
+                            map_id: p.map,
+                            area_id: p.area,
+                            floor: p.floor,
+                            points: p.points.clone(),
+                        })
+                        .collect(),
+                })
+            })
+            .collect()
     }
 }
 

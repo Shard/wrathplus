@@ -4,7 +4,7 @@
 //! bright arc toward the camera. The vertical fade on wall and ledge pieces is matched to
 //! captures: the reference's edge-fade ramp (`0x6147f0`) is untraced.
 
-use benilla_formats::{load_faction_catalog, reputation_rank, FactionCatalog, Reaction};
+use benilla_formats::{load_faction_catalog, reputation_rank, Reaction};
 use benilla_protocol::EntityKind;
 use bevy::prelude::*;
 
@@ -62,17 +62,6 @@ const RING_PARTY: Color = Color::linear_rgb(0.667, 0.667, 1.0); // 0xFFAAAAFF
 const RING_PARTY_PVP: Color = Color::linear_rgb(0.667, 1.0, 0.667); // 0xFFAAFFAA
 
 pub(crate) use crate::app_core::state::Factions;
-impl Factions {
-    pub(crate) fn catalog(&self) -> &FactionCatalog {
-        &self.0
-    }
-
-    /// Wrap a catalog, for tests; a running client builds the resource once, from the DBC.
-    #[cfg(test)]
-    pub(crate) fn from_catalog(catalog: FactionCatalog) -> Self {
-        Self(catalog)
-    }
-}
 
 /// The colour class `GetSelectionCircleColor` resolves, shared by the ground ring and the overhead
 /// name, which both read the selector (`vtable+0x2c`).

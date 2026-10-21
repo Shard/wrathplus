@@ -1080,12 +1080,12 @@ mod tests {
     use super::WrathLfgQueueRequest as R;
     use super::*;
     use crate::script::{
-        PartyMemberInfo, PartyState, ScriptDialect, UnitState, WrathGroup, WrathLfgCatalog,
+        PartyMemberInfo, PartyState, UnitState, WrathGroup, WrathLfgCatalog,
         WrathLfgDungeon,
     };
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.register_cvars([("lfgSelectedRoles", "0")]);
         s.set_unit(
             "player",

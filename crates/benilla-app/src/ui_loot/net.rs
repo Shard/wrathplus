@@ -1,6 +1,7 @@
 //! The loot window's packet handlers: the [`LootState`] session and the [`LootLatch`] the feed
 //! reads, the fishing verdicts, and the item push behind "You receive …".
 
+use crate::ui_loot::LootStateRows;
 use benilla_protocol::types::ItemPushResult;
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;

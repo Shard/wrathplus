@@ -1,5 +1,5 @@
 use super::*;
-use crate::net::wrath_ui_timer_capture::tests::dispatch;
+use crate::net::test_support::ui_timer::dispatch;
 use benilla_protocol::wrath_events::WrathEventAdapter;
 use benilla_protocol::SessionEvent;
 

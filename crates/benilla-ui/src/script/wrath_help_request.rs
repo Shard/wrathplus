@@ -50,11 +50,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{GmTicketIntent, ScriptDialect, UiScript};
+    use crate::script::{GmTicketIntent, UiScript};
 
     #[test]
     fn help_globals_queue_intents_in_call_order_and_check_arguments() {
-        let mut ui = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut ui = UiScript::new().unwrap();
         ui.run("GMReportLag(2.6); GMResponseNeedMoreHelp('still stuck')")
             .unwrap();
         assert_eq!(

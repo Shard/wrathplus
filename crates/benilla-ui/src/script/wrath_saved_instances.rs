@@ -196,8 +196,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::ScriptDialect;
-
+    
     fn row(name: Option<&str>) -> WrathSavedInstance {
         WrathSavedInstance {
             map: 533,
@@ -215,7 +214,7 @@ mod tests {
 
     #[test]
     fn rows_answer_ten_values_and_an_unknown_map_the_defaults() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_wrath_saved_instances(Arc::new(vec![row(Some("Naxxramas")), row(None)]));
         assert_eq!(s.eval::<i64>("return GetNumSavedInstances()").unwrap(), 2);
         let (name, id, reset, difficulty, locked, extended, high, raid, max): (
@@ -261,7 +260,7 @@ mod tests {
 
     #[test]
     fn extending_sets_the_row_prints_and_sends() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_wrath_saved_instances(Arc::new(vec![row(Some("Naxxramas"))]));
         s.run(
             "SEEN = nil local f = CreateFrame('Frame') f:RegisterEvent('CHAT_MSG_SYSTEM')

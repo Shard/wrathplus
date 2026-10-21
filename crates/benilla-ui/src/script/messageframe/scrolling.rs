@@ -897,7 +897,7 @@ mod tests {
     }
 
     fn wrath() -> UiScript {
-        UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap()
+        UiScript::new().unwrap()
     }
 
     /// FloatingChatFrame.lua:745-754: count a conversation's lines by accessID, read each back,

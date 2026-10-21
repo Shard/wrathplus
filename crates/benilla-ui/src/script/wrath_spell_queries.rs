@@ -74,11 +74,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::ScriptDialect;
-
+    
     #[test]
     fn known_spell_uses_full_separate_arrays_and_boolean_abi() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_wrath_known_spells([133, 668], [172], []);
         for args in [
             "133",
@@ -134,7 +133,7 @@ mod tests {
 
     #[test]
     fn pet_action_fallback_keeps_native_type_mask_and_ten_slot_bound() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         for kind in 0..64 {
             script.set_wrath_known_spells([], [], [(kind << 24) | 172]);
             assert_eq!(

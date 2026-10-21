@@ -62,6 +62,8 @@ pub(crate) mod wrath_pet_name_capture;
 pub(crate) mod wrath_threat;
 pub(crate) mod wrath_ui_timer_capture;
 pub(crate) mod wrath_who_capture;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod test_support;
 
 pub(crate) use apply::apply_net_updates;
 use apply::tag_self_player;

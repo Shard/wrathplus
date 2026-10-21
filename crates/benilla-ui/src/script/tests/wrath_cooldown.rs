@@ -1,7 +1,7 @@
 //! The 3.3.5 `Cooldown` widget: the engine draws its sweep, so a running cooldown extracts as a
 //! [`QuadContent::CooldownSweep`] over the frame's rect.
 
-use crate::script::{QuadContent, ScriptDialect, UiScript};
+use crate::script::{QuadContent, UiScript};
 
 fn sweeps(script: &UiScript) -> Vec<QuadContent> {
     script
@@ -14,7 +14,7 @@ fn sweeps(script: &UiScript) -> Vec<QuadContent> {
 
 #[test]
 fn a_running_cooldown_extracts_its_sweep_and_an_idle_one_does_not() {
-    let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut script = UiScript::new().unwrap();
     script
         .run(
             r#"

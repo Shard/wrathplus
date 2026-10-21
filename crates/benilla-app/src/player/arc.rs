@@ -10,7 +10,8 @@ pub(super) struct ArcEdges {
     pub(super) landed: bool,
 }
 
-impl Player {
+/// `Player`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait PlayerArc {
     /// Advances the arc; call once per non-swim frame, after the mover wrote `pos` and `vel_y`.
     /// `launch_y` is the pre-step feet Y, the true takeoff height.
     ///
@@ -19,10 +20,19 @@ impl Player {
     /// speed, or exactly 0 for a step-off's `StartFalling(0)`) and the launch height (`+0x7c`),
     /// and clears the far latch. The height is `launch_y`, not the post-step `pos.y` a tick
     /// higher, which would read a flat jump's descent as a far fall.
-    ///
     /// FALLINGFAR (`0x633240`) splits on the launch speed: a jump latches [`FALL_FAR_DROP`] below
     /// its launch, a step-off after [`FALL_FAR_TIME`] airborne; only a landing clears it.
-    pub(super) fn advance_airborne_arc(
+    fn advance_airborne_arc(
+        &mut self,
+        airborne: bool,
+        jumped: bool,
+        now: f32,
+        launch_y: f32,
+    ) -> ArcEdges;
+}
+
+impl PlayerArc for Player {
+    fn advance_airborne_arc(
         &mut self,
         airborne: bool,
         jumped: bool,

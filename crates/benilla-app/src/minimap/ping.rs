@@ -60,7 +60,7 @@ impl MinimapPing {
 }
 
 /// A `Minimap:PingLocation(x, y)` click to the world point it names: `ui` is centre-relative UI
-/// units (x right, y up), `seam` window px per UI unit ([`crate::ui_script::seam_scale`]), `ctx`
+/// units (x right, y up), `seam` window px per UI unit ([`crate::app_core::ui_state::seam_scale`]), `ctx`
 /// the map as drawn this frame. The inverse of [`BlipCtx::offset`]: screen right is −WoW y, screen
 /// up +WoW x. `None` outside the disc, the stock test (`Minimap.lua:135`) in yards.
 fn click_to_world(ctx: &BlipCtx, ui: (f32, f32), seam: f32) -> Option<(f32, f32)> {

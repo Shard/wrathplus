@@ -422,15 +422,13 @@ impl Tile {
 /// Frames a tile survives off the paint list, so a re-arming cooldown or a ping keeps its tree.
 const TILE_LINGER_FRAMES: u64 = 600;
 
-/// The atlas edge the first tile allocates, and the cap a grown atlas stops at.
-const ATLAS_MIN: u32 = 512;
+/// The cap a grown atlas stops at; the first edge is [`ATLAS_MIN`].
 const ATLAS_MAX: u32 = 4096;
 
 /// Gutter between cells (texels): a tile's bilinear edge never samples a neighbour.
 const GUTTER: u32 = 2;
 
-/// The tile camera's order: after every booth (`-100 …`), before the UI camera (`1`).
-const TILE_CAMERA_ORDER: isize = -10;
+use crate::portrait::{ATLAS_MIN, TILE_CAMERA_ORDER};
 
 /// The renderer's state beyond the bridge, most of it one VM's: the VM is built at world entry,
 /// dropped at the character screen and rebuilt by `ReloadUI()`.
@@ -589,42 +587,6 @@ fn setup_tiles(
     }
     commands.insert_resource(rig);
     let _ = light_buf;
-}
-
-/// `pipe_warm`'s orthographic twin of [`setup_tiles`]' camera, kept in its shape: bevy_pbr keys
-/// mesh pipelines on the projection class (`bevy_pbr-0.18.1` `render/mesh.rs:397`). The real one
-/// is not borrowed, since switching it on would draw the warm models into the live atlas.
-pub(crate) fn spawn_warm_tile_cam(
-    commands: &mut Commands,
-    images: &mut Assets<Image>,
-) -> (Entity, RenderLayers) {
-    let layer = RenderLayers::layer(crate::portrait::WARM_ORTHO_LAYER);
-    // The atlas's minimum size, like the camera it warms; size reaches no pipeline key.
-    let image = images.add(new_target_image_sized(ATLAS_MIN, ATLAS_MIN));
-    let cam = commands
-        .spawn((
-            Name::new("pipe_warm orthographic twin camera"),
-            booth_view_shape(),
-            Camera {
-                order: TILE_CAMERA_ORDER - 1,
-                clear_color: ClearColorConfig::Custom(Color::NONE),
-                ..default()
-            },
-            RenderTarget::Image(image.into()),
-            benilla_world::ffx_glow::FfxGlow::UI_PANE,
-            Projection::Orthographic(OrthographicProjection {
-                near: 0.1,
-                far: 2000.0,
-                scaling_mode: ScalingMode::Fixed {
-                    width: ATLAS_MIN as f32,
-                    height: ATLAS_MIN as f32,
-                },
-                ..OrthographicProjection::default_3d()
-            }),
-            layer.clone(),
-        ))
-        .id();
-    (cam, layer)
 }
 
 /// Bevy space to tile-camera space: WoW `+X` right, `+Y` up, `+Z` toward the viewer, the ortho
@@ -1030,13 +992,13 @@ fn sync_tiles(
         });
         let mut leg_trace = String::from("ortho");
         if let Some((slot, cam)) = perspective {
-            // Camera tracks read the file's absolute timeline and the play head is a cursor in
-            // the armed band, so the band's start is added.
-            let file_ms = seq_slot
-                .and_then(|slot| assets.m2s.get(&tile.m2)?.sequences.get(slot))
-                .map_or(0, |seq| seq.start_ms)
-                + pane.play.map_or(0, |ph| ph.cursor_ms);
-            let record = cam.at(file_ms);
+            // v264 camera tracks are per sequence: the armed band's file slot, at the play head's
+            // cursor in it; an unarmed pane reads sequence 0 at its start.
+            let (cam_seq, cam_ms) = (
+                seq_slot.unwrap_or(0),
+                pane.play.map_or(0, |ph| ph.cursor_ms),
+            );
+            let record = cam.at(cam_seq, cam_ms);
             let aspect = req.size_px.x as f32 / req.size_px.y.max(1) as f32;
             let leg = perspective_rig(&record, req, aspect);
             *tf = leg.root;
@@ -1067,7 +1029,7 @@ fn sync_tiles(
                 let eye = leg.camera.translation;
                 let fwd = leg.camera.forward().as_vec3();
                 leg_trace = format!(
-                    "persp[cam {:?} slot {slot} t={file_ms}ms] fov={:.5} aspect={aspect:.4} near={:.4} far={:.3} eye={:.3},{:.3},{:.3} fwd={:.3},{:.3},{:.3} root(s={:.4} pos={:?}) m00={:.4} m11={:.4}",
+                    "persp[cam {:?} slot {slot} t={cam_seq}:{cam_ms}ms] fov={:.5} aspect={aspect:.4} near={:.4} far={:.3} eye={:.3},{:.3},{:.3} fwd={:.3},{:.3},{:.3} root(s={:.4} pos={:?}) m00={:.4} m11={:.4}",
                     req.camera,
                     record.fov,
                     record.near,

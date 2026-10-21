@@ -1549,7 +1549,7 @@ mod stationery_tests {
     #[test]
     fn a_wrath_invoice_has_ten_values_and_the_pending_type() {
         use super::{MailInboxRow, MailInvoice};
-        let mut s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let header = MailInboxRow {
             is_invoice: true,
             invoice: Some(MailInvoice {

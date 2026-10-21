@@ -48,11 +48,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn the_chooser_answers_the_pushed_names_as_icon_paths_and_empty_on_a_miss() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert_eq!(s.eval::<i64>("return GetNumMacroIcons()").unwrap(), 0);
         s.set_macro_spell_icons(vec![
             "INV_Misc_QuestionMark".into(),

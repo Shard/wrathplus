@@ -102,11 +102,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, SpellBookState, SpellSlotView, SpellTabView, UiScript};
+    use crate::script::{SpellBookState, SpellSlotView, SpellTabView, UiScript};
 
     #[test]
     fn the_rank_view_offsets_both_lists() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let slot = |id, current| SpellSlotView {
             spell_id: id,
             current,

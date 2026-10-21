@@ -29,6 +29,7 @@ fn create(guid: u64) -> SessionEvent {
         display_id: None,
         position: [3.0, 0.0, 0.0],
         orientation: 0.0,
+        rotation: None,
         scale: 1.0,
         speeds: None,
         mover: None,

@@ -126,11 +126,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript, UnitState};
+    use crate::script::{UiScript, UnitState};
 
     #[test]
     fn titles_read_the_catalog_and_the_player_fields() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert!(s.eval::<bool>("return GetNumTitles() == 1 and GetCurrentTitle() == 0 and IsTitleKnown(1) == 0 and select('#', GetTitleName(1)) == 0").unwrap());
         s.set_wrath_char_titles(Arc::new(vec![
             WrathCharTitle { id: 1, male: "Private %s".into(), female: "".into(), mask_id: 1 },

@@ -591,6 +591,20 @@ pub struct MovementBlock {
     pub rotation: Option<i64>,
 }
 
+/// Unpack `UPDATEFLAG_ROTATION`'s 64-bit quaternion `[x, y, z, w]`, AzerothCore's
+/// `GameObject::UpdatePackedRotation` inverted: x signed in the top 22 bits over 2^21, y and z
+/// signed in 21 bits each over 2^20, packed with the sign of w folded in, so w is the
+/// non-negative `√(1 − x² − y² − z²)`. Unresolved, labelled: build 12340's own reader is untraced.
+pub fn unpack_rotation(packed: i64) -> [f32; 4] {
+    const PACK_X: f32 = (1 << 21) as f32;
+    const PACK_YZ: f32 = (1 << 20) as f32;
+    let x = (packed >> 42) as f32 / PACK_X;
+    let y = ((packed << 22) >> 43) as f32 / PACK_YZ;
+    let z = ((packed << 43) >> 43) as f32 / PACK_YZ;
+    let w = (1.0 - (x * x + y * y + z * z)).max(0.0).sqrt();
+    [x, y, z, w]
+}
+
 impl MovementBlock {
     fn validate_position_flags(&self) -> Result<()> {
         // AzerothCore Object::BuildMovementUpdate selects exactly one payload in this order;

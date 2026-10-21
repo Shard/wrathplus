@@ -2,6 +2,7 @@
 //! chat. `SMSG_NOTIFICATION` and `SMSG_AREA_TRIGGER_MESSAGE` are `UIErrorsFrame` toasts instead,
 //! queued on [`UiErrorTexts`].
 
+use crate::ui_chat::feed::ChatLogFeed;
 use benilla_protocol::types::{ChatMessage, CHAT_MSG_WHISPER};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;

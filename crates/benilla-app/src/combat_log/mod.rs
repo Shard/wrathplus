@@ -70,7 +70,7 @@ impl Plugin for CombatLogPlugin {
             Update,
             native::feed
                 .in_set(crate::ui_script::UiFeed)
-                .run_if(crate::ui_script::ingame_ui_up),
+                .run_if(crate::app_core::ui_state::ingame_ui_up),
         );
         app.net_handler(K::WrathAttackerState, on_native_logged)
             .net_handler(K::SpellDamageLog, on_spell_damage_log)
@@ -86,7 +86,7 @@ impl Plugin for CombatLogPlugin {
             .net_handler(K::ProcResist, on_unlogged)
             .net_handler(K::SpellOrDamageImmune, on_unlogged)
             .net_handler(K::EnchantmentLog, on_unlogged)
-            .net_handler(K::SpellLogExecute, on_native_logged)
+            .net_handler(K::SpellLogExecute, on_spell_log_execute)
             .net_handler(K::WrathEnvironmentalDamage, on_native_logged)
             .net_handler(K::XpGain, on_xp_gain)
             .net_handler(K::ExplorationXp, on_exploration_xp)
@@ -128,10 +128,18 @@ fn on_native_logged(In(ev): In<SessionEvent>, mut l: Sinks) {
             | SessionEvent::SpellInstaKillLog(_)
             | SessionEvent::SpellDispelLog(_)
             | SessionEvent::DispelFailed(_)
-            | SessionEvent::SpellLogExecute(_)
             | SessionEvent::WrathEnvironmentalDamage(_)
     ) {
         l.record_native(&ev);
+    }
+}
+
+/// `SMSG_SPELLLOGEXECUTE`: its native entry, then the created-item and fed-pet lines
+/// ([`chat::spell_log_execute`]).
+fn on_spell_log_execute(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
+    if let SessionEvent::SpellLogExecute(x) = ev {
+        chat::spell_log_execute(&x, &c.self_guid, &mut l.log);
     }
 }
 

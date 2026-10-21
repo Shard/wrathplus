@@ -629,7 +629,7 @@ fn emit_minimap(
         }
         let win = window.iter().next();
         let cursor = win.and_then(|w| w.cursor_position());
-        let seam = win.map_or(1.0, |w| crate::ui_script::seam_scale(w.height(), ui_scale.0));
+        let seam = win.map_or(1.0, |w| crate::app_core::ui_state::seam_scale(w.height(), ui_scale.0));
         // The pan origin snapped to a half-logical-pixel grid: every blip offset and rim bearing
         // derives from `wx`/`wy`, so the layer steps together instead of rewriting the batch mesh
         // every frame while walking. Blip world positions stay exact.
@@ -943,7 +943,7 @@ impl Plugin for MinimapPlugin {
                     ping::drive_minimap_ping
                         .after(feed_minimap_inside)
                         .in_set(crate::ui_script::UiFeed)
-                        .run_if(crate::ui_script::ingame_ui_up),
+                        .run_if(crate::app_core::ui_state::ingame_ui_up),
                     // Before the script tick, so GameTimeFrame reads this frame's minute.
                     feed_game_time.in_set(crate::ui_script::UiFeed),
                     // After the world-mouseover drive (UnitFeed): a same-frame world-hover→blip
