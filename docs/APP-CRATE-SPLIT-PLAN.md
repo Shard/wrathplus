@@ -54,7 +54,14 @@ The cycles come from three patterns, not from tangled features:
 | `benilla-app` (root) | assembly | `lib.rs` (`run`, `run_with`), `game_plugins`, the bins, `tests/` | ~1.4k | few |
 
 Dependencies point down only: root → tools → ui → world → net → core. `benilla-ui` (the Lua VM)
-becomes a dependency of `benilla-app-ui` only, so world and net builds stop pulling mlua.
+is a separate crate below all of them: core depends on it (decision of 2026-10-21, below), so
+every layer builds mlua once and a world feed taking `UiScript` is not a layer break.
+
+**Decision (2026-10-21): core depends on `benilla-ui`.** `app_core::vm_memo::VmMemo` holds
+`UiScript`, `app_core::errors` carries `MsgKind` and `app_core::interaction` a `WhoSortChain`, and
+the world feeds (area, cinematic, cursor, minimap, sound::ui, spell::unit_cast,
+spell::targeting::item, video, vplates) take `UiScript`. `benilla-ui` is already its own crate
+below `benilla-app`, so these are downward edges; nothing moves up to avoid them.
 
 Against this layering there are, today, about 1,100 references in about 250 module pairs that
 point the wrong way (world → ui 613, net → world 153, core → world 92, core → ui 73, net → ui 72,
@@ -385,9 +392,9 @@ Done (Experience):
 **Needs design (~93 references): calls from a lower layer into a higher one.** Each wants an
 event, a message the higher layer drains, or the caller moving up:
 
-- `ui_script::VmMemo` (17): it holds the Lua VM, so it cannot go to core without `benilla-ui`.
-  Its world users (area, cinematic, cursor, death, minimap, sound, spell, video, vplates) want a
-  UI-layer event or a narrower memo.
+- `ui_script::VmMemo` (17): it holds the Lua VM; it is `app_core::vm_memo` now, core depending on
+  `benilla-ui` (the 2026-10-21 decision under Proposed crates), so its world users (area,
+  cinematic, cursor, death, minimap, sound, spell, video, vplates) are downward edges.
 - UI helpers world code calls: `ui_items::{find_item, carried_counts, slot_guid,
   collect_inventory, send_item_use}`, `ui_session::feed_interact_npc`,
   `ui_merchant::end_repair_mode_on_right_press`, `ui_loot::{close_interaction,
@@ -460,7 +467,7 @@ Each lands as a behaviour-neutral unit with the usual gates, in this order.
 | Drawing helpers | `ui_pass::{project_overlay, tile_quad_mesh, overlay_z, ui_render_layers}`, `ui_models::spawn_warm_tile_cam` | **Move down.** The four `ui_pass` helpers are a new world-layer `overlay` module (`ui_pass` re-exports `ui_render_layers`, which it still uses); `spawn_warm_tile_cam` goes to `portrait` beside its twin `spawn_warm_booth`, with the tile atlas's first edge and camera order. chat_bubble, combat_text, minimap::composite, pipe_warm and vplates name the new paths. | in review |
 | Cast-bar feedback | `ui_cast::feed_cast_bar` from world | **Drained message.** The queue world already writes, `CastBarEdge`/`CastBarFeed`, moves to `spell::cast_bar`; `ui_cast` keeps the drain in its slot (`UnitFeed`, after `spell::LocalCancel`), the same frame, pinned by `a_queued_edge_reaches_the_vm_the_same_frame`. The four Esc tests that ran `feed_cast_bar` from `spell::inflight` move to `ui_cast_esc_tests.rs` over a shared `spell::cast_test_support` harness. | in review |
 | Other action requests | `ui_session::feed_interact_npc`, `ui_pet::pet_stop_on_old_target_clear`, `ui_world_map::world_enter_selection`, `script_calls::{apply_script_calls, in_call_order}` | Narrower than the dry run by now. `InteractNpc` is already `app_core::state`: world code (target::click, creature_anim, motion::facing, portrait, capture) names that path, and `target::click`'s re-click test, which runs `feed_interact_npc`, moves to `ui_session`'s tests. `pet_stop_on_old_target_clear` is ordered against by `spell::targeting::feed_targeting_to_vm`, itself a `VmMemo` user: it moves up with the `VmMemo` row. `world_enter_selection` and the `script_calls` links in target and spell docs are prose. `apply_script_calls` in the target chain was App Migration's split unit 1. | done (`pet_stop_on_old_target_clear` with `VmMemo`: its one world reader moved up) |
-| `VmMemo` (17) | `ui_script::VmMemo` users in area, cinematic, cursor, death, minimap, sound, spell, video, vplates | `VmMemo` is `app_core::vm_memo` now, so a `ui_script::VmMemo` path is a re-export path that `scripts/split/canonical-paths.py` rewrites at move time, and `ui_party::GroupState` likewise. Done: `spell::targeting::feed_targeting_to_vm` moved up to `ui_spell_targeting` (its plugin keeps the `UnitFeed`, old-target-clear and aura-feed order), and its four VM tests went with it onto `spell::targeting::test_support`. `UnitTokens` moved down to `target::unit_tokens` (world state only), and `raid_row_guid(s)` to `app_core::group`. Not inversions: `bindings` and `tutorial` are UI-layer, so the bindings loaders and `TaxiState` (read by `tutorial`, `ui_session`, `capture`) stay. The other world feeds that take `UiScript` (area, cinematic, cursor, minimap, sound::ui, spell::unit_cast, spell::targeting::item, video, vplates) hold `benilla-ui` in world; they go with the core-on-`benilla-ui` decision under Risks. The death row is App's. | in review |
+| `VmMemo` (17) | `ui_script::VmMemo` users in area, cinematic, cursor, death, minimap, sound, spell, video, vplates | `VmMemo` is `app_core::vm_memo` now, so a `ui_script::VmMemo` path is a re-export path that `scripts/split/canonical-paths.py` rewrites at move time, and `ui_party::GroupState` likewise. Done: `spell::targeting::feed_targeting_to_vm` moved up to `ui_spell_targeting` (its plugin keeps the `UnitFeed`, old-target-clear and aura-feed order), and its four VM tests went with it onto `spell::targeting::test_support`. `UnitTokens` moved down to `target::unit_tokens` (world state only), and `raid_row_guid(s)` to `app_core::group`. Not inversions: `bindings` and `tutorial` are UI-layer, so the bindings loaders and `TaxiState` (read by `tutorial`, `ui_session`, `capture`) stay. The other world feeds that take `UiScript` (area, cinematic, cursor, minimap, sound::ui, spell::unit_cast, spell::targeting::item, video, vplates) hold `benilla-ui` in world; they stay: core depends on `benilla-ui` (the 2026-10-21 decision under Proposed crates). The death row is App's. | done |
 
 When the pure moves and the in-flight items land, the move phase can start with `core` and `net`;
 `world` and `ui` wait for the design items above.
@@ -713,6 +720,4 @@ takes seconds and needs no build. Keep it next to this plan when execution start
 - The root crate keeps `game_plugins`, so a whole-client test still rebuilds everything; the
   savings are for edits and tests inside one layer.
 - `app_core::errors::UiErrorTexts` carries `benilla_ui::messages::MsgKind` (found in step 0
-  unit 2a), so a `benilla-app-core` crate would depend on `benilla-ui` and its mlua build. Before
-  the core move, put that plain enum in a small shared crate both can depend on, or mirror it in
-  core; it must stay a plain enum.
+  unit 2a). Settled by the 2026-10-21 decision: `benilla-app-core` depends on `benilla-ui`.

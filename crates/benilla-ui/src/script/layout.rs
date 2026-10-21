@@ -1,8 +1,7 @@
-use std::collections::HashMap;
 
 use crate::layout::{self, Anchor, LayoutInput, Point, Rect};
 use crate::order::ZTarget;
-use crate::widget::{FrameHandle, FrameKind, KindState, RegionHandle};
+use crate::widget::{FrameHandle, FrameKind, HandleMap, KindState, RegionHandle};
 
 use super::backdrop;
 use super::types::RegionData;
@@ -478,8 +477,8 @@ impl PreambleProf {
 /// `CSimpleFrame`'s ctor leaves; one that loses its rect had no `ApplyRect` and fires nothing.
 fn queue_size_changes(
     watched: &[(FrameHandle, Option<Rect>)],
-    resolved: &HashMap<FrameHandle, Rect>,
-    frame_to_id: &HashMap<FrameHandle, u32>,
+    resolved: &HandleMap<FrameHandle, Rect>,
+    frame_to_id: &HandleMap<FrameHandle, u32>,
     out: &mut Vec<(u32, f32, f32)>,
 ) {
     for &(h, before) in watched {
@@ -1033,7 +1032,7 @@ impl UiScript {
         // at the raw, unnegated `(horizontal, vertical)` offsets, as the reference's re-anchor
         // `0x787100` passes them to `SetPoint`: y up, so a positive vertical lifts the child. Its
         // authored anchors and size are untouched, so `SetScrollChild(nil)` needs no restore.
-        let mut scroll_child_anchor: HashMap<FrameHandle, Anchor> = HashMap::new();
+        let mut scroll_child_anchor: HandleMap<FrameHandle, Anchor> = HandleMap::default();
         for &(h, id) in &ids {
             let Some(frame) = arena.frame(h) else {
                 continue;

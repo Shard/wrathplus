@@ -193,6 +193,29 @@ fn stock_session(data: &std::path::Path) -> (UiScript, Vec<String>) {
     (script, failures)
 }
 
+/// The whole stock session's cost, for profiling the interface load: `AZB_LOAD_REPS` fresh
+/// sessions (default 1, so the census run stays cheap), each timed, under the census's seeding; a sampler attached to the run
+/// finds the hot spots.
+#[test]
+#[ignore = "reads the installed Wrath client; run with WOW_CLIENT_PROFILE=wrath WOW_DATA=…"]
+fn installed_wrath_framexml_load_timing() {
+    let data = benilla_formats::wow_data_or_skip!();
+    let reps = std::env::var("AZB_LOAD_REPS")
+        .ok()
+        .and_then(|reps| reps.parse().ok())
+        .unwrap_or(1);
+    let mut times = Vec::new();
+    for _ in 0..reps {
+        let started = std::time::Instant::now();
+        let (script, failures) = stock_session(&data);
+        times.push(started.elapsed().as_secs_f64() * 1000.0);
+        eprintln!("LOAD-TIMING {:.0} ms, {} failures", times[times.len() - 1], failures.len());
+        drop(script);
+    }
+    times.sort_by(f64::total_cmp);
+    eprintln!("LOAD-TIMING median {:.0} ms of {reps}", times[times.len() / 2]);
+}
+
 #[test]
 #[ignore = "reads the installed Wrath client; run with WOW_CLIENT_PROFILE=wrath WOW_DATA=…"]
 fn installed_wrath_framexml_builds_the_stock_hud() {

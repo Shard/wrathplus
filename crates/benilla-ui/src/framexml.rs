@@ -112,12 +112,12 @@ pub struct ParsedDocument {
 
 impl ParsedDocument {
     /// The named templates, for [`expand`]; an unnamed one (the reference's "Unnamed virtual
-    /// node" error, `0x6ee500`) is absent.
-    pub fn templates(&self) -> HashMap<&str, &Element> {
+    /// node" error, `0x6ee500`) is absent. Owned, in the loader registry's shape.
+    pub fn templates(&self) -> HashMap<String, Element> {
         self.items
             .iter()
             .filter_map(|item| match item {
-                TopLevel::Template(el) => el.name().map(|name| (name, el)),
+                TopLevel::Template(el) => el.name().map(|name| (name.to_string(), el.clone())),
                 _ => None,
             })
             .collect()
@@ -343,19 +343,20 @@ fn element_from_node(node: roxmltree::Node) -> Element {
 /// any attribute. A cycle is skipped with a warning.
 pub fn expand(
     element: &Element,
-    templates: &HashMap<&str, &Element>,
+    templates: &HashMap<String, Element>,
     warnings: &mut Vec<String>,
 ) -> Element {
-    expand_known(element, templates, &HashSet::new(), false, warnings)
+    expand_known(element, templates, None, false, warnings)
 }
 
 /// [`expand`], skipping without a warning an `inherits` that names a font object: a
 /// `<FontString inherits="GameFontNormalSmall">` takes a font, applied later, not a template.
-/// `list` reads `inherits` as Wrath does, a comma-separated list applied in order.
+/// `list` reads `inherits` as Wrath does, a comma-separated list applied in order. Both maps are
+/// the registries, read in place: a per-call view of every name would cost the whole load.
 pub fn expand_known(
     element: &Element,
-    templates: &HashMap<&str, &Element>,
-    fonts: &HashSet<&str>,
+    templates: &HashMap<String, Element>,
+    fonts: Option<&HashMap<String, Element>>,
     list: bool,
     warnings: &mut Vec<String>,
 ) -> Element {
@@ -365,8 +366,8 @@ pub fn expand_known(
 
 fn expand_inner(
     element: &Element,
-    templates: &HashMap<&str, &Element>,
-    fonts: &HashSet<&str>,
+    templates: &HashMap<String, Element>,
+    fonts: Option<&HashMap<String, Element>>,
     list: bool,
     warnings: &mut Vec<String>,
     active: &mut HashSet<String>,
@@ -392,15 +393,15 @@ fn expand_inner(
             ));
             continue;
         }
-        let hit = templates.get(name).copied().or_else(|| {
+        let hit = templates.get(name).or_else(|| {
             templates
                 .iter()
                 .find(|(k, _)| k.eq_ignore_ascii_case(name))
-                .map(|(_, v)| *v)
+                .map(|(_, v)| v)
         });
         let Some(template) = hit else {
             // A font object is not an unknown template; it is applied after this.
-            if !fonts.contains(name) {
+            if !fonts.is_some_and(|fonts| fonts.contains_key(name)) {
                 warnings.push(format!(
                     "unknown template '{name}' referenced by inherits; skipping"
                 ));
