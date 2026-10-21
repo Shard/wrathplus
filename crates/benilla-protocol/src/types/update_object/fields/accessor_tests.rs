@@ -350,6 +350,24 @@ fn scalar_accessors_read_distinct_native_fields_in_both_dialects() {
         }
     );
     check!(
+        "player_kills",
+        Field::PlayerKills,
+        |fields: &ObjectFields| fields.player_kills(),
+        |raw: Option<u32>, guid: Option<u64>| {
+            let _ = (raw, guid);
+            raw
+        }
+    );
+    check!(
+        "player_today_contribution",
+        Field::PlayerTodayContribution,
+        |fields: &ObjectFields| fields.player_today_contribution(),
+        |raw: Option<u32>, guid: Option<u64>| {
+            let _ = (raw, guid);
+            raw
+        }
+    );
+    check!(
         "player_yesterday_contribution",
         Field::PlayerYesterdayContribution,
         |fields: &ObjectFields| fields.player_yesterday_contribution(),
