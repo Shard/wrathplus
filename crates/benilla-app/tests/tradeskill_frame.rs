@@ -1,15 +1,14 @@
-//! Drives the stock `Blizzard_TradeSkillUI` and `Blizzard_CraftUI` addons off the player's chain
-//! with a synthetic book and the app's own show events: the CollapseAll tab, the filter menus,
-//! the reagent slots and the list rows' selection and hover.
+//! Drives the stock `Blizzard_TradeSkillUI` addon off the player's chain with a synthetic book and
+//! the app's own show events: the CollapseAll tab, the filter menus, the reagent slots and the list
+//! rows' selection and hover. 3.3.5 has no `Blizzard_CraftUI`: enchanting is a trade skill.
 
 use benilla_ui::script::{
-    CraftRecipe, CraftState, CraftTooltip, TradeSkillDifficulty, TradeSkillReagent,
-    TradeSkillRecipe, TradeSkillState, UiScript,
+    TradeSkillDifficulty, TradeSkillReagent, TradeSkillRecipe, TradeSkillState, UiScript,
 };
 
 mod common;
 
-/// The load prefix of both windows, in the app's order.
+/// The window's load prefix, in the app's order.
 const FILES: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
@@ -26,13 +25,11 @@ const FILES: &[&str] = &[
     // and `SetItemButtonCount` (`ItemButtonTemplate.lua`).
     r"Interface\FrameXML\ItemButtonTemplate.xml",
     r"Interface\FrameXML\QuestFrameTemplates.xml",
-    // Both windows open from UIParent's TRADE_SKILL_SHOW / CRAFT_SHOW arms (`*_LoadUI`, then
-    // `*_Show`). With no addon registry the addons load as chain files, and `*_LoadUI` reports
-    // ADDON_LOAD_FAILED through `message`, a shown frame, not an error.
-    // Both addons inherit the trainer window's list and detail templates.
+    // The window opens from UIParent's TRADE_SKILL_SHOW arm (`TradeSkillFrame_LoadUI`, then
+    // `ShowUIPanel`). With no addon registry the addon loads as chain files. It inherits the
+    // trainer window's list and detail templates.
     r"Interface\FrameXML\ClassTrainerFrameTemplates.xml",
     r"Interface\AddOns\Blizzard_TradeSkillUI\Blizzard_TradeSkillUI.xml",
-    r"Interface\AddOns\Blizzard_CraftUI\Blizzard_CraftUI.xml",
 ];
 
 fn load_ui(script: &mut UiScript) {
@@ -189,53 +186,25 @@ fn collapse_all_tab_and_filter_dropdowns_work_end_to_end() {
     assert_eq!(s.eval::<i64>("return GetNumTradeSkills()").unwrap(), 5);
 }
 
-/// A 1.12 craft list has no headers, so `Blizzard_CraftUI.lua:269-282` always hides the Craft
-/// window's CollapseAll tab.
-#[test]
-fn craft_collapse_tab_loads_with_text_and_stays_hidden_for_a_flat_list() {
-    benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    load_ui(&mut s);
-
-    assert_eq!(
-        s.eval::<String>("return CraftCollapseAllButton:GetText()")
-            .unwrap(),
-        "All"
-    );
-    s.fire_event("CRAFT_SHOW", vec![]);
-    assert!(
-        s.eval::<bool>("return CraftFrame:IsShown()").unwrap(),
-        "the craft window opens on CRAFT_SHOW"
-    );
-    assert!(
-        !s.eval::<bool>("return CraftExpandButtonFrame:IsShown()")
-            .unwrap(),
-        "zero headers → the tab hides (ref l.269-282's own scan)"
-    );
-}
-
-/// `TradeSkillItemTemplate` (`Blizzard_TradeSkillUI.xml:11-35`) and `CraftItemTemplate`
-/// (`Blizzard_CraftUI.xml:29-53`) inherit `QuestItemTemplate` and override only scripts: a 147×41
+/// `TradeSkillItemTemplate` inherits `QuestItemTemplate` and overrides only scripts: a 147×41
 /// slot, a 39×39 icon, the name plate on the icon's right edge with the name centred on it, and
 /// the count on the icon's bottom-right corner.
 #[test]
-fn reagent_slots_carry_the_questitemtemplate_shape_in_both_windows() {
+fn reagent_slots_carry_the_questitemtemplate_shape() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui(&mut s);
 
-    // Both windows open so the anchors resolve against a laid-out parent; the slots are shown as
+    // The window opens so the anchors resolve against a laid-out parent; the slots are shown as
     // SetSelection shows one per reagent.
     s.set_trade_skill(Some(state()));
     s.fire_event("TRADE_SKILL_SHOW", vec![]);
-    s.fire_event("CRAFT_SHOW", vec![]);
-    for w in ["TradeSkillReagent", "CraftReagent"] {
-        for i in 1..=3 {
-            s.run(&format!("{w}{i}:Show()")).unwrap();
-        }
+    let w = "TradeSkillReagent";
+    for i in 1..=3 {
+        s.run(&format!("{w}{i}:Show()")).unwrap();
     }
 
-    for w in ["TradeSkillReagent", "CraftReagent"] {
+    {
         let num = |expr: &str| {
             s.eval::<f64>(&format!("return {expr}"))
                 .unwrap_or_else(|e| panic!("{expr}: {e}"))
@@ -525,106 +494,5 @@ fn a_hovered_or_selected_recipe_row_paints_its_label_white() {
         row_color(&mut s, 2),
         MEDIUM,
         "the old selection is UNLOCKED back to its difficulty colour, not left lit"
-    );
-}
-
-/// The craft list lights the same way: `CraftButtonTemplate` inherits the same base template, and
-/// the update locks the selected row (`Blizzard_CraftUI.lua:234`).
-#[test]
-fn a_hovered_or_selected_craft_row_paints_its_label_white() {
-    benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    load_ui(&mut s);
-    s.set_screen_size(1024.0, 768.0);
-
-    let recipe = |spell_id: u32, name: &str| CraftRecipe {
-        spell_id,
-        name: name.into(),
-        sub_name: String::new(),
-        difficulty: TradeSkillDifficulty::Medium,
-        num_available: 1,
-        icon: Some("Interface\\Icons\\Spell_Holy_Heal".into()),
-        description: None,
-        needs_item_target: false,
-        reagents: vec![],
-        tools: vec![],
-        tooltip: CraftTooltip::Spell(spell_id),
-        spell_level: 0,
-    };
-    s.set_craft(Some(CraftState {
-        name: "Enchanting".into(),
-        rank: 100,
-        max_rank: 150,
-        craft_type: 3,
-        recipes: vec![
-            recipe(7420, "Enchant Bracer - Minor Health"),
-            recipe(7426, "Enchant Chest - Minor Absorption"),
-        ],
-    }));
-    s.fire_event("CRAFT_SHOW", vec![]);
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-
-    assert!(
-        s.eval::<bool>("return Craft1:GetFontString() ~= nil")
-            .unwrap(),
-        "the craft row name is the Button's ButtonText"
-    );
-
-    let row_color = |s: &mut UiScript, n: i64| -> [f32; 4] {
-        let text = s
-            .eval::<String>(&format!("return Craft{n}:GetText()"))
-            .unwrap();
-        s.resolve();
-        s.extract()
-            .into_iter()
-            .find_map(|q| match q.content {
-                benilla_ui::script::QuadContent::Text {
-                    text: Some(t),
-                    color,
-                    ..
-                } if t == text => color,
-                _ => None,
-            })
-            .unwrap_or_else(|| panic!("no text quad for craft row {n} (\"{text}\")"))
-    };
-
-    const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-    const MEDIUM: [f32; 4] = [1.0, 1.0, 0.0, 1.0]; // CraftTypeColor["medium"]
-
-    // Row 1 is the show-time selection; row 2 is not.
-    s.run("SelectCraft(1); CraftFrame_Update()").unwrap();
-    s.resolve();
-    s.mouse_move(1000.0, 20.0);
-    assert_eq!(
-        row_color(&mut s, 1),
-        WHITE,
-        "the selected craft row is white"
-    );
-    assert_eq!(
-        row_color(&mut s, 2),
-        MEDIUM,
-        "an unselected one wears its difficulty colour"
-    );
-
-    // Hover row 2.
-    s.resolve();
-    let (x, y) = (
-        s.eval::<f64>("return (Craft2:GetLeft() + Craft2:GetRight()) / 2")
-            .unwrap(),
-        s.eval::<f64>("return (Craft2:GetTop() + Craft2:GetBottom()) / 2")
-            .unwrap(),
-    );
-    s.mouse_move(x as f32, y as f32);
-    assert_eq!(row_color(&mut s, 2), WHITE, "hovered: white");
-
-    // And the selection follows a click, releasing the old row's lock.
-    s.run("SelectCraft(2); CraftFrame_Update()").unwrap();
-    s.resolve();
-    s.mouse_move(1000.0, 20.0);
-    assert_eq!(row_color(&mut s, 2), WHITE);
-    assert_eq!(
-        row_color(&mut s, 1),
-        MEDIUM,
-        "the old selection is UNLOCKED, not left lit"
     );
 }

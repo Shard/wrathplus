@@ -332,13 +332,13 @@ fn the_stock_raid_ui_repaints_a_member_who_dies_out_of_view() {
     let pullout_colour = |app: &mut App| colour(app, "RaidPullout1Button1Name:GetTextColor()");
     let (warrior, red) = ([78, 61, 43], [100, 10, 10]);
 
-    // The first list loads the raid UI (`RaidFrame_LoadUI`); the drag on group 1's label, whose
-    // handler runs with `this` set, opens the group's pullout (`Blizzard_RaidUI.xml:172`).
+    // The first list loads the raid UI (`RaidFrame_LoadUI`); the drag on group 1's label opens the
+    // group's pullout, `RaidPullout_GeneratePulloutFrame(self:GetParent():GetID())`.
     raid(&mut app, &[ON, ON]);
     frame(&mut app);
     app.world_mut()
         .non_send_resource_mut::<UiScript>()
-        .run("this = RaidGroup1Label RaidPullout_GenerateGroupFrame()")
+        .run("RaidPullout_GeneratePulloutFrame(RaidGroup1:GetID())")
         .unwrap();
     assert_eq!(text_colour(&mut app), warrior, "the grid's row");
     assert_eq!(pullout_colour(&mut app), warrior, "the pullout's row");
