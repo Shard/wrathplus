@@ -8,7 +8,7 @@
 //! Lua handles are never accumulated breadth-wise (MAXCSTACK): a frame's wrapper and `OnLoad`
 //! live only across its own subtree build, and everything durable lives Lua-side.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use mlua::{Function, ObjectLike, Table, Value};
 
@@ -580,17 +580,11 @@ impl Loader<'_> {
     pub(super) fn expand(&mut self, el: &Element) -> Element {
         let model = self.model();
         let templates = model.framexml_templates.borrow();
-        let view: HashMap<&str, &Element> =
-            templates.iter().map(|(k, v)| (k.as_str(), v)).collect();
         // A font object in an inherit chain is skipped, not warned as an unknown template.
         let fonts = model.framexml_fonts.borrow();
-        let font_names: std::collections::HashSet<&str> =
-            fonts.keys().map(|k| k.as_str()).collect();
         let mut warns = Vec::new();
-        let out = framexml::expand_known(el, &view, &font_names, true, &mut warns);
-        drop(font_names);
+        let out = framexml::expand_known(el, &templates, Some(&fonts), true, &mut warns);
         drop(fonts);
-        drop(view);
         drop(templates);
         drop(model);
         self.report.warnings.extend(warns);
@@ -626,11 +620,8 @@ impl Loader<'_> {
         let merged = {
             let model = self.model();
             let fonts = model.framexml_fonts.borrow();
-            let view: HashMap<&str, &Element> =
-                fonts.iter().map(|(k, v)| (k.as_str(), v)).collect();
             let mut warns = Vec::new();
-            let merged = framexml::expand(el, &view, &mut warns);
-            drop(view);
+            let merged = framexml::expand(el, &fonts, &mut warns);
             drop(fonts);
             drop(model);
             self.report.warnings.extend(warns);
