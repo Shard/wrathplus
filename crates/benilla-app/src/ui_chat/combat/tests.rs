@@ -27,7 +27,7 @@ fn declared_signature(family: Family) -> Vec<char> {
         .slots
         .iter()
         .map(|slot| match slot {
-            Slot::Named => 's',
+            Slot::Subject | Slot::Named => 's',
             Slot::Amount => 'd',
         })
         .collect()
@@ -71,10 +71,24 @@ fn every_family_matches_the_shipped_template() {
     let gain = Fills {
         named: "Stormwind".into(),
         amount: 25,
+        ..Default::default()
     };
     assert_eq!(
         compose_line(&script, FACTION_STANDING_INCREASED, &gain).as_deref(),
         Some("Reputation with Stormwind increased by 25.")
+    );
+    let made = Fills {
+        subject: "Bob".into(),
+        named: "Linen Bandage".into(),
+        ..Default::default()
+    };
+    assert_eq!(
+        compose_line(&script, TRADESKILL_LOG_THIRDPERSON, &made).as_deref(),
+        Some("Bob creates Linen Bandage.")
+    );
+    assert_eq!(
+        compose_line(&script, TRADESKILL_LOG_FIRSTPERSON, &made).as_deref(),
+        Some("You create Linen Bandage.")
     );
 }
 
