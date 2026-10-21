@@ -262,7 +262,7 @@ pub(super) fn local_self_cancel(mut moved: ResMut<LocalMoveStart>, mut cancel: S
 }
 
 /// What [`local_self_cancel`] reads and writes, shared with the Esc cancel, which is a script call
-/// (`SpellStopCasting`) and lands in call order ([`crate::script_calls`]).
+/// (`SpellStopCasting`) and lands in call order (the UI's `script_calls` pass).
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct SelfCancel<'w, 's> {
     pending: ResMut<'w, PendingCast>,
