@@ -139,7 +139,6 @@ mod ui_battlefield_score;
 mod ui_bind_confirm;
 mod ui_binder;
 mod ui_cast;
-mod ui_spell_targeting;
 mod ui_char;
 mod ui_chat;
 mod ui_chat_verbs;
