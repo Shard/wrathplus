@@ -580,10 +580,54 @@ relative hop.
 After those (860a358f, with `launch_plan` moved as core): **core 3, core+net 6**. Left: `ItemUse` and the four
 `net` drains (App Migration, in flight), the `vm_memo` test helper, and in core alone
 `app_core::interaction`'s read of `names::NameCache`.
+After fa933740 (both moved, the `vm_memo` scan to the root): **core 0, core+net 0**: both crates
+build, lib and tests (`cargo check -p benilla-app-core --lib --tests`).
 
 `ConsoleCommandApp` and `capture::ProbeAuctionPlugin` are not net-side. The console trait is used by
 `experience`, `video` (world) and `ui_script`. The probe plugin is named only by `dev` (tools) and in a
 plain-text `ui_auction` comment. They stay with the world → ui rows.
+
+### Move dry run: world and ui (Wire B, 2026-10-21)
+
+On 939f2801 (wrath-hud 2a5560d2 and the core rows), after `canonical-paths.py --apply` (2588
+paths). The layers below each pass go into one crate with it, so a pass shows only the edges out
+of its top layer and below, as resolution errors (distinct `cargo check --lib --tests` sites):
+**world pass** (core + net + world, 71 modules): **62** (49 in the lib); **ui pass** (core through
+ui, 175 modules): **16** (3 in the lib). Each pass's one core → root site, `vm_memo`'s test, is
+gone in fa933740. Not measured: the visibility widening and the cross-crate inherent impls, which
+only separate crates report.
+
+Modules the table above does not list, as the pass placed them. World: `asset_churn`,
+`blob_shadow`, `camera_shake`, `chat_bubble`, `cinematic`, `combat_text`, `doodad_events`,
+`experience`, `experience_ao`, `go_anim`, `inventory`, `loot`, `overlay`, `pipe_warm`,
+`poi_marker`, `area_poi`, `raid_marks`, `ranged_flex`, `screen_fade`, `screenshot`, `shaders`,
+`opaque2d`, `smart_rect`, `world_backdrop`. Ui: `npc_text`, `quest_rewards`, `game_tip`,
+`wrath_vehicle_seats`. Root: `shipped_cvars`, `test_support`.
+
+**World → ui: 61 sites.**
+
+| Cause | Sites | What | Owner |
+|---|---|---|---|
+| 2-D drawing primitives in ui | 20 | `ui_pass::{UiQuad, UiQuads, UiQuadMask, UiQuadMaterial, UiQuadAppend, UvRect, PlayerUiCamera}`, `ui_text::{layout_text_quads, measure_text, FontSpec, Justify, TextSeat, UiFontAtlas}` (3 are `Justify` follow-ons), `ui_models::UiModelTiles`, from `minimap` (6), `chat_bubble`, `nameplates`, `combat_text`, `pipe_warm` (4), `portrait`, `world_backdrop` | **Design:** the quad and text layout primitives move into the world `overlay` module (Native UI's), or the 2-D overlays (`minimap`, `chat_bubble`, `nameplates`, `combat_text`) are ui modules |
+| A ui test fixture | 7 | `ui_items::TestObjects::new` in world tests | Mechanical: the fixture moves to `net::test_support` |
+| Ui-owned state and data | 15 | `ui_guild::{GuildState, unit_guild_name, unit_guild_emblem, corpse_guild_emblem}` (6), `ui_unit::{UnitTokens, player_token_guid}` (4), `ui_loot::LootMoveStart`, `ui_items::ItemSubClasses`, `ui_chat::{default_color, combat::DURABILITYDAMAGE_DEATH}`, `tutorial::id::LOOTING` | Pure moves: `GuildState` (Assets) and `UnitTokens` (Native UI) are in flight |
+| World calls a ui system or helper | 10 | `combat_log::{native::NativeCombatLog, text::{melee_center_text, classify_source}}`, `ui_quest::net::register`, `ui_pet::pet_stop_on_old_target_clear`, `ui_merchant::end_repair_mode_on_right_press`, `ui_party::raid_row_guids`, `ui_action::reagent_totem_refusal`, `tutorial::InputHooks`, `game_tip::tip_bundle` | **Design per row:** a message the ui drains, the caller moving up, or the helper moving down |
+| A ui extension trait called from world | 8 | `ConsoleCommandApp` (`experience`, `video`: 4), `ChatLogFeed::push_combat` (`death`: 2), `AuraDurationsTrace::set` (`spell::net`: 2), each counting its `use` and its call | **Design:** the console trait is the registry question above; the other two methods need their ui feature, so world sends a message or the trait's lower half moves down |
+| `Default` impl in ui | 1 | `app_core::state::LootConfig` | Mechanical: the impl moves to its type |
+
+**Ui → root: 15 sites** (the ui pass's 16, less `vm_memo`).
+
+| Cause | Sites | What | Owner |
+|---|---|---|---|
+| `shipped_cvars` | 11 | `ui_script` reads the root's aggregate (`addons`, `manifest`, `wrath_addons`, five test files) | **Design:** the cvar-registry note above: the root passes the static table in |
+| Root module alias | 2 | `ui_social` reaches `wrath_who_capture` through the root's `use net::{wrath_who_capture as ui_native_who}` | Mechanical |
+| `include_dir!` path | 1 | `ui_script::content` embeds `$CARGO_MANIFEST_DIR/assets/ui` | Mechanical: the assets move with `ui_script`, or the path names `benilla-app` |
+| `cfg(test)` helper | 1 | `ui_session` tests use the root's `test_support` | Mechanical: the test moves to the root, or the helper down |
+
+So of the 76 sites, 27 are mechanical (the fixture 7, the pure moves 15 of which 10 are in flight,
+two aliases, the asset path, the test helper, the `Default` impl), and 49 are four design
+questions: where the 2-D primitives live (20), how world reaches ui systems (10) and ui-feature
+traits (8), and how the root hands `ui_script` the cvar table (11).
 
 ## Moving a layer out (steps 1 to 4)
 
