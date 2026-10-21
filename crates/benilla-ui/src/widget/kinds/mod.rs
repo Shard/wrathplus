@@ -35,6 +35,10 @@ pub enum FrameKind {
     DressUpModel,
     /// `TabardModel` (`0x503bd0`): `CGCharacterModelBase` plus ten verbs (table `0x84ee40`).
     TabardModel,
+    /// `ModelFFX`, the glue screens' backdrop model (`<ModelFFX>` in GlueXML: `AccountLogin`,
+    /// `CharacterSelect`, `CharacterCreate`): a `Model` with fog and glow. Labelled: its own method
+    /// table, if any, is not read; it answers `Model`'s.
+    ModelFFX,
     /// `CSimpleMessageFrame`, `UIErrorsFrame`'s class: a sibling of the scrolling one.
     MessageFrame,
     /// `CSimpleMessageScrollFrame`, the chat window's ring-buffered class; a sibling of

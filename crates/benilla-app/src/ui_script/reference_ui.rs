@@ -47,7 +47,12 @@ pub(super) fn core() -> Option<Addon> {
 /// order, as the runner builds its paths (`0x6edbe5`, `0x6edcf4`, `0x6edd0c`) and dispatches each
 /// in turn (`0x6edd51`).
 pub(super) fn core_from(toc: &str) -> Addon {
-    let dir = TOC.rsplit_once('\\').map_or("", |(d, _)| d);
+    core_at(TOC, toc)
+}
+
+/// [`core_from`] for any stock toc at `path` (GlueXML's as FrameXML's).
+pub(super) fn core_at(path: &str, toc: &str) -> Addon {
+    let dir = path.rsplit_once('\\').map_or("", |(d, _)| d);
     addon(
         Toc::parse(toc)
             .files
