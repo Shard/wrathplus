@@ -25,7 +25,7 @@ use bevy::prelude::*;
 use crate::items::Items;
 use crate::net::{ClientCommand, NetCommands, Objects, SelfPlayer};
 
-use super::{cast_target, validator, AutoRepeatActive};
+use super::{cast_target, validator, AutoRepeatActive, SpellsCastTime};
 use crate::ui_action::{reagent_totem_refusal, CastErrors, Spells};
 
 /// What the commit sends: `SendCast 0x6e54f0` branches on whether the pending-cast guid

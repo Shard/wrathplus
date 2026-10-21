@@ -271,6 +271,44 @@ impl benilla_formats::SpellMods for SpellModifiers {
     }
 }
 
+/// `Spells`' cast times, which apply the spell-mod tables (the type lives in `app_core` for the
+/// crate split).
+pub(crate) trait SpellsCastTime {
+    /// The cast time in ms as `GetCastTime 0x6e3340` returns it for argument 1, the tooltip's
+    /// (`52eb4b`): the level-scaled `CastingTimeIndex` row, then spell-mod op 10 (`0x6e33b7`),
+    /// with no clamp, so row 18's negative time survives. A missing row returns 0 before the
+    /// modifier (`0x6e338a`). The cast-speed multiply (`0x6e3422`) is not applied.
+    fn cast_time_unclamped_ms(
+        &self,
+        def: &SpellDisplay,
+        caster_level: u32,
+        mods: &SpellModifiers,
+    ) -> i32;
+    /// [`Self::cast_time_unclamped_ms`] for argument 0, the cast validator's (`0x609e16`): a
+    /// result at or below zero reads 0 (`0x6e3461`-`0x6e3470`).
+    fn cast_time_ms(&self, def: &SpellDisplay, caster_level: u32, mods: &SpellModifiers) -> u32;
+}
+
+impl SpellsCastTime for crate::app_core::state::Spells {
+    fn cast_time_unclamped_ms(
+        &self,
+        def: &SpellDisplay,
+        caster_level: u32,
+        mods: &SpellModifiers,
+    ) -> i32 {
+        self.cast_times
+            .get(def.casting_time_index)
+            .map_or(0, |row| {
+                let resolved = row.resolved_ms(caster_level, def.base_level);
+                mods.apply(def, OP_CAST_TIME, resolved)
+            })
+    }
+
+    fn cast_time_ms(&self, def: &SpellDisplay, caster_level: u32, mods: &SpellModifiers) -> u32 {
+        self.cast_time_unclamped_ms(def, caster_level, mods).max(0) as u32
+    }
+}
+
 /// Entering the world clears the tables and class family: `Spell_C::SystemInitialize 0x6e7150`,
 /// run once per world entry from `CGlueMgr::Update 0x46b930`. The teardown `0x6e99e0` leaves
 /// them, and there is no talent-change clear.

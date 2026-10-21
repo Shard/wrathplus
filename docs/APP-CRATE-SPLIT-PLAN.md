@@ -46,7 +46,7 @@ The cycles come from three patterns, not from tangled features:
 
 | Crate | Layer | Today's modules (examples) | Size | Lib tests |
 |---|---|---|---|---|
-| `benilla-app-core` | shared state, schedule sets, cvar registry | `run_mode`, `local_state`, `query_cache`, `area`, `chr_classes`, `text_filter`, `text_reshape`, `glue_strings`, `crash`, `shutdown`, `pending_item_ops`, `quest_reputation`, `cvars` (registry only), `app_core` (the state extracted in step 0) | ~12k + extracted | ~150 |
+| `benilla-app-core` | shared state, schedule sets, cvar registry | `run_mode`, `local_state`, `query_cache`, `area`, `chr_classes`, `text_filter`, `text_reshape`, `glue_strings`, `crash`, `shutdown`, `pending_item_ops`, `quest_reputation`, `cvars` (registry only), `launch_plan` (the run's command line and environment), `app_core` (the state extracted in step 0) | ~12k + extracted | ~150 |
 | `benilla-app-net` | session and wire drain | `net` (with the capture FIFOs), `realmlist`, and the wire-query caches `names`, `items`, `go_templates`, `area_trigger`, `name_persist`, `creature_type` (reassigned after the move dry run) | ~25k | ~280 |
 | `benilla-app-world` | world, rendering, gameplay | `entities`, `creature_anim`, `player`, `target`, `spell`, `motion`, `swing_refusal`, `sound`, `portrait`, `minimap`, `transport`, `video`, `cursor`, `death`, `nameplates`, `vplates`, `quest_markers`, `world_state`, `loading_screen`, the effect modules (`aura_visual`, `weapon_trail`, `bowstring`, `fishing_line`, `footprints`, …) | ~136k | ~1.4k |
 | `benilla-app-ui` | FrameXML host and feeds, glue screens | `ui_script`, every `ui_*`, `bindings`, `console`, `combat_log`, `char_select`, `char_create`, `realm_select`, `login`, `glue`, `textinput`, `tutorial`, `script_calls`, `experience_ui`, `world_state_ui` | ~234k | ~2.8k |
@@ -566,15 +566,15 @@ relative hop.
 
 | Cause | Sites | What | Owner |
 |---|---|---|---|
-| Core calls an extension-trait method | 4 | `GossipState::resolve_greeting` → `GossipGreeting::draw_greeting`, `Realms::highlight_current` → `RealmsSelect::rows` (and their `use` lines) | Wire B: the callers join their traits |
-| `Default` impl left in an upper layer | 2 | `CollisionHeight` (`entities::collision_height`), `ui_flags::Sort` (`realm_select`) | Wire B: the impls move with their types (the inherent-impl matcher did not look at trait impls) |
-| Core → spell | 3 | `Spells`' cast-time helpers take `spell::SpellModifiers` and `OP_CAST_TIME` (`app_core::state`) | Wire B: an extension trait beside `spell::mods` |
-| Core → ui_items | 1 | `app_core::state`'s `Key(ui_items::ItemUse)` | `ItemUse` moves down if pure |
+| Core calls an extension-trait method | 4 | `GossipState::resolve_greeting` → `GossipGreeting::draw_greeting`, `Realms::highlight_current` → `RealmsSelect::rows` (and their `use` lines) | Done (Wire B): `open_menu`, `text_arrived` and `resolve_greeting` are `GossipGreeting`'s, `highlight_current` is `RealmsSelect`'s |
+| `Default` impl left in an upper layer | 2 | `CollisionHeight` (`entities::collision_height`), `ui_flags::Sort` (`realm_select`) | Done (Wire B): both impls moved with their types (the inherent-impl matcher did not look at trait impls) |
+| Core → spell | 3 | `Spells`' cast-time helpers take `spell::SpellModifiers` and `OP_CAST_TIME` (`app_core::state`) | Done (Wire B): `spell::SpellsCastTime` |
+| Core → ui_items | 1 | `app_core::state`'s `Key(ui_items::ItemUse)` | App Migration (`ui_items`): `ItemUse` moves down if pure |
 | Core → net | 1 (core alone only) | `app_core::interaction` reads `names::NameCache` | The method leaves core, or takes the name as an argument |
 | `cfg(test)` helper | 1 | `app_core::vm_memo` tests use the root's `test_support::{fn_parameter_lists, rust_files}` | The test moves to the root, or the helpers to a core `test_support` |
-| `launch_plan` unassigned | 1 + 2 | `run_mode` (core) and `realmlist` (net) read `launch_plan::plan()` (bad7aa42) | Table edit: `launch_plan` (process arguments and environment) is core |
+| `launch_plan` unassigned | 1 + 2 | `run_mode` (core) and `realmlist` (net) read `launch_plan::plan()` (bad7aa42) | Done (Wire B): `launch_plan` is in the core row |
 | `net` drains UI state | 4 | `ui_party::net::{member_deactivated, roster_deactivated}` (3), `combat_log::chat::faction_standing` | App Migration's groups (unchanged) |
-| Root module alias | 2 | `names` reaches `NativePetNamePackets` through the root's `use net::{wrath_pet_name_capture as ui_native_pet_name}` | Mechanical: name `net::wrath_pet_name_capture` |
+| Root module alias | 2 | `names` reaches `NativePetNamePackets` through the root's `use net::{wrath_pet_name_capture as ui_native_pet_name}` | Done (Wire B): `names` names `net::wrath_pet_name_capture` |
 
 `ConsoleCommandApp` and `capture::ProbeAuctionPlugin` are not net-side. The console trait is used by
 `experience`, `video` (world) and `ui_script`. The probe plugin is named only by `dev` (tools) and in a
