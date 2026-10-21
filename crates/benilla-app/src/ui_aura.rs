@@ -24,25 +24,6 @@ use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
 
 pub(crate) use crate::app_core::state::{AuraDurations, DurationStamp};
-impl AuraDurations {
-    /// Records one `SMSG_UPDATE_AURA_DURATION`.
-    pub(crate) fn set(&mut self, slot: u8, remaining_ms: u32, now: f64) {
-        let total = f64::from(remaining_ms) / 1000.0;
-        if trace_period().is_some() {
-            info!(
-                "aura trace: SMSG_UPDATE_AURA_DURATION slot {slot} = {remaining_ms} ms @ {now:.2}"
-            );
-        }
-        self.by_slot.insert(
-            slot,
-            DurationStamp {
-                total,
-                expires_at: now + total,
-                received_at: now,
-            },
-        );
-    }
-}
 
 /// A record of the player's cache (`0xbc6040`): the position persists, the fields refresh.
 struct CachedAura {
@@ -674,6 +655,31 @@ fn drain_aura_cancels(script: Option<NonSendMut<UiScript>>, net: Res<NetCommands
     };
     for spell_id in script.take_cancel_aura_requests() {
         let _ = net.0.send(ClientCommand::CancelAura { spell_id });
+    }
+}
+
+/// `AuraDurations`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait AuraDurationsTrace {
+    /// Records one `SMSG_UPDATE_AURA_DURATION`.
+    fn set(&mut self, slot: u8, remaining_ms: u32, now: f64);
+}
+
+impl AuraDurationsTrace for AuraDurations {
+    fn set(&mut self, slot: u8, remaining_ms: u32, now: f64) {
+        let total = f64::from(remaining_ms) / 1000.0;
+        if trace_period().is_some() {
+            info!(
+                "aura trace: SMSG_UPDATE_AURA_DURATION slot {slot} = {remaining_ms} ms @ {now:.2}"
+            );
+        }
+        self.by_slot.insert(
+            slot,
+            DurationStamp {
+                total,
+                expires_at: now + total,
+                received_at: now,
+            },
+        );
     }
 }
 

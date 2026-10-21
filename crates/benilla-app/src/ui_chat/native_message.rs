@@ -7,6 +7,7 @@ use super::{
     event::{language_name, ChatEvent},
     frames::ChatWindows,
 };
+use crate::ui_chat::event::ChatEventScript;
 use crate::{names::NameCache, net::NetCommands};
 use benilla_protocol::wrath_chat::Message;
 use benilla_ui::script::{ScriptValue as V, UiScript};

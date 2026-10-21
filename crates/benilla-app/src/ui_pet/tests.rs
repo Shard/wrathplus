@@ -1,5 +1,6 @@
 //! The pet system's tests, in one module because they share their fixtures.
 
+use crate::spell::cooldowns::CooldownsSpell;
 use benilla_protocol::types::{
     PetActionEntry, PetSpells, PET_ACT_COMMAND, PET_ACT_DISABLED, PET_ACT_ENABLED, PET_ACT_PASSIVE,
     PET_ACT_REACTION, PET_COMMAND_ATTACK, PET_COMMAND_DISMISS, PET_COMMAND_FOLLOW,

@@ -3,6 +3,7 @@
 //! [`release_post_snap_hold`] ends the mover's settle hold on the residency the world publishes.
 //! The hold ends on residency, never on ground contact, the same way for every mover mode.
 
+use crate::player::state::PlayerSettle;
 use bevy::prelude::*;
 
 use super::{Player, SETTLE_TIMEOUT};

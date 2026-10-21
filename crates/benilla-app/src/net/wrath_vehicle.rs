@@ -235,7 +235,7 @@ pub(crate) mod tests {
     use super::*;
 
     const ME: u64 = 0x10;
-    pub(crate) const CAR: u64 = 0xF150_0000_0000_0007;
+    use crate::net::test_support::vehicle::CAR;
     const TURRET: u64 = 0xF150_0000_0000_0008;
 
     pub(crate) fn world() -> VehicleWorld {

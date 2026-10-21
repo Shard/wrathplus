@@ -2,12 +2,14 @@
 //! bank, reader, gossip, binder, meeting stone, spirit healer, taxi, trade skill, merchant,
 //! social lists and tabard designer; their owners keep the systems and re-export the types.
 
+use crate::ui_gossip::GossipGreeting;
 use std::collections::HashMap;
 use std::time::Instant;
 
+use benilla_formats::GuildEmblem;
 use benilla_protocol::types::{
-    FriendEntry, FriendStatusUpdate, GossipOption, MailListEntry, MeetingStoneNotice, NpcTextBlock,
-    TrainerSpell, VendorItem,
+    friend_result, friend_status, FriendEntry, FriendStatusUpdate, GossipOption, MailListEntry,
+    MeetingStoneNotice, NpcTextBlock, TrainerSpell, VendorItem,
 };
 use bevy::prelude::*;
 
@@ -29,6 +31,47 @@ pub(crate) struct TrainerOpen {
     /// re-derives and fires `TRAINER_UPDATE` even if no state moved, as `0x4d7d40`'s tail does
     /// (`0x4d83f4`), and the stock window re-reads `GetMoney()` on it.
     pub(crate) re_derive: bool,
+}
+
+impl TrainerOpen {
+    /// Open (or replace) the window with a trainer's freshly-listed services.
+    pub(crate) fn open(
+        &mut self,
+        trainer: u64,
+        trainer_type: u32,
+        services: Vec<TrainerSpell>,
+        greeting: String,
+    ) {
+        self.trainer = Some(trainer);
+        self.trainer_type = trainer_type;
+        self.services = services;
+        self.greeting = greeting;
+        // A fresh list carries the server's own states, so nothing is pending against it.
+        self.fresh_list = true;
+        self.re_derive = false;
+    }
+
+    /// One of the twelve triggers fired: re-derive on the next feed, if a window is open.
+    pub(crate) fn trigger_re_derive(&mut self) {
+        if self.trainer.is_some() {
+            self.re_derive = true;
+        }
+    }
+
+    /// A client-side close; a re-open re-lists.
+    pub(crate) fn clear(&mut self) {
+        self.trainer = None;
+        self.services.clear();
+        self.trainer_type = 0;
+        self.greeting.clear();
+        self.fresh_list = false;
+        self.re_derive = false;
+    }
+
+    /// Disconnect: drop the open window.
+    pub(crate) fn clear_session(&mut self) {
+        self.clear();
+    }
 }
 
 /// The `Stationery.dbc` catalog; without it every mail gets the default backdrop.
@@ -70,6 +113,36 @@ pub(crate) struct MailOpen {
     pub(crate) errors: Vec<&'static str>,
 }
 
+impl MailOpen {
+    /// A mailbox right-click. A different mailbox resets the rows and the throttle; the same one
+    /// only re-shows, as the reference fires `MAIL_SHOW` on every use.
+    pub(crate) fn click(&mut self, mailbox: u64) {
+        if self.mailbox != Some(mailbox) {
+            self.mailbox = Some(mailbox);
+            self.mails.clear();
+            self.wrath_inbox = None;
+            self.last_list_query = None;
+        }
+        self.show_requested = true;
+    }
+
+    /// A client-side close, sending nothing as 1.12 does; a re-open re-lists.
+    pub(crate) fn clear(&mut self) {
+        self.mailbox = None;
+        self.mails.clear();
+        self.wrath_inbox = None;
+        self.bodies.clear();
+        self.show_requested = false;
+        self.last_list_query = None;
+        self.send_acks.clear();
+        self.errors.clear();
+    }
+
+    pub(crate) fn clear_session(&mut self) {
+        self.clear();
+    }
+}
+
 /// The vault the player opened, set by the object click and cleared by the frame's close.
 #[derive(Resource, Default)]
 pub(crate) struct GuildBankOpen {
@@ -78,12 +151,37 @@ pub(crate) struct GuildBankOpen {
     pub(crate) pending: bool,
 }
 
+impl GuildBankOpen {
+    /// The object click on a guild vault (`GAMEOBJECT_TYPE_GUILD_BANK`).
+    pub(crate) fn open(&mut self, banker: u64) {
+        self.banker = Some(banker);
+        self.pending = true;
+    }
+
+    /// The vault in use, for the bank writers that name it.
+    pub(crate) fn banker(&self) -> Option<u64> {
+        self.banker
+    }
+}
+
 /// Build 12340's letter texts, by item GUID: `CMSG_ITEM_TEXT_QUERY` names the item and
 /// `SMSG_ITEM_TEXT_QUERY_RESPONSE` answers with it (AC `HandleItemTextQuery`); a `None` answer is
 /// an item the server has no text for.
 #[derive(Resource, Default)]
 pub(crate) struct LetterTexts {
     pub(crate) texts: QueryCache<u64, String>,
+}
+
+impl LetterTexts {
+    /// Record an answer (`wrath_inventory_capture`).
+    pub(crate) fn insert(&mut self, item_guid: u64, text: Option<String>) {
+        self.texts.insert(item_guid, text);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn text(&mut self, item_guid: u64) -> Option<String> {
+        self.texts.get_or_ask(item_guid, || {}).cloned()
+    }
 }
 
 /// Which of the reference's two text sources a session shows; the object decides, not the click.
@@ -118,6 +216,49 @@ pub(crate) struct ItemTextOpen {
     pub(crate) closing: bool,
 }
 
+impl ItemTextOpen {
+    /// Open a bag letter; re-opening restarts from `ITEM_TEXT_BEGIN`.
+    pub(crate) fn open_letter(&mut self, item_guid: u64) {
+        self.open(item_guid, ReadSource::Letter);
+    }
+
+    /// Open a page chain; the feed asks the object's template for the first page.
+    pub(crate) fn open_pages(&mut self, object_guid: u64) {
+        self.open(
+            object_guid,
+            ReadSource::Pages {
+                visited: Vec::new(),
+            },
+        );
+    }
+
+    /// The reference's toggle, `0x4e32e0` with flag 0 from both click routes (`0x5d8e5e`,
+    /// `0x5f58e7`): reading the open object again closes it. Returns whether it closed.
+    pub(crate) fn toggle_closed(&mut self, object_guid: u64) -> bool {
+        let open = self
+            .pending
+            .as_ref()
+            .is_some_and(|s| s.object_guid == object_guid);
+        if open {
+            self.pending = None;
+            self.closing = true;
+        }
+        open
+    }
+
+    pub(crate) fn take_closing(&mut self) -> bool {
+        std::mem::take(&mut self.closing)
+    }
+
+    pub(crate) fn open(&mut self, object_guid: u64, source: ReadSource) {
+        self.pending = Some(ReadSession {
+            object_guid,
+            source,
+            told: Default::default(),
+        });
+    }
+}
+
 /// `PageTextMaterial.dbc`; absent without client data, leaving every reader on Parchment.
 #[derive(Resource)]
 pub(crate) struct PageMaterials(pub(crate) benilla_formats::PageTextMaterialCatalog);
@@ -139,6 +280,93 @@ pub(crate) struct GossipState {
     pub(crate) records: HashMap<u32, Vec<NpcTextBlock>>,
 }
 
+impl GossipState {
+    /// Close the menu; the records stay.
+    pub(crate) fn clear(&mut self) {
+        self.npc = None;
+        self.text_id = 0;
+        self.greeting = None;
+        self.options.clear();
+        self.quests.clear();
+        self.quest_info.clear();
+    }
+
+    /// The disconnect clear; NPC text is static per id, so the records stay.
+    pub(crate) fn clear_session(&mut self) {
+        self.clear();
+    }
+}
+
+impl GossipState {
+    pub(crate) fn cached_record(&self, text_id: u32) -> Option<&[NpcTextBlock]> {
+        self.records.get(&text_id).map(Vec::as_slice)
+    }
+
+    pub(crate) fn remember_record(&mut self, text_id: u32, blocks: Vec<NpcTextBlock>) {
+        self.records.insert(text_id, blocks);
+    }
+
+    /// The reference's text-pending latch (`[0xbbb670]`): a menu whose text query is out, or was
+    /// never sent (`text_id` 0). While it holds, nothing fires and every select is refused.
+    pub(crate) fn text_pending(&self) -> bool {
+        self.npc.is_some() && self.greeting.is_none()
+    }
+
+    /// Latch a `SMSG_GOSSIP_MESSAGE` menu; `true` when the caller owes the `CMSG_NPC_TEXT_QUERY`.
+    /// A `text_id` of 0 stays pending: the reference's `DBCache::Get` never queries id 0.
+    pub(crate) fn open_menu(
+        &mut self,
+        npc: u64,
+        text_id: u32,
+        options: Vec<GossipOption>,
+        quests: Vec<(u32, u32, u32, String)>,
+        npc_gender: u8,
+    ) -> bool {
+        self.npc = Some(npc);
+        self.text_id = text_id;
+        self.options = options;
+        self.quests = quests;
+        self.quest_info.clear();
+        self.greeting = None;
+        if text_id == 0 {
+            return false;
+        }
+        match self.cached_record(text_id).is_some() {
+            true => {
+                self.resolve_greeting(npc_gender);
+                false
+            }
+            false => true,
+        }
+    }
+
+    /// Cache a `SMSG_NPC_TEXT_UPDATE` record and resolve the menu waiting on it, if any. An open
+    /// menu's greeting is not re-drawn: the reference's cache callback re-enters only for the
+    /// query it was registered for.
+    pub(crate) fn text_arrived(&mut self, text_id: u32, blocks: Vec<NpcTextBlock>, npc_gender: u8) {
+        self.remember_record(text_id, blocks);
+        if self.npc.is_some() && self.text_id == text_id && self.greeting.is_none() {
+            self.resolve_greeting(npc_gender);
+        }
+    }
+
+    /// Draw the open menu's greeting, or end the interaction when the record has no line for the
+    /// NPC's gender: the reference's missing-text path (`0x4e216e`) logs "Missing gossip text!"
+    /// and fires `GOSSIP_CLOSED`. Here the clear makes the feed fire it if a menu was showing.
+    pub(crate) fn resolve_greeting(&mut self, npc_gender: u8) {
+        match self.draw_greeting(self.text_id, npc_gender) {
+            Some(line) => self.greeting = Some(line),
+            None => {
+                debug!(
+                    "ui_gossip: missing gossip text (id {}) — ending the interaction",
+                    self.text_id
+                );
+                self.clear();
+            }
+        }
+    }
+}
+
 /// The innkeeper's pending bind question; everything the dialog reads rides the event's argument.
 #[derive(Resource, Default)]
 pub(crate) struct BinderState {
@@ -149,6 +377,25 @@ pub(crate) struct BinderState {
     pub(crate) ask: bool,
 }
 
+impl BinderState {
+    /// `SMSG_BINDER_CONFIRM`: parks the innkeeper's guid and owes the UI a dialog.
+    pub(crate) fn ask(&mut self, npc: u64) {
+        self.npc = Some(npc);
+        self.ask = true;
+    }
+
+    /// The guid to answer with, if a question is live.
+    pub(crate) fn pending(&self) -> Option<u64> {
+        self.npc
+    }
+
+    /// Retracts the question: the range guard's close, and `SMSG_PLAYERBOUND`'s.
+    pub(crate) fn clear(&mut self) {
+        self.npc = None;
+        self.ask = false;
+    }
+}
+
 /// The current-area spirit healer (`[0xb4e330/334]`) and its wave clock (`[0xb4e338]`).
 #[derive(Resource, Default)]
 pub(crate) struct AreaSpiritHealer {
@@ -156,6 +403,60 @@ pub(crate) struct AreaSpiritHealer {
     pub(crate) healer: Option<u64>,
     pub(crate) deadline: Option<Instant>,
     pub(crate) in_range: bool,
+}
+
+impl AreaSpiritHealer {
+    /// `SMSG_AREA_SPIRIT_HEALER_TIME`: arms the clock only for the cached healer (`0x4922a0`) and
+    /// a positive time, and owes `AREA_SPIRIT_HEALER_IN_RANGE`.
+    pub(crate) fn on_time(&mut self, healer: u64, ms: u32, now: Instant) {
+        if self.healer == Some(healer) && ms > 0 {
+            self.deadline = Some(now + std::time::Duration::from_millis(u64::from(ms)));
+            self.in_range = true;
+        }
+    }
+
+    /// `0x4921c0`: an unchanged guid returns before anything else (`0x4921cf`/`0x4921dd`), so the
+    /// poll calls it every frame; a change cancels a pending wave (`0x4921fc`), zeroes the
+    /// deadline (`0x492211`) and queries a non-zero healer (`0x492217`).
+    pub(crate) fn set_healer(&mut self, new: Option<u64>) -> SetHealerOutcome {
+        // The reference's zero guid is our `None`.
+        let new = new.filter(|&g| g != 0);
+        if self.healer == new {
+            return SetHealerOutcome::default();
+        }
+        self.healer = new;
+        let cancel_aura = self.deadline.take().is_some();
+        if cancel_aura {
+            // The cancel closes the dialog, so an `_IN_RANGE` still owed is stale.
+            self.in_range = false;
+        }
+        SetHealerOutcome {
+            cancel_aura,
+            query: new,
+        }
+    }
+
+    /// The spirit-guide click (`0x5df950`): `0x4921c0(0)` then `0x4921c0(guid)`, a cache-bust that
+    /// makes the second call query even for the healer already cached.
+    pub(crate) fn click_guide(&mut self, guid: u64) -> SetHealerOutcome {
+        let bust = self.set_healer(None);
+        let set = self.set_healer(Some(guid));
+        SetHealerOutcome {
+            cancel_aura: bust.cancel_aura || set.cancel_aura,
+            query: set.query,
+        }
+    }
+
+    /// The cached healer: `AcceptAreaSpiritHeal`'s guid and the poll's retain subject.
+    pub(crate) fn healer(&self) -> Option<u64> {
+        self.healer
+    }
+
+    pub(crate) fn secs(&self, now: Instant) -> u32 {
+        self.deadline
+            .map(|d| d.saturating_duration_since(now).as_secs())
+            .map_or(0, |s| u32::try_from(s).unwrap_or(u32::MAX))
+    }
 }
 
 /// The status text (`[0xb7203c]`): none until the server's `0x295` lands and after world leave,
@@ -181,6 +482,26 @@ pub(crate) struct MeetingStone {
     pub(crate) pending_members: Vec<u64>,
     /// The VM's copy of the two globals is stale.
     pub(crate) dirty: bool,
+}
+
+impl MeetingStone {
+    /// `SMSG 0x295` (`0x4ca230`): the area is stored at once; the line and event wait for the feed.
+    pub(crate) fn apply(&mut self, area: u32, status: u8) {
+        let old = self.area;
+        self.area = area;
+        self.updates.push((old, status));
+    }
+
+    /// One of the four display-only replies.
+    pub(crate) fn apply_notice(&mut self, notice: MeetingStoneNotice) {
+        self.notices.push(notice);
+    }
+
+    /// The leave-world sweep (`0x4c9f80`): the text goes, the area stays.
+    pub(crate) fn leave_world(&mut self) {
+        self.text = StoneText::None;
+        self.dirty = true;
+    }
 }
 
 /// A right-click on a `GAMEOBJECT_TYPE_MEETINGSTONE` (23) that passed the shared click gates.
@@ -210,6 +531,52 @@ pub(crate) struct MerchantOpen {
     pub(crate) vendor: Option<u64>,
     /// In wire order, which is the 1-based display order.
     pub(crate) items: Vec<VendorItem>,
+}
+
+impl MerchantOpen {
+    pub(crate) fn open(&mut self, vendor: u64, items: Vec<VendorItem>) {
+        self.vendor = Some(vendor);
+        self.items = items;
+    }
+
+    pub(crate) fn is_open(&self) -> bool {
+        self.vendor.is_some()
+    }
+
+    /// The item entry at a 1-based row: `CMSG_BUY_ITEM` buys by entry, not by vendor slot.
+    pub(crate) fn entry_at(&self, index_1based: u32) -> Option<u32> {
+        index_1based
+            .checked_sub(1)
+            .and_then(|i| self.items.get(i as usize))
+            .map(|it| it.entry)
+    }
+
+    /// `SMSG_BUY_ITEM`'s new count for the row at 1-based vendor `slot`; the bought item itself
+    /// arrives as an object create.
+    pub(crate) fn update_stock(&mut self, slot: u32, new_count: u32) {
+        if let Some(it) = self.items.iter_mut().find(|it| it.slot == slot) {
+            it.current_count = new_count;
+        }
+    }
+
+    /// Zero every row of `entry`, as the reference's `ITEM_ALREADY_SOLD` arm writes 0 (`0x5dcdbf`)
+    /// into each matching row of its 128-row cache (`0x5dcdcd`).
+    pub(crate) fn sold_out(&mut self, entry: u32) {
+        for it in self.items.iter_mut().filter(|it| it.entry == entry) {
+            it.current_count = 0;
+        }
+    }
+
+    /// A client-side close; a re-open re-lists.
+    pub(crate) fn clear(&mut self) {
+        self.vendor = None;
+        self.items.clear();
+    }
+
+    /// The disconnect clear.
+    pub(crate) fn clear_session(&mut self) {
+        self.clear();
+    }
 }
 
 /// The social session mirror: filled by the social handlers, read by the feed, cleared on
@@ -252,11 +619,172 @@ pub(crate) struct SocialState {
     pub(crate) who_dirty: bool,
 }
 
+impl SocialState {
+    /// Drop the session's state: the server re-sends both lists at login, and a stale ignore list
+    /// would silence the wrong guids. The `/who` sort chain survives, since the reference
+    /// initialises it once per process (`0x5adc50`, from `0x401666`), never at login.
+    pub(crate) fn clear_session(&mut self) {
+        *self = Self {
+            who_sort: std::mem::take(&mut self.who_sort),
+            ..Self::default()
+        };
+    }
+
+    /// Is `guid` on the ignore list? The reference's `IsIgnored` (`0x5ae5a0`): an ignored player's
+    /// chat and text emotes drop silently (`0x49dbe0`), and their duel is declined (`0x4d4a33`).
+    pub(crate) fn is_ignored(&self, guid: u64) -> bool {
+        guid != 0 && self.ignores.contains(&guid)
+    }
+
+    /// `SetFriendNotes(index | name, notes)`' friend: the 1-based row as last shown, else the
+    /// friend whose known name matches, case-insensitively.
+    pub(crate) fn friend_guid(
+        &self,
+        index: Option<u32>,
+        name: Option<&str>,
+        names: &crate::names::NameCache,
+    ) -> Option<u64> {
+        if let Some(i) = index {
+            return (i as usize)
+                .checked_sub(1)
+                .and_then(|i| self.display_order.get(i).copied());
+        }
+        let name = name?;
+        self.friends
+            .iter()
+            .map(|f| f.guid)
+            .find(|&g| names.peek(g).is_some_and(|n| n.eq_ignore_ascii_case(name)))
+    }
+
+    /// Is `guid` on the friend list? The reference's `FindFriendSlot` (`0x5ae810`), which keeps the
+    /// guild sign-on line from announcing a friend twice.
+    pub(crate) fn is_friend(&self, guid: u64) -> bool {
+        guid != 0 && self.friends.iter().any(|f| f.guid == guid)
+    }
+
+    /// `SMSG_FRIEND_LIST`: the whole list, never a delta.
+    pub(crate) fn apply_friend_list(&mut self, friends: Vec<FriendEntry>) {
+        self.friends = friends;
+        self.friends_dirty = true;
+    }
+
+    /// Seat the ignore list directly, for tests of the code that consults it.
+    #[cfg(test)]
+    pub(crate) fn set_ignores_for_test(&mut self, guids: Vec<u64>) {
+        self.apply_ignore_list(guids);
+    }
+
+    /// `SMSG_IGNORE_LIST`: the whole list.
+    pub(crate) fn apply_ignore_list(&mut self, guids: Vec<u64>) {
+        self.ignores = guids;
+        self.ignores_dirty = true;
+    }
+
+    /// `SMSG_FRIEND_STATUS`: apply the result and queue its line. The server sends no fresh list
+    /// after an add or a remove, so the result codes maintain it, and a presence broadcast patches
+    /// the row in place.
+    pub(crate) fn apply_friend_status(&mut self, update: FriendStatusUpdate) {
+        match update.result {
+            friend_result::ADDED_ONLINE | friend_result::ADDED_OFFLINE => {
+                if !self.friends.iter().any(|f| f.guid == update.guid) {
+                    let online = update.online;
+                    self.friends.push(FriendEntry {
+                        guid: update.guid,
+                        status: online.map_or(friend_status::OFFLINE, |o| o.status),
+                        area: online.map_or(0, |o| o.area),
+                        level: online.map_or(0, |o| o.level),
+                        class: online.map_or(0, |o| o.class),
+                    });
+                }
+                self.friends_dirty = true;
+            }
+            friend_result::REMOVED => {
+                self.friends.retain(|f| f.guid != update.guid);
+                self.notes.remove(&update.guid);
+                if self.selected_friend == update.guid {
+                    self.selected_friend = 0;
+                }
+                self.friends_dirty = true;
+            }
+            friend_result::ONLINE => {
+                if let (Some(entry), Some(online)) = (self.friend_mut(update.guid), update.online) {
+                    entry.status = online.status;
+                    entry.area = online.area;
+                    entry.level = online.level;
+                    entry.class = online.class;
+                }
+                self.friends_dirty = true;
+            }
+            friend_result::OFFLINE => {
+                if let Some(entry) = self.friend_mut(update.guid) {
+                    entry.status = friend_status::OFFLINE;
+                    // An offline friend carries no area, level or class on the wire.
+                    entry.area = 0;
+                    entry.level = 0;
+                    entry.class = 0;
+                }
+                self.friends_dirty = true;
+            }
+            friend_result::IGNORE_ADDED => {
+                if !self.ignores.contains(&update.guid) {
+                    self.ignores.push(update.guid);
+                }
+                self.ignores_dirty = true;
+            }
+            friend_result::IGNORE_REMOVED => {
+                self.ignores.retain(|g| *g != update.guid);
+                if self.selected_ignore == update.guid {
+                    self.selected_ignore = 0;
+                }
+                self.ignores_dirty = true;
+            }
+            // Every other code is a refusal: a line, no change.
+            _ => {}
+        }
+        self.pending_lines.push(update);
+    }
+
+    pub(crate) fn friend_mut(&mut self, guid: u64) -> Option<&mut FriendEntry> {
+        self.friends.iter_mut().find(|f| f.guid == guid)
+    }
+
+    /// `SMSG_WHO`: the answer to the last query.
+    pub(crate) fn apply_who(&mut self, results: benilla_protocol::types::WhoResults) {
+        self.native_who_rows.clear();
+        self.native_who_count = None;
+        self.who = results.entries;
+        self.who_total = results.total;
+        self.who_dirty = true;
+    }
+}
+
 /// The design our own body wears while the frame is open.
 #[derive(Resource, Default)]
 pub(crate) struct TabardDesign(pub(crate) Option<[i32; 5]>);
+
+impl TabardDesign {
+    pub(crate) fn preview(&self) -> Option<GuildEmblem> {
+        self.0.map(|d| GuildEmblem {
+            emblem_style: d[0],
+            emblem_color: d[1],
+            border_style: d[2],
+            border_color: d[3],
+            background_color: d[4],
+        })
+    }
+}
 
 /// `UNIT_NPC_FLAGS` bit 6, `SPIRITGUIDE`, which the acquire callback `0x4924c0` tests (`0x4924fc`).
 /// The area spirit healer's aura, cancelled by `0x4921c0` and `CancelAreaSpiritHeal`; `0x6e7040`
 /// fires `AREA_SPIRIT_HEALER_OUT_OF_RANGE` for this spell id alone (`0x6e70b6`).
 pub(crate) const AREA_SPIRIT_HEALER_AURA: u32 = 2584;
+
+/// What [`AreaSpiritHealer::set_healer`] owes the frame; the reference does both in `0x4921c0`.
+#[derive(Default, PartialEq, Eq, Debug)]
+pub(crate) struct SetHealerOutcome {
+    /// A wave was pending and the healer changed (`0x4921fc`): `AREA_SPIRIT_HEALER_OUT_OF_RANGE`
+    /// fires and `CMSG_CANCEL_AURA` goes out for 2584; this, not Lua, closes the dialog.
+    pub(crate) cancel_aura: bool,
+    /// A newly adopted non-zero healer: `CMSG_AREA_SPIRIT_HEALER_QUERY` with it.
+    pub(crate) query: Option<u64>,
+}

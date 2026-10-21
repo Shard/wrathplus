@@ -8,6 +8,7 @@ use benilla_protocol::types::SpellLogExecute;
 
 use crate::net::{Reputations, SelfGuid};
 use crate::ui_chat::combat::{self, Fills};
+use crate::ui_chat::feed::ChatLogFeed;
 use crate::ui_chat::{ChatEventKind, ChatLog};
 
 /// `SMSG_SET_FACTION_STANDING`: "Your %s reputation has increased by %d.". The wire carries the

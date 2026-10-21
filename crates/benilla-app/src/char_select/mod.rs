@@ -9,7 +9,9 @@ mod input;
 mod refresh;
 mod screen;
 
-use benilla_protocol::{CharAction, Character};
+use benilla_protocol::CharAction;
+#[cfg(test)]
+use benilla_protocol::Character;
 use bevy::prelude::*;
 
 use crate::glue_strings::GlueStrings;
@@ -133,98 +135,6 @@ impl Plugin for CharSelectPlugin {
 }
 
 // ── The roster and pick policy ──────────────────────────────────────────────────────────────────
-
-impl Roster {
-    /// A roster with a pick in flight, for tests outside this module.
-    #[cfg(test)]
-    pub(crate) fn with_pending_pick(chars: Vec<Character>, guid: u64) -> Self {
-        Self {
-            chars,
-            pending_pick: Some(guid),
-            ..Self::default()
-        }
-    }
-
-    /// Note a character the create screen just made, and select its row now: `net::io` emits the
-    /// fresh roster before the create result, so no later roster comes. If the row is not in hand
-    /// yet, the arm stays for [`apply_roster_policy`].
-    pub(crate) fn note_created(&mut self, name: String) {
-        self.just_created = Some(name);
-        self.select_created_by_name();
-    }
-
-    /// Select the armed just-created row by name, disarming only on a hit. Case-insensitive:
-    /// vmangos's `normalizePlayerName` turns a typed `ZZBULL` into `Zzbull`.
-    fn select_created_by_name(&mut self) {
-        let Some(name) = self.just_created.as_deref() else {
-            return;
-        };
-        if let Some(row) = self
-            .chars
-            .iter()
-            .position(|c| c.name.eq_ignore_ascii_case(name))
-        {
-            self.select(Some(row));
-            self.just_created = None;
-        }
-    }
-
-    /// Select a row, the reference's `SelectCharacter`; every selection goes through here so the
-    /// facing reset is never skipped.
-    pub(super) fn select(&mut self, row: Option<usize>) {
-        self.selected = row;
-        self.select_seq = self.select_seq.wrapping_add(1);
-    }
-
-    /// A click on a row: `CharacterSelectButton_OnClick` selects only when `id` differs from
-    /// `selectedIndex` (`CharacterSelect.lua:305-310`, and `OnDoubleClick` at 312-318), so clicking
-    /// the current row keeps its dragged facing.
-    pub(super) fn click_row(&mut self, row: usize) {
-        if self.selected != Some(row) {
-            self.select(Some(row));
-        }
-    }
-
-    pub(super) fn selected(&self) -> Option<usize> {
-        self.selected
-    }
-
-    pub(super) fn selected_char(&self) -> Option<&Character> {
-        self.selected.and_then(|i| self.chars.get(i))
-    }
-
-    /// The pending pick's map, for the loading screen's art before `SMSG_LOGIN_VERIFY_WORLD`.
-    pub(crate) fn pending_map(&self) -> Option<u32> {
-        self.pending_row().map(|c| c.map)
-    }
-
-    /// The pending pick's level: the reference suppresses the loading tip when it arrived as 0 in
-    /// `SMSG_CHAR_ENUM` (`0x5b42a0` sets `[selChar+0x10a]`); vmangos always sends a real level.
-    pub(crate) fn pending_level(&self) -> Option<u8> {
-        self.pending_row().map(|c| c.level)
-    }
-
-    /// The picked character's `(map, wow xyz)`, a round trip before `SMSG_LOGIN_VERIFY_WORLD`; the
-    /// streamers aim at it during world entry.
-    pub(crate) fn pending_entry(&self) -> Option<(u32, [f32; 3])> {
-        self.pending_row()
-            .map(|c| (c.map, [c.position.x, c.position.y, c.position.z]))
-    }
-
-    /// The roster row for the pick in flight: the only description of the character until the
-    /// self descriptor streams in, so the in-game UI seats `UnitName("player")` from it.
-    pub(crate) fn pending_row(&self) -> Option<&Character> {
-        self.pending_pick
-            .and_then(|g| self.chars.iter().find(|c| c.guid == g))
-    }
-
-    /// The roster position of the pick in flight, by guid rather than the live selection: what
-    /// the reference persists as `lastCharacterIndex` at Enter World.
-    pub(super) fn pending_index(&self) -> Option<usize> {
-        let guid = self.pending_pick?;
-        self.chars.iter().position(|c| c.guid == guid)
-    }
-}
 
 // ── The remembered character (`lastCharacterIndex`) ───────────────────────────────
 

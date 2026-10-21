@@ -27,24 +27,6 @@ use crate::ui_script::{UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
 pub(crate) use crate::app_core::interaction::BinderState;
-impl BinderState {
-    /// `SMSG_BINDER_CONFIRM`: parks the innkeeper's guid and owes the UI a dialog.
-    pub(crate) fn ask(&mut self, npc: u64) {
-        self.npc = Some(npc);
-        self.ask = true;
-    }
-
-    /// The guid to answer with, if a question is live.
-    fn pending(&self) -> Option<u64> {
-        self.npc
-    }
-
-    /// Retracts the question: the range guard's close, and `SMSG_PLAYERBOUND`'s.
-    pub(crate) fn clear(&mut self) {
-        self.npc = None;
-        self.ask = false;
-    }
-}
 
 /// The range guard closes the question without a packet, as declining does, when the player
 /// leaves service range or the innkeeper despawns; that close is what `CheckBinderDist()` reports.

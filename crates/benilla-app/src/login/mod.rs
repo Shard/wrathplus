@@ -97,19 +97,6 @@ impl Plugin for LoginPlugin {
 // ── The credential policy ────────────────────────────────────────────────────────────────────────
 
 pub(crate) use crate::app_core::ui_flags::{IoPark, LoginIntent};
-impl LoginIntent {
-    /// Forget the session's credentials and any scheduled retry.
-    pub(crate) fn clear(&mut self) {
-        self.creds = None;
-        self.retry_at = None;
-    }
-
-    /// The account this session authenticated as, from the env fast path or the screen; it
-    /// decides whether the probe shield applies.
-    pub(crate) fn account(&self) -> Option<&str> {
-        self.creds.as_ref().map(|(user, _)| user.as_str())
-    }
-}
 
 /// One login attempt's inputs as a single [`SystemParam`]: the policy's memory, the channel to
 /// the parked IO thread, the abandon generation a Cancel bumps, and the realmlist it dials. A

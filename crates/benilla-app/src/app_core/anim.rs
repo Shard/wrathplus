@@ -26,6 +26,13 @@ pub(crate) struct NockLatch;
 #[derive(Resource, Default)]
 pub(crate) struct PlaySeq(pub(crate) u64);
 
+impl PlaySeq {
+    pub(crate) fn next(&mut self) -> u64 {
+        self.0 += 1;
+        self.0
+    }
+}
+
 /// The twist state, on a unit's root when its model has either key bone (the client's
 /// `[+0xd58] & 0x80`/`0x100`).
 #[derive(Component)]
@@ -36,6 +43,16 @@ pub(crate) struct BodyTwist {
     pub(crate) head: Option<Channel>,
 }
 
+impl BodyTwist {
+    pub(crate) fn new(spine: Option<u16>, head: Option<u16>) -> Self {
+        Self {
+            yaw_gap: 0.0,
+            spine: spine.map(Channel::new),
+            head: head.map(Channel::new),
+        }
+    }
+}
+
 /// One twist channel's bone and bookkeeping.
 pub(crate) struct Channel {
     pub(crate) bone: u16,
@@ -44,6 +61,16 @@ pub(crate) struct Channel {
     /// What we last wrote (`base * twist`). A bone still holding it was not re-keyed this frame, so
     /// `base` stays; composing onto it would accumulate the twist and spin the bone.
     pub(crate) last_out: Quat,
+}
+
+impl Channel {
+    pub(crate) fn new(bone: u16) -> Self {
+        Self {
+            bone,
+            base: Quat::IDENTITY,
+            last_out: Quat::IDENTITY,
+        }
+    }
 }
 
 /// `SMSG_GAMEOBJECT_CUSTOM_ANIM`, bridged from the net layer; the fishing bobber's bite sends

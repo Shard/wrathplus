@@ -5,108 +5,6 @@
 use benilla_ui::script::ScriptValue;
 
 pub(crate) use crate::app_core::chat::{ChatEvent, ChatEventKind};
-impl ChatEventKind {
-    /// The combat log's own kinds. The reference tests the `COMBAT_`/`SPELL_` prefix
-    /// (`ChatFrame.lua:1397-1399`); `COMBAT_XP_GAIN` and `COMBAT_HONOR_GAIN`, composed apart from
-    /// the combat log, are outside this set.
-    pub(crate) fn is_combat_log(self) -> bool {
-        use ChatEventKind as K;
-        matches!(self, K::CombatMiscInfo | K::CombatFactionChange)
-    }
-
-    /// Every kind, for the exhaustive sweeps; `ui_chat::tests::every_kind_is_in_all` fails when one
-    /// is missing.
-    #[cfg(test)]
-    pub(crate) const ALL: &'static [ChatEventKind] = {
-        use ChatEventKind as K;
-        &[
-            K::Say,
-            K::Party,
-            K::Raid,
-            K::Guild,
-            K::Officer,
-            K::Yell,
-            K::Whisper,
-            K::WhisperInform,
-            K::Emote,
-            K::TextEmote,
-            K::System,
-            K::MonsterSay,
-            K::MonsterYell,
-            K::MonsterEmote,
-            K::MonsterWhisper,
-            K::Channel,
-            K::ChannelJoin,
-            K::ChannelLeave,
-            K::ChannelNotice,
-            K::ChannelNoticeUser,
-            K::ChannelList,
-            K::Afk,
-            K::Dnd,
-            K::Ignored,
-            K::Skill,
-            K::Loot,
-            K::Money,
-            K::CombatXpGain,
-            K::CombatHonorGain,
-            K::RaidLeader,
-            K::RaidWarning,
-            K::RaidBossEmote,
-            K::Filtered,
-            K::Battleground,
-            K::BattlegroundLeader,
-            K::BgSystemNeutral,
-            K::BgSystemAlliance,
-            K::BgSystemHorde,
-            K::CombatMiscInfo,
-            K::CombatFactionChange,
-            K::Tradeskills,
-            K::PetInfo,
-        ]
-    };
-}
-
-impl ChatEvent {
-    /// A bare kind+text event (SYSTEM lines, loot receive lines, TEXT_EMOTE sentences).
-    pub(crate) fn text_only(kind: ChatEventKind, text: String) -> Self {
-        ChatEvent {
-            kind: Some(kind),
-            text,
-            ..Default::default()
-        }
-    }
-
-    /// The `SMSG_CHANNEL_NOTIFY` byte behind a channel notice, which `notice` holds in decimal.
-    pub(crate) fn notice_byte(&self) -> Option<u8> {
-        self.notice.parse().ok()
-    }
-
-    /// This event's `arg1..arg10` in the reference's order and types; ten values, never nil.
-    pub(crate) fn script_args(&self) -> Vec<ScriptValue> {
-        // arg1 is the token for a channel notice, else the body.
-        let arg1 = match (self.kind, self.notice_byte()) {
-            (Some(ChatEventKind::ChannelNotice | ChatEventKind::ChannelNoticeUser), Some(byte)) => {
-                notice_token(byte, self.slot_state)
-                    .unwrap_or_default()
-                    .to_string()
-            }
-            _ => self.text.clone(),
-        };
-        vec![
-            ScriptValue::Str(arg1),
-            ScriptValue::Str(self.sender.clone()),
-            ScriptValue::Str(self.language.clone()),
-            ScriptValue::Str(self.channel.clone()),
-            ScriptValue::Str(self.target.clone()),
-            ScriptValue::Str(self.flag.clone()),
-            ScriptValue::Int(i64::from(self.zone_channel_id)),
-            ScriptValue::Int(i64::from(self.channel_number)),
-            ScriptValue::Str(self.channel_base.clone()),
-            // arg10: always 0, see the struct doc.
-            ScriptValue::Int(0),
-        ]
-    }
-}
 
 /// The reference's event name for a kind, `CHAT_MSG_` and its `ChatTypeInfo` key, which
 /// `ChatFrame_OnEvent` recovers with `strsub(event, 10)`.
@@ -318,5 +216,38 @@ pub(crate) fn language_name(id: u32) -> &'static str {
         14 => "Troll",
         33 => "Gutterspeak",
         _ => "", // 0, Universal, and unknown ids: no header
+    }
+}
+
+/// `ChatEvent`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait ChatEventScript {
+    /// This event's `arg1..arg10` in the reference's order and types; ten values, never nil.
+    fn script_args(&self) -> Vec<ScriptValue>;
+}
+
+impl ChatEventScript for ChatEvent {
+    fn script_args(&self) -> Vec<ScriptValue> {
+        // arg1 is the token for a channel notice, else the body.
+        let arg1 = match (self.kind, self.notice_byte()) {
+            (Some(ChatEventKind::ChannelNotice | ChatEventKind::ChannelNoticeUser), Some(byte)) => {
+                notice_token(byte, self.slot_state)
+                    .unwrap_or_default()
+                    .to_string()
+            }
+            _ => self.text.clone(),
+        };
+        vec![
+            ScriptValue::Str(arg1),
+            ScriptValue::Str(self.sender.clone()),
+            ScriptValue::Str(self.language.clone()),
+            ScriptValue::Str(self.channel.clone()),
+            ScriptValue::Str(self.target.clone()),
+            ScriptValue::Str(self.flag.clone()),
+            ScriptValue::Int(i64::from(self.zone_channel_id)),
+            ScriptValue::Int(i64::from(self.channel_number)),
+            ScriptValue::Str(self.channel_base.clone()),
+            // arg10: always 0, see the struct doc.
+            ScriptValue::Int(0),
+        ]
     }
 }
