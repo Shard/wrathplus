@@ -224,23 +224,6 @@ fn unpark_boot_vm(world: &mut World) {
     }
 }
 
-/// Run condition for every in-world feed: the in-game UI is up on the VM in the world, since a
-/// feed that fires or drains into a VM with no frames loses what it sends. The reference likewise
-/// processes no world state before its UI is up: world entry (`0x420d63`) runs after the same
-/// iteration's inbound drain (`0x420d55`, its container `0x420c00` entered once per process),
-/// socket threads only enqueue (`0x537b7c`; `SMSG_PONG` at `0x537b56` the one bypass), and the
-/// login request waits for the UI (`0x46c272`).
-///
-/// Two terms, because the latch trails the wire by a frame: `apply_net_updates` drains `Connected`
-/// and the login burst behind it in one pass, and the `InWorld` transition that arms the latch and
-/// parks the VM runs at the next frame's `StateTransition`; the `InWorld` term covers that frame.
-pub(crate) fn ingame_ui_up(
-    pending: Option<Res<PendingEntryUiLoad>>,
-    state: Option<Res<State<crate::char_select::ClientState>>>,
-) -> bool {
-    pending.is_none() && state.is_some_and(|s| *s.get() == crate::char_select::ClientState::InWorld)
-}
-
 /// `PreUpdate`, after [`run_pending_reload`] so a reload never interleaves an armed entry load:
 /// run the armed entry load once the cover has presented, at once when there is no cover (a
 /// capture booting straight `InWorld`). Leaving the world first drops the latch unrun, and
