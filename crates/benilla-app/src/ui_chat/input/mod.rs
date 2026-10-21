@@ -4,6 +4,7 @@
 //! eligibility gate, the asleep gate, the stow, the posture, then `CMSG_TEXT_EMOTE`. Own sends are
 //! never echoed locally; the server echoes them.
 
+use crate::ui_chat::feed::ChatLogFeed;
 use bevy::prelude::*;
 
 mod parse;

@@ -497,14 +497,23 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
   `ConsoleEcho`, `PlaySeq`, `BodyTwist`, `Channel`, `MoveModes`, `ChatEvent`, `ChatEventKind`,
   `Family`, `Variant`, `NativeSavedInstances` and `QuestPois` (item 5's feed). These were matched by
   name and need a check per row. Fix per row: the impl moves with the type when it is pure (the
-  plan's rule), or becomes an extension trait in the feature.
+  plan's rule), or becomes an extension trait in the feature. Done (Wire B, taken over from Assets):
+  21 impls moved whole with their types, with the pure items they needed (`UnitClass`, `ListOutcome`,
+  `CooldownInfo`, `GROUPTYPE_RAID`, `GROUP_MEMBER_SUBGROUP`, the loot-candidate and fall constants).
+  The other 17 moved too except 13 methods that need their feature (the Lua VM, `SpellModifiers`,
+  `BindingInput`, `ArcEdges`, `move_trace`, the chat broadcast and combat queues, `LootAction`, the
+  push-container map). Those are eight extension traits beside the feature: `BindingsScriptInput`,
+  `ChatEventScript`, `ChatLogFeed`, `CooldownsSpell`, `LootStateRows`, `PlayerArc`, `PlayerSettle` and
+  `QuestPoisView`.
 - *Visibility*: 428 distinct `crate::<core|net module>::…` symbols named from upper layers (254 core,
   174 net; an upper bound, since it counts re-export paths and module paths). The plan's estimate was
   about 115 and 114. Each still widens to `pub` only when the compiler names it.
 - *`cfg(test)` helpers across the boundary*: upper-layer tests use 7 core or net `tests::` helpers from
   9 files (`net::…::tests::dispatch` and similar, from `game_plugins::client_tests`), and one core test
   uses `test_support`. `#[cfg(test)]` items are invisible to another crate, so these need a
-  `test-support` cargo feature on the lower crate, or the helper moving to the root's `client_tests`.
+  `test-support` cargo feature on the lower crate, or the helper moving to the root's `client_tests`. Done (Wire B): `benilla-app` has a `test-support` feature; `net::test_support` (the per-family
+  `dispatch`/`captured` helpers and the vehicle fixture guid) and the root `test_support` compile under
+  `cfg(any(test, feature = "test-support"))`, and every cross-layer user imports from there.
 - `env!("CARGO_MANIFEST_DIR")`, `include_str!` and `include_dir!` in moved files resolve against the new
   crate's directory. None failed in this pass; the move commit still needs to check them.
 

@@ -41,54 +41,14 @@ fn fired_input(input: FiredInput) -> (Input, f32) {
     }
 }
 
-impl BindingsState {
-    /// Execute the movement commands supported by Wrath's native, VM-less binding route. Keeping
-    /// this command-shaped preserves the same state edges as the Lua binding functions.
-    pub(super) fn apply_native_movement(&mut self, command: &str, pressed: bool) -> bool {
-        let fired = match command {
-            "JUMP" => Some(Input::Jump),
-            "ATTACKTARGET" => Some(Input::AttackTarget),
-            "TARGETNEARESTENEMY" => Some(Input::TargetNearestEnemy),
-            "TARGETPREVIOUSENEMY" => Some(Input::TargetPreviousEnemy),
-            _ => None,
-        };
-        if let Some(input) = fired {
-            if pressed {
-                self.fired.push(input);
-                self.just.push(input);
-            }
-            // `JUMP` is `JumpOrAscendStart`/`AscendStop`: the key also holds the ascend.
-            if input == Input::Jump {
-                self.apply_held(Input::Ascend, pressed);
-            }
-            return true;
-        }
-        let input = match command {
-            "MOVEFORWARD" => Input::MoveForward,
-            "MOVEBACKWARD" => Input::MoveBackward,
-            "TURNLEFT" => Input::TurnLeft,
-            "TURNRIGHT" => Input::TurnRight,
-            "STRAFELEFT" => Input::StrafeLeft,
-            "STRAFERIGHT" => Input::StrafeRight,
-            _ => return false,
-        };
-        self.apply_held(input, pressed);
-        true
-    }
-
-    fn apply_held(&mut self, input: Input, pressed: bool) {
-        if pressed {
-            if !self.pressed(input) {
-                self.just.push(input);
-                self.held.push(input);
-            }
-        } else {
-            self.held.retain(|&held| held != input);
-        }
-    }
-
+/// `BindingsState`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait BindingsScriptInput {
     /// Apply Lua's binding calls, in call order.
-    pub(super) fn apply_script_input(&mut self, inputs: Vec<BindingInput>) {
+    fn apply_script_input(&mut self, inputs: Vec<BindingInput>);
+}
+
+impl BindingsScriptInput for BindingsState {
+    fn apply_script_input(&mut self, inputs: Vec<BindingInput>) {
         for input in inputs {
             match input {
                 // The set helper `0x514840` early-outs on a bit already set, so a Start on a held

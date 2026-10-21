@@ -10,126 +10,6 @@ use super::{LootAction, LootLatch, LootState};
 use crate::net::{ClientCommand, NetCommands};
 use crate::ui_action::{UiError, UiErrorKeys};
 
-pub(crate) use crate::app_core::loot::{Phase, WrathLootState};
-impl WrathLootState {
-    pub(super) fn reset(&mut self) {
-        *self = Self::default();
-    }
-
-    fn begin(&mut self, guid: u64) -> bool {
-        if self.phase != Phase::Idle {
-            return false;
-        }
-        self.source = Some(guid);
-        self.phase = Phase::Requesting;
-        true
-    }
-
-    pub(super) fn admit_response(&mut self, guid: u64) -> bool {
-        if self.phase != Phase::Requesting || self.source != Some(guid) {
-            return false;
-        }
-        self.phase = Phase::Active;
-        true
-    }
-
-    /// A response we did not request (a chest or lockbox our use opened, fishing, a pickpocket):
-    /// adopted as the open window when nothing else is in flight. A repeat of the open window is
-    /// admitted too, as the latch still names it (`0x6d53b0`).
-    pub(super) fn adopt_response(&mut self, guid: u64) -> bool {
-        if self.phase == Phase::Active && self.source == Some(guid) {
-            return true;
-        }
-        if self.phase != Phase::Idle {
-            return false;
-        }
-        self.source = Some(guid);
-        self.phase = Phase::Active;
-        true
-    }
-
-    /// Whether our own `CMSG_LOOT` for `guid` is unanswered: the reference arms its latch at that
-    /// send, where ours stays cold until the response, so this stands in for the latch match.
-    pub(super) fn is_requesting(&self, guid: u64) -> bool {
-        self.phase == Phase::Requesting && self.source == Some(guid)
-    }
-
-    /// The response handler zeroes the latch on a refusal and on a releasing error (`0x6d53b0`),
-    /// which drops an unanswered request with it; an open window's session is untouched.
-    pub(super) fn drop_request(&mut self) {
-        if self.phase == Phase::Requesting {
-            self.reset();
-        }
-    }
-
-    pub(super) fn begin_take(&mut self, slot: u8) -> bool {
-        if self.phase != Phase::Active || self.takes.contains(&slot) {
-            return false;
-        }
-        self.takes.push_back(slot);
-        true
-    }
-
-    pub(super) fn undo_take(&mut self, slot: u8) {
-        if let Some(index) = self.takes.iter().position(|pending| *pending == slot) {
-            self.takes.remove(index);
-        }
-    }
-
-    pub(super) fn acknowledge_take(&mut self, slot: u8) -> bool {
-        let Some(index) = self.takes.iter().position(|pending| *pending == slot) else {
-            return false;
-        };
-        self.takes.remove(index);
-        true
-    }
-
-    pub(super) fn refuse_take(&mut self) -> bool {
-        self.phase == Phase::Active && self.takes.pop_front().is_some()
-    }
-
-    pub(super) fn begin_money(&mut self) -> bool {
-        if self.phase != Phase::Active || self.money {
-            return false;
-        }
-        self.money = true;
-        true
-    }
-
-    pub(super) fn undo_money(&mut self) {
-        self.money = false;
-    }
-
-    pub(super) fn acknowledge_money_notify(&self) -> bool {
-        self.phase == Phase::Active && self.money
-    }
-
-    pub(super) fn acknowledge_money_clear(&mut self) -> bool {
-        self.phase == Phase::Active && std::mem::take(&mut self.money)
-    }
-
-    pub(super) fn begin_release(&mut self, guid: u64) {
-        if self.source == Some(guid) && self.phase == Phase::Active {
-            self.phase = Phase::Releasing;
-            self.takes.clear();
-            self.money = false;
-        }
-    }
-
-    pub(super) fn acknowledge_release(&mut self, guid: u64) -> bool {
-        if self.source != Some(guid) || !matches!(self.phase, Phase::Active | Phase::Releasing) {
-            return false;
-        }
-        self.reset();
-        true
-    }
-
-    #[cfg(test)]
-    pub(super) fn pending_take_count(&self) -> usize {
-        self.takes.len()
-    }
-}
-
 /// Starts one build-12340 corpse-loot request. The latch stays cold until the matching response,
 /// so a failed channel send cannot predict either an open window or a kneel.
 pub(crate) fn begin_wrath_corpse_loot(
@@ -212,6 +92,7 @@ pub(super) fn inventory_failure(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui_loot::LootStateRows;
     use benilla_protocol::types::LootItem;
     use benilla_protocol::wrath_loot::InventoryChangeFailure;
 

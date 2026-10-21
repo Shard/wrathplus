@@ -4,9 +4,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::types::{
-    channel_notice, ChannelNoticeTail, ChatMessage, LevelUpInfo, XpGain, MACRO_EXPANDED_TYPES,
-};
+use benilla_protocol::types::{channel_notice, ChannelNoticeTail, MACRO_EXPANDED_TYPES};
 
 use benilla_assets::{LockRecover, WorldAssets};
 use benilla_formats::{EmoteLine, EmoteTextCatalog};
@@ -86,212 +84,6 @@ pub(super) fn text_emote_event(
         sender: line.performer.to_string(),
         ..Default::default()
     })
-}
-
-impl ChatLog {
-    /// Queue one world broadcast for [`super::broadcast::feed_broadcasts`]'s resolve pass.
-    pub(crate) fn push_broadcast(&mut self, b: super::broadcast::Broadcast) {
-        self.broadcasts.push(b);
-    }
-
-    /// How many broadcasts are waiting, the drain's early-out.
-    pub(crate) fn broadcasts_pending(&self) -> usize {
-        self.broadcasts.len()
-    }
-
-    /// Take the parked broadcasts, leaving the queue empty.
-    pub(crate) fn take_broadcasts(&mut self) -> Vec<super::broadcast::Broadcast> {
-        std::mem::take(&mut self.broadcasts)
-    }
-
-    /// Park a level-up's gains for the `PLAYER_LEVEL_UP` fire.
-    pub(crate) fn push_level_up_gains(&mut self, info: &LevelUpInfo, talent_points: u32) {
-        self.level_up_gains.push((*info, talent_points));
-    }
-
-    /// Take the parked gains for `level`; with none (a GM's level write), the caller fires zeros.
-    pub(crate) fn take_level_up_gains(&mut self, level: u32) -> Option<(LevelUpInfo, u32)> {
-        let i = self
-            .level_up_gains
-            .iter()
-            .position(|(l, _)| l.level == level)?;
-        Some(self.level_up_gains.remove(i))
-    }
-}
-
-impl ChatLog {
-    /// Queue a decoded wire line (`SMSG_MESSAGECHAT`).
-    pub(crate) fn push_wire(&mut self, msg: ChatMessage) {
-        self.pending.push(Pending::Wire { msg, tries: 0 });
-    }
-
-    /// Queue a client-composed event: loot, quest and system lines, the `/played` answer.
-    pub(crate) fn push_event(&mut self, event: ChatEvent) {
-        self.pending.push(Pending::Event(event));
-    }
-
-    /// Queue one combat-log line, classified at the packet by [`super::combat`], for its names.
-    pub(crate) fn push_combat(&mut self, line: super::combat::PendingCombat) {
-        self.pending.push(Pending::Combat(Box::new(line)));
-    }
-
-    /// Queue a decoded `SMSG_CHANNEL_NOTIFY`; a guid tail waits for its names.
-    pub(crate) fn push_channel_notice(
-        &mut self,
-        notice_byte: u8,
-        channel: String,
-        tail: &ChannelNoticeTail,
-    ) {
-        let (a_guid, b_guid, name) = match tail {
-            ChannelNoticeTail::Guid(g) | ChannelNoticeTail::Actor(g) => (*g, 0, None),
-            ChannelNoticeTail::Actors { target, source } => (*target, *source, None),
-            ChannelNoticeTail::Name(n) => (0, 0, Some(n.clone())),
-            ChannelNoticeTail::YouJoined { .. } | ChannelNoticeTail::Empty => (0, 0, None),
-            ChannelNoticeTail::ModeChange { .. } => return, // silent in the 1.12 UI (no string)
-        };
-        if a_guid != 0 {
-            self.pending.push(Pending::Notice {
-                notice: notice_byte,
-                channel,
-                a_guid,
-                b_guid,
-                tries: 0,
-            });
-        } else {
-            if let Some(event) = notice_event(notice_byte, channel, name, None) {
-                self.pending.push(Pending::Event(event));
-            }
-        }
-    }
-
-    /// Queue an inbound addon line for its sender's name. The text splits on its first tab, and
-    /// with none it is all prefix (`0x49a8d0`); `distribution` names PARTY, RAID, GUILD and
-    /// BATTLEGROUND, any other type `"UNKNOWN"` (`0x49aff4`).
-    pub(crate) fn push_addon(&mut self, text: &str, chat_type: u8, guid: u64) {
-        let (prefix, message) = match text.find('\t') {
-            Some(i) => (text[..i].to_string(), text[i + 1..].to_string()),
-            None => (text.to_string(), String::new()),
-        };
-        // The protocol's `CHAT_TYPE_*` constants.
-        let distribution = {
-            use benilla_protocol::types as m;
-            match u32::from(chat_type) {
-                m::CHAT_TYPE_PARTY => "PARTY",
-                m::CHAT_TYPE_RAID => "RAID",
-                m::CHAT_TYPE_GUILD => "GUILD",
-                m::CHAT_TYPE_BATTLEGROUND => "BATTLEGROUND",
-                _ => "UNKNOWN",
-            }
-        }
-        .to_string();
-        self.pending.push(Pending::Addon {
-            prefix,
-            message,
-            distribution,
-            guid,
-            tries: 0,
-        });
-    }
-
-    /// Queue a `/random` broadcast (`MSG_RANDOM_ROLL`) for the roller-name resolve.
-    pub(crate) fn push_roll(&mut self, min: u32, max: u32, roll: u32, guid: u64) {
-        self.pending.push(Pending::Roll {
-            min,
-            max,
-            roll,
-            guid,
-            tries: 0,
-        });
-    }
-
-    /// Queue an XP award's line (`SMSG_LOG_XPGAIN`); a kill waits on the victim's name.
-    pub(crate) fn push_xp_gain(&mut self, x: &XpGain) {
-        // Both forks park: the template resolves at the drain; `victim: 0` is the unnamed form.
-        let named = x.kill && x.victim != 0;
-        self.pending.push(Pending::XpGain {
-            victim: if named { x.victim } else { 0 },
-            total: x.total,
-            bonus: if named {
-                x.total.saturating_sub(x.base)
-            } else {
-                0
-            },
-            tries: 0,
-        });
-    }
-
-    /// Queue an honor award's line (`SMSG_PVP_CREDIT`); victim 0 is a bonus or objective award.
-    pub(crate) fn push_pvp_credit(&mut self, honor: i32, victim: u64, rank: u8) {
-        // Both forks park: the template resolves at the drain.
-        self.pending.push(Pending::HonorGain {
-            victim,
-            honor,
-            rank,
-            tries: 0,
-        });
-    }
-
-    /// Queue a text emote (`SMSG_TEXT_EMOTE`) for its performer's name, then its sentence.
-    pub(crate) fn push_text_emote(&mut self, performer: u64, text_id: u32, target: String) {
-        self.pending.push(Pending::TextEmote {
-            performer,
-            text_id,
-            target,
-            tries: 0,
-        });
-    }
-
-    /// Queue an area discovery: the `ERR_ZONE_EXPLORED` toast on every packet, never chat, and the
-    /// `ERR_ZONE_EXPLORED_XP` system line when `xp > 0`.
-    pub(crate) fn push_exploration(&mut self, area_name: &str, xp: u32) {
-        self.pending.push(Pending::Discovery {
-            area: area_name.to_string(),
-            xp,
-        });
-    }
-
-    /// Drop every pending item on disconnect.
-    pub(crate) fn clear_session(&mut self) {
-        self.pending.clear();
-    }
-
-    /// The parked addon lines as `(prefix, message, distribution)`.
-    #[cfg(test)]
-    pub(crate) fn pending_addons(&self) -> Vec<(String, String, String)> {
-        self.pending
-            .iter()
-            .filter_map(|p| match p {
-                Pending::Addon {
-                    prefix,
-                    message,
-                    distribution,
-                    ..
-                } => Some((prefix.clone(), message.clone(), distribution.clone())),
-                _ => None,
-            })
-            .collect()
-    }
-
-    /// How many parked items will render in a chat window; addon lines never do.
-    #[cfg(test)]
-    pub(crate) fn pending_len(&self) -> usize {
-        self.pending
-            .iter()
-            .filter(|p| !matches!(p, Pending::Addon { .. }))
-            .count()
-    }
-
-    /// The text of every composed line waiting to render, in order.
-    #[cfg(test)]
-    pub(crate) fn pending_lines(&self) -> Vec<String> {
-        self.pending
-            .iter()
-            .filter_map(|p| match p {
-                Pending::Event(e) => Some(e.text.clone()),
-                _ => None,
-            })
-            .collect()
-    }
 }
 
 /// The VM's globals as a string lookup, borrowed per composition so `route` can take the VM.
@@ -1219,6 +1011,55 @@ pub(crate) fn played_time_bridge(
                 benilla_ui::script::ScriptValue::Int(i64::from(level)),
             ],
         );
+    }
+}
+
+/// `ChatLog`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait ChatLogFeed {
+    /// Queue one world broadcast for [`super::broadcast::feed_broadcasts`]'s resolve pass.
+    fn push_broadcast(&mut self, b: super::broadcast::Broadcast);
+    /// Take the parked broadcasts, leaving the queue empty.
+    fn take_broadcasts(&mut self) -> Vec<super::broadcast::Broadcast>;
+    /// Queue one combat-log line, classified at the packet by [`super::combat`], for its names.
+    fn push_combat(&mut self, line: super::combat::PendingCombat);
+    /// Queue a decoded `SMSG_CHANNEL_NOTIFY`; a guid tail waits for its names.
+    fn push_channel_notice(&mut self, notice_byte: u8, channel: String, tail: &ChannelNoticeTail);
+}
+
+impl ChatLogFeed for ChatLog {
+    fn push_broadcast(&mut self, b: super::broadcast::Broadcast) {
+        self.broadcasts.push(b);
+    }
+
+    fn take_broadcasts(&mut self) -> Vec<super::broadcast::Broadcast> {
+        std::mem::take(&mut self.broadcasts)
+    }
+
+    fn push_combat(&mut self, line: super::combat::PendingCombat) {
+        self.pending.push(Pending::Combat(Box::new(line)));
+    }
+
+    fn push_channel_notice(&mut self, notice_byte: u8, channel: String, tail: &ChannelNoticeTail) {
+        let (a_guid, b_guid, name) = match tail {
+            ChannelNoticeTail::Guid(g) | ChannelNoticeTail::Actor(g) => (*g, 0, None),
+            ChannelNoticeTail::Actors { target, source } => (*target, *source, None),
+            ChannelNoticeTail::Name(n) => (0, 0, Some(n.clone())),
+            ChannelNoticeTail::YouJoined { .. } | ChannelNoticeTail::Empty => (0, 0, None),
+            ChannelNoticeTail::ModeChange { .. } => return, // silent in the 1.12 UI (no string)
+        };
+        if a_guid != 0 {
+            self.pending.push(Pending::Notice {
+                notice: notice_byte,
+                channel,
+                a_guid,
+                b_guid,
+                tries: 0,
+            });
+        } else {
+            if let Some(event) = notice_event(notice_byte, channel, name, None) {
+                self.pending.push(Pending::Event(event));
+            }
+        }
     }
 }
 

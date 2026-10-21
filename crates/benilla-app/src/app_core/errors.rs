@@ -8,6 +8,36 @@ use bevy::prelude::*;
 #[derive(Resource, Default)]
 pub(crate) struct CastErrors(pub Vec<CastFail>);
 
+impl CastErrors {
+    /// Queue a [`CastFail::local`] refusal.
+    pub(crate) fn push_local(&mut self, spell_id: u32, reason: u8) {
+        self.0.push(CastFail::local(spell_id, reason));
+    }
+
+    /// Queue a client-local refusal with an argument word, the crowd-control `0x8d`.
+    pub(crate) fn push_local_arg(&mut self, spell_id: u32, reason: u8, arg: u32) {
+        self.0.push(CastFail {
+            spell_id,
+            reason,
+            arg: Some(arg),
+            caster: Caster::Player,
+            redisplay: false,
+        });
+    }
+
+    /// Queue the pet's `SMSG_PET_CAST_FAILED` refusal, which carries no argument word
+    /// (vmangos `Packets/Pet.cpp:127-132`).
+    pub(crate) fn push_pet(&mut self, spell_id: u32, reason: u8) {
+        self.0.push(CastFail {
+            spell_id,
+            reason,
+            arg: None,
+            caster: Caster::Pet,
+            redisplay: false,
+        });
+    }
+}
+
 /// One queued cast failure. `arg` fills the message's `%s` (the arm table `0x6e1d8e`); the
 /// reference raises its local refusals with none, except the crowd-control `0x8d` (`0x6094f0`),
 /// which names the blocking aura's `SpellMechanic.dbc` id.
@@ -23,6 +53,28 @@ pub(crate) struct CastFail {
     /// cache callback `0x6e29b0`, calls `DisplayError` directly and never `0x62c360`, so a
     /// redisplay is not logged.
     pub redisplay: bool,
+}
+
+impl CastFail {
+    /// A client-local refusal, with no argument word; always the player's, since the server
+    /// decides every pet refusal.
+    pub(crate) const fn local(spell_id: u32, reason: u8) -> Self {
+        Self {
+            spell_id,
+            reason,
+            arg: None,
+            caster: Caster::Player,
+            redisplay: false,
+        }
+    }
+
+    /// The same entry, marked as a [`Self::redisplay`].
+    pub(crate) const fn requeued(self) -> Self {
+        Self {
+            redisplay: true,
+            ..self
+        }
+    }
 }
 
 /// Who failed to cast, which picks the reference's handler: `SMSG_CAST_RESULT` lands in
@@ -66,6 +118,55 @@ pub(crate) struct UiError {
     pub args: Vec<FillArg>,
 }
 
+impl UiError {
+    /// A message with no arguments.
+    pub(crate) fn key(key: &'static str) -> Self {
+        Self {
+            key,
+            args: Vec::new(),
+        }
+    }
+
+    /// One string, the `_S` family.
+    pub(crate) fn s(key: &'static str, s: impl Into<String>) -> Self {
+        Self {
+            key,
+            args: vec![FillArg::S(s.into())],
+        }
+    }
+
+    /// Several strings in push order, the `_SS`/`_SSS` family.
+    pub(crate) fn strings(key: &'static str, args: &[&str]) -> Self {
+        Self {
+            key,
+            args: args.iter().map(|s| FillArg::S((*s).to_string())).collect(),
+        }
+    }
+
+    /// A mixed list, for a template whose specifiers are not all `%s`.
+    pub(crate) fn args(key: &'static str, args: Vec<FillArg>) -> Self {
+        Self { key, args }
+    }
+
+    /// The first string argument.
+    #[cfg(test)]
+    pub(crate) fn arg_s(&self) -> Option<&str> {
+        self.args.iter().find_map(|a| match a {
+            FillArg::S(s) => Some(s.as_str()),
+            FillArg::D(_) => None,
+        })
+    }
+
+    /// The first integer argument.
+    #[cfg(test)]
+    pub(crate) fn arg_d(&self) -> Option<i64> {
+        self.args.iter().find_map(|a| match a {
+            FillArg::D(d) => Some(*d),
+            FillArg::S(_) => None,
+        })
+    }
+}
+
 /// Client-local refusals queued by GlobalStrings key: the `DisplayError` route for errors with no
 /// wire code and no spell record.
 #[derive(Resource, Default)]
@@ -77,3 +178,15 @@ pub(crate) struct UiErrorKeys(pub Vec<UiError>);
 /// `SMSG_AREA_TRIGGER_MESSAGE` (`0x48f8ff`) passes 0.
 #[derive(Resource, Default)]
 pub(crate) struct UiErrorTexts(pub Vec<(String, MsgKind)>);
+
+impl UiErrorTexts {
+    /// The red `UI_ERROR_MESSAGE` arm (`0x4945b0(text, 1)`).
+    pub(crate) fn error(&mut self, text: String) {
+        self.0.push((text, MsgKind::Error));
+    }
+
+    /// The yellow `UI_INFO_MESSAGE` arm (`0x4945b0(text, 0)`).
+    pub(crate) fn info(&mut self, text: String) {
+        self.0.push((text, MsgKind::Info));
+    }
+}

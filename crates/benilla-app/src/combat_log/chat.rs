@@ -7,6 +7,7 @@
 //! its names. The sentence's subject is not always the packet's `attacker`
 //! (`SMSG_SPELLDAMAGESHIELD`).
 
+use crate::ui_chat::feed::ChatLogFeed;
 use bevy::prelude::*;
 
 use benilla_protocol::types::{

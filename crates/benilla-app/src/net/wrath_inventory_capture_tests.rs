@@ -1,23 +1,7 @@
 use super::*;
-use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
+use crate::net::test_support::inventory::{captured, dispatch};
+use benilla_protocol::wrath_events::WrathEventAdapter;
 use benilla_protocol::wrath_inventory::decode;
-
-pub(crate) fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, opcode: u16, body: &[u8]) {
-    if let WrathDispatch::Handled { session_events, .. } =
-        adapter.dispatch(opcode, body, 0).unwrap()
-    {
-        crate::net::handlers::dispatch(app.world_mut(), session_events);
-    }
-}
-
-pub(crate) fn captured(app: &App) -> Vec<Packet> {
-    app.world()
-        .resource::<NativeInventoryPackets>()
-        .0
-        .iter()
-        .cloned()
-        .collect()
-}
 
 fn packet(opcode: u16, body: &[u8]) -> Packet {
     match decode(opcode, body).unwrap() {

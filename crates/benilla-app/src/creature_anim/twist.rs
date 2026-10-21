@@ -5,26 +5,7 @@
 
 use bevy::prelude::*;
 
-pub(crate) use crate::app_core::anim::{BodyTwist, Channel};
-impl BodyTwist {
-    pub(crate) fn new(spine: Option<u16>, head: Option<u16>) -> Self {
-        Self {
-            yaw_gap: 0.0,
-            spine: spine.map(Channel::new),
-            head: head.map(Channel::new),
-        }
-    }
-}
-
-impl Channel {
-    fn new(bone: u16) -> Self {
-        Self {
-            bone,
-            base: Quat::IDENTITY,
-            last_out: Quat::IDENTITY,
-        }
-    }
-}
+pub(crate) use crate::app_core::anim::BodyTwist;
 
 pub(crate) use crate::app_core::movement::wrap_pi;
 

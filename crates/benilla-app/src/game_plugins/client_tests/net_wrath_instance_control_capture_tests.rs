@@ -1,7 +1,7 @@
 //! Whole-client tests of `crate::net::wrath_instance_control_capture`, from `net/wrath_instance_control_capture_tests.rs`.
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::wrath_instance_control_capture::tests::dispatch;
+use crate::net::test_support::instance_control::dispatch;
 use crate::net::wrath_instance_control_capture::*;
 use benilla_protocol::wrath_events::WrathEventAdapter;
 use benilla_protocol::SessionEvent;

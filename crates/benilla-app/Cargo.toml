@@ -16,6 +16,9 @@ dev = ["benilla-assets/dev", "benilla-formats/dev", "benilla-world/dev", "dep:be
 tracy = ["bevy/trace_tracy"]
 # Writes every system's per-run span to `trace-<ts>.json` in the cwd.
 trace_chrome = ["bevy/trace_chrome"]
+# Test helpers that other crates' tests need (a `#[cfg(test)]` item is invisible across crates);
+# the crate split's root enables it for its tests.
+test-support = []
 
 [dependencies]
 anyhow.workspace = true

@@ -15,6 +15,7 @@
 //! carries nothing and is `DisplayError` 451 (`0x5e4a09`, `0x496720`), `ERR_CHAT_RESTRICTED`, a
 //! chat row, not a red toast (`0x496822`, `0x484cac`); vmangos never sends it.
 
+use crate::ui_chat::feed::ChatLogFeed;
 use bevy::prelude::*;
 
 use benilla_assets::{LockRecover, WorldAssets};

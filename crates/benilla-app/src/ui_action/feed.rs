@@ -3,6 +3,7 @@
 //! and feeds the stance page (`GetBonusBarOffset`: the form's `SpellShapeshiftForm.dbc`
 //! BonusActionBar column, `0x4e4fc0`).
 
+use crate::ui_chat::feed::ChatLogFeed;
 use crate::ui_items::{count_of, InventoryScope};
 use std::collections::{HashMap, HashSet};
 

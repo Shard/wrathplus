@@ -3,6 +3,7 @@
 //! `UNIT_FIELD_AURA` and `UNIT_FIELD_AURAAPPLICATIONS` callbacks `0x604d00` and `0x604ea0`,
 //! through `0x612320`, `0x6123f0` and `0x612450`) and the pet-loyalty line (`0x5ff860`).
 
+use crate::ui_chat::feed::ChatLogFeed;
 use bevy::prelude::*;
 
 mod packet;

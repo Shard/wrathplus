@@ -20,6 +20,7 @@ use crate::ui_script::gate;
 
 use super::pets::{self, Roster};
 use super::GroupState;
+pub(crate) use crate::app_core::group::{GROUPTYPE_RAID, GROUP_MEMBER_SUBGROUP};
 
 // ─── The VM feed and drain ───────────────────────────────────────────────────────────────────────
 
@@ -156,12 +157,6 @@ pub(crate) const RAID_PET_TOKENS: [&str; 40] = [
     "raidpet29", "raidpet30", "raidpet31", "raidpet32", "raidpet33", "raidpet34", "raidpet35",
     "raidpet36", "raidpet37", "raidpet38", "raidpet39", "raidpet40",
 ];
-
-/// `SMSG_GROUP_LIST`'s first byte for a raid; 0 is a party (vmangos `Group/Group.h:119`).
-pub(crate) const GROUPTYPE_RAID: u8 = 1;
-
-/// The subgroup bits (0-2) of a member's flags byte; `0x80` is the assistant bit.
-pub(crate) const GROUP_MEMBER_SUBGROUP: u8 = 0x07;
 
 /// Push the roster and the party unit snapshots into the VM and fire the party events on their
 /// edges. A member's unit state is their live descriptor when streamed, else their roster record.

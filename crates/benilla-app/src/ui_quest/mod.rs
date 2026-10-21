@@ -1,8 +1,8 @@
 //! The questgiver window's app side: the handlers fill [`QuestGiver`], [`feed_quest`] pushes it
 //! into the VM and fires the panel's event, and [`drain_quest`] sends the Lua intents.
 
-use std::collections::HashMap;
-
+#[cfg(test)]
+use crate::app_core::errors::UiError;
 #[cfg(test)]
 use benilla_protocol::types::{QuestDetails, QuestGiverList, QuestRequestItems};
 use benilla_protocol::types::{QuestRewardItem, QuestShareMsg};
@@ -16,138 +16,11 @@ use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, SelfPlayer};
-use crate::ui_action::{show_messages, ui_error_text, MessageSink, Shown, Spells, UiError};
+use crate::ui_action::{show_messages, ui_error_text, MessageSink, Shown, Spells};
 use crate::ui_script::{UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 
 pub(crate) use crate::app_core::state::{QuestGiver, QuestView};
-impl QuestGiver {
-    /// The quest the panel shows; a greeting lists several and names none.
-    pub(crate) fn shown_quest(&self) -> Option<u32> {
-        self.view.as_ref().and_then(|v| match v {
-            QuestView::Detail(d) => Some(d.quest_id),
-            QuestView::Progress(p) => Some(p.quest_id),
-            QuestView::Reward(o) => Some(o.quest_id),
-            QuestView::Greeting(_) => None,
-        })
-    }
-
-    /// Open (or replace) the window with a fresh wire view for `npc`.
-    pub(crate) fn open(&mut self, npc: u64, view: QuestView) {
-        self.npc = Some(npc);
-        self.view = Some(view);
-        // `0x500bd0` clears the already-acted latch (`0x500d91`) and the chosen reward
-        // (`0x500d8c`) on every panel publish.
-        self.acted = false;
-        self.chosen_reward = 0;
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn is_open(&self) -> bool {
-        self.view.is_some()
-    }
-
-    /// The one-shot turn-in fanfare, which the reference plays from the packet, not from Lua.
-    pub(crate) fn take_completed_fanfare(&mut self) -> bool {
-        std::mem::take(&mut self.completed_fanfare)
-    }
-
-    pub(crate) fn clear(&mut self) {
-        self.npc = None;
-        self.view = None;
-    }
-
-    pub(crate) fn set_status(&mut self, npc: u64, status: u32) {
-        self.statuses.insert(npc, status);
-    }
-
-    pub(crate) fn set_wrath_status(&mut self, npc: u64, status: u8) {
-        self.wrath_statuses.insert(npc, u32::from(status));
-    }
-
-    pub(crate) fn wrath_statuses(&self) -> &HashMap<u64, u32> {
-        &self.wrath_statuses
-    }
-
-    /// Every stored dialog status, which [`crate::quest_markers`] renders.
-    pub(crate) fn statuses(&self) -> &HashMap<u64, u32> {
-        &self.statuses
-    }
-
-    /// Drop the status of every guid `live` rejects: the reference keeps it on the unit
-    /// (`unit+0xcb8`), so it dies with the object, and a map needs the prune.
-    pub(crate) fn retain_statuses(&mut self, live: impl Fn(u64) -> bool) {
-        self.statuses.retain(|&npc, _| live(npc));
-        self.wrath_statuses.retain(|&npc, _| live(npc));
-        // The refusals follow the same lifetime.
-        self.refused.retain(|&npc, _| live(npc));
-    }
-
-    /// Drop one guid's status when it stops being a questgiver, as the reference's teardown does.
-    pub(crate) fn clear_status(&mut self, npc: u64) {
-        self.statuses.remove(&npc);
-        self.wrath_statuses.remove(&npc);
-    }
-
-    /// Re-ask every visible questgiver's status, as the reference does after
-    /// `SMSG_SET_FACTION_STANDING`, `SMSG_GROUP_LIST`, a turn-in and `SMSG_QUESTUPDATE_*`. A
-    /// counter, folded into the marker query's generation, so no bump is lost to ordering.
-    pub(crate) fn bump_reask(&mut self) {
-        self.reask = self.reask.wrapping_add(1);
-    }
-
-    pub(crate) fn reask_epoch(&self) -> u32 {
-        self.reask
-    }
-
-    pub(crate) fn refuse_status(&mut self, npc: u64, status: u32) {
-        self.refused.insert(npc, status);
-        self.refused_count = self.refused_count.saturating_add(1);
-    }
-
-    pub(crate) fn refused_for(&self, npc: u64) -> Option<u32> {
-        self.refused.get(&npc).copied()
-    }
-
-    pub(crate) fn refused_count(&self) -> u32 {
-        self.refused_count
-    }
-
-    /// One guid's stored dialog status; the markers read the whole map instead.
-    #[allow(dead_code)]
-    pub(crate) fn status(&self, npc: u64) -> Option<u32> {
-        self.statuses.get(&npc).copied()
-    }
-
-    /// The open panel's title if it shows `quest_id`: the `%s` of a refusal naming the quest.
-    pub(crate) fn view_title(&self, quest_id: u32) -> Option<String> {
-        match self.view.as_ref()? {
-            QuestView::Detail(d) if d.quest_id == quest_id => Some(d.title.clone()),
-            QuestView::Progress(p) if p.quest_id == quest_id => Some(p.title.clone()),
-            QuestView::Reward(o) if o.quest_id == quest_id => Some(o.title.clone()),
-            _ => None,
-        }
-    }
-
-    /// Queue a message for [`feed_quest`]; its key's catalog row picks the surface.
-    pub(crate) fn push_message(&mut self, msg: UiError) {
-        self.messages.push(msg);
-    }
-
-    pub(crate) fn take_messages(&mut self) -> Vec<UiError> {
-        std::mem::take(&mut self.messages)
-    }
-
-    pub(crate) fn clear_session(&mut self) {
-        self.clear();
-        self.statuses.clear();
-        self.wrath_statuses.clear();
-        self.messages.clear();
-        self.close_on_cancel = 0;
-        self.acted = false;
-        self.chosen_reward = 0;
-    }
-}
 
 /// `SMSG_QUESTGIVER_QUEST_INVALID`'s `QuestFailedReason` as a GlobalStrings key, per the
 /// reference's handler `0x5dbca0` (the `0x18f` arm of the quest demux `0x5e5910`), whose default,

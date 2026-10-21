@@ -1,5 +1,5 @@
 use super::*;
-use crate::net::wrath_quests_completed_capture::tests::dispatch;
+use crate::net::test_support::quests_completed::dispatch;
 use benilla_protocol::wrath_events::WrathEventAdapter;
 use benilla_protocol::SessionEvent;
 

@@ -62,14 +62,6 @@ impl ConsoleCommandApp for App {
 }
 
 pub(crate) use crate::app_core::state::ConsoleEcho;
-impl ConsoleEcho {
-    pub(crate) fn print(&mut self, line: String) {
-        match &mut self.capture {
-            Some(lines) => lines.push(line),
-            None => info!("console: {line}"),
-        }
-    }
-}
 
 /// The built-ins: the reference's four `ConsoleVar.cpp` commands and `help`.
 pub(crate) struct ConsolePlugin;

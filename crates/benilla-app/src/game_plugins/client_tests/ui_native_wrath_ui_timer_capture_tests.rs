@@ -1,7 +1,7 @@
 //! Whole-client tests of `crate::ui_native::wrath_ui_timer_capture`, from `ui_native/wrath_ui_timer_capture_tests.rs`.
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::wrath_ui_timer_capture::tests::dispatch;
+use crate::net::test_support::ui_timer::dispatch;
 use crate::ui_native::wrath_ui_timer_capture::*;
 use benilla_protocol::wrath_events::WrathEventAdapter;
 use benilla_protocol::SessionEvent;

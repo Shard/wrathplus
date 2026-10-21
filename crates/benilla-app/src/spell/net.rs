@@ -3,6 +3,7 @@
 //! ([`super::inflight`], [`super::cooldowns`], [`super::mods`]) and the windows' stores through
 //! [`Lifecycle`] and [`Scene`].
 
+use crate::spell::cooldowns::CooldownsSpell;
 use std::time::{Duration, Instant};
 
 use benilla_formats::LearnAnnouncement;

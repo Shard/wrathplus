@@ -2,6 +2,8 @@
 //! resolved rows to the VM and fires `LOOT_OPENED`, `LOOT_SLOT_CLEARED`, `UPDATE_MASTER_LOOT_LIST`
 //! and `LOOT_CLOSED`, and [`drain_loot`] sends what the Lua asked for.
 
+#[cfg(test)]
+use crate::app_core::group::GROUPTYPE_RAID;
 use benilla_protocol::types::{slot_type, ItemPushResult, LootItem, BAG_PLAYER_INVENTORY};
 use bevy::prelude::*;
 
@@ -12,7 +14,7 @@ use crate::items::{Items, RollCatalogs};
 use crate::names::NameCache;
 use crate::net::{ClientCommand, NetCommands};
 use crate::ui_items::KEYRING_CONTAINER;
-use crate::ui_party::{GroupState, GROUPTYPE_RAID, GROUP_MEMBER_SUBGROUP};
+use crate::ui_party::GroupState;
 use crate::ui_script::{UiFeed, UiInput};
 
 mod net;
@@ -57,14 +59,9 @@ fn push_container(bag: u8, slot: u32) -> i64 {
     0
 }
 
-/// The client's candidate array: 40 slots at `0xc4dc38`, bound-checked by the getter `0x61c660`.
-const MASTER_LOOT_CANDIDATE_SLOTS: usize = 40;
-/// A raid subgroup's block within it (`0x61c609`).
-const MEMBERS_PER_RAID_GROUP: usize = 5;
-
 /// A clicked row resolved: the coin pile, or an item at its wire loot slot.
 #[derive(Clone, Copy)]
-enum LootAction {
+pub(crate) enum LootAction {
     Money,
     Item {
         wire_slot: u8,
@@ -73,179 +70,6 @@ enum LootAction {
         /// `MASTER` opens the master-loot dropdown instead of a take.
         slot_type: u8,
     },
-}
-
-impl LootState {
-    /// Opens or replaces the window; quest items ride the same rows at `slot = items.len() + i`.
-    pub(crate) fn open(&mut self, source: u64, loot_type: u8, gold: u32, items: Vec<LootItem>) {
-        self.source = Some(source);
-        // An open window is an active build-12340 session; a response admission already made it one.
-        self.wrath.adopt_response(source);
-        self.gold = gold;
-        self.coin_slot = gold > 0; // fixed for the window's lifetime
-        self.items = items;
-        self.taken.clear();
-        self.auto_release = false; // an empty window at open stays open
-        self.pending_bind_confirm = None; // `0x4c1df5`: the copier resets the stash
-        self.loot_type = loot_type;
-        self.fishing = loot_type == benilla_protocol::types::loot_type::FISHING;
-        self.master_candidates = std::mem::take(&mut self.pending_master_candidates);
-    }
-
-    /// Stages a list for the next open; an open window takes it at once, as a refresh.
-    pub(crate) fn set_master_candidates(&mut self, candidates: Vec<u64>) {
-        if self.source.is_some() {
-            self.master_candidates.clone_from(&candidates);
-        }
-        self.pending_master_candidates = candidates;
-    }
-
-    /// `SMSG_LOOT_REMOVED`: the row becomes a gap; an emptied window arms the auto-close.
-    pub(crate) fn remove_slot(&mut self, wire_slot: u8) {
-        if self.items.iter().any(|it| it.slot == wire_slot) && !self.taken.contains(&wire_slot) {
-            self.taken.push(wire_slot);
-        }
-        self.arm_auto_release();
-    }
-
-    /// A roll that resolved (`SMSG_LOOT_ROLL_WON`, `SMSG_LOOT_ALL_PASSED` → `0x6dc770`): the row's
-    /// slot type drops to `ALLOW_LOOT` while the window is open on the roll's source.
-    pub(crate) fn release_roll(&mut self, source: u64, wire_slot: u8) {
-        if self.source != Some(source) {
-            return;
-        }
-        if let Some(it) = self.items.iter_mut().find(|it| it.slot == wire_slot) {
-            it.slot_type = slot_type::ALLOW_LOOT;
-        }
-    }
-
-    /// `SMSG_LOOT_CLEAR_MONEY`: the coin row becomes a gap; an emptied window arms the auto-close.
-    pub(crate) fn clear_money(&mut self) {
-        self.gold = 0;
-        self.arm_auto_release();
-    }
-
-    fn arm_auto_release(&mut self) {
-        if self.source.is_some() && self.is_empty() {
-            self.auto_release = true;
-        }
-    }
-
-    fn take_auto_release(&mut self) -> bool {
-        std::mem::take(&mut self.auto_release)
-    }
-
-    /// Queues a push the net handler has already checked is ours.
-    pub(crate) fn push_receive(&mut self, p: &ItemPushResult) {
-        self.receives.push(PendingReceive {
-            created: p.created,
-            entry: p.item_entry,
-            count: p.count,
-            from_npc: p.from_npc,
-            random_property_id: p.random_property_id,
-            suffix_factor: p.suffix_factor,
-            in_chat: p.show_in_chat,
-            container: push_container(p.bag_slot, p.item_slot),
-            tries: 0,
-        });
-    }
-
-    /// Closes the window; queued pushes outlive it.
-    pub(crate) fn clear(&mut self) {
-        self.source = None;
-        self.gold = 0;
-        self.coin_slot = false;
-        self.items.clear();
-        self.taken.clear();
-        self.auto_release = false;
-        self.fishing = false;
-        self.loot_type = 0;
-        self.pending_bind_confirm = None;
-        self.master_candidates.clear();
-        self.pending_master_candidates.clear();
-    }
-
-    /// Session end: drops the window and the queued pushes.
-    pub(crate) fn clear_session(&mut self) {
-        self.clear();
-        self.receives.clear();
-        self.wrath.reset();
-    }
-
-    /// Queued pushes, for the net handler's self-gate test.
-    #[cfg(test)]
-    pub(crate) fn pending_receive_count(&self) -> usize {
-        self.receives.len()
-    }
-
-    fn has_coin(&self) -> bool {
-        self.gold > 0
-    }
-
-    /// The open loot's guid; the chest lid watcher in [`crate::go_anim`] reads it too.
-    pub(crate) fn source(&self) -> Option<u64> {
-        self.source
-    }
-
-    /// Nothing lootable left: the reference's empty check `0x4c2a70`.
-    fn is_empty(&self) -> bool {
-        !self.has_coin() && self.items.iter().all(|it| self.taken.contains(&it.slot))
-    }
-
-    /// A 1-based display row of the fixed layout; a gap answers `None`, like the hidden button.
-    fn action_at(&self, index_1based: u32) -> Option<LootAction> {
-        let mut index = index_1based.checked_sub(1)? as usize; // 0-based layout position
-        if self.coin_slot {
-            if index == 0 {
-                return self.has_coin().then_some(LootAction::Money);
-            }
-            index -= 1;
-        }
-        let it = self.items.get(index)?;
-        (!self.taken.contains(&it.slot)).then_some(LootAction::Item {
-            wire_slot: it.slot,
-            display_id: it.display_info_id,
-            item_id: it.item_id,
-            slot_type: it.slot_type,
-        })
-    }
-
-    /// The candidate slots as `0x61c550` lays them out: wire order in a party (`0x61c5b9`); in a
-    /// raid, each guid in the first free slot of its subgroup's block of five
-    /// (`0x61c5c9`-`0x61c637`), holes kept for `GroupLootDropDown_Initialize`'s "Group N" submenus
-    /// (`LootFrame.lua:197-213`). The feed and the drain share it, so an index means one candidate.
-    fn placed_candidates(&self, group: &GroupState) -> Vec<Option<u64>> {
-        if group.group_type != GROUPTYPE_RAID {
-            return self.master_candidates.iter().copied().map(Some).collect();
-        }
-        let mut slots: Vec<Option<u64>> = vec![None; MASTER_LOOT_CANDIDATE_SLOTS];
-        for &guid in &self.master_candidates {
-            // A guid missing from the roster is ours: `SMSG_GROUP_LIST` lists only the others,
-            // and `Group::MasterLoot` includes us.
-            let flags = group
-                .members
-                .iter()
-                .find(|m| m.guid == guid)
-                .map_or(group.own_flags, |m| m.flags);
-            let base = usize::from(flags & GROUP_MEMBER_SUBGROUP) * MEMBERS_PER_RAID_GROUP;
-            let end = (base + MEMBERS_PER_RAID_GROUP).min(MASTER_LOOT_CANDIDATE_SLOTS);
-            if let Some(free) = (base..end).find(|&i| slots[i].is_none()) {
-                slots[free] = Some(guid);
-            }
-        }
-        while slots.last().is_some_and(Option::is_none) {
-            slots.pop(); // trailing empties read as nil either way
-        }
-        slots
-    }
-
-    /// The candidate at a 1-based menu index, through [`LootState::placed_candidates`].
-    fn master_candidate(&self, index_1based: u32, group: &GroupState) -> Option<u64> {
-        self.placed_candidates(group)
-            .get(index_1based.checked_sub(1)? as usize)
-            .copied()
-            .flatten()
-    }
 }
 
 pub(crate) use crate::app_core::state::{LootConfig, LootLatch};
@@ -297,15 +121,6 @@ pub(crate) fn resolve_loot_kneel(
         });
     if kneel.0 != allowed {
         kneel.0 = allowed;
-    }
-}
-
-impl LootLatch {
-    /// Drops the latch only if it still names `guid`.
-    pub(crate) fn clear_for(&mut self, guid: u64) {
-        if self.0 == Some(guid) {
-            self.0 = None;
-        }
     }
 }
 
@@ -1058,6 +873,47 @@ fn drain_loot(
             debug!("ui_loot: loot emptied — auto-release {guid:#x}");
         }
         dead.after_close(closed);
+    }
+}
+
+/// `LootState`'s methods that need this module (the type lives in `app_core` for the crate split).
+pub(crate) trait LootStateRows {
+    /// Queues a push the net handler has already checked is ours.
+    fn push_receive(&mut self, p: &ItemPushResult);
+    /// A 1-based display row of the fixed layout; a gap answers `None`, like the hidden button.
+    fn action_at(&self, index_1based: u32) -> Option<LootAction>;
+}
+
+impl LootStateRows for LootState {
+    fn push_receive(&mut self, p: &ItemPushResult) {
+        self.receives.push(PendingReceive {
+            created: p.created,
+            entry: p.item_entry,
+            count: p.count,
+            from_npc: p.from_npc,
+            random_property_id: p.random_property_id,
+            suffix_factor: p.suffix_factor,
+            in_chat: p.show_in_chat,
+            container: push_container(p.bag_slot, p.item_slot),
+            tries: 0,
+        });
+    }
+
+    fn action_at(&self, index_1based: u32) -> Option<LootAction> {
+        let mut index = index_1based.checked_sub(1)? as usize; // 0-based layout position
+        if self.coin_slot {
+            if index == 0 {
+                return self.has_coin().then_some(LootAction::Money);
+            }
+            index -= 1;
+        }
+        let it = self.items.get(index)?;
+        (!self.taken.contains(&it.slot)).then_some(LootAction::Item {
+            wire_slot: it.slot,
+            display_id: it.display_info_id,
+            item_id: it.item_id,
+            slot_type: it.slot_type,
+        })
     }
 }
 

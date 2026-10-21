@@ -23,6 +23,7 @@
 //! Persistence: `benilla-config/bindings/account.txt` and `<Realm>-<Char>.txt` ([`store`]); the
 //! character file's existence is the character-set state, as in the reference.
 
+use crate::bindings::script_input::BindingsScriptInput;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input::mouse::{AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::input::ButtonState;
@@ -103,39 +104,6 @@ impl BindingDispatch {
 }
 
 pub(crate) use crate::app_core::state::{BindingsState, Held};
-impl BindingsState {
-    /// Is a held bit set right now (the reference's `[InputControl+4]`)?
-    pub(crate) fn pressed(&self, i: Input) -> bool {
-        self.held.contains(&i)
-    }
-    /// Did this bit's Start, or this one-shot, come this frame (the key-down edge)?
-    pub(crate) fn just_pressed(&self, i: Input) -> bool {
-        self.just.contains(&i)
-    }
-    /// Did this one-shot fire this frame?
-    pub(crate) fn fired(&self, i: Input) -> bool {
-        self.fired.contains(&i)
-    }
-    /// Total amount for a one-shot this frame (0.0 when idle): the camera zoom's yards.
-    pub(crate) fn amount(&self, i: Input) -> f32 {
-        self.amounts
-            .iter()
-            .filter(|&&(a, _)| a == i)
-            .map(|&(_, v)| v)
-            .sum()
-    }
-    /// Both mouse bits held by their Lua Starts, the both-button run: MOVEANDSTEER's body
-    /// (`Bindings.xml:3-11`) runs `CameraOrSelectOrMoveStart` and `TurnOrActionStart`.
-    pub(crate) fn steering(&self) -> bool {
-        self.pressed(Input::TurnOrAction) && self.pressed(Input::CameraOrSelectOrMove)
-    }
-    /// [`Self::steering`] began this frame.
-    pub(crate) fn steering_began(&self) -> bool {
-        self.steering()
-            && (self.just_pressed(Input::TurnOrAction)
-                || self.just_pressed(Input::CameraOrSelectOrMove))
-    }
-}
 
 /// Which files this session's bindings live in: written by [`seed_bindings_for_vm`], read by the
 /// save.

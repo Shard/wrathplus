@@ -171,71 +171,6 @@ pub(crate) const LOG_PERIODIC_CVAR: &str = "CombatLogPeriodicSpells";
 pub(crate) const DEATH_LOG_RANGE_CVAR: &str = "CombatDeathLogRange";
 pub(crate) const DEATH_LOG_RANGE_DEFAULT: f32 = 60.0;
 
-/// A unit's standing relative to the active player: the `0..9` index every combat-log selector
-/// takes, in the order of the reference's range table at `0x8629e0`, which `0x626810` indexes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum UnitClass {
-    Me = 0,
-    MyPet = 1,
-    Party = 2,
-    PartyPet = 3,
-    FriendlyPlayer = 4,
-    FriendlyPet = 5,
-    HostilePlayer = 6,
-    HostilePet = 7,
-    Creature = 8,
-    /// Unresolvable: not streamed, or a guid with no unit behind it.
-    Unknown = 9,
-}
-
-impl UnitClass {
-    pub(crate) fn from_index(i: usize) -> Self {
-        match i {
-            0 => Self::Me,
-            1 => Self::MyPet,
-            2 => Self::Party,
-            3 => Self::PartyPet,
-            4 => Self::FriendlyPlayer,
-            5 => Self::FriendlyPet,
-            6 => Self::HostilePlayer,
-            7 => Self::HostilePet,
-            8 => Self::Creature,
-            _ => Self::Unknown,
-        }
-    }
-
-    /// The CVar naming this class's display range; classes 0, 1 and 9 have none.
-    pub(crate) fn range_cvar(self) -> Option<&'static str> {
-        Some(match self {
-            Self::Me | Self::MyPet | Self::Unknown => return None,
-            Self::Party => "CombatLogRangeParty",
-            Self::PartyPet => "CombatLogRangePartyPet",
-            Self::FriendlyPlayer => "CombatLogRangeFriendlyPlayers",
-            Self::FriendlyPet => "CombatLogRangeFriendlyPlayersPets",
-            Self::HostilePlayer => "CombatLogRangeHostilePlayers",
-            Self::HostilePet => "CombatLogRangeHostilePlayersPets",
-            Self::Creature => "CombatLogRangeCreature",
-        })
-    }
-
-    /// The registered default in yards, from the `0x8629e0` pairs: the sentinels are `100000.0`
-    /// (`[0x80dcc4]`) for classes 0 and 1 and `0.0` (`[0x7ffd74]`) for 9.
-    pub(crate) fn default_range(self) -> f32 {
-        match self {
-            Self::Me | Self::MyPet => 100_000.0,
-            Self::Creature => 30.0,
-            Self::Unknown => 0.0,
-            _ => 50.0,
-        }
-    }
-
-    /// The `SELF` of a `…SELFOTHER`/`…OTHERSELF` key: class 0 only. Your pet is an `OTHER`, told
-    /// apart by its chat type (`COMBAT_PET_HITS`).
-    fn is_me(self) -> bool {
-        self == Self::Me
-    }
-}
-
 /// Classify one guid against the active player, the reference's `0x5efea0`. This reads the owner
 /// (`UNIT_FIELD_CHARMEDBY`, then `UNIT_FIELD_CREATEDBY`) for every unit, tests party (your own
 /// subgroup) before hostility, and runs `CanAttack` (`0x606980`) only with the player attacking
@@ -469,78 +404,8 @@ fn buff_twin(damage: ChatEventKind) -> ChatEventKind {
 // ──────────────────────────── the format-string selectors ─────────────────────────────
 
 pub(crate) use crate::app_core::chat::{
-    Family, Fills, Keying, Named, PendingCombat, Slot, Trailers, Variant,
+    Family, Fills, Keying, Named, PendingCombat, Slot, Trailers, UnitClass, Variant,
 };
-impl Variant {
-    fn of(subject: UnitClass, object: UnitClass) -> Self {
-        match (subject.is_me(), object.is_me()) {
-            (true, false) => Self::SelfOther,
-            (false, true) => Self::OtherSelf,
-            (false, false) => Self::OtherOther,
-            (true, true) => Self::SelfSelf,
-        }
-    }
-
-    fn suffix(self) -> &'static str {
-        match self {
-            Self::SelfOther => "SELFOTHER",
-            Self::OtherSelf => "OTHERSELF",
-            Self::OtherOther => "OTHEROTHER",
-            Self::SelfSelf => "SELFSELF",
-        }
-    }
-
-    /// Whether the subject is spelled by name rather than as "You".
-    fn names_subject(self) -> bool {
-        matches!(self, Self::OtherSelf | Self::OtherOther)
-    }
-
-    fn names_object(self) -> bool {
-        matches!(self, Self::SelfOther | Self::OtherOther)
-    }
-
-    /// Whether the subject is the local player, the one bit a [`Keying::Duo`] family keys on.
-    fn subject_is_me(self) -> bool {
-        matches!(self, Self::SelfSelf | Self::SelfOther)
-    }
-}
-
-impl Family {
-    /// The GlobalString key this family resolves for `variant`.
-    pub(crate) fn key(&self, variant: Variant) -> String {
-        let mid = match self.keying {
-            Keying::Quad => variant.suffix(),
-            Keying::Duo { me, other } => {
-                if variant.subject_is_me() {
-                    me
-                } else {
-                    other
-                }
-            }
-            Keying::Single => "",
-        };
-        format!("{}{mid}{}", self.stem, self.tail)
-    }
-
-    fn names_subject(&self, variant: Variant) -> bool {
-        match self.keying {
-            Keying::Quad => variant.names_subject(),
-            // Only the `…OTHER` half of a two-way key spells a name.
-            Keying::Duo { .. } => !variant.subject_is_me(),
-            // A fixed key such as `PARTYKILLOTHER` always names its subject.
-            Keying::Single => true,
-        }
-    }
-
-    fn names_object(&self, variant: Variant) -> bool {
-        match self.keying {
-            Keying::Quad => variant.names_object(),
-            // A two-way family's sentence has one participant, so no `Victim` slot.
-            Keying::Duo { .. } => false,
-            Keying::Single => true,
-        }
-    }
-}
 
 fn append_trailers(lua: &benilla_ui::script::UiScript, line: &mut String, t: Trailers) {
     const GLANCING: u32 = 0x4000;
