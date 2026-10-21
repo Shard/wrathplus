@@ -17,6 +17,8 @@ use crate::ui_trainer::TrainerFeed;
 use crate::ui_unit::{enrich_unit, snapshot, unit_reaction, SnapshotTables, UnitFeed};
 
 mod spell_deps;
+/// The spell tooltip's cost cell, its runes and its per-type keys.
+mod cost_cell;
 pub(crate) mod spell_feed;
 use spell_feed::feed_spell_tooltips;
 

@@ -14,6 +14,8 @@
 //! `SpellIcon.dbc` is `ID`, `TextureFilename` (no extension).
 
 mod cast_times;
+/// The cost cell's 3.3.5-only tables: `SpellRuneCost.dbc` and `PowerDisplay.dbc`.
+mod cost;
 mod dispel_types;
 mod display;
 mod duration;
@@ -24,6 +26,8 @@ mod soft_float;
 mod tokens;
 
 pub use cast_times::{load_spell_cast_times, SpellCastTime, SpellCastTimeCatalog};
+pub use cost::RuneCost;
+use cost::{load_power_displays, load_rune_costs};
 pub use dispel_types::{load_spell_dispel_types, SpellDispelTypes};
 pub use display::{FormRefusal, LearnAnnouncement, OpenLock, SpellDisplay};
 pub use duration::{load_spell_durations, SpellDuration, SpellDurationCatalog};
@@ -311,15 +315,6 @@ pub struct SpellCatalog {
     rune_costs: HashMap<u32, RuneCost>,
     /// `PowerDisplay.dbc` by id: the `GlobalStrings.lua` key naming the power.
     power_displays: HashMap<u32, String>,
-}
-
-/// One `SpellRuneCost.dbc` row's runes, columns 1-3 as the 12340 tooltip reads them (`0x623d21`):
-/// Blood, then Unholy, then Frost.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct RuneCost {
-    pub blood: u32,
-    pub unholy: u32,
-    pub frost: u32,
 }
 
 impl SpellCatalog {
@@ -735,99 +730,9 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
     })
 }
 
-/// `SpellRuneCost.dbc`, 3.3.5-only: id, three rune counts, the runic power gain.
-fn load_rune_costs(chain: &mut Chain) -> Result<HashMap<u32, RuneCost>> {
-    let bytes = chain
-        .read_file("DBFilesClient\\SpellRuneCost.dbc")
-        .context("reading SpellRuneCost.dbc")?;
-    let mut s = Schema::new("SpellRuneCost");
-    for name in ["ID", "Blood", "Unholy", "Frost", "RunicPowerGain"] {
-        s.add_field(SchemaField::new(name, FieldType::UInt32));
-    }
-    let rs = parse(&bytes, s, "SpellRuneCost.dbc")?;
-    Ok(rs
-        .records()
-        .iter()
-        .filter_map(|r| {
-            let at = |i| u32_at(r, i).unwrap_or(0);
-            Some((
-                u32_at(r, 0)?,
-                RuneCost {
-                    blood: at(1),
-                    unholy: at(2),
-                    frost: at(3),
-                },
-            ))
-        })
-        .collect())
-}
-
-/// `PowerDisplay.dbc`, 3.3.5-only: id, the actual power type, the `GlobalStrings.lua` key, and
-/// the bar colour.
-fn load_power_displays(chain: &mut Chain) -> Result<HashMap<u32, String>> {
-    let bytes = chain
-        .read_file("DBFilesClient\\PowerDisplay.dbc")
-        .context("reading PowerDisplay.dbc")?;
-    let mut s = Schema::new("PowerDisplay");
-    s.add_field(SchemaField::new("ID", FieldType::UInt32));
-    s.add_field(SchemaField::new("ActualType", FieldType::UInt32));
-    s.add_field(SchemaField::new("GlobalStringBaseTag", FieldType::String));
-    for name in ["Red", "Green", "Blue"] {
-        s.add_field(SchemaField::new(name, FieldType::UInt32));
-    }
-    let rs = parse(&bytes, s, "PowerDisplay.dbc")?;
-    Ok(rs
-        .records()
-        .iter()
-        .filter_map(|r| Some((u32_at(r, 0)?, str_at(&rs, r, 2)?)))
-        .collect())
-}
-
 #[cfg(test)]
 #[path = "catalog_tests.rs"]
 mod tests;
 
 #[cfg(test)]
-mod learn_effect_tests {
-    use super::*;
-
-    /// A trainer's wrapper carries the learn effect and the step `0x4d7d40` compares.
-    #[test]
-    fn the_openers_skill_steps_read_off_the_real_file() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_spell_catalog(&mut chain).expect("Spell.dbc");
-        let blacksmithing = 164;
-        for (wrapper, taught, step) in [
-            (2020, 2018, 1),
-            (2021, 3100, 2),
-            (3539, 3538, 3),
-            (9786, 9785, 4),
-        ] {
-            assert_eq!(
-                cat.learn_effects(wrapper),
-                &[
-                    LearnEffect::Spell(taught),
-                    LearnEffect::SkillStep {
-                        skill: blacksmithing,
-                        step
-                    }
-                ],
-                "wrapper {wrapper}"
-            );
-        }
-        // Mining's opener: base −1 + die 1 on the LEARN slot is not a step; the SKILL_STEP slot is.
-        assert_eq!(
-            cat.learn_effects(2581),
-            &[
-                LearnEffect::Spell(2575),
-                LearnEffect::SkillStep {
-                    skill: 186,
-                    step: 1
-                }
-            ]
-        );
-        // A plain ability teaches nothing.
-        assert!(cat.learn_effects(2383).is_empty(), "Find Herbs");
-    }
-}
+mod learn_effect_tests;

@@ -870,10 +870,8 @@ pub(crate) struct Model {
     pub(crate) spell_tooltip_waits: HashMap<FrameHandle, super::tooltip_spell::SpellWait>,
     /// `CollapseQuestHeader`/`ExpandQuestHeader` as `(1-based entry, collapse)`, entry 0 for all.
     pub(crate) quest_log_collapses: Vec<(u32, bool)>,
-    /// Watched quest ids in watch order, pruned when a quest leaves the log.
-    pub(crate) quest_log_watched: Vec<u32>,
-    /// A timed watch's expiry, in `GetTime` seconds, by quest id; a permanent watch has none.
-    pub(crate) quest_log_watch_expiry: HashMap<u32, f64>,
+    /// The quest watch set, pruned when a quest leaves the log.
+    pub(crate) quest_watches: super::quest_log::QuestWatches,
     /// The server's clock in Unix seconds, `None` before `SMSG_QUERY_TIME_RESPONSE`. A quest
     /// deadline is a stamp in it, and `GetQuestTimers` subtracts per call, as the reference does.
     pub(crate) server_unix_time: Option<f64>,
@@ -1528,8 +1526,7 @@ impl Model {
             pet_spell_tooltip_asks: HashSet::new(),
             spell_tooltip_waits: HashMap::new(),
             quest_log_collapses: Vec::new(),
-            quest_log_watched: Vec::new(),
-            quest_log_watch_expiry: HashMap::new(),
+            quest_watches: Default::default(),
             server_unix_time: None,
             worldmap: super::worldmap::WorldMapState::default(),
             nameplates: super::nameplate::NamePlates::default(),

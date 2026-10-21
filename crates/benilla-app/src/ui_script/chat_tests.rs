@@ -47,6 +47,15 @@ fn text_color(quads: &[ExtractedQuad], t: &str) -> Option<[f32; 4]> {
     })
 }
 
+/// Past `CHAT_TAB_HIDE_DELAY` (1 s) and `CHAT_FRAME_FADE_OUT_TIME` (2 s), so a fade-out has landed
+/// (FloatingChatFrame.lua:9-11, :1087-1092).
+fn leave(s: &mut UiScript) {
+    for _ in 0..200 {
+        s.tick(0.016);
+        s.resolve();
+    }
+}
+
 fn close(a: f32, b: f32) -> bool {
     (a - b).abs() < 0.01
 }
@@ -146,7 +155,7 @@ fn wheel_scroll_re_arms_the_fade_then_freezes_it() {
 fn input_editbox_enter_drains_the_typed_line() {
     benilla_formats::wow_data_or_skip!();
     let mut s = chat_frame();
-    assert!(s.focus_editbox("ChatFrameEditBox"), "the edit box focuses");
+    assert!(s.focus_editbox("ChatFrame1EditBox"), "the edit box focuses");
     assert!(s.has_keyboard_focus(), "focus gates the world's keys");
     s.char_input("/yell hi");
     assert!(s.key_input("ENTER"), "the box consumes ENTER");
@@ -165,8 +174,9 @@ fn input_editbox_enter_drains_the_typed_line() {
     assert!(s.take_chat_sends().is_empty(), "drained");
 }
 
-/// The chat menu's Language list sets `editBox.language` (`ChatFrame.lua:2403-2405`) and
-/// `ChatEdit_SendText` passes it on every send (`:1950-1954`), so `/s` and `/y` speak the pick.
+/// The edit box always carries a language: the first known one once the list changes
+/// (`LanguageMenu_LoadLanguages`, ChatFrame.lua:4350-4366); the Language list's pick replaces it
+/// (:4372) and `ChatEdit_SendText` passes it on every send (:3669-3686).
 #[test]
 fn the_edit_box_speaks_the_language_picked_in_the_chat_menu() {
     benilla_formats::wow_data_or_skip!();
@@ -175,10 +185,10 @@ fn the_edit_box_speaks_the_language_picked_in_the_chat_menu() {
     s.set_known_languages(vec!["Darnassian".into(), "Common".into()]);
     for line in ["/s before", "/s ishnu", "/y alah"] {
         if line == "/s ishnu" {
-            s.run("ChatFrameEditBox.language = GetLanguageByIndex(1)")
+            s.run("ChatFrame1EditBox.language = GetLanguageByIndex(2)")
                 .unwrap();
         }
-        assert!(s.focus_editbox("ChatFrameEditBox"));
+        assert!(s.focus_editbox("ChatFrame1EditBox"));
         s.char_input(line);
         assert!(s.key_input("ENTER"));
     }
@@ -189,9 +199,9 @@ fn the_edit_box_speaks_the_language_picked_in_the_chat_menu() {
             .map(|c| (c.text.as_str(), c.chat_type.as_str(), c.language))
             .collect::<Vec<_>>(),
         vec![
-            ("before", "SAY", None),
-            ("ishnu", "SAY", Some(2)),
-            ("alah", "YELL", Some(2)),
+            ("before", "SAY", Some(2)),
+            ("ishnu", "SAY", Some(7)),
+            ("alah", "YELL", Some(7)),
         ]
     );
 }
@@ -200,7 +210,7 @@ fn the_edit_box_speaks_the_language_picked_in_the_chat_menu() {
 fn input_escape_closes_without_submitting() {
     benilla_formats::wow_data_or_skip!();
     let mut s = chat_frame();
-    assert!(s.focus_editbox("ChatFrameEditBox"));
+    assert!(s.focus_editbox("ChatFrame1EditBox"));
     s.char_input("hello");
     assert!(s.key_input("ESCAPE"), "the box consumes ESCAPE");
     assert!(s.take_chat_input().is_empty(), "escape submits nothing");
@@ -213,7 +223,7 @@ fn chat_box_arrows_edit_and_history_recalls() {
     benilla_formats::wow_data_or_skip!();
     use benilla_ui::script::{EditAction, EditUnit};
     let mut s = chat_frame();
-    assert!(s.focus_editbox("ChatFrameEditBox"));
+    assert!(s.focus_editbox("ChatFrame1EditBox"));
     s.char_input("ab");
     // The stock template's `ignoreArrows="true"` is AltArrowKeyMode: the app hands a plain arrow
     // to the bindings (the character turns while you type), and the box still edits.
@@ -226,11 +236,11 @@ fn chat_box_arrows_edit_and_history_recalls() {
         back: true,
     });
     assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
+        s.eval::<String>("return ChatFrame1EditBox:GetText()")
             .unwrap(),
         "a"
     );
-    s.run("ChatFrameEditBox:SetText('')").unwrap();
+    s.run("ChatFrame1EditBox:SetText('')").unwrap();
     s.char_input("/yell hi");
     assert!(s.key_input("ENTER"));
     let sends = s.take_chat_sends();
@@ -241,7 +251,7 @@ fn chat_box_arrows_edit_and_history_recalls() {
             .collect::<Vec<_>>(),
         vec![("hi", "YELL")]
     );
-    assert!(s.focus_editbox("ChatFrameEditBox"));
+    assert!(s.focus_editbox("ChatFrame1EditBox"));
     s.char_input("dra");
     s.editbox_action(EditAction::Move {
         unit: EditUnit::Row,
@@ -252,13 +262,14 @@ fn chat_box_arrows_edit_and_history_recalls() {
     // parse (l.2077-2079) turns it back into YELL with "hi".
     assert!(
         s.eval::<bool>(
-            "return ChatFrameEditBox.chatType == 'YELL' and ChatFrameEditBox:GetText() == 'hi'"
+            "return ChatFrame1EditBox:GetAttribute('chatType') == 'YELL' \
+             and ChatFrame1EditBox:GetText() == 'hi'"
         )
         .unwrap(),
         "Up recalls the filed line, live-parsed: {:?} {:?}",
-        s.eval::<String>("return ChatFrameEditBox.chatType")
+        s.eval::<Option<String>>("return ChatFrame1EditBox:GetAttribute('chatType')")
             .unwrap(),
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
+        s.eval::<String>("return ChatFrame1EditBox:GetText()")
             .unwrap()
     );
     s.editbox_action(EditAction::Move {
@@ -267,7 +278,7 @@ fn chat_box_arrows_edit_and_history_recalls() {
         extend: false,
     });
     assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
+        s.eval::<String>("return ChatFrame1EditBox:GetText()")
             .unwrap(),
         "dra",
         "Down past the newest restores the in-progress draft"
@@ -391,8 +402,9 @@ fn chat_click_dismisses_a_stuck_spell_but_not_an_item() {
 
 // ── ChatTypeInfo: the addon-facing color table ────────────────────────────────────────────────
 
-/// `ChatTypeInfo` and [`crate::ui_chat::default_color`] both carry the reference's registry
-/// (`.rdata 0x804710`): every kind agrees to the byte, and `id` is its registry slot.
+/// `ChatTypeInfo` and [`crate::ui_chat::default_color`] both carry build 12340's registry
+/// (`0x9fa558`, `benilla_ui::script::chat_types`): every kind agrees to the byte, and `id` is its
+/// 1-based slot, which `GetChatTypeIndex` answers (ChatFrame.lua:2269-2274).
 #[test]
 fn chat_type_info_matches_the_host_color_table() {
     benilla_formats::wow_data_or_skip!();
@@ -400,42 +412,42 @@ fn chat_type_info_matches_the_host_color_table() {
 
     /// Each modeled kind, its `ChatTypeInfo` key and its registry id.
     const PAIRS: &[(&str, K, i64)] = &[
-        ("SAY", K::Say, 1),
-        ("PARTY", K::Party, 2),
-        ("RAID", K::Raid, 3),
-        ("GUILD", K::Guild, 4),
-        ("OFFICER", K::Officer, 5),
-        ("YELL", K::Yell, 6),
-        ("WHISPER", K::Whisper, 7),
-        ("WHISPER_INFORM", K::WhisperInform, 8),
-        ("EMOTE", K::Emote, 9),
-        ("TEXT_EMOTE", K::TextEmote, 10),
-        ("SYSTEM", K::System, 11),
-        ("MONSTER_SAY", K::MonsterSay, 12),
-        ("MONSTER_YELL", K::MonsterYell, 13),
-        ("MONSTER_EMOTE", K::MonsterEmote, 14),
-        ("MONSTER_WHISPER", K::MonsterWhisper, 27),
-        ("CHANNEL", K::Channel, 15),
-        ("CHANNEL_JOIN", K::ChannelJoin, 16),
-        ("CHANNEL_LEAVE", K::ChannelLeave, 17),
-        ("CHANNEL_NOTICE", K::ChannelNotice, 19),
-        ("CHANNEL_NOTICE_USER", K::ChannelNoticeUser, 20),
-        ("CHANNEL_LIST", K::ChannelList, 18),
-        ("AFK", K::Afk, 21),
-        ("DND", K::Dnd, 22),
-        ("IGNORED", K::Ignored, 23),
-        ("SKILL", K::Skill, 24),
-        ("LOOT", K::Loot, 25),
-        ("MONEY", K::Money, 87),
-        ("COMBAT_XP_GAIN", K::CombatXpGain, 46),
-        ("RAID_LEADER", K::RaidLeader, 88),
-        ("RAID_WARNING", K::RaidWarning, 89),
-        ("RAID_BOSS_EMOTE", K::RaidBossEmote, 91),
-        ("BATTLEGROUND", K::Battleground, 93),
-        ("BATTLEGROUND_LEADER", K::BattlegroundLeader, 94),
-        ("BG_SYSTEM_NEUTRAL", K::BgSystemNeutral, 83),
-        ("BG_SYSTEM_ALLIANCE", K::BgSystemAlliance, 84),
-        ("BG_SYSTEM_HORDE", K::BgSystemHorde, 85),
+        ("SAY", K::Say, 2),
+        ("PARTY", K::Party, 3),
+        ("RAID", K::Raid, 4),
+        ("GUILD", K::Guild, 5),
+        ("OFFICER", K::Officer, 6),
+        ("YELL", K::Yell, 7),
+        ("WHISPER", K::Whisper, 8),
+        ("WHISPER_INFORM", K::WhisperInform, 10),
+        ("EMOTE", K::Emote, 11),
+        ("TEXT_EMOTE", K::TextEmote, 12),
+        ("SYSTEM", K::System, 1),
+        ("MONSTER_SAY", K::MonsterSay, 13),
+        ("MONSTER_YELL", K::MonsterYell, 15),
+        ("MONSTER_EMOTE", K::MonsterEmote, 17),
+        ("MONSTER_WHISPER", K::MonsterWhisper, 16),
+        ("CHANNEL", K::Channel, 18),
+        ("CHANNEL_JOIN", K::ChannelJoin, 19),
+        ("CHANNEL_LEAVE", K::ChannelLeave, 20),
+        ("CHANNEL_NOTICE", K::ChannelNotice, 22),
+        ("CHANNEL_NOTICE_USER", K::ChannelNoticeUser, 23),
+        ("CHANNEL_LIST", K::ChannelList, 21),
+        ("AFK", K::Afk, 24),
+        ("DND", K::Dnd, 25),
+        ("IGNORED", K::Ignored, 26),
+        ("SKILL", K::Skill, 27),
+        ("LOOT", K::Loot, 28),
+        ("MONEY", K::Money, 29),
+        ("COMBAT_XP_GAIN", K::CombatXpGain, 34),
+        ("RAID_LEADER", K::RaidLeader, 40),
+        ("RAID_WARNING", K::RaidWarning, 41),
+        ("RAID_BOSS_EMOTE", K::RaidBossEmote, 42),
+        ("BATTLEGROUND", K::Battleground, 45),
+        ("BATTLEGROUND_LEADER", K::BattlegroundLeader, 46),
+        ("BG_SYSTEM_NEUTRAL", K::BgSystemNeutral, 37),
+        ("BG_SYSTEM_ALLIANCE", K::BgSystemAlliance, 38),
+        ("BG_SYSTEM_HORDE", K::BgSystemHorde, 39),
     ];
 
     let s = chat_frame();
@@ -464,7 +476,7 @@ fn chat_type_info_has_the_references_shape() {
     let count: i64 = s
         .eval("local n = 0 for _ in pairs(ChatTypeInfo) do n = n + 1 end return n")
         .unwrap();
-    assert_eq!(count, 105, "the reference declares 105 keys");
+    assert_eq!(count, 73, "stock 3.3.5 ChatFrame.lua declares 73 keys");
 
     let sticky: String = s
         .eval(
@@ -472,37 +484,33 @@ fn chat_type_info_has_the_references_shape() {
              table.insert(t, k) end end table.sort(t) return table.concat(t, \" \")",
         )
         .unwrap();
-    assert_eq!(sticky, "BATTLEGROUND GUILD PARTY RAID SAY");
+    assert_eq!(
+        sticky,
+        "BATTLEGROUND BN_CONVERSATION BN_WHISPER CHANNEL CHANNEL1 CHANNEL10 CHANNEL2 CHANNEL3 \
+         CHANNEL4 CHANNEL5 CHANNEL6 CHANNEL7 CHANNEL8 CHANNEL9 GUILD OFFICER PARTY RAID SAY WHISPER"
+    );
 
-    // REPLY and COMBAT_ERROR are FrameXML's own, absent from the engine's 94-entry registry, so
-    // both have id 0, but their colors differ: the `UPDATE_CHAT_COLOR` arm copies WHISPER's
-    // FF80FF into REPLY (`ChatFrame.lua:1357-1365`), and nothing overwrites COMBAT_ERROR's white.
-    for (name, want) in [
-        ("REPLY", [255u8, 128, 255]),
-        ("COMBAT_ERROR", [255, 255, 255]),
-    ] {
-        let (id, r, g, b): (i64, f64, f64, f64) = s
-            .eval(&format!(
-                r#"local i = ChatTypeInfo["{name}"] return i.id, i.r, i.g, i.b"#
-            ))
-            .unwrap();
-        assert_eq!(id, 0, r#""{name}".id — not in the engine's registry"#);
-        let got = [
-            (r * 255.0).round() as u8,
-            (g * 255.0).round() as u8,
-            (b * 255.0).round() as u8,
-        ];
-        assert_eq!(got, want, r#""{name}" color"#);
-    }
+    // REPLY is FrameXML's own, absent from the engine's registry, so its id is 0; the
+    // `UPDATE_CHAT_COLOR` arm copies WHISPER's FF80FF into it (ChatFrame.lua:2515-2530).
+    let (id, r, g, b): (i64, f64, f64, f64) = s
+        .eval(r#"local i = ChatTypeInfo["REPLY"] return i.id, i.r, i.g, i.b"#)
+        .unwrap();
+    assert_eq!(id, 0, "REPLY is not in the engine's registry");
+    let got = [
+        (r * 255.0).round() as u8,
+        (g * 255.0).round() as u8,
+        (b * 255.0).round() as u8,
+    ];
+    assert_eq!(got, [255, 128, 255], "REPLY wears WHISPER's colour");
 
-    // The extras: CHANNEL1..CHANNEL10, indices 95..104, each the live CHANNEL entry's FFC0C0.
+    // CHANNEL1..CHANNEL10 are the registry's boot extras, slots 63..72 after its 62 fixed rows.
     for n in 1..=10 {
         let (id, r, g, b): (i64, f64, f64, f64) = s
             .eval(&format!(
                 r#"local i = ChatTypeInfo["CHANNEL{n}"] return i.id, i.r, i.g, i.b"#
             ))
             .unwrap();
-        assert_eq!(id, 94 + n, "CHANNEL{n}.id");
+        assert_eq!(id, 62 + n, "CHANNEL{n}.id");
         let rgb = [
             (r * 255.0).round() as u8,
             (g * 255.0).round() as u8,
@@ -532,15 +540,15 @@ fn fired_event_names_are_all_chat_type_info_keys() {
     }
 }
 
-// ── The seven chat windows (NUM_CHAT_WINDOWS) ────────────────────────────────────────────────
+// ── The ten chat windows (NUM_CHAT_WINDOWS) ────────────────────────────────────────────────
 
-/// `NUM_CHAT_WINDOWS` is 7 (`ChatFrame.lua:5`), and addons index all seven windows unguarded.
+/// `NUM_CHAT_WINDOWS` is 10 (`ChatFrame.lua:5`), and addons index every window unguarded.
 #[test]
 fn every_window_num_chat_windows_promises_is_a_real_frame() {
     benilla_formats::wow_data_or_skip!();
     let s = chat_frame();
-    assert_eq!(s.eval::<i64>("return NUM_CHAT_WINDOWS").unwrap(), 7);
-    for i in 1..=7 {
+    assert_eq!(s.eval::<i64>("return NUM_CHAT_WINDOWS").unwrap(), 10);
+    for i in 1..=10 {
         let ok: bool = s
             .eval(&format!(
                 "local f = getglobal('ChatFrame{i}') \
@@ -716,7 +724,8 @@ fn an_idle_dock_stops_rewriting_the_tab_alpha_every_frame() {
     );
 }
 
-/// The control: a stationary hover past `CHAT_TAB_SHOW_DELAY` still fades the selected tab in.
+/// A stationary hover past `CHAT_TAB_SHOW_DELAY` fades the selected tab from its resting 0.4 to
+/// its mouse-over 1.0 (`FCF_FadeInChatFrame`, FloatingChatFrame.lua:1014-1015).
 #[test]
 fn hovering_the_dock_still_reveals_the_tabs() {
     benilla_formats::wow_data_or_skip!();
@@ -727,8 +736,8 @@ fn hovering_the_dock_still_reveals_the_tabs() {
         s.resolve();
     }
     assert!(
-        !s.eval::<bool>("return ChatFrame1Tab:IsVisible()").unwrap(),
-        "the dock starts concealed — the tab template ships hidden"
+        close(s.eval::<f32>("return ChatFrame1Tab:GetAlpha()").unwrap(), 0.4),
+        "the selected tab rests at CHAT_FRAME_TAB_SELECTED_NOMOUSE_ALPHA (FloatingChatFrame.lua:15)"
     );
     let (x, y): (f32, f32) = s
         .eval(
@@ -774,7 +783,7 @@ fn a_chat_view_at_the_bottom_stops_rewriting_the_flash() {
         "a settled view must not rewrite flashTimer every frame — got {timer}"
     );
     assert!(
-        !s.eval::<bool>("return ChatFrame1BottomButtonFlash:IsVisible()")
+        !s.eval::<bool>("return ChatFrame1ButtonFrameBottomButtonFlash:IsVisible()")
             .unwrap(),
         "the flash stays hidden at rest"
     );
@@ -782,7 +791,7 @@ fn a_chat_view_at_the_bottom_stops_rewriting_the_flash() {
     s.tick(0.3); // 0.42 + 0.3 = 0.72 >= CHAT_BUTTON_FLASH_TIME -> toggle on
     s.resolve();
     assert!(
-        s.eval::<bool>("return ChatFrame1BottomButtonFlash:IsVisible()")
+        s.eval::<bool>("return ChatFrame1ButtonFrameBottomButtonFlash:IsVisible()")
             .unwrap(),
         "scrolled up, the bottom-button blink lights"
     );
@@ -790,7 +799,7 @@ fn a_chat_view_at_the_bottom_stops_rewriting_the_flash() {
     s.tick(0.016);
     s.resolve();
     assert!(
-        !s.eval::<bool>("return ChatFrame1BottomButtonFlash:IsVisible()")
+        !s.eval::<bool>("return ChatFrame1ButtonFrameBottomButtonFlash:IsVisible()")
             .unwrap(),
         "returning to the bottom hides a lit flash"
     );
@@ -827,7 +836,7 @@ fn selecting_the_combat_log_keeps_the_dock_driver_running() {
             1.0
         ) && close(
             s.eval::<f32>("return ChatFrame2Tab:GetAlpha()").unwrap(),
-            0.5
+            0.6
         ),
         "the hovered dock starts with General selected — this test must not pass vacuously"
     );
@@ -846,7 +855,7 @@ fn selecting_the_combat_log_keeps_the_dock_driver_running() {
         .eval("return ChatFrame1Tab:GetAlpha(), ChatFrame2Tab:GetAlpha()")
         .unwrap();
     assert!(
-        close(a1, 0.5) && close(a2, 1.0),
+        close(a1, 0.6) && close(a2, 1.0),
         "the selected tab is the one at full alpha — got General {a1}, Combat Log {a2}"
     );
 }
@@ -879,15 +888,15 @@ fn the_dock_still_fades_out_with_the_combat_log_selected() {
         "revealed before the cursor leaves"
     );
     s.mouse_move(1500.0, 850.0); // away from the dock
-    for _ in 0..45 {
-        s.tick(0.016);
-        s.resolve();
-    }
+    leave(&mut s);
     assert!(s.errors().is_empty(), "{:?}", s.errors());
-    // The reference fades the tab out and `FCF_ChatTabFadeFinished` hides it.
+    // `CHAT_TAB_HIDE_DELAY` then the fade back to the selected tab's resting alpha.
     assert!(
-        !s.eval::<bool>("return ChatFrame2Tab:IsVisible()").unwrap(),
-        "the dock conceals itself again on leave"
+        close(
+            s.eval::<f32>("return ChatFrame2Tab:GetAlpha()").unwrap(),
+            0.4
+        ),
+        "the dock fades back to rest on leave"
     );
 }
 
@@ -912,7 +921,7 @@ fn the_combat_log_window_runs_its_own_bottom_button_blink() {
     }
     assert!(s.errors().is_empty(), "{:?}", s.errors());
     assert!(
-        s.eval::<bool>("return ChatFrame2BottomButtonFlash:IsVisible()")
+        s.eval::<bool>("return ChatFrame2ButtonFrameBottomButtonFlash:IsVisible()")
             .unwrap(),
         "window 2's bottom-button flash blinks while it is scrolled up"
     );
@@ -969,10 +978,12 @@ fn the_chat_menu_builds_its_rows_on_the_references_kit() {
             .unwrap(),
         "the reference's row click hides the menu"
     );
-    // `ChatMenu_Say` sets the box's type directly, typing no slash (`ChatFrame.lua:2245-2255`).
+    // `ChatMenu_Say` opens the box and sets its `chatType` attribute, typing no slash
+    // (`ChatMenu_SetChatType`, ChatFrame.lua:4188-4196).
     assert!(
         s.eval::<bool>(
-            "return ChatFrameEditBox:IsVisible() and ChatFrameEditBox.chatType == 'SAY'"
+            "return ChatFrame1EditBox:IsVisible() == 1 \
+             and ChatFrame1EditBox:GetAttribute('chatType') == 'SAY'"
         )
         .unwrap(),
         "and it opened the edit box as SAY"
@@ -980,7 +991,7 @@ fn the_chat_menu_builds_its_rows_on_the_references_kit() {
 }
 
 /// A glass window (chat cache `COLOR 0 0 0 0`) rests its plate at alpha 0, and `FCF_OnUpdate`
-/// fades it to `DEFAULT_CHATFRAME_ALPHA` and back on every hover (`FloatingChatFrame.lua:873-916`).
+/// fades it to `DEFAULT_CHATFRAME_ALPHA` and back on every hover (FloatingChatFrame.lua:994-1032).
 #[test]
 fn a_glass_windows_plate_fades_in_on_every_hover() {
     benilla_formats::wow_data_or_skip!();
@@ -1013,10 +1024,7 @@ fn a_glass_windows_plate_fades_in_on_every_hover() {
             s.eval::<Option<f64>>("return ChatFrame1.oldAlpha").unwrap()
         );
         s.mouse_move(1500.0, 850.0);
-        for _ in 0..45 {
-            s.tick(0.016);
-            s.resolve();
-        }
+        leave(&mut s);
         assert!(s.errors().is_empty(), "{:?}", s.errors());
         let a = bg(&mut s);
         assert!(
@@ -1031,7 +1039,6 @@ fn a_glass_windows_plate_fades_in_on_every_hover_under_the_full_manifest() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1600.0, 900.0);
-    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
     let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "{failures:?}");
     s.resolve();
@@ -1098,10 +1105,7 @@ fn a_glass_windows_plate_fades_in_on_every_hover_under_the_full_manifest() {
             s.eval::<Option<f64>>("return ChatFrame1.init").unwrap(),
         );
         s.mouse_move(1500.0, 850.0);
-        for _ in 0..45 {
-            s.tick(0.016);
-            s.resolve();
-        }
+        leave(&mut s);
         assert!(s.errors().is_empty(), "{:?}", s.errors());
         let a = bg(&mut s);
         assert!(
@@ -1109,96 +1113,6 @@ fn a_glass_windows_plate_fades_in_on_every_hover_under_the_full_manifest() {
             "leave {round}: the plate fades back to its saved alpha — got {a}"
         );
     }
-}
-
-/// Leaving and re-entering within `CHAT_FRAME_FADE_TIME` traps the stock Lua (the tab fade's
-/// finished callback nils `oldAlpha` under a live hover): the bare chat stack must trap, and the
-/// shipped interface, with the layer's `FrameXMLFixes.xml`, must not.
-#[test]
-fn a_quick_exit_and_reentry_keeps_the_plates_hover_fade() {
-    benilla_formats::wow_data_or_skip!();
-    fn drive(s: &mut UiScript) -> (f64, f64, f64) {
-        let (x, y): (f32, f32) = s
-            .eval(
-                "return (ChatFrame1:GetLeft() + ChatFrame1:GetRight()) / 2, \
-                 (ChatFrame1:GetBottom() + ChatFrame1:GetTop()) / 2",
-            )
-            .unwrap();
-        let bg =
-            |s: &mut UiScript| -> f64 { s.eval("return ChatFrame1Background:GetAlpha()").unwrap() };
-        s.mouse_move(1500.0, 850.0);
-        for _ in 0..4 {
-            s.tick(0.016);
-            s.resolve();
-        }
-        s.mouse_move(x, y);
-        for _ in 0..45 {
-            s.tick(0.016);
-            s.resolve();
-        }
-        let first = bg(s);
-        // Out for ~50 ms, inside the 0.15 s fade-out, and back, then stationary.
-        s.mouse_move(1500.0, 850.0);
-        for _ in 0..3 {
-            s.tick(0.016);
-            s.resolve();
-        }
-        s.mouse_move(x, y);
-        for _ in 0..45 {
-            s.tick(0.016);
-            s.resolve();
-        }
-        let reentry = bg(s);
-        // Away for a full second, then a fresh hover: whatever the re-entry left behind stays.
-        s.mouse_move(1500.0, 850.0);
-        for _ in 0..60 {
-            s.tick(0.016);
-            s.resolve();
-        }
-        s.mouse_move(x, y);
-        for _ in 0..45 {
-            s.tick(0.016);
-            s.resolve();
-        }
-        let later = bg(s);
-        assert!(s.errors().is_empty(), "{:?}", s.errors());
-        (first, reentry, later)
-    }
-
-    // The control: the reference's Lua alone.
-    let mut bare = chat_frame();
-    let (first, reentry, later) = drive(&mut bare);
-    assert!((first - 0.25).abs() < 1e-6, "control, first hover: {first}");
-    assert!(
-        reentry.abs() < 1e-6 && later.abs() < 1e-6,
-        "the control must trap — the reference's Lua nils oldAlpha under a live hover \
-         (re-entry {reentry}, later {later}); if it no longer does, the guard is a repair of nothing"
-    );
-    assert!(
-        bare.eval::<bool>("return ChatFrame1Tab:IsVisible() and ChatFrame1.oldAlpha == nil and ChatFrame1.hover == 1")
-            .unwrap(),
-        "the trapped state: tab up, oldAlpha nil, hover stuck"
-    );
-
-    // The shipped interface, with the guard the layer installs.
-    let mut shipped = UiScript::new().unwrap();
-    shipped.set_screen_size(1600.0, 900.0);
-    super::test_ui::load_ui(&mut shipped, "Interface\\FrameXML\\GlobalStrings.lua");
-    let failures = super::load_default_ui(&mut shipped);
-    assert!(failures.is_empty(), "{failures:?}");
-    shipped.resolve();
-    super::fire_chat_login(&mut shipped);
-    shipped.resolve();
-    let (first, reentry, later) = drive(&mut shipped);
-    assert!((first - 0.25).abs() < 1e-6, "shipped, first hover: {first}");
-    assert!(
-        (reentry - 0.25).abs() < 1e-6,
-        "shipped: the plate comes back on the quick re-entry — got {reentry}"
-    );
-    assert!(
-        (later - 0.25).abs() < 1e-6,
-        "shipped: and on every hover after — got {later}"
-    );
 }
 
 /// The stock `/afk` and `/dnd` call `SendChatMessage(msg, "AFK")` or `"DND"`
@@ -1212,7 +1126,7 @@ fn the_stock_afk_and_dnd_commands_reach_the_wire() {
 
     let typed = |line: &str| -> (String, String) {
         let mut s = chat_frame();
-        assert!(s.focus_editbox("ChatFrameEditBox"));
+        assert!(s.focus_editbox("ChatFrame1EditBox"));
         s.char_input(line);
         assert!(s.key_input("ENTER"), "the box consumes ENTER");
         let sends = s.take_chat_sends();

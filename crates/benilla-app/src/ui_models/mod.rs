@@ -51,67 +51,7 @@ pub(crate) fn trace_on() -> bool {
     *ON
 }
 
-/// One pane's tile request, published by the extract's `ModelPane` arm: its device size, the unit
-/// ladder `0x76d1a0` derives from it, and the Lua-set scene.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct TileRequest {
-    /// The `SetModel` path, as written.
-    pub path: String,
-    /// The pane's rect in whole device pixels: the tile's cell size.
-    pub size_px: UVec2,
-    /// Device px per model unit: `1280 · modelScale · layoutScale` FrameXML units × seam × DPI.
-    pub px_per_unit: f32,
-    /// Device px per `SetPosition` unit: `768 · √(a²+1) · layoutScale` FrameXML units × seam × DPI.
-    pub pos_px_per_unit: f32,
-    /// Device px per model unit of a particle's half-extent, which carries no scale.
-    pub star_px_per_unit: f32,
-    /// `SetFacing`, radians about the screen normal (CCW positive, the reference's `+Z`).
-    pub facing: f32,
-    /// `SetPosition`, layout units.
-    pub position: Vec3,
-    /// The perspective leg's root scale, `G48 · (5/3) · modelScale · layoutScale`.
-    pub root_scale: f32,
-    /// The perspective leg's root translation: `SetPosition · layoutScale`, model units.
-    pub root_pos: Vec3,
-    /// The installed camera index (ctor 0, `SetCamera(n)`); `None` is the NULL camera an index
-    /// past the file's cameras installs (`0x76cec0`), the orthographic leg of every shipped pane.
-    pub camera: Option<u32>,
-    /// The pane's embedded `CGLight`, disabled on a fresh `<Model>`, so a lit batch draws black.
-    pub light: ModelLight,
-    pub fog: Option<ModelFog>,
-    /// `ReplaceIconTexture`'s path, the texture of the file's type-14 batches.
-    pub icon: Option<String>,
-    /// Where the cell composites: the pane's rect in the quad pass's space, y-down logical px.
-    pub rect: Rect,
-    /// `ZKey::callback(Artwork)`: after every texture and font string of the pane's layer.
-    pub z_key: u64,
-    /// The frame's own alpha, which the composite draws at (`0x76d120`).
-    pub alpha: f32,
-    /// The enclosing ScrollFrame's clip, in the quad pass's space.
-    pub clip: Option<Rect>,
-}
-
-/// Where a tile sits in the atlas, in texels, `y` down.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Cell {
-    pub origin: UVec2,
-    pub size: UVec2,
-}
-
-/// The extract-to-renderer bridge, reached through `crate::portrait::BoothBridge`.
-#[derive(Resource, Default)]
-pub(crate) struct UiModelTiles {
-    /// The last request per pane. An entry outlives its pane, since the memoized conversion never
-    /// says it vanished, so which panes draw is the engine's paint list, never this map.
-    pub requests: HashMap<FrameHandle, TileRequest>,
-    /// This frame's cell per tile that has something to draw.
-    pub cells: HashMap<FrameHandle, Cell>,
-    /// The atlas and its size; `None` until the first tile is packed.
-    pub atlas: Option<Handle<Image>>,
-    pub atlas_size: UVec2,
-    /// Device px per logical px, written by the extract and read by its arm to size cells.
-    pub dpi: f32,
-}
+pub(crate) use crate::overlay::{Cell, TileRequest, UiModelTiles};
 
 /// A pane's light input: its embedded `CGLight` and its armed fog. Panes with the same scene
 /// share one light buffer and twin cache; the default, a disabled light and no fog, is slot 0.

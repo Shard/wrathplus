@@ -598,13 +598,14 @@ impl WrathEventAdapter {
             SMSG_ITEM_QUERY_SINGLE_RESPONSE => {
                 let (entry, template) = decode_native_item_query_response(body)
                     .map_err(|source| WrathEventError::ItemCodec { opcode, source })?;
-                let (info, metadata, sockets) = match template {
+                let (info, metadata, sockets, scaling) = match template {
                     Some(template) => (
                         Some(Box::new(template.info)),
                         Some(template.roll),
                         Some(template.sockets),
+                        Some(template.scaling),
                     ),
-                    None => (None, None, None),
+                    None => (None, None, None, None),
                 };
                 Ok(handled(
                     vec![
@@ -614,6 +615,7 @@ impl WrathEventAdapter {
                             entry,
                             metadata: sockets,
                         },
+                        SessionEvent::WrathItemScaling(entry, scaling),
                     ],
                     Vec::new(),
                     Vec::new(),
@@ -1408,7 +1410,8 @@ mod tests {
             &session_events[..],
             [SessionEvent::ItemTemplate { entry: 117, info: Some(info) },
              SessionEvent::WrathItemRollMetadata { entry: 117, metadata: Some(metadata) },
-             SessionEvent::WrathItemSocketMetadata { entry: 117, metadata: Some(sockets) }]
+             SessionEvent::WrathItemSocketMetadata { entry: 117, metadata: Some(sockets) },
+             SessionEvent::WrathItemScaling(117, Some([0, 0]))]
                 if info.name.is_empty() && metadata.flags2 == 0 && *sockets == Default::default()
                     && metadata.required_disenchant_skill == 0 && metadata.item_limit_category == 0
         ));
@@ -1429,7 +1432,8 @@ mod tests {
                 entry: 9999,
                 info: None
             }, SessionEvent::WrathItemRollMetadata { entry: 9999, metadata: None },
-            SessionEvent::WrathItemSocketMetadata { entry: 9999, metadata: None }]
+            SessionEvent::WrathItemSocketMetadata { entry: 9999, metadata: None },
+            SessionEvent::WrathItemScaling(9999, None)]
         ));
     }
 
@@ -1841,29 +1845,5 @@ mod tests {
 }
 
 #[cfg(test)]
-mod native_descriptor_tests {
-    use super::*;
-
-    #[test]
-    fn npc_flags_retain_services_absent_from_vanilla() {
-        let fields = ObjectFields::from_pairs(&[(82, 0x1100_1081)]);
-        assert_eq!(fields.unit_npc_flags(), 0x1100_1081);
-    }
-
-    #[test]
-    fn final_quest_slot_preserves_unclamped_counters_and_timer() {
-        let fields = ObjectFields::from_pairs(&[
-            (278, 783),
-            (279, 1),
-            (280, 3 | (65535 << 16)),
-            (281, 70 << 16),
-            (282, 12345),
-        ]);
-        let quest = fields.player_quest_log(24).unwrap();
-        assert_eq!(quest.quest_id, 783);
-        assert_eq!(quest.counters, [3, 65535, 0, 70]);
-        assert_eq!(quest.state, 1);
-        assert_eq!(quest.timer, 12345);
-        assert_eq!(fields.player_quest_log(25), None);
-    }
-}
+#[path = "wrath_events_descriptor_tests.rs"]
+mod native_descriptor_tests;

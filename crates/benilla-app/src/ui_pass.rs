@@ -20,141 +20,9 @@ use bevy::image::Image;
 use bevy::math::Rect;
 use bevy::mesh::{Indices, Mesh, MeshTag, PrimitiveTopology};
 use bevy::prelude::*;
-use bevy::render::render_resource::{
-    AsBindGroup, BlendComponent, BlendFactor, BlendOperation, BlendState, Extent3d,
-    TextureDimension, TextureFormat,
-};
-use bevy::shader::ShaderRef;
-use bevy::sprite_render::{Material2d, Material2dKey, Material2dPlugin};
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use bevy::sprite_render::Material2dPlugin;
 use bevy::window::PrimaryWindow;
-
-/// One `(u, v)` per screen corner, in [`Run::push_quad`]'s winding (top-left, top-right,
-/// bottom-right, bottom-left), not a `(min, max)` rect: a `<TexCoords>` with `left > right` (the
-/// PlayerFrame ring) must stay mirrored, and a backdrop top or bottom edge maps atlas u to screen
-/// Y, which only per-corner UVs express.
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) struct UvRect {
-    pub corners: [[f32; 2]; 4],
-}
-
-impl UvRect {
-    /// The full texture, no crop.
-    pub const FULL: Self = Self {
-        corners: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
-    };
-
-    /// From a `<TexCoords>` `[left, right, top, bottom]` tuple, unnormalized, so a mirror survives.
-    pub fn from_tex_coords([left, right, top, bottom]: [f32; 4]) -> Self {
-        Self {
-            corners: [[left, top], [right, top], [right, bottom], [left, bottom]],
-        }
-    }
-
-    /// From explicit corners in the `push_quad` winding: the backdrop's rotated edge slices.
-    pub fn from_corners(corners: [[f32; 2]; 4]) -> Self {
-        Self { corners }
-    }
-
-    /// From an already-normalized [`Rect`], such as a glyph atlas cell: `min` to TL, `max` to BR.
-    pub fn from_rect(r: Rect) -> Self {
-        Self::from_tex_coords([r.min.x, r.max.x, r.min.y, r.max.y])
-    }
-}
-
-/// One resolved screen-space quad, the pass's whole input. `texture`, the flags from `additive`
-/// to `uv_clamp`, and `mask` are material state: a quad differing in any of them starts a new run.
-#[derive(Clone, PartialEq)]
-pub(crate) struct UiQuad {
-    /// Screen pixels, y-down, anchor-resolved.
-    pub rect: Rect,
-    /// Paint order, stable-sorted ascending: higher draws on top.
-    pub z_key: u64,
-    /// `None` samples the shared 1×1 white.
-    pub texture: Option<Handle<Image>>,
-    pub uv: UvRect,
-    /// Straight-alpha tint in client-space sRGB, the raw FrameXML/Lua value, never converted.
-    pub color: [f32; 4],
-    /// WoW `ADD` blend (EGxBlend 3, `glBlendFunc(GL_SRC_ALPHA, GL_ONE)`) instead of straight alpha.
-    pub additive: bool,
-    /// Mask to the inscribed circle: the live unit portrait.
-    pub circular: bool,
-    /// Draw the texel's luminance (`Texture:SetDesaturated(1)`), folded in gamma bytes before the
-    /// tint, so `SetItemButtonDesaturated(button, 1, 0.65, 0.65, 0.65)`
-    /// (`Blizzard_TalentUI.lua:215`) lands grey and dim.
-    pub desaturated: bool,
-    /// The texture is already premultiplied: a booth render target ([`crate::portrait`]), where
-    /// an additive particle adds colour with no coverage and a second alpha weight would erase it.
-    pub premultiplied: bool,
-    /// The texture holds undecoded gamma bytes (`BlpVariant::MapTile`: the reference's tile
-    /// sampler sets `GL_TEXTURE_SRGB_DECODE_EXT = GL_SKIP_DECODE_EXT`), so the tint multiplies the
-    /// authored byte and the ordinary arm's `linear_to_srgb` must not encode it again.
-    pub gamma_texel: bool,
-    /// Alpha test against this value on `texel.a × tint.a` instead of blending: a pass writes
-    /// opaque, a fail discards. `Some(224.0 / 255.0)` is the WMO-interior minimap tile, drawn by
-    /// the reference with EGxBlend 1 (blending off) and `glAlphaFunc(GL_GEQUAL, 0.87843144)`
-    /// (`0x85ad20[1] = 224`); blended, two tiles' seam keeps `(1−a)(1−b)` of the black clear.
-    pub alpha_test: Option<f32>,
-    /// The half-texel-inset window `[u_min, v_min, u_max, v_max]` sampled, so an atlas cell clamps
-    /// at its own edge instead of filtering in its neighbour (`ClampToEdge` stops at the image's).
-    /// Per axis: UVs past `[0, 1]` are the reference's tiling idiom and never clamp.
-    pub uv_clamp: Option<[f32; 4]>,
-    /// CPU clip standing in for a scissor rect.
-    pub clip: Option<Rect>,
-    /// Radians clockwise on screen about the rect centre (the minimap player arrow), the UVs
-    /// riding their corners; `clip` applies first, unrotated.
-    pub rotation: f32,
-    /// A screen-anchored alpha mask (the minimap's `MinimapMask.blp` circle), so a tile panning
-    /// under the fixed circle masks correctly; outside [`UiQuadMask::rect`] the fragment drops.
-    pub mask: Option<UiQuadMask>,
-    /// Explicit screen corners (y-down px) drawn as the fan `(0,1,2)(0,2,3)` (the cooldown pie's
-    /// wedge), bypassing `rotation`, `clip` and `rect`, which should still bound them.
-    pub corners: Option<[Vec2; 4]>,
-}
-
-/// A screen-anchored alpha mask over a [`UiQuad`].
-#[derive(Clone, PartialEq)]
-pub(crate) struct UiQuadMask {
-    /// The mask art, whose alpha is the coverage (`MinimapMask.blp`: DXT3, the circle in alpha).
-    pub texture: Handle<Image>,
-    /// The span it covers, in [`UiQuad::rect`]'s y-down logical px; it samples 0..1 across it.
-    pub rect: Rect,
-}
-
-impl Default for UiQuad {
-    fn default() -> Self {
-        Self {
-            rect: Rect::new(0.0, 0.0, 0.0, 0.0),
-            z_key: 0,
-            texture: None,
-            uv: UvRect::FULL,
-            color: [1.0, 1.0, 1.0, 1.0],
-            additive: false,
-            circular: false,
-            desaturated: false,
-            premultiplied: false,
-            gamma_texel: false,
-            alpha_test: None,
-            uv_clamp: None,
-            clip: None,
-            rotation: 0.0,
-            mask: None,
-            corners: None,
-        }
-    }
-}
-
-/// The pass's input in two lanes. [`Self::quads`], the base lane, is replaced whole by the script
-/// extract, which sets [`Self::dirty`] only when it changed. [`Self::overlays`], the append lane
-/// ([`UiQuadAppend`]), is cleared and re-emitted every frame and diffed by [`rebuild_ui_mesh`]
-/// against the last frame's; its appenders never touch `dirty`.
-#[derive(Resource, Default)]
-pub(crate) struct UiQuads {
-    pub quads: Vec<UiQuad>,
-    pub overlays: Vec<UiQuad>,
-    /// The append lane as of the last rebuild.
-    last_overlays: Vec<UiQuad>,
-    pub dirty: bool,
-}
 
 
 /// Clear the append lane at the top of the [`UiQuadAppend`] window, before every appender.
@@ -166,11 +34,6 @@ fn clear_ui_overlays(mut quads: ResMut<UiQuads>) {
 /// Above the world camera (0), below the egui dev overlay (2, `debug_panel::spawn_egui_camera`).
 const UI_CAMERA_ORDER: isize = 1;
 
-/// Marker on the player-UI camera, whose backdrop [`crate::world_backdrop`] points at the world
-/// camera drawing this frame.
-#[derive(Component)]
-pub(crate) struct PlayerUiCamera;
-
 /// Marker on each pooled batch entity, one `Mesh2d` draw per run; the FPS probe's `ui_batches=`
 /// counts them.
 #[derive(Component)]
@@ -179,38 +42,6 @@ pub(crate) struct UiQuadBatch;
 /// The shared 1×1 opaque white that texture-less quads sample.
 #[derive(Resource)]
 struct UiWhiteTexture(Handle<Image>);
-
-/// The quad material: a texture and the [`UiQuad`] flags as uniforms, drawn through one
-/// premultiplied-alpha pipeline (`ui_quad.wgsl`). It holds no colour, so it is its identity key
-/// alone and a steady frame re-prepares none.
-#[derive(Asset, TypePath, AsBindGroup, Clone)]
-pub(crate) struct UiQuadMaterial {
-    #[uniform(0)]
-    additive: u32,
-    #[texture(1)]
-    #[sampler(2)]
-    texture: Option<Handle<Image>>,
-    #[uniform(3)]
-    circular: u32,
-    #[uniform(7)]
-    desaturate: u32,
-    #[uniform(8)]
-    premultiplied: u32,
-    /// `<= 0` disables the alpha test.
-    #[uniform(9)]
-    alpha_ref: f32,
-    #[uniform(10)]
-    gamma_texel: u32,
-    /// The mask span in physical px (the shader compares `@builtin(position)`); `z <= x` disables.
-    #[uniform(4)]
-    mask_rect: Vec4,
-    #[texture(5)]
-    #[sampler(6)]
-    mask: Option<Handle<Image>>,
-    /// `(u_min, v_min, u_max, v_max)`; `min > max` on an axis disables that axis.
-    #[uniform(11)]
-    uv_clamp: Vec4,
-}
 
 /// A run's one colour for the batch entity's [`MeshTag`], unpacked by `ui_quad.wgsl`'s vertex
 /// stage, so a colour pulse is a component write, never a mesh or material write. One byte per
@@ -227,69 +58,10 @@ fn tint_tag(color: [f32; 4]) -> u32 {
     !(byte(color[0]) | byte(color[1]) << 8 | byte(color[2]) << 16 | byte(color[3]) << 24)
 }
 
-impl UiQuadMaterial {
-    /// The WMO-interior minimap tile material: the texture and an alpha test, nothing else, for the
-    /// minimap's own composite target ([`crate::minimap`]). A passing fragment emits `a = 1`, so
-    /// the forced blend of [`Self::specialize`] is a plain replace: the reference's blending off.
-    pub(crate) fn interior_tile(texture: Handle<Image>, alpha_ref: f32) -> Self {
-        Self {
-            additive: 0,
-            texture: Some(texture),
-            circular: 0,
-            desaturate: 0,
-            premultiplied: 0,
-            alpha_ref,
-            // The alpha-test arm decodes explicitly, so the tile's SKIP_DECODE holds without this.
-            gamma_texel: 0,
-            mask_rect: Vec4::new(0.0, 0.0, -1.0, -1.0),
-            mask: None,
-            uv_clamp: UV_CLAMP_OFF,
-        }
-    }
-}
-
-
-impl Material2d for UiQuadMaterial {
-    /// Our own vertex stage, which unpacks the run's tint from the instance tag ([`tint_tag`]).
-    fn vertex_shader() -> ShaderRef {
-        "embedded://benilla_app/shaders/ui_quad.wgsl".into()
-    }
-
-    fn fragment_shader() -> ShaderRef {
-        "embedded://benilla_app/shaders/ui_quad.wgsl".into()
-    }
-
-    fn alpha_mode(&self) -> bevy::sprite_render::AlphaMode2d {
-        // The transparent phase, sorted by mesh z (the run order); `specialize` sets the blend.
-        bevy::sprite_render::AlphaMode2d::Blend
-    }
-
-    fn specialize(
-        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
-        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
-        _key: Material2dKey<Self>,
-    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
-        if let Some(fragment) = descriptor.fragment.as_mut() {
-            if let Some(target) = fragment.targets.first_mut().and_then(|t| t.as_mut()) {
-                // `(One, OneMinusSrcAlpha)` over gamma values: the shader emits `(rgb·a, a)` for
-                // BLEND and `(rgb·a, 0)` for ADD, so this one state is EGxBlend 2 and EGxBlend 3,
-                // clamped at each write like the reference's 8-bit backbuffer.
-                let premultiplied = BlendComponent {
-                    src_factor: BlendFactor::One,
-                    dst_factor: BlendFactor::OneMinusSrcAlpha,
-                    operation: BlendOperation::Add,
-                };
-                target.blend = Some(BlendState {
-                    color: premultiplied,
-                    alpha: premultiplied,
-                });
-            }
-        }
-        Ok(())
-    }
-}
 
 pub(crate) use crate::app_core::schedule::UiQuadAppend;
+pub(crate) use crate::overlay::{PlayerUiCamera, UiQuad, UiQuadMask, UiQuadMaterial, UiQuads, UvRect};
+use crate::overlay::UV_CLAMP_OFF;
 pub(crate) use crate::overlay::ui_render_layers;
 
 
@@ -624,8 +396,6 @@ type MatKey = (
 );
 
 /// The [`UiQuadMaterial::uv_clamp`] that clamps neither axis: `min > max` turns an axis off.
-const UV_CLAMP_OFF: Vec4 = Vec4::new(1.0, 1.0, 0.0, 0.0);
-
 /// Despawn every pooled batch entity; mesh handles and the material cache stay, free to keep.
 fn retire_batches(pools: &mut BatchPools, commands: &mut Commands) {
     for entity in pools.entities.drain(..) {

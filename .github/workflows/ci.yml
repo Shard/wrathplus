@@ -40,6 +40,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: fmt
         run: cargo fmt --all -- --check
+      - name: loc
+        run: scripts/quality/run.sh loc
       - name: clippy
         # The ratchet: warnings mode, every warning fails unless the committed baseline names it.
         run: AZB_QUALITY_LOCKED=1 CARGO_TARGET_DIR=target scripts/quality/run.sh clippy --workspace

@@ -13,13 +13,9 @@ use benilla_protocol::types::{BAG_PLAYER_INVENTORY, SLOT_BAG_FIRST, SLOT_PACK_FI
 use benilla_ui::script::EQUIPMENT_BAG;
 use bevy::prelude::*;
 
-#[cfg(test)]
-use crate::net::Objects;
 use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
-#[cfg(test)]
-use benilla_protocol::ObjectFields;
 
 pub(crate) use crate::inventory::{
     carried_counts, collect_inventory, count_of, find_item, has_key, slot_guid, slot_guid_count,
@@ -29,6 +25,7 @@ pub(crate) use crate::inventory::{
 pub(crate) mod currency;
 mod drain;
 mod equip_error;
+mod heirloom;
 pub(crate) mod feed;
 pub(crate) mod net;
 mod owned;
@@ -150,38 +147,9 @@ pub(crate) fn item_icon(
         .and_then(|d| d.icon.clone())
 }
 
-/// A test's object index: a world to seed with items, and the [`Objects`] lookup over it. Seed
-/// first, then read: `get()` borrows the world while its answer lives, so call sites write
-/// `&objs.get()` inline.
+pub(crate) use crate::items::ItemSubClasses;
 #[cfg(test)]
-pub(crate) struct TestObjects {
-    world: World,
-    state: bevy::ecs::system::SystemState<Objects<'static, 'static>>,
-}
-
-#[cfg(test)]
-impl TestObjects {
-    pub(crate) fn new() -> Self {
-        let mut world = World::new();
-        world.init_resource::<crate::net::GuidIndex>();
-        let state = bevy::ecs::system::SystemState::new(&mut world);
-        Self { world, state }
-    }
-
-    /// One item instance in the index, as the wire's `ItemCreate` makes it.
-    pub(crate) fn spawn(&mut self, guid: u64, fields: ObjectFields) {
-        crate::items::test_spawn_item(&mut self.world, guid, fields, false);
-    }
-
-    /// The same for a container instance (`TYPEMASK_CONTAINER`).
-    pub(crate) fn spawn_container(&mut self, guid: u64, fields: ObjectFields) {
-        crate::items::test_spawn_item(&mut self.world, guid, fields, true);
-    }
-
-    pub(crate) fn get(&mut self) -> Objects<'_, '_> {
-        self.state.get(&self.world)
-    }
-}
+pub(crate) use crate::items::TestObjects;
 
 /// The wire's player-array bag index, `INVENTORY_SLOT_BAG_0`; with it, [`ItemUse::slot`] is the
 /// equipment index (0-18 worn, 19-22 the equipped bags).
@@ -472,10 +440,6 @@ pub(super) fn find_equip_slot(inventory_type: u32, has_relic_slot: bool) -> Vec<
 #[derive(Resource)]
 pub(crate) struct ItemSets(pub(crate) benilla_formats::ItemSetCatalog);
 
-/// `ItemSubClass.dbc`: the slot and type line's alternate-proficiency and hidden-name gates.
-#[derive(Resource)]
-pub(crate) struct ItemSubClasses(pub(crate) benilla_formats::ItemSubClassCatalog);
-
 /// `ItemBagFamily.dbc`: reason 16's `%s`, what a specialised bag accepts ("Only Arrows can be
 /// placed in that.").
 #[derive(Resource)]
@@ -537,6 +501,7 @@ pub(crate) struct UiItemsPlugin;
 impl Plugin for UiItemsPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        heirloom::register(app);
         // The icons come from the equipment renderer's `ItemDisplays`.
         app.init_resource::<EquipErrors>()
             .init_resource::<PendingItemOps>()
@@ -1329,61 +1294,5 @@ mod count_of_tests {
 }
 
 #[cfg(test)]
-mod storage_tests {
-    use super::*;
-
-    #[test]
-    fn storage_boundaries_and_native_positions_preserve_vanilla() {
-        let (bank, bags, first, key, keys) = (28, 7, 67, 86, 32);
-        let geometry = StorageSlots::GEOMETRY;
-        assert_eq!(
-            (
-                geometry.bank_slots,
-                geometry.bank_bags,
-                geometry.bank_bag_first,
-                geometry.keyring_first,
-                geometry.keyring_slots
-            ),
-            (bank, bags, first, key, keys)
-        );
-        for (bag, count, wire_bag, wire_first) in [
-            (0, 16, 255, 23),
-            (1, 36, 19, 0),
-            (4, 36, 22, 0),
-            (BANK_CONTAINER, bank, 255, 39),
-            (KEYRING_CONTAINER, keys, 255, key),
-            (5, 36, first, 0),
-            (4 + i64::from(bags), 36, first + bags - 1, 0),
-        ] {
-            for slot in [1, u32::from(count)] {
-                let position = wire_pos_for(bag, slot).unwrap();
-                assert_eq!(position, (wire_bag, wire_first + slot as u8 - 1));
-                // Independently decode the server position into the snapshot container.
-                let snapshot_bag = if position.0 == 255 {
-                    match position.1 {
-                        23..=38 => 0,
-                        39..=66 => BANK_CONTAINER,
-                        _ => KEYRING_CONTAINER,
-                    }
-                } else if (19..=22).contains(&position.0) {
-                    i64::from(position.0 - 19) + 1
-                } else {
-                    i64::from(position.0 - first) + 5
-                };
-                assert_eq!(snapshot_bag, bag);
-                // Independently invert this container's byte position into its Lua slot.
-                assert_eq!(u32::from(position.1 - wire_first) + 1, slot);
-                assert_eq!(
-                    wire_pos_for(bag, u32::from(position.1 - wire_first) + 1),
-                    Some(position)
-                );
-            }
-            assert_eq!(wire_pos_for(bag, 0), None);
-            assert_eq!(wire_pos_for(bag, u32::from(count) + 1), None);
-        }
-        assert_eq!(wire_pos_for(geometry.last_bag() + 1, 1), None);
-        for level in [1, 39, 40, 49, 50, 60, 61, 80] {
-            assert_eq!(StorageSlots::GEOMETRY.keyring_size(level), 32);
-        }
-    }
-}
+#[path = "storage_tests.rs"]
+mod storage_tests;

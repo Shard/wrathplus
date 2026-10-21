@@ -242,6 +242,8 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
 /// next `UiScript::resolve`, a tick after the reference's (`ApplyRect 0x76b580`), because running
 /// Lua handlers inside a binding risks a borrow panic or unbounded recursion.
 fn settle(lua: &Lua) {
+    // A frame anchored to a re-texted FontString moves with its new box.
+    crate::script::measure::measure_pending(lua, None);
     let mut model = lua.app_data_mut::<Model>().expect("model");
     crate::script::UiScript::resolve_layout(&mut model);
 }

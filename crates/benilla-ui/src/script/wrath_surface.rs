@@ -5,6 +5,10 @@
 
 use mlua::{Lua, MultiValue, Value};
 
+#[path = "wrath_cooldown.rs"]
+mod wrath_cooldown;
+pub(super) use wrath_cooldown::REG_COOLDOWN_METHODS;
+
 #[path = "wrath_loot.rs"]
 mod wrath_loot;
 
@@ -43,6 +47,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     super::aura::wrath::install(lua)?;
     install_trusted_secure_environment(lua)?;
     install_frame_methods(lua)?;
+    wrath_cooldown::install(lua)?;
     super::input_verbs::install_wrath(lua)?;
     install_compat(lua)
 }
@@ -62,49 +67,16 @@ fn install_compat(lua: &Lua) -> mlua::Result<()> {
         .exec()
 }
 
-/// The `Cooldown` kind's own method table: the sweep verbs a plain `Frame` lacks.
-pub(super) const REG_COOLDOWN_METHODS: &str = "__benilla_cooldown_methods";
-
 /// Wrath-era methods every frame kind shares: attributes (the state the secure templates key
 /// on), `HookScript`, and the protection queries, which answer "not protected" for every frame.
 fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
-    let globals = lua.globals();
-    globals.set(
-        "__azb_cooldown_set",
-        lua.create_function(|lua, (this, start, duration): (mlua::Table, f64, f64)| {
-            let h = super::object::frame_handle_of(lua, &this)?;
-            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            let reverse = model.wrath_cooldowns.get(&h).is_some_and(|c| c.2);
-            model.wrath_cooldowns.insert(h, (start, duration, reverse));
-            Ok(())
-        })?,
-    )?;
-    globals.set(
-        "__azb_cooldown_get",
-        lua.create_function(|lua, this: mlua::Table| {
-            let h = super::object::frame_handle_of(lua, &this)?;
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(model.wrath_cooldowns.get(&h).map_or((0.0, 0.0), |c| (c.0, c.1)))
-        })?,
-    )?;
-    globals.set(
-        "__azb_cooldown_reverse",
-        lua.create_function(|lua, (this, reverse): (mlua::Table, bool)| {
-            let h = super::object::frame_handle_of(lua, &this)?;
-            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            model.wrath_cooldowns.entry(h).or_insert((0.0, 0.0, false)).2 = reverse;
-            Ok(())
-        })?,
-    )?;
     let methods: mlua::Table = lua.named_registry_value(super::REG_FRAME_METHODS)?;
-    let cooldowns = lua.create_table()?;
-    lua.set_named_registry_value(REG_COOLDOWN_METHODS, &cooldowns)?;
     let table = |name: &str| lua.named_registry_value::<mlua::Table>(name);
     let install: mlua::Function = lua
         .load(
             r##"
             local methods, regions, fontstrings, buttons, editboxes, minimaps, sliders, textures,
-                tooltips, cooldowns = ...
+                tooltips = ...
             -- A tooltip remembers its owner.
             local owners = setmetatable({}, { __mode = "k" })
             local setOwner = tooltips.SetOwner
@@ -113,20 +85,6 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
                 return setOwner(self, owner, ...)
             end
             function tooltips.GetOwner(self) return owners[self] end
-            -- Cooldown frames: the engine draws the sweep from the model's record. The verbs are
-            -- the Cooldown kind's, so a plain Frame has none.
-            local setCooldown, getCooldown, setReverse = __azb_cooldown_set,
-                __azb_cooldown_get, __azb_cooldown_reverse
-            __azb_cooldown_set, __azb_cooldown_get, __azb_cooldown_reverse = nil, nil, nil
-            function cooldowns.SetCooldown(self, start, duration)
-                setCooldown(self, tonumber(start) or 0, tonumber(duration) or 0)
-            end
-            function cooldowns.GetCooldownTimes(self)
-                local start, duration = getCooldown(self)
-                return start * 1000, duration * 1000
-            end
-            function cooldowns.SetReverse(self, reverse) setReverse(self, reverse and true or false) end
-            function cooldowns.SetDrawEdge() end
             -- QuestPOIFrame (the world map's quest blobs): accepted, not drawn.
             for _, name in ipairs({ "DrawQuestBlob", "DrawBlob", "DrawNone", "SetFillTexture",
                 "SetBorderTexture", "SetFillAlpha", "SetBorderAlpha", "SetBorderScalar",
@@ -239,7 +197,6 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
         table(super::slider::REG_SLIDER_METHODS)?,
         table(super::REG_TEXTURE_METHODS)?,
         table(super::tooltip::REG_TOOLTIP_METHODS)?,
-        cooldowns,
     ))
 }
 

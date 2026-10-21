@@ -10,7 +10,7 @@ use benilla_ui::script::GuildMemberInfo;
 /// `name` 2, `zone` 3, `class` 4, `group` 5, `online` 6, `note` 7. The chain starts as
 /// `key[i] = i` (`0x4d0a50`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum SortField {
+pub(crate) enum SortField {
     Rank,
     Level,
     Name,
@@ -38,7 +38,7 @@ const SORT_FIELDS: [SortField; 8] = [
 impl SortField {
     /// The column a `SortGuildRoster` string names, case-insensitively (`0x64a4c0`, `0x414310`);
     /// anything else sorts by `name`, the preloaded key (`0x4d1cdb`, `0x4d1df4`).
-    pub(super) fn parse(field: &str) -> SortField {
+    pub(crate) fn parse(field: &str) -> SortField {
         match field {
             f if f.eq_ignore_ascii_case("rank") => SortField::Rank,
             f if f.eq_ignore_ascii_case("level") => SortField::Level,
@@ -100,7 +100,7 @@ fn misses_last(a: &str, b: &str) -> Ordering {
 /// maintains it and `0x4d0d50` walks it, so every column clicked before stays a tie-break, and one
 /// returned to keeps the direction it was left at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct SortStack([(SortField, bool); 8]);
+pub(crate) struct SortStack([(SortField, bool); 8]);
 
 impl Default for SortStack {
     fn default() -> Self {
@@ -111,7 +111,7 @@ impl Default for SortStack {
 impl SortStack {
     /// `SortGuildRoster(field)`: a field already first flips its direction (`0x4d0fcf`); any other
     /// moves to the front with the direction it was left at (`0x4d0fdc`-`0x4d0ff3`).
-    pub(super) fn select(&mut self, field: SortField) {
+    pub(crate) fn select(&mut self, field: SortField) {
         let Some(at) = self.0.iter().position(|(f, _)| *f == field) else {
             return; // unreachable: the chain holds all eight, always
         };
@@ -151,7 +151,7 @@ impl SortStack {
     }
 
     /// Put `rows` in display order; unstable, like the reference's MSVC CRT `qsort` (`0x73f727`).
-    pub(super) fn order(&self, rows: &mut [RosterRow], show_offline: bool) {
+    pub(crate) fn order(&self, rows: &mut [RosterRow], show_offline: bool) {
         rows.sort_unstable_by(|a, b| self.compare(a, b, show_offline));
     }
 }

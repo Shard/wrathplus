@@ -336,7 +336,7 @@ fn attacker_state(
     }
     // The center text for a hit on us, after the synthesis so a full block reads BLOCK, not MISS.
     if self_guid.0 == Some(s.victim) {
-        if let Some((message_type, data, extra)) = crate::combat_log::text::melee_center_text(
+        if let Some((message_type, data, extra)) = crate::combat_text::center::melee_center_text(
             s.hit_info,
             s.victim_state,
             s.damage,

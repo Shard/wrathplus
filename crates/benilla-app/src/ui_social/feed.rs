@@ -690,7 +690,7 @@ mod tests {
 #[cfg(test)]
 pub(crate) mod native_tests {
     use super::*;
-    use crate::ui_native_who::NativeWhoPackets;
+    use crate::net::wrath_who_capture::NativeWhoPackets;
     use benilla_protocol::wrath_who::{Entry, Packet};
     pub(crate) fn entries(name: &str, race: u32) -> Vec<Entry> {
         vec![Entry {

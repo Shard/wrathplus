@@ -22,7 +22,7 @@
 //! targeting, the pick flags come from the word alone, so a click over a unit with a dest-only
 //! word commits on the ground behind it.
 //!
-//! Cancels: ESC through `UIParent.lua:1490` (the UI's targeting push, `ui_spell_targeting`, and
+//! Cancels: ESC through `UIParent.lua:1490` (the UI's targeting push in `ui_cast`, and
 //! [`ScriptCursor::stop_targeting`]), the right-button down edge
 //! ([`cancel_targeting_on_right_press`]), a new spell's press, which aborts and proceeds
 //! (`TryCast 0x6e4b60` at `0x6e4d62`), and the bar's re-press of the same spell

@@ -244,7 +244,7 @@ impl PluginGroup for GamePlugins {
             .add(UiNetPlugin)
             .add(crate::ui_native::NativeFeedsPlugin)
             .add(UiCastPlugin)
-            .add(crate::ui_spell_targeting::UiSpellTargetingPlugin)
+            .add(crate::ui_cast::spell_targeting::UiSpellTargetingPlugin)
             .add(UiMirrorPlugin)
             .add(crate::combat_text::CombatTextPlugin)
             .add(crate::nameplates::NameplatesPlugin)
@@ -714,13 +714,12 @@ pub(crate) mod schedule_tests {
     ///   orders against the target chain. Such a gesture and a script call in one frame take
     ///   either order;
     /// - the range compare's readers (`ui_action::state::feed_action_state`,
-    ///   `ui_tooltip::spell_feed::feed_spell_tooltips`,
-    ///   `ui_spell_targeting::feed_targeting_to_vm`, the targeting cursor and the object-click commit) against the writers of `Player` and
+    ///   `ui_tooltip::spell_feed::feed_spell_tooltips`, the targeting push in `ui_cast`,
+    ///   the targeting cursor and the object-click commit) against the writers of `Player` and
     ///   `RemoteMotion` (`camera_saved::load_camera_pose`, `world_focus`'s focus publish and settle
     ///   release, `transport::compose_riders` and `ground_deck_riders`): the readers take the
-    ///   movement flags of the caster (`Player::move_flags`) and its target
-    ///   (`RemoteMotion::flags`), and those writers touch `login_pitch`, the settle fields and a
-    ///   rider's pose, never the flags;
+    ///   caster's and its target's movement flags (`Player::move_flags`, `RemoteMotion::flags`),
+    ///   which those writers never touch;
     /// - Click to Move's steer and arrival (`player::approach::steer_approach`,
     ///   `target::click::act_on_arrival`) against what `steer_follow` and `act_on_right_click`
     ///   already pair with: the steer is chained after follow's and writes the same `Player`

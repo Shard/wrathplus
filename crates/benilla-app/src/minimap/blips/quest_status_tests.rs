@@ -144,9 +144,14 @@ fn native_status_packets_emit_a_wrath_question_mark_quad() {
                 panic!()
             };
             let mut app = App::new();
-            app.init_resource::<crate::ui_quest::QuestGiver>();
-            crate::ui_quest::net::register(&mut app);
-            crate::net::handlers::dispatch(app.world_mut(), session_events);
+            // What `ui_quest::net`'s handler does with each decoded status.
+            let mut giver = crate::app_core::state::QuestGiver::default();
+            for ev in session_events {
+                if let benilla_protocol::SessionEvent::WrathQuestGiverStatus { npc, status } = ev {
+                    giver.set_wrath_status(npc, status);
+                }
+            }
+            app.insert_resource(giver);
             // Native UNIT_FIELD_HEALTH=24, no Vanilla flags or projected descriptor.
             app.world_mut().spawn((
                 crate::net::Guid(npc),

@@ -27,13 +27,19 @@ fn registered_capture_never_duplicates_shared_cleanup_or_clears_colliding_player
         .world()
         .resource::<crate::net::handlers::NetHandlers>()
         .census();
-    for kind in [
-        SessionEventKind::WrathSpellFailure,
-        SessionEventKind::WrathPetCastFailed,
+    // The receipt owner, and for a spell failure the combat log's `SPELL_CAST_FAILED` beside it.
+    for (kind, owners) in [
+        (SessionEventKind::WrathSpellFailure, 2),
+        (SessionEventKind::WrathPetCastFailed, 1),
     ] {
-        assert_eq!(census[&kind].len(), 1);
-        assert!(census[&kind][0].contains("native_failure::receive"));
+        assert_eq!(census[&kind].len(), owners, "{kind:?}: {:?}", census[&kind]);
+        assert!(census[&kind]
+            .iter()
+            .any(|o| o.contains("native_failure::receive")));
     }
+    assert!(census[&SessionEventKind::WrathSpellFailure]
+        .iter()
+        .any(|o| o.contains("combat_log::on_native_only")));
     let mut cursor = bevy::ecs::message::MessageCursor::<CastEvent>::default();
     let mut adapter = WrathEventAdapter::new();
     let mut spell = vec![1, 42, 7];

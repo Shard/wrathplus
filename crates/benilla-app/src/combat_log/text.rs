@@ -15,13 +15,14 @@ use benilla_protocol::types::{
     SpellDamageLog, SpellEnergizeLog, SpellHealLog, SpellLogMiss, XpGain,
 };
 
-use crate::combat_text::{
-    damage_color, miss_word, spell_text, CombatTextSpawn, DamageSource, DamageTextGates,
-};
+use crate::combat_text::{damage_color, miss_word, spell_text, CombatTextSpawn, DamageTextGates};
 use crate::names::NameCache;
 use crate::ui_chat::ChatLog;
 use crate::ui_unit::{CombatTextEvent, UnitCombatFeedback};
 
+#[cfg(test)]
+use crate::combat_text::center::melee_center_text;
+pub(crate) use crate::combat_text::center::{classify_source, CenterText};
 use crate::net::{GuidIndex, NetCommands, ObjectStore, SelfGuid};
 
 /// Gate A: the recipient's entity, unless the recipient is us (`0x607140` and `0x6128b0` compare
@@ -31,25 +32,6 @@ fn gated_anchor(guid: u64, index: &GuidIndex, self_guid: &SelfGuid) -> Option<En
         return None;
     }
     index.0.get(&guid).copied()
-}
-
-/// The source-ownership classifier `0x5efea0` (the colour law's `K`): `Player` for me, `Pet` for a
-/// unit whose SummonedBy or CreatedBy is me (pet, guardian, totem), `None` for anything else,
-/// whose damage is never drawn.
-pub(crate) fn classify_source(
-    guid: u64,
-    index: &GuidIndex,
-    self_guid: &SelfGuid,
-    stores: &Query<&mut ObjectStore>,
-) -> Option<DamageSource> {
-    let me = self_guid.0?;
-    if guid == me {
-        return Some(DamageSource::Player);
-    }
-    let entity = index.0.get(&guid).copied()?;
-    let store = stores.get(entity).ok()?;
-    (store.0.unit_summoned_by() == Some(me) || store.0.unit_created_by() == Some(me))
-        .then_some(DamageSource::Pet)
 }
 
 // The melee number and word (`SMSG_ATTACKERSTATEUPDATE`) spawn at the swing's impact keyframe
@@ -82,9 +64,6 @@ fn spell_feedback(
         None
     }
 }
-
-/// A centre-text line: the messageType, `arg2` and `arg3`.
-pub(crate) type CenterText = (&'static str, Option<String>, Option<String>);
 
 /// `SMSG_SPELLNONMELEEDAMAGELOG`'s centre text, routed as the handler `0x5e85e0` routes the log:
 /// split damage (`hit_info & 8`, `0x5e8700`) is `0x62de60`'s `SPLIT_DAMAGE` with the damage; a
@@ -153,49 +132,6 @@ fn periodic_center_text(damage: u32, absorb: u32, resist: i32) -> Option<CenterT
         Some(("SPELL_RESISTED", None, None))
     } else {
         None
-    }
-}
-
-/// Melee packet to the centre text's messageType and args (`0x629d30`), fired at packet receive,
-/// not at the impact keyframe. A landed hit with a partial fires the first of resist
-/// (`0x629efd`), block (`0x629f15`) and absorb (`0x629f30`) with `(damage, partial)`, ahead of
-/// the crit.
-pub(crate) fn melee_center_text(
-    hit_info: u32,
-    victim_state: u32,
-    damage: u32,
-    absorb: u32,
-    resist: i32,
-    blocked: u32,
-) -> Option<CenterText> {
-    match victim_state {
-        2 => Some(("DODGE", None, None)),
-        3 => Some(("PARRY", None, None)),
-        5 => Some(("BLOCK", None, None)),
-        6 => Some(("EVADE", None, None)),
-        7 => Some(("IMMUNE", None, None)),
-        8 => Some(("DEFLECT", None, None)),
-        _ => {
-            if damage > 0 {
-                if resist > 0 {
-                    Some(("RESIST", Some(damage.to_string()), Some(resist.to_string())))
-                } else if blocked > 0 {
-                    Some(("BLOCK", Some(damage.to_string()), Some(blocked.to_string())))
-                } else if absorb > 0 {
-                    Some(("ABSORB", Some(damage.to_string()), Some(absorb.to_string())))
-                } else if hit_info & 0x80 != 0 {
-                    Some(("DAMAGE_CRIT", Some(damage.to_string()), None))
-                } else {
-                    Some(("DAMAGE", Some(damage.to_string()), None))
-                }
-            } else if hit_info & 0x20 != 0 {
-                Some(("ABSORB", None, None))
-            } else if hit_info & 0x40 != 0 {
-                Some(("RESIST", None, None))
-            } else {
-                Some(("MISS", None, None))
-            }
-        }
     }
 }
 

@@ -607,13 +607,13 @@ impl benilla_ui::script::TextMeasure for FixedWidthFont {
 #[cfg(test)]
 pub(crate) mod test_ui;
 
-/// The chat loader's two login events (`0x498a60`): `UPDATE_CHAT_WINDOWS` once, then
-/// `UPDATE_CHAT_COLOR` per registry entry.
+/// `PLAYER_LOGIN`, then the chat loader's two login events (`0x498a60`): `UPDATE_CHAT_WINDOWS`
+/// once, then `UPDATE_CHAT_COLOR` per registry entry.
 #[cfg(test)]
 pub(crate) fn fire_chat_login(s: &mut benilla_ui::script::UiScript) {
-    // `FCF_OnUpdate` reads `UIOptionsFrame:IsShown()` every frame; stand in a closed one.
-    s.run("if not UIOptionsFrame then UIOptionsFrame = CreateFrame('Frame') UIOptionsFrame:Hide() end")
-        .expect("the options stand-in");
+    // `UIParent_OnEvent`'s PLAYER_LOGIN loads `Blizzard_CombatLog` (UIParent.lua:480-483), which
+    // the combat log window's tab and filters call into.
+    s.fire_event("PLAYER_LOGIN", vec![]);
     s.fire_event("UPDATE_CHAT_WINDOWS", vec![]);
     let renorm = |b: u8| f64::from(b as f32 * (1.0f32 / 255.0f32));
     for entry in s.chat_colors() {

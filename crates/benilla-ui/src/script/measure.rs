@@ -66,6 +66,25 @@ pub(super) fn ensure_measured(lua: &Lua, rh: RegionHandle) {
     }
 }
 
+/// Measure, before a geometry read, every FontString whose measure went stale, as the reference's
+/// getters resolve a dirty rect inline (`GetLeft 0x49d0b0`: `0x488cf0`, then `0x489de0`) and its
+/// text setter dirties the string (`0x483910`): `SetText` or `SetWidth(0)` then `GetRight` reads
+/// the new box, on the string itself and on whatever anchors to it. The ledger keeps its entries
+/// for the frame's drain. Without a ledger (a font-object write names no region) only `this` is
+/// measured; without a measurer nothing is, and the box waits for the host's round trip.
+pub(super) fn measure_pending(lua: &Lua, this: Option<RegionHandle>) {
+    let named: Vec<RegionHandle> = {
+        let model = lua.app_data_ref::<Model>().expect("model app_data");
+        if model.measurer.is_none() {
+            return;
+        }
+        model.measure_dirty.clone().unwrap_or_default()
+    };
+    for rh in this.into_iter().chain(named) {
+        ensure_measured(lua, rh);
+    }
+}
+
 impl super::UiScript {
     /// Install the host's font engine, so metric reads answer inside the tick that asked. Replace
     /// it whenever the window size or `uiScale` changes: glyph advances snap to whole physical

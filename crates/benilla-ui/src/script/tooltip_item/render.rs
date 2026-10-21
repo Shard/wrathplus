@@ -117,6 +117,9 @@ pub(super) fn render_view(
             .collect();
         (model.player_req.clone(), known, taught, set_view, equipped)
     };
+    // An heirloom prints its numbers at its owner's level (`0x6277f0` through `0x61e740`).
+    let scaled = v.heirloom.as_ref().and_then(|h| h.apply(v, req.level));
+    let v = scaled.as_ref().map_or(v, |s| &s.view);
     let add = |l: (String, [f32; 4])| append_line(lua, this, l, None, false);
     let addw = |l: (String, [f32; 4])| append_line(lua, this, l, None, true);
     let add2 =
@@ -332,9 +335,11 @@ pub(super) fn render_view(
             // The precision is `DPS_TEMPLATE`'s own (`0x854c4c`); the reference has no
             // divide-by-zero guard either.
             let secs = f64::from(v.delay_ms) * f64::from(0.001_f32);
+            // An heirloom's is the untruncated scaled range's mean.
+            let dps = scaled.as_ref().and_then(|s| s.dps);
             keyed(
                 "DPS_TEMPLATE",
-                &[Arg::F(f64::from(dps_acc) / secs)],
+                &[Arg::F(dps.map_or(f64::from(dps_acc) / secs, f64::from))],
                 WHITE,
                 false,
             )?;
@@ -546,6 +551,28 @@ pub(super) fn render_view(
     if taught_known {
         keyed("ITEM_SPELL_KNOWN", &[], RED, false)?;
     }
+    // The green `Equip:` stat lines in slot order (`0x6277f0`; an heirloom's wrap), the stats off
+    // the builder's green table, then an heirloom's spell power line.
+    if let Some(prefix) = get("ITEM_SPELL_TRIGGER_ONEQUIP") {
+        let green = |text: String| (format!("{prefix} {text}"), GREEN);
+        for &(t, val) in &v.stats {
+            let Some(text) = crate::heirloom::green_stat_text(t, val, &get) else {
+                continue;
+            };
+            if scaled.is_some() {
+                addw(green(text))?;
+            } else {
+                add(green(text))?;
+            }
+        }
+        let sp = scaled
+            .as_ref()
+            .and_then(|s| s.spell_power)
+            .filter(|&sp| sp != 0);
+        if let (Some(sp), Some(t)) = (sp, get("ITEM_MOD_SPELL_POWER")) {
+            addw(green(fill(&t, &[Arg::D(sp.into())])))?;
+        }
+    }
     // Green, wrapped trigger lines: the prefix key and the app-resolved text joined by the
     // literal `"%s %s"` (`0x82ef08`, `0x52da7e`).
     for &(trigger, _, ref text) in &v.spell_triggers {
@@ -693,59 +720,5 @@ fn charges_phrase(n: u32, get: &dyn Fn(&str) -> Option<String>) -> Option<String
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A stand-in string table, not the shipped wording: the tests check which key is reached and
-    /// what fills it.
-    fn table(key: &str) -> Option<String> {
-        Some(
-            match key {
-                "ITEM_ENCHANT_TIME_LEFT_DAYS" => "<%s :: %d D>",
-                "ITEM_ENCHANT_TIME_LEFT_DAYS_P1" => "<%s :: %d DD>",
-                "ITEM_ENCHANT_TIME_LEFT_HOURS" => "<%s :: %d H>",
-                "ITEM_ENCHANT_TIME_LEFT_HOURS_P1" => "<%s :: %d HH>",
-                "ITEM_ENCHANT_TIME_LEFT_MIN" => "<%s :: %d M>",
-                "ITEM_ENCHANT_TIME_LEFT_SEC" => "<%s :: %d S>",
-                "ITEM_SPELL_CHARGES" => "<%d chg>",
-                "ITEM_SPELL_CHARGES_P1" => "<%d chgs>",
-                _ => return None,
-            }
-            .to_string(),
-        )
-    }
-
-    /// The `0x52fa50` ladder: minutes and seconds have no `_P1` twin, so each reaches one key.
-    #[test]
-    fn enchant_countdown_buckets_and_rounding() {
-        let t = |ms| enchant_time_left("Rockbiter", ms, &table);
-        // Seconds truncate: 1900 ms is 1, not 2.
-        assert_eq!(t(1_900).as_deref(), Some("<Rockbiter :: 1 S>"));
-        assert_eq!(t(59_999).as_deref(), Some("<Rockbiter :: 59 S>"));
-        // Minutes ceil: one second past 4 minutes already reads 5.
-        assert_eq!(t(60_000).as_deref(), Some("<Rockbiter :: 1 M>"));
-        assert_eq!(t(241_000).as_deref(), Some("<Rockbiter :: 5 M>"));
-        // Hours ceil, and only the non-singular count takes the `_P1` key.
-        assert_eq!(t(3_600_000).as_deref(), Some("<Rockbiter :: 1 H>"));
-        assert_eq!(t(3_600_001).as_deref(), Some("<Rockbiter :: 2 HH>"));
-        // Days ceil.
-        assert_eq!(t(86_400_000).as_deref(), Some("<Rockbiter :: 1 D>"));
-        assert_eq!(t(86_400_001).as_deref(), Some("<Rockbiter :: 2 DD>"));
-        // The app drops an expired timer, but zero must not panic; it takes the plural arm,
-        // `GetPluralIndex`'s rule.
-        assert_eq!(t(0).as_deref(), Some("<Rockbiter :: 0 S>"));
-    }
-
-    #[test]
-    fn a_missing_countdown_family_draws_nothing() {
-        assert_eq!(enchant_time_left("Rockbiter", 60_000, &|_| None), None);
-        assert_eq!(charges_phrase(3, &|_| None), None);
-    }
-
-    #[test]
-    fn charges_phrase_picks_the_plural() {
-        assert_eq!(charges_phrase(1, &table).as_deref(), Some("<1 chg>"));
-        assert_eq!(charges_phrase(5, &table).as_deref(), Some("<5 chgs>"));
-        assert_eq!(charges_phrase(0, &table), None);
-    }
-}
+#[path = "render_tests.rs"]
+mod tests;

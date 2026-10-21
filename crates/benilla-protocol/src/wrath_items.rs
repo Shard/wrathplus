@@ -77,6 +77,8 @@ pub struct NativeItemTemplate {
     pub info: ItemInfo,
     pub roll: RollMetadata,
     pub sockets: SocketMetadata,
+    /// `[ScalingStatDistribution id, ScalingStatValue mask]`, an heirloom's scaling (`0x61f550`).
+    pub scaling: [u32; 2],
 }
 
 /// Decode the expansion-neutral projection without changing legacy callers.
@@ -133,8 +135,7 @@ pub fn decode_native_item_query_response(body: &[u8]) -> Result<(u32, Option<Nat
     for _ in 0..stat_count {
         stats.push((input.u32()?, input.i32()?));
     }
-    let _scaling_stat_distribution = input.u32()?;
-    let _scaling_stat_value = input.u32()?;
+    let scaling = [input.u32()?, input.u32()?];
 
     let mut damages = Vec::with_capacity(ITEM_DAMAGE_BLOCKS);
     let mut dmg_min = 0.0;
@@ -237,6 +238,7 @@ pub fn decode_native_item_query_response(body: &[u8]) -> Result<(u32, Option<Nat
         wire_entry,
         Some(NativeItemTemplate {
             sockets,
+            scaling,
             roll: RollMetadata {
                 flags2,
                 required_disenchant_skill,
@@ -381,12 +383,9 @@ mod tests {
         for _ in 0..4 {
             text(&mut out, "");
         }
-        for _ in 0..21 {
-            word(&mut out, 0); // display through container slots
+        for _ in 0..24 {
+            word(&mut out, 0); // display through StatsCount, ScalingStatDistribution and Value
         }
-        word(&mut out, 0); // StatsCount
-        word(&mut out, 0); // ScalingStatDistribution
-        word(&mut out, 0); // ScalingStatValue
         for _ in 0..ITEM_DAMAGE_BLOCKS {
             float(&mut out, 0.0);
             float(&mut out, 0.0);
@@ -504,6 +503,7 @@ mod tests {
             let (entry, template) = decode_native_item_query_response(&body).unwrap();
             let template = template.unwrap();
             assert_eq!(entry, 0x0102_0304);
+            assert_eq!(template.scaling, [55, 0xa5a5_5a5a], "after the stat run");
             assert_eq!(
                 template.roll,
                 RollMetadata {

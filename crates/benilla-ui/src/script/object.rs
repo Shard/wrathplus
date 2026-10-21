@@ -20,7 +20,7 @@ use crate::widget::{FrameHandle, FrameKind};
 
 pub(crate) mod anchor_args;
 mod events_regions;
-mod frame_state;
+pub(crate) mod frame_state;
 mod layout_methods;
 pub(crate) use layout_methods::eff_scale;
 pub(crate) mod movable;
@@ -260,10 +260,6 @@ pub fn frame_kind_from_tag(s: &str) -> Option<FrameKind> {
 /// record is released once the first one is made (`0x6ee439`), so a second one misses. On a miss
 /// Lua raises and XML logs `Unknown frame type: %s` and skips the node.
 pub(crate) fn registered_frame_kind(lua: &Lua, kind: &str) -> Option<FrameKind> {
-    // Wrath's `<QuestPOIFrame>` is a plain frame here; its methods are the Wrath surface's.
-    if enum_token(kind) == "QUESTPOIFRAME" {
-        return Some(FrameKind::Frame);
-    }
     let frame_kind = frame_kind_from_str(kind)?;
     let one_shot_spent = frame_kind == FrameKind::WorldFrame
         && lua
@@ -304,6 +300,8 @@ fn frame_kind_from_str(s: &str) -> Option<FrameKind> {
         "GAMETOOLTIP" => FrameKind::GameTooltip,
         "MINIMAP" => FrameKind::Minimap,
         "COOLDOWN" => FrameKind::Cooldown,
+        // Wrath's `<QuestPOIFrame>` is a plain frame here; its methods are the Wrath surface's.
+        "QUESTPOIFRAME" => FrameKind::Frame,
         _ => return None,
     })
 }

@@ -10,6 +10,36 @@ use crate::widget::FrameKind;
 
 use super::{decode_id, draw_layer_from_str, frame_handle_of, frame_wrapper, strata_from_str};
 
+/// Each class's chain is a fixed list in the reference, so a table here. `ScrollingMessageFrame`
+/// derives from `Frame`, not `MessageFrame` (`0x787940`); `SimpleHTML` keeps its capitals,
+/// unlike the `SimpleHtml` variant; Wrath's `Cooldown` derives from `Frame`.
+pub(crate) fn type_chain(kind: FrameKind) -> &'static [&'static str] {
+    match kind {
+        FrameKind::Frame => &["Frame", "Region"],
+        FrameKind::WorldFrame => &["Frame", "Region"],
+        FrameKind::Button => &["Button", "Frame", "Region"],
+        FrameKind::CheckButton => &["CheckButton", "Button", "Frame", "Region"],
+        // `CLootButton::IsObjectType` (`0x495af0`) prepends its name to `Button`'s chain.
+        FrameKind::LootButton => &["LootButton", "Button", "Frame", "Region"],
+        FrameKind::EditBox => &["EditBox", "Frame", "Region"],
+        FrameKind::StatusBar => &["StatusBar", "Frame", "Region"],
+        FrameKind::Slider => &["Slider", "Frame", "Region"],
+        FrameKind::ScrollFrame => &["ScrollFrame", "Frame", "Region"],
+        FrameKind::Model => &["Model", "Frame", "Region"],
+        FrameKind::PlayerModel => &["PlayerModel", "Model", "Frame", "Region"],
+        FrameKind::DressUpModel => &["DressUpModel", "PlayerModel", "Model", "Frame", "Region"],
+        FrameKind::TabardModel => &["TabardModel", "PlayerModel", "Model", "Frame", "Region"],
+        FrameKind::MessageFrame => &["MessageFrame", "Frame", "Region"],
+        FrameKind::ScrollingMessageFrame => &["ScrollingMessageFrame", "Frame", "Region"],
+        FrameKind::ColorSelect => &["ColorSelect", "Frame", "Region"],
+        FrameKind::SimpleHtml => &["SimpleHTML", "Frame", "Region"],
+        FrameKind::MovieFrame => &["MovieFrame", "Frame", "Region"],
+        FrameKind::GameTooltip => &["GameTooltip", "Frame", "Region"],
+        FrameKind::Minimap => &["Minimap", "Frame", "Region"],
+        FrameKind::Cooldown => &["Cooldown", "Frame", "Region"],
+    }
+}
+
 /// Populate `m`'s visibility, hierarchy, strata, backdrop and input methods.
 pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
     // Show / Hide / visibility. No `SetShown`: no 1.12 method table registers it.
@@ -77,37 +107,7 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
             Ok(())
         })?,
     )?;
-    // ── GetObjectType / IsObjectType, frame side (`0x7a11d0`/`0x7a1290`) ──
-    //
-    // Each class's chain is a fixed list in the reference, so a table here. `ScrollingMessageFrame`
-    // derives from `Frame`, not `MessageFrame` (`0x787940`); `SimpleHTML` keeps its capitals,
-    // unlike the `SimpleHtml` variant; Wrath's `Cooldown` derives from `Frame`.
-    fn type_chain(kind: FrameKind) -> &'static [&'static str] {
-        match kind {
-            FrameKind::Frame => &["Frame", "Region"],
-            FrameKind::WorldFrame => &["Frame", "Region"],
-            FrameKind::Button => &["Button", "Frame", "Region"],
-            FrameKind::CheckButton => &["CheckButton", "Button", "Frame", "Region"],
-            // `CLootButton::IsObjectType` (`0x495af0`) prepends its name to `Button`'s chain.
-            FrameKind::LootButton => &["LootButton", "Button", "Frame", "Region"],
-            FrameKind::EditBox => &["EditBox", "Frame", "Region"],
-            FrameKind::StatusBar => &["StatusBar", "Frame", "Region"],
-            FrameKind::Slider => &["Slider", "Frame", "Region"],
-            FrameKind::ScrollFrame => &["ScrollFrame", "Frame", "Region"],
-            FrameKind::Model => &["Model", "Frame", "Region"],
-            FrameKind::PlayerModel => &["PlayerModel", "Model", "Frame", "Region"],
-            FrameKind::DressUpModel => &["DressUpModel", "PlayerModel", "Model", "Frame", "Region"],
-            FrameKind::TabardModel => &["TabardModel", "PlayerModel", "Model", "Frame", "Region"],
-            FrameKind::MessageFrame => &["MessageFrame", "Frame", "Region"],
-            FrameKind::ScrollingMessageFrame => &["ScrollingMessageFrame", "Frame", "Region"],
-            FrameKind::ColorSelect => &["ColorSelect", "Frame", "Region"],
-            FrameKind::SimpleHtml => &["SimpleHTML", "Frame", "Region"],
-            FrameKind::MovieFrame => &["MovieFrame", "Frame", "Region"],
-            FrameKind::GameTooltip => &["GameTooltip", "Frame", "Region"],
-            FrameKind::Minimap => &["Minimap", "Frame", "Region"],
-            FrameKind::Cooldown => &["Cooldown", "Frame", "Region"],
-        }
-    }
+    // ── GetObjectType / IsObjectType, frame side (`0x7a11d0`/`0x7a1290`): [`type_chain`] ──
     fn chain_of(lua: &Lua, this: &Table) -> mlua::Result<&'static [&'static str]> {
         let h = frame_handle_of(lua, this)?;
         let model = lua.app_data_ref::<Model>().expect("model");
@@ -387,42 +387,6 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
             let model = lua.app_data_ref::<Model>().expect("model");
             let s = model.arena.frame(h).map(|f| f.strata).unwrap_or_default();
             Ok(strata_name(s).to_string())
-        })?,
-    )?;
-    m.set(
-        "SetFrameLevel",
-        lua.create_function(|lua, (this, level): (Table, i64)| {
-            let h = frame_handle_of(lua, &this)?;
-            // `SetFrameLevel` (12340 `0x49e9d0`) raises on a negative level and otherwise calls
-            // `0x4910a0(level, 1)`: same-strata children shift with the frame.
-            if level < 0 {
-                let name = lua
-                    .app_data_ref::<Model>()
-                    .expect("model")
-                    .arena
-                    .frame(h)
-                    .and_then(|f| f.name.clone())
-                    .unwrap_or_else(|| "<unnamed>".to_string());
-                return Err(mlua::Error::runtime(format!(
-                    "{name}:SetFrameLevel(): Passed negative frame level: {level}"
-                )));
-            }
-            let lvl = level.min(i64::from(u16::MAX)) as u16;
-            lua.app_data_mut::<Model>()
-                .expect("model")
-                .arena
-                .set_frame_level(h, lvl, true);
-            Ok(())
-        })?,
-    )?;
-    m.set(
-        "GetFrameLevel",
-        lua.create_function(|lua, this: Table| {
-            let h = frame_handle_of(lua, &this)?;
-            let model = lua.app_data_ref::<Model>().expect("model");
-            Ok(i64::from(
-                model.arena.frame(h).map(|f| f.level).unwrap_or(0),
-            ))
         })?,
     )?;
     m.set(
