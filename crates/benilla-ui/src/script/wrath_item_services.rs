@@ -172,11 +172,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::ScriptDialect;
-    use super::*;
+        use super::*;
     #[test]
     fn refunds_keep_arity_signed_costs_and_unavailable_item_fields() {
-        let mut ui = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut ui = UiScript::new().unwrap();
         ui.set_item_refunds(vec![
             (
                 false,
@@ -225,7 +224,7 @@ mod tests {
     }
     #[test]
     fn socket_closed_shapes_and_capture_only_intents_do_not_claim_success() {
-        let mut ui = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut ui = UiScript::new().unwrap();
         ui.run(
             r#"
             local n,i,q = GetSocketItemInfo(); assert(n == nil and i == nil and q == 0)

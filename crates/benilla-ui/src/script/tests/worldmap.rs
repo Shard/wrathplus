@@ -498,7 +498,7 @@ fn world_loc_map_position_projects_through_the_host() {
 
 #[test]
 fn the_death_release_position_projects_like_a_world_location() {
-    let mut s = crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let mut s = crate::script::UiScript::new().unwrap();
     assert_eq!(s.eval::<(f64, f64)>("return GetDeathReleasePosition()").unwrap(), (0.0, 0.0));
     s.set_death_release_location(Some((1, 10.0, 20.0)));
     assert_eq!(s.eval::<(f64, f64)>("return GetDeathReleasePosition()").unwrap(), (0.0, 0.0), "no projector");

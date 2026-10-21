@@ -95,12 +95,12 @@ pub(super) fn install(lua: &mlua::Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, WrathLfgCatalog};
+    use crate::script::{WrathLfgCatalog};
 
     #[test]
     fn choice_union_reuses_table_and_preserves_tuple_holes() {
         use crate::script::WrathLfgDungeon;
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_wrath_lfg_catalog(
             Arc::new(WrathLfgCatalog {
                 dungeons: vec![
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn independent_metadata_setters_preserve_shared_inputs() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         let groups = Arc::new(vec![
             WrathLfgGroup {
                 id: 4,

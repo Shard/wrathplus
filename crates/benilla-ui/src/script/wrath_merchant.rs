@@ -171,11 +171,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{MerchantItem, MerchantState, ScriptDialect, UiScript};
+    use crate::script::{MerchantItem, MerchantState, UiScript};
 
     #[test]
     fn cost_bindings_follow_the_record() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let gold = MerchantItem {
             name: Some("Bread".into()),
             price: 25,

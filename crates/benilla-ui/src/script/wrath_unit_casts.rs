@@ -145,10 +145,10 @@ mod tests {
     use std::collections::HashMap;
 
     use super::WrathUnitCast;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     fn vm_with_player(guid: u64) -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.model_mut().unit_guids.player = guid;
         s.model_mut().unit_guids.target = guid + 1;
         s.set_now(100.0);

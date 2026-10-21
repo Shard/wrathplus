@@ -78,10 +78,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{ContainerSlot, ContainerState, InvSlotView, ScriptDialect, UiScript};
+    use super::super::{ContainerSlot, ContainerState, InvSlotView, UiScript};
 
     fn script() -> UiScript {
-        UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap()
+        UiScript::new().unwrap()
     }
 
     #[test]

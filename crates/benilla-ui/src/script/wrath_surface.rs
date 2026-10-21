@@ -381,11 +381,11 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{ScriptDialect, UiScript};
+    use super::super::UiScript;
 
     #[test]
     fn wrath_format_supports_localized_positional_conversions_in_both_aliases() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run(r#"
             assert(format('%2$s hit %1$s for %3$02d (%%)', 'target', 'source', 7) == 'source hit target for 07 (%)')
             assert(string.format('%2$s %2$s %1$d', 3, 'repeat') == 'repeat repeat 3')
@@ -397,31 +397,31 @@ mod tests {
 
     #[test]
     fn wrath_dynamic_fontstring_labels_clear_until_updated_without_calling_functions() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run("local f = CreateFrame('Frame'):CreateFontString() f:SetText('old') f:SetText(function() error('must not invoke') end) assert(f:GetText() == nil) f:SetText(42) assert(f:GetText() == '42') f:SetText({}) assert(f:GetText() == nil)").unwrap();
     }
 
     #[test]
     fn wrath_world_arrow_creates_one_effect_child_before_onload_uses_it() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run("local parent = CreateFrame('Frame') CreateWorldMapArrowFrame(parent) assert(PlayerArrowEffectFrame ~= nil) PlayerArrowEffectFrame:SetAlpha(.65) PlayerArrowEffectFrame:SetFrameLevel(110) local effect = PlayerArrowEffectFrame CreateWorldMapArrowFrame(parent) assert(effect == PlayerArrowEffectFrame)").unwrap();
     }
 
     #[test]
     fn wrath_alarm_time_has_a_numeric_default_and_is_writable() {
-        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run("assert(tonumber(GetCVar('timeMgrAlarmTime')) == 0) SetCVar('timeMgrAlarmTime', '420') assert(tonumber(GetCVar('timeMgrAlarmTime')) == 420)").unwrap();
     }
 
     #[test]
     fn arena_opponent_count_is_zero_without_an_arena() {
-        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         assert_eq!(s.eval::<i64>("return GetNumArenaOpponents()").unwrap(), 0);
     }
 
     #[test]
     fn wrath_keeps_the_full_engine_api() {
-        let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let script = UiScript::new().unwrap();
         assert!(script
             .eval::<bool>("return ceil == math.ceil and type(UseContainerItem) == 'function'")
             .unwrap());
@@ -429,7 +429,7 @@ mod tests {
 
     #[test]
     fn secure_templates_build_as_ordinary_trusted_frames() {
-        let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let script = UiScript::new().unwrap();
         let doc = crate::framexml::parse(
             r#"<Ui><Button name="SecureActionButtonTemplate" virtual="true"/></Ui>"#,
         )
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn secure_entry_points_are_trusted_pass_throughs() {
-        let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let script = UiScript::new().unwrap();
         assert!(script
             .eval::<bool>(
                 "local calls = 0 \
@@ -457,7 +457,7 @@ mod tests {
 
     #[test]
     fn attributes_store_per_frame_and_fire_on_attribute_changed() {
-        let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let script = UiScript::new().unwrap();
         let doc = crate::framexml::parse(
             r#"<Ui><Button name="Unitish"><Scripts>
                 <OnAttributeChanged>SEEN = name .. "=" .. tostring(value)</OnAttributeChanged>
@@ -547,7 +547,7 @@ mod tests {
 
     #[test]
     fn the_compat_chunk_serves_exactly_the_listed_globals() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         let mut served = Vec::new();
         for pair in s.lua.globals().pairs::<String, mlua::Value>() {
             let (name, value) = pair.unwrap();

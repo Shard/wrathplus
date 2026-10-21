@@ -355,7 +355,7 @@ mod tests {
     #[test]
     fn native_link_argument_slot_and_zero_return_abi() {
         let mut script =
-            crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340)
+            crate::script::UiScript::new()
                 .unwrap();
         script.set_wrath_mail(Some(Inbox {
             rows: vec![Row {
@@ -450,7 +450,7 @@ mod tests {
     #[test]
     fn first_occupied_unresolved_link_does_not_skip_to_resolved_slot() {
         let mut script =
-            crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340)
+            crate::script::UiScript::new()
                 .unwrap();
         script.set_wrath_mail(Some(Inbox {
             rows: vec![Row {
@@ -541,10 +541,10 @@ mod tests {
 #[cfg(test)]
 mod family_tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let row = |kind: u8, sender: u64, gm: bool, returned: bool| Row {
             kind,
             sender_guid: sender,

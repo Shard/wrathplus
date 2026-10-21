@@ -194,7 +194,7 @@ mod tests {
     }
 
     fn wrath(in_party: bool) -> UiScript {
-        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.model_mut().unit_guids.player = 7;
         if in_party {
             s.model_mut().party.members.push(Default::default());
@@ -272,7 +272,7 @@ mod tests {
 
     #[test]
     fn wrath_sends_nothing_without_the_player() {
-        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run("SendAddonMessage('P', 'm', 'GUILD')").unwrap();
         assert!(s.take_addon_sends().is_empty());
     }

@@ -1388,7 +1388,7 @@ mod tests {
     #[test]
     fn the_wrath_sort_verbs_queue_and_read_the_stack() {
         let mut s =
-            UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+            UiScript::new().unwrap();
         s.run(
             "SortAuctionClearSort('owner') SortAuctionSetSort('owner', 'duration', true) \
              SortAuctionSetSort('list', 'nope') SortAuctionSetSort('list', 'quantity') \
@@ -1442,7 +1442,7 @@ mod tests {
     #[test]
     fn wrath_answers_thirteen_auction_and_nine_sell_values() {
         let wrath =
-            crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340)
+            crate::script::UiScript::new()
                 .unwrap();
         assert!(wrath
             .eval::<bool>(

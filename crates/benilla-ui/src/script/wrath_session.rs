@@ -176,11 +176,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript, UnitState};
+    use crate::script::{UiScript, UnitState};
 
     #[test]
     fn the_session_queries_answer_the_pushed_account_and_the_native_ranges() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert_eq!(s.eval::<i64>("return GetExpansionLevel()").unwrap(), 0);
         s.set_wrath_session(Some(2), vec!["enUS".into()]);
         for check in [

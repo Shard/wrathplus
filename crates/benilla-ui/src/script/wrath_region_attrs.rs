@@ -121,11 +121,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn word_wrap_indent_and_tiling_flags() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run("F = CreateFrame('Frame') S = F:CreateFontString() T = F:CreateTexture()").unwrap();
         {
             let check = "S:CanWordWrap() == 1 and S:GetIndentedWordWrap() == nil and T:GetHorizTile() == nil";
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn button_offsets_motion_and_stored_widget_flags_from_xml() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         let doc = crate::framexml::parse(
             r#"<Ui><Button name="FlagButton" motionScriptsWhileDisabled="true" registerForClicks="AnyUp"><PushedTextOffset><AbsDimension x="2" y="-3"/></PushedTextOffset></Button>
                <StatusBar name="FlagBar" rotatesTexture="true"/><EditBox name="FlagBox" countInvisibleLetters="true"/></Ui>"#,
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn a_font_string_template_applies_through_create_font_string() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let doc = crate::framexml::parse(
             r#"<Ui><FontString name="TestFsTemplate" justifyH="LEFT" wordwrap="false" virtual="true"/></Ui>"#,
         )

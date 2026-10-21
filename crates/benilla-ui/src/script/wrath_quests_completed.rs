@@ -65,11 +65,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn queries_are_counted_and_the_reply_fills_the_passed_table() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert_eq!(s.arity("QueryQuestsCompleted()").unwrap(), 0);
         s.run("QueryQuestsCompleted() QueryQuestsCompleted()")
             .unwrap();

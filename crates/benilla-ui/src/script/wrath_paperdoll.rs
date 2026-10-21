@@ -153,10 +153,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::ScriptDialect;
-    #[test]
+        #[test]
     fn snapshot_preserves_school_rating_indexes_and_multi_return_shapes() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut stats = WrathPaperDollStats {
             dodge: 5.5,
             parry: 6.5,

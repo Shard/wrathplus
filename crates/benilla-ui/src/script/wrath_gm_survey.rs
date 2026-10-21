@@ -205,11 +205,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::ScriptDialect;
-
+    
     #[test]
     fn the_survey_reads_questions_answers_and_submits_them() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut questions = vec![WrathGmSurveyQuestion::default(); 10];
         questions[0] = WrathGmSurveyQuestion {
             id: 35,

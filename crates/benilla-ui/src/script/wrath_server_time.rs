@@ -35,11 +35,11 @@ pub(crate) fn server_now(model: &Model) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn server_now_is_local_time_plus_the_pushed_offset() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert_eq!(s.wrath_server_now(), None);
         let local = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
