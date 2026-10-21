@@ -245,6 +245,9 @@ pub(crate) const REGISTERED: &[Registered] = &[
     same("nameplateShowFriendlyTotems", "1"),
     // The target's cast bar on its plate (`0x51d9b0`, `[0xbd0934]`, read at `0x98eb5d`).
     same("showVKeyCastbar", "1"),
+    // The threat warning's mode (`0x51f142`, callback `0x51d990` into `0x519df0`): 0 never, 1 in a
+    // dungeon or raid, 2 in a group, 3 always; it gates the plates' threat flash.
+    same("threatWarning", "3"),
     // `WorldDetail` is no 1.12 CVar but the `GetWorldDetail`/`SetWorldDetail` verb name
     // (`OptionsFrame.lua:27`); stops 0/1/2 are `frillDensity` 16/32/48. `SetWorldDetail 0x488dd0`
     // also writes `SmallCull` {0.07, 0.04, 0.01}, and `GetWorldDetail` reads only `SmallCull`,

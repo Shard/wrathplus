@@ -296,3 +296,108 @@ fn a_local_failure_at_0x34_stops_auto_repeat_once() {
         .0
         .is_none());
 }
+
+fn spell(effects: [u32; 3], auras: [u32; 3], misc: [i32; 3], school_mask: u32) -> SpellDisplay {
+    SpellDisplay {
+        effects,
+        effect_apply_aura: auras,
+        effect_misc_value: misc,
+        school_mask,
+        ..Default::default()
+    }
+}
+
+/// `0x53ca70`: the book's interrupts, silences and non-player-only variants, by school mask.
+#[test]
+fn the_interrupt_masks_gather_the_books_reach_by_school() {
+    let kick = spell([0x44, 0, 0], [0; 3], [0; 3], 0x1);
+    let silence = spell([6, 0, 0], [0x1b, 0, 0], [0; 3], 0x20);
+    let mut npc_only = spell([0x44, 0, 0], [0; 3], [0; 3], 0x4);
+    npc_only.attributes_ex7 = 0x800;
+    let masks = InterruptMasks::of([&kick, &silence, &npc_only]);
+    assert_eq!(
+        masks,
+        InterruptMasks {
+            interrupt: 0x5,
+            interrupt_npc: 0x4,
+            silence: 0x20,
+            silence_npc: 0,
+        }
+    );
+}
+
+/// `0x7262e0`: a silence-prevented cast is uninterruptible when the caster's immunities strip all
+/// the player's reach, and only then.
+#[test]
+fn a_cast_is_uninterruptible_only_when_immunities_strip_every_interrupt() {
+    let mut cast = SpellDisplay {
+        prevention_type: 1,
+        ..Default::default()
+    };
+    let kick_only = InterruptMasks {
+        interrupt: 0x1,
+        ..Default::default()
+    };
+    let none: [&SpellDisplay; 0] = [];
+    assert!(
+        !not_interruptible(&cast, false, kick_only, none),
+        "no immunity"
+    );
+
+    let physical_immune = spell([6, 0, 0], [0x27, 0, 0], [0x1, 0, 0], 0);
+    assert!(not_interruptible(
+        &cast,
+        false,
+        kick_only,
+        [&physical_immune]
+    ));
+
+    // A silence in another school still reaches it.
+    let both = InterruptMasks {
+        silence: 0x20,
+        ..kick_only
+    };
+    assert!(!not_interruptible(&cast, false, both, [&physical_immune]));
+    let silence_immune = spell([6, 0, 0], [0x26, 0, 0], [0x1b, 0, 0], 0);
+    assert!(not_interruptible(
+        &cast,
+        false,
+        both,
+        [&physical_immune, &silence_immune]
+    ));
+
+    // A player with no reach never sees the shield; a player caster drops the non-player masks.
+    let npc_only = InterruptMasks {
+        interrupt_npc: 0x1,
+        ..Default::default()
+    };
+    assert!(!not_interruptible(
+        &cast,
+        true,
+        npc_only,
+        [&physical_immune]
+    ));
+    assert!(!not_interruptible(
+        &cast,
+        false,
+        InterruptMasks::default(),
+        [&physical_immune]
+    ));
+
+    // Only silence-prevented casts, and AttributesEx7 0x2000 exempts.
+    cast.prevention_type = 0;
+    assert!(!not_interruptible(
+        &cast,
+        false,
+        kick_only,
+        [&physical_immune]
+    ));
+    cast.prevention_type = 1;
+    cast.attributes_ex7 = 0x2000;
+    assert!(!not_interruptible(
+        &cast,
+        false,
+        kick_only,
+        [&physical_immune]
+    ));
+}

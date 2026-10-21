@@ -53,6 +53,8 @@ pub(crate) struct VPlateMode {
     pub(crate) friendly_totems: bool,
     /// `showVKeyCastbar`: the target's plate carries its cast bar.
     pub(crate) cast_bar: bool,
+    /// `threatWarning`: when the plates' threat flash may show (`0x519df0`).
+    pub(crate) threat_warning: u8,
 }
 
 impl Default for VPlateMode {
@@ -67,6 +69,7 @@ impl Default for VPlateMode {
             friendly_guardians: true,
             friendly_totems: true,
             cast_bar: true,
+            threat_warning: 3,
         }
     }
 }
@@ -101,6 +104,10 @@ impl VPlateMode {
 
 /// The plate CVars' change callback.
 pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut mode: ResMut<VPlateMode>) {
+    if ev.key() == "threatwarning" {
+        mode.threat_warning = ev.num().clamp(0.0, 255.0) as u8;
+        return;
+    }
     let slot = match ev.key().as_str() {
         "nameplateshowenemies" => &mut mode.enemies,
         "nameplateshowenemypets" => &mut mode.enemy_pets,
@@ -116,18 +123,29 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut mode: ResMut<VPlate
     *slot = ev.flag();
 }
 
+/// The threat flash's colour for a threat situation (`0x98eb16`): situations 1-3, the table at
+/// `0xad2d70` one slot up (`0x61a4f0`), the colours `GetThreatStatusColor` answers; 0 has none.
+fn threat_flash(situation: u8) -> Option<[f32; 3]> {
+    Some(match situation {
+        1 => [1.0, 1.0, 119.0 / 255.0],
+        2 => [1.0, 153.0 / 255.0, 0.0],
+        3 => [1.0, 0.0, 0.0],
+        _ => return None,
+    })
+}
+
 /// The target's cast bar (`0x720e50`): its channel draining, else its cast filling, in seconds
 /// from 0 to the cast's length; a trade-skill spell (`Attributes & 0x20`) or a missing row shows
-/// none (`0x98f0b6`). Unresolved, labelled: `0x71ab20`'s not-interruptible flag is untraced (always
-/// false, as for `UnitCastingInfo`), and the plate's own finish (green, hold, fade, `0x98e9f0`)
-/// is not modelled: the bar goes with the cast slot.
+/// none (`0x98f0b6`); the shield is the slot's [`crate::spell::unit_cast::not_interruptible`].
+/// Unresolved, labelled: the plate's own finish (green, hold, fade, `0x98e9f0`) is not
+/// modelled: the bar goes with the cast slot.
 fn target_cast(
     casts: &crate::spell::unit_cast::UnitCasts,
     spells: Option<&crate::ui_action::Spells>,
     guid: u64,
     now_ms: u32,
 ) -> Option<PlateCast> {
-    let (spell_id, start, end, channel) = casts.bar_of(guid)?;
+    let (spell_id, start, end, channel, not_interruptible) = casts.bar_of(guid)?;
     let def = spells?.catalog.get(spell_id)?;
     if def.attributes & 0x20 != 0 {
         return None;
@@ -144,7 +162,7 @@ fn target_cast(
         value: value.min(max),
         icon: def.icon.clone(),
         channel,
-        not_interruptible: false,
+        not_interruptible,
     })
 }
 
@@ -366,6 +384,9 @@ struct PlateWorld<'w, 's> {
     /// The target's cast bar: its cast slots and the spell's icon and attributes.
     casts: Res<'w, crate::spell::unit_cast::UnitCasts>,
     spells: Option<Res<'w, crate::ui_action::Spells>>,
+    /// The threat flash: the threat lists and whose situation they are read for.
+    threat: Res<'w, crate::net::wrath_threat::ThreatStore>,
+    self_guid: Res<'w, crate::net::SelfGuid>,
 }
 
 /// Every frame: gate the units, seat each plate and hand the result to the widget layer as
@@ -450,6 +471,19 @@ fn drive_vplates(
     let hovered_key = script.hovered_nameplate();
     // The cast slots' clock (`spell::unit_cast`).
     let now_ms = (script.now() * 1000.0) as u32;
+    // `[0xbd08c0]`, the threat warning's switch (`0x519df0`): mode 1 in a dungeon or raid, 2 in
+    // a group, 3 always. Unresolved, labelled: mode 2's third condition (`[0xbeb608]`) is untraced.
+    let warning = match mode.threat_warning {
+        0 => false,
+        1 => world
+            .map
+            .as_deref()
+            .zip(world.maps.as_deref())
+            .and_then(|(map, maps)| maps.0.instance_type(map.0))
+            .is_some_and(|t| matches!(t, 1 | 2)),
+        2 => group.in_group,
+        _ => true,
+    };
     let clicked = script.take_nameplate_clicks();
     let my_level = self_store.and_then(|s| s.0.unit_level()).unwrap_or(1);
     let has_target = world.selection.target.is_some();
@@ -720,6 +754,13 @@ fn drive_vplates(
             cast: (mode.cast_bar && world.selection.target == Some(entity))
                 .then(|| target_cast(&world.casts, world.spells.as_deref(), guid.0, now_ms))
                 .flatten(),
+            threat: warning
+                .then(|| {
+                    let me = world.self_guid.0?;
+                    let mob = world.threat.0.mobs.get(&guid.0)?;
+                    threat_flash(mob.situation(me)?)
+                })
+                .flatten(),
         });
     }
 
@@ -827,6 +868,16 @@ mod tests {
         let big = plate_basis(Vec2::new(2560.0, 1440.0));
         assert_eq!(text_px(NAME_H, big), 21.0, "midway between 29 and 13");
         assert_eq!(text_px(NAME_H, 10_000.0), 32.0, "atlas-cell cap, raw law");
+    }
+
+    /// The flash shows for a threat situation of 1 to 3 in `GetThreatStatusColor`'s colours,
+    /// the `0xad2d70` table one slot up; situation 0 has none.
+    #[test]
+    fn the_threat_flash_takes_the_threat_tables_colours() {
+        assert_eq!(threat_flash(0), None);
+        assert_eq!(threat_flash(1), Some([1.0, 1.0, 119.0 / 255.0]));
+        assert_eq!(threat_flash(2), Some([1.0, 153.0 / 255.0, 0.0]));
+        assert_eq!(threat_flash(3), Some([1.0, 0.0, 0.0]));
     }
 
     /// The registered defaults show nothing until a category is on, and a category's sub-gates
