@@ -70,6 +70,7 @@ mod inventory;
 mod items;
 mod loading_screen;
 mod local_state;
+mod launch_plan;
 mod login;
 mod minimap;
 mod motion;
@@ -256,6 +257,11 @@ type Extension<'a> = Box<dyn FnOnce(&mut App) + 'a>;
 fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     // First: `run_mode`'s pre-plugin answers below read the capture harness through it.
     dev::install_run_mode_seam();
+    // The command line, before anything reads the plan; a refused one prints why and exits.
+    if let Err(why) = launch_plan::install_from_process() {
+        eprintln!("{why}");
+        return AppExit::error();
+    }
     // `WOW_HOVER_LOG_REPORT=<csv>` and `WOW_CAPTURE=list` print and exit before any setup.
     if let Ok(path) = std::env::var("WOW_HOVER_LOG_REPORT") {
         dev::report_recorded_hover_log(&path);
