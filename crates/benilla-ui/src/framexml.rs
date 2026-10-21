@@ -351,8 +351,7 @@ pub fn expand(
 
 /// [`expand`], skipping without a warning an `inherits` that names a font object: a
 /// `<FontString inherits="GameFontNormalSmall">` takes a font, applied later, not a template.
-/// `list` reads `inherits` as Wrath does, a comma-separated list applied in order. Both maps are
-/// the registries, read in place: a per-call view of every name would cost the whole load.
+/// `list` reads `inherits` as Wrath does, a comma-separated list applied in order.
 pub fn expand_known(
     element: &Element,
     templates: &HashMap<String, Element>,
