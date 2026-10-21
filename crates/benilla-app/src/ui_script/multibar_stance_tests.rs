@@ -8,7 +8,7 @@ use super::test_ui::load_ui as load_xml;
 /// The main bar's and the four extra bars' stock files, with UIParent.xml for the manage pass the
 /// stance bar's OnShow runs and GameTooltip.xml for the OnLeave a bar hiding under the cursor
 /// fires, and `extra` merged in; returns the frames MultiActionBars.xml built.
-fn load_action_bar(s: &UiScript, extra: &[&str]) -> usize {
+fn load_action_bar(s: &mut UiScript, extra: &[&str]) -> usize {
     const MULTIBARS: &str = "Interface\\FrameXML\\MultiActionBars.xml";
     let mut built = 0;
     for file in super::test_ui::production_order(&[
@@ -75,7 +75,7 @@ fn shipped_multibars_drive_end_to_end() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    let frames = load_action_bar(&s, &[]);
+    let frames = load_action_bar(&mut s, &[]);
     assert_eq!(
         frames, 100,
         "what stock MultiActionBars.xml declares: the four bar frames and their 48 buttons, \
@@ -249,7 +249,7 @@ fn shipped_stance_bar_drives_end_to_end() {
     s.set_screen_size(1024.0, 768.0);
     // `ShapeshiftBarFrame` is parented to `MainMenuBar` and its update calls
     // `CooldownFrame_SetTimer` (BonusActionBarFrame.lua:201), so both load first.
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
     // Bar 1 up: the stance bar's OnShow runs the manage pass (BonusActionBarFrame.xml:350-352),
     // whose `ShapeshiftBarFrame` row adds 45 only while bar 1 is up (UIParent.lua:1583, 1605).
     show_bars(&s, &[1]);
@@ -428,7 +428,7 @@ fn multibar_hover_renders_the_buttons_own_action() {
         r"Interface\FrameXML\ReputationFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
     ] {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
 
     // Main slot 2 stays empty under BottomLeft slot 2 (action 62), so a wrong id shows no tooltip.
@@ -504,8 +504,8 @@ fn multibar_hover_renders_the_buttons_own_action() {
 #[test]
 fn the_vertical_multibars_exist_hidden_on_the_reference_pages() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_action_bar(&s, &[]);
+    let mut s = UiScript::new().unwrap();
+    load_action_bar(&mut s, &[]);
 
     for bar in ["MultiBarRight", "MultiBarLeft"] {
         assert!(
@@ -546,7 +546,7 @@ fn every_extra_bar_stays_down_until_its_own_toggle_is_set() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
 
     const BARS: [&str; 4] = [
         "MultiBarBottomLeft",
@@ -609,7 +609,7 @@ fn raising_a_bottom_bar_moves_the_managed_bottom_stack() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[r"Interface\FrameXML\CastingBarFrame.xml"]);
+    load_action_bar(&mut s, &[r"Interface\FrameXML\CastingBarFrame.xml"]);
 
     // Read the row's y off the anchor, so a hidden cast bar answers too.
     let cast_y = |s: &UiScript| {
@@ -653,7 +653,7 @@ fn viewable_action_bar_pages_follow_the_bar_toggles() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
 
     let viewable = |s: &UiScript| {
         s.eval::<String>(
@@ -701,7 +701,7 @@ fn the_grid_option_holds_the_extra_bars_empty_wells_open() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
     show_bars(&s, &[1]);
 
     let well = |s: &UiScript| {
@@ -768,7 +768,7 @@ fn a_held_payload_ghosts_the_empty_wells_it_opens() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
     s.set_action(
         1,
         Some(ActionSlot {
@@ -877,7 +877,7 @@ fn a_bar_toggle_sends_the_byte_its_globals_pack_to() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
     let _ = s.take_action_bar_toggle_sends();
 
     // The Options row's sequence: assign, update the bars, send.
@@ -940,7 +940,7 @@ fn the_stance_bar_sits_where_the_pass_puts_it() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
     s.set_shapeshift_forms(vec![ShapeshiftFormView {
         spell_id: 2457,
         texture: Some("Interface\\Icons\\Stance_A".into()),
@@ -985,7 +985,7 @@ fn the_stance_shelf_follows_the_bottom_left_bar() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
 
     let form = |id: u32| ShapeshiftFormView {
         spell_id: id,
@@ -1081,7 +1081,7 @@ fn the_stance_shelf_is_as_long_as_the_form_count() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
     show_bars(&s, &[]); // unraised: the shelf art is the state under test
 
     let form = |id: u32| ShapeshiftFormView {
@@ -1165,7 +1165,7 @@ fn an_extra_bars_empty_well_keeps_its_bound_hotkey_label() {
     s.set_screen_size(1024.0, 768.0);
     // The real command set, so `MULTIACTIONBAR1BUTTONn` is bindable; it ships unbound.
     crate::ui_script::load_stock_bindings(&mut s);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
     show_bars(&s, &[1]);
     s.set_action(
         61,
@@ -1246,7 +1246,7 @@ fn the_middle_strip_tiles_along_its_length_only() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
     show_bars(&s, &[]); // bars down: the shelf is the state under test
 
     let form = |id: u32| ShapeshiftFormView {
@@ -1312,7 +1312,7 @@ fn a_forms_state_change_leaves_the_shelf_down_over_the_raised_bar() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s, &[]);
+    load_action_bar(&mut s, &[]);
     // A recorder for the two events a push may announce.
     s.run(
         "STANCE_LOG = {} local f = CreateFrame('Frame') \

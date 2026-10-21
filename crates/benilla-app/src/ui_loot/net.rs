@@ -1059,7 +1059,7 @@ mod tests {
             "Interface\\FrameXML\\PartyFrame.xml",
             "Interface\\FrameXML\\TargetFrame.xml",
         ]]) {
-            crate::ui_script::test_ui::load_ui(&s, f);
+            crate::ui_script::test_ui::load_ui(&mut s, f);
         }
 
         let mut app = App::new();

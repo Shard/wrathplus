@@ -5,12 +5,12 @@ use benilla_ui::script::{
 use super::test_ui::{hover, load_ui as load_xml, unhover};
 
 /// The unit frames' load prefix, in the production order.
-fn load_unit_frames(s: &UiScript) {
+fn load_unit_frames(s: &mut UiScript) {
     load_unit_frames_with(s, &[]);
 }
 
 /// [`load_unit_frames`] with `extra` merged in.
-fn load_unit_frames_with(s: &UiScript, extra: &[&str]) {
+fn load_unit_frames_with(s: &mut UiScript, extra: &[&str]) {
     const UNIT_FRAMES: &[&str] = &[
         // Stock `GlobalStrings.lua` first, as the app runs it: the unit-frame files read it at load
         // (`CombatFeedback.lua:6-17`, `UnitFrame.lua:2-7`).
@@ -46,7 +46,7 @@ fn shipped_unit_frames_drive_end_to_end() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 
     // Only the target frame hides: `PlayerFrame_Update` has no else arm (`PlayerFrame.lua:29-37`),
@@ -262,7 +262,7 @@ fn unit_combat_drives_the_player_hit_indicator() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
     s.set_unit(
         "player",
         Some(UnitState {
@@ -356,7 +356,7 @@ fn left_clicking_the_player_frame_targets_self() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
 
     s.set_unit(
         "player",
@@ -461,7 +461,7 @@ fn raid_mark_clicks_through_the_nested_level() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
 
     s.set_unit(
         "player",
@@ -570,7 +570,7 @@ fn shipped_target_frame_runs_the_level_law() {
     s.set_screen_size(1024.0, 768.0);
     // `GetDifficultyColor`'s load chain: the stock quest log window.
     load_unit_frames_with(
-        &s,
+        &mut s,
         &[
             r"Interface\FrameXML\UIPanelTemplates.lua",
             r"Interface\FrameXML\UIPanelTemplates.xml",
@@ -748,7 +748,7 @@ fn pvp_icon_follows_the_three_branch_law() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
     let _ = s.take_sounds(); // the frames' own load-time kits (target hide) aren't ours
 
     let icon_shown = |s: &UiScript, unit: &str| -> bool {
@@ -864,7 +864,7 @@ fn flagged_friendly_player_plate_is_green() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
 
     let friendly_player = |pvp: bool| UnitState {
         exists: true,
@@ -914,7 +914,7 @@ fn an_exalted_npc_target_reads_revered_and_its_plate_is_green() {
     let mut chain = benilla_formats::open_chain(&data).expect("open chain");
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
     let me = ObjectStore(ObjectFields::from_fields(
         benilla_protocol::types::FieldLayout::Wrath12340,
         &[(benilla_protocol::types::Field::UnitBytes0, HUMAN_WARRIOR)],
@@ -968,7 +968,7 @@ fn target_frame_border_follows_the_classification_law() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
 
     // Every TargetingFrame border in the draw list; the player frame always adds the plain one.
     let borders = |s: &mut UiScript| -> Vec<String> {
@@ -1085,7 +1085,7 @@ fn the_ring_art_paints_over_the_bars() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
     s.set_unit(
         "player",
         Some(UnitState {
@@ -1147,32 +1147,32 @@ fn the_party_art_paints_over_the_bars() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
     // Before UnitPopup, which reads `TEXT` and `ITEM_QUALITY_COLORS` (`UIParent.lua:65`) at load.
-    load_xml(&s, "Interface\\FrameXML\\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
     // The stock kit in the production order. `TargetofTargetTextureFrame`'s OnLoad calls
     // `RaiseFrameLevel` (`UIParent.lua:1894-1896`), loaded above.
-    load_xml(&s, "Interface\\FrameXML\\TextStatusBar.lua");
-    load_xml(&s, "Interface\\FrameXML\\TextStatusBar.xml");
-    load_xml(&s, "Interface\\FrameXML\\BuffFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\CombatFeedback.xml");
-    load_xml(&s, "Interface\\FrameXML\\UnitPopup.xml");
-    load_xml(&s, "Interface\\FrameXML\\UnitFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\PlayerFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\PartyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\TargetFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\PetFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\ReputationFrame.lua"); // FACTION_BAR_COLORS
+    load_xml(&mut s, "Interface\\FrameXML\\TextStatusBar.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\TextStatusBar.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BuffFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\CombatFeedback.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UnitPopup.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UnitFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\PlayerFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\PartyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\TargetFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\PetFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\ReputationFrame.lua"); // FACTION_BAR_COLORS
 
     s.set_unit(
         "party1",
@@ -1266,7 +1266,7 @@ fn a_feigning_target_paints_empty_bars_and_the_dead_text() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
 
     let hunter = |health: u32, power: u32, dead: bool| {
         Some(UnitState {
@@ -1359,7 +1359,7 @@ fn the_player_frame_flashes_zzz_while_resting() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
     s.set_unit(
         "player",
         Some(UnitState {
@@ -1456,7 +1456,7 @@ fn the_rest_badge_covers_the_level_number() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
     s.set_unit(
         "player",
         Some(UnitState {
@@ -1509,7 +1509,7 @@ fn status_bar_text_paints_the_player_numerals_but_not_the_targets() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
 
     let alive = |health: u32, power: u32, power_type: u8| UnitState {
         exists: true,
@@ -1644,7 +1644,7 @@ fn no_two_numeral_strings_overlap_on_any_frame() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
 
     let alive = |health: u32, power: u32| UnitState {
         exists: true,
@@ -1712,8 +1712,8 @@ fn no_two_numeral_strings_overlap_on_any_frame() {
 #[test]
 fn the_unit_frame_hover_hooks_carry_the_references_names() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_unit_frames(&s);
+    let mut s = UiScript::new().unwrap();
+    load_unit_frames(&mut s);
 
     assert!(
         s.eval::<bool>(
@@ -1755,8 +1755,8 @@ fn the_unit_frame_hover_hooks_carry_the_references_names() {
 #[test]
 fn the_raid_mark_helper_maps_each_index_to_its_cell() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_unit_frames(&s);
+    let mut s = UiScript::new().unwrap();
+    load_unit_frames(&mut s);
     s.run(r#"RTMark = UIParent:CreateTexture("RTMark", "OVERLAY")"#)
         .unwrap();
 
@@ -1797,7 +1797,7 @@ fn the_player_frame_wears_the_leader_and_master_looter_icons() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
     s.set_unit(
         "player",
         Some(UnitState {
@@ -1871,8 +1871,8 @@ fn the_player_frame_wears_the_leader_and_master_looter_icons() {
 #[test]
 fn the_unit_frames_publish_every_name_the_reference_declares() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_unit_frames(&s);
+    let mut s = UiScript::new().unwrap();
+    load_unit_frames(&mut s);
 
     // Names from `PlayerFrame.xml`, `TargetFrame.xml` and `PetFrame.xml`, less virtual templates
     // and the buff and debuff buttons; collected so a failure reports the whole gap.
@@ -1973,7 +1973,7 @@ fn the_target_leader_crown_follows_player_flags_changed() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&s);
+    load_unit_frames(&mut s);
 
     let mate = |leader: bool| {
         Some(UnitState {

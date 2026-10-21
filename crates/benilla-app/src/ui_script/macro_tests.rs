@@ -76,7 +76,7 @@ fn harness_with(player: &str) -> UiScript {
         // `ClassTrainerListScrollFrameTemplate`, which the icon chooser's scroll frame inherits.
         r"Interface\FrameXML\ClassTrainerFrameTemplates.xml",
     ] {
-        super::test_ui::load_ui(&s, file);
+        super::test_ui::load_ui(&mut s, file);
     }
     // A LoadOnDemand addon, seated off the chain and loaded by stock `MacroFrame_LoadUI`
     // (`UIParent.lua:178`), as the app reaches it.

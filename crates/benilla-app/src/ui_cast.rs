@@ -313,8 +313,8 @@ mod tests {
     fn the_channeling_word_comes_off_the_players_own_chain() {
         let _data = benilla_formats::wow_data_or_skip!();
         use benilla_formats::{SpellCatalog, SpellDisplay};
-        let script = UiScript::new().expect("VM");
-        crate::ui_script::test_ui::load_ui(&script, r"Interface\FrameXML\GlobalStrings.lua");
+        let mut script = UiScript::new().expect("VM");
+        crate::ui_script::test_ui::load_ui(&mut script, r"Interface\FrameXML\GlobalStrings.lua");
         let spells = crate::ui_action::Spells {
             catalog: SpellCatalog::from_displays(
                 [(

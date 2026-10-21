@@ -12,10 +12,10 @@ fn harness(money: u64) -> UiScript {
     s.set_money(money);
     // A flat 8 px per digit, so every expected width reads as `digits * 8 + icon`.
     s.set_text_measurer(Box::new(super::FixedWidthFont(8.0)));
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, "Interface\\FrameXML\\BasicControls.xml"); // `message`, the kit's own error path
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BasicControls.xml"); // `message`, the kit's own error path
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
 
     let doc = benilla_ui::framexml::parse(
         r#"<Ui>
@@ -326,12 +326,12 @@ fn the_money_type_table_carries_all_seven_reference_types() {
 #[test]
 fn the_chains_money_input_frame_splits_an_amount_across_its_three_boxes() {
     let _data = benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua"); // COPPER_PER_GOLD and COPPER_PER_SILVER
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyInputFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyInputFrame.xml");
+    let mut s = UiScript::new().unwrap();
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua"); // COPPER_PER_GOLD and COPPER_PER_SILVER
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyInputFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyInputFrame.xml");
 
     let doc = benilla_ui::framexml::parse(
         r#"<Ui>

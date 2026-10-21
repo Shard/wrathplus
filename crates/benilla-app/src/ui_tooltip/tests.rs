@@ -34,8 +34,8 @@ type Getter = dyn Fn(&str) -> Option<String>;
 impl TestCtx {
     pub(super) fn new() -> Self {
         let (tx, rx) = crossbeam_channel::unbounded();
-        let vm = benilla_ui::script::UiScript::new().expect("VM");
-        crate::ui_script::load_ui_for_test(&vm, "Interface\\FrameXML\\GlobalStrings.lua");
+        let mut vm = benilla_ui::script::UiScript::new().expect("VM");
+        crate::ui_script::load_ui_for_test(&mut vm, "Interface\\FrameXML\\GlobalStrings.lua");
         Self {
             items: Items::default(),
             commands: NetCommands(tx),

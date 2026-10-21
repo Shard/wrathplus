@@ -5,8 +5,8 @@ thread_local! {
     /// The shipped `GlobalStrings.lua`, run in a VM once per test thread; built lazily, so a
     /// caller's `wow_data_or_skip!()` runs first.
     static GLOBAL_STRINGS: benilla_ui::script::UiScript = {
-        let s = benilla_ui::script::UiScript::new().expect("VM");
-        crate::ui_script::test_ui::load_ui(&s, "Interface\\FrameXML\\GlobalStrings.lua");
+        let mut s = benilla_ui::script::UiScript::new().expect("VM");
+        crate::ui_script::test_ui::load_ui(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
         s
     };
 }
@@ -430,7 +430,7 @@ pub(super) fn chat_vm() -> benilla_ui::script::UiScript {
         "Interface\\FrameXML\\ChatFrame.xml",
         "Interface\\FrameXML\\FloatingChatFrame.xml",
     ] {
-        crate::ui_script::load_ui_for_test(&s, file);
+        crate::ui_script::load_ui_for_test(&mut s, file);
     }
     crate::ui_script::fire_chat_login(&mut s);
     s.set_screen_size(1600.0, 900.0);

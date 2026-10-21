@@ -1311,7 +1311,7 @@ mod bind_confirm_tests {
     const F_OBJECT_ENTRY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
         .index_of(benilla_protocol::types::Field::ObjectEntry);
 
-    fn load_ui(s: &UiScript) {
+    fn load_ui(s: &mut UiScript) {
         // Chain files, so through the chain-aware reader.
         for file in [
             "Interface\\FrameXML\\GlobalStrings.lua",
@@ -1411,7 +1411,7 @@ mod bind_confirm_tests {
 
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        load_ui(&script);
+        load_ui(&mut script);
         script.set_container(0, Some(bag_with_the_axe(quality)));
         let doll: benilla_ui::script::InventorySlots = Default::default();
         script.set_inventory_slots(doll);
@@ -1660,7 +1660,7 @@ mod bind_confirm_tests {
         );
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        load_ui(&script);
+        load_ui(&mut script);
         script.set_container(0, Some(bag_with_the_axe(4)));
         script.run("PickupContainerItem(0, 1)").unwrap();
         script.run("AutoEquipCursorItem()").unwrap();
@@ -1835,7 +1835,7 @@ mod bind_confirm_tests {
 
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        load_ui(&script);
+        load_ui(&mut script);
         script.set_container(0, Some(bag_with_the_axe(3)));
         script.run("UseContainerItem(0, 1)").unwrap();
         app.insert_non_send_resource(script);

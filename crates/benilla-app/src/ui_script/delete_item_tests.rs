@@ -66,7 +66,7 @@ fn setup() -> UiScript {
         ],
         WORLD_FRAME_UI,
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     s
@@ -85,7 +85,7 @@ fn bag_setup() -> UiScript {
         ],
         WORLD_FRAME_UI, // the drop target
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
 
     // `BAG_UI` leaves out `CharacterFrame.xml`, so `PaperDollFrame` has no hidden parent and would
@@ -159,7 +159,7 @@ fn delete_item_confirm_no_clears_without_destroying() {
     s.run("ToggleBackpack()").unwrap();
     assert!(bag_open(&s, 0), "the backpack window is up");
     // `ContainerFrame_GenerateFrame` numbers buttons backwards (`ContainerFrame.lua:426-428`).
-    let slot1 = bag_slot_button(&s, 0, 1);
+    let slot1 = bag_slot_button(&mut s, 0, 1);
 
     pick_up_and_drop_in_world(&mut s);
     assert!(

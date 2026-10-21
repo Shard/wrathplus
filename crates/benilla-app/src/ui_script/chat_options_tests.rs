@@ -38,7 +38,7 @@ fn chat_with_menu() -> UiScript {
         "Interface\\FrameXML\\FloatingChatFrame.xml",
         "Interface\\FrameXML\\ColorPickerFrame.xml",
     ] {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     bake_strings(&s);
     super::fire_chat_login(&mut s);

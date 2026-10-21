@@ -30,7 +30,7 @@ fn state() -> HonorState {
 
 /// The character window, whose fifth tab this page is; [`super::test_ui::CHARACTER_UI`] carries
 /// `HonorFrame.xml`, as `PaperDollFrame.lua:103` writes into it on every show.
-fn load_page(s: &UiScript) {
+fn load_page(s: &mut UiScript) {
     for file in super::test_ui::CHARACTER_UI {
         super::test_ui::load_ui_strict(s, file);
     }
@@ -60,7 +60,7 @@ fn alliance_player() -> UnitState {
 fn shown_honor_page() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_page(&s);
+    load_page(&mut s);
     s.set_unit("player", Some(alliance_player()));
     s.set_honor(Some(state()));
     s.run(r#"ToggleCharacter("HonorFrame")"#).unwrap();
@@ -273,7 +273,7 @@ fn the_real_global_strings_name_the_rank() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     s.run(&String::from_utf8_lossy(&src)).expect("runs clean");
-    load_page(&s);
+    load_page(&mut s);
     s.set_honor(Some(state()));
 
     for (team, want) in [(1i8, "Knight-Captain"), (0, "Legionnaire")] {
