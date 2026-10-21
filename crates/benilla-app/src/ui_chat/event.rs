@@ -50,6 +50,8 @@ pub(crate) fn event_name(kind: ChatEventKind) -> &'static str {
         K::BgSystemAlliance => "CHAT_MSG_BG_SYSTEM_ALLIANCE",
         K::BgSystemHorde => "CHAT_MSG_BG_SYSTEM_HORDE",
         K::CombatMiscInfo => "CHAT_MSG_COMBAT_MISC_INFO",
+        K::Tradeskills => "CHAT_MSG_TRADESKILLS",
+        K::PetInfo => "CHAT_MSG_PET_INFO",
         K::CombatFactionChange => "CHAT_MSG_COMBAT_FACTION_CHANGE",
     }
 }
@@ -141,6 +143,8 @@ pub(crate) fn default_color(kind: ChatEventKind) -> [u8; 3] {
         K::BgSystemAlliance => [0, 174, 239],
         K::BgSystemHorde => [255, 0, 0],
         K::CombatMiscInfo | K::CombatFactionChange => [128, 128, 255],
+        // Untraced in 12340's table; neither kind speaks in a bubble or the edit box.
+        K::Tradeskills | K::PetInfo => [255, 255, 255],
     }
 }
 

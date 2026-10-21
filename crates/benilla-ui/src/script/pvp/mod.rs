@@ -1,4 +1,4 @@
-//! `TogglePVP` and the thirteen honor bindings: the character and inspect windows' Honor tabs and
+//! `TogglePVP` and the eleven honor bindings: the character and inspect windows' Honor tabs and
 //! the rank any unit frame can read off another player.
 //!
 //! The local player's counters are private descriptor fields the app pushes as a [`HonorState`];
@@ -22,41 +22,25 @@ use super::binding_abi::{number_arg, string_arg};
 use super::unit::{check_unit_token, is_civilian_kill};
 use super::Model;
 
-/// The local player's honor snapshot, decoded by the app from the private honor descriptor
-/// fields. Kill counts are halves of `TWO_SHORT` fields, low honorable and high dishonorable.
+/// The local player's honor snapshot, decoded by the app from its own private descriptor. Build
+/// 12340 keeps no dishonorable, weekly or rank-bar counter: `PLAYER_FIELD_KILLS` packs today's
+/// honorable kills low and yesterday's high, and the getters read the player block at `+0x10d4`
+/// to `+0x10e0`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct HonorState {
-    /// `PLAYER_FIELD_SESSION_KILLS` low half.
-    pub session_hk: u16,
-    /// `PLAYER_FIELD_SESSION_KILLS` high half.
-    pub session_dk: u16,
-    /// `PLAYER_FIELD_YESTERDAY_KILLS` halves.
+    /// `PLAYER_FIELD_KILLS` low half.
+    pub today_hk: u16,
+    /// `PLAYER_FIELD_KILLS` high half.
     pub yesterday_hk: u16,
-    pub yesterday_dk: u16,
+    /// `PLAYER_FIELD_TODAY_CONTRIBUTION`.
+    pub today_honor: u32,
     /// `PLAYER_FIELD_YESTERDAY_CONTRIBUTION`.
     pub yesterday_honor: u32,
-    /// `PLAYER_FIELD_THIS_WEEK_KILLS` low half; `GetPVPThisWeekStats` has no dishonorable count.
-    pub this_week_hk: u16,
-    /// `PLAYER_FIELD_THIS_WEEK_CONTRIBUTION`.
-    pub this_week_honor: u32,
-    /// `PLAYER_FIELD_LAST_WEEK_KILLS` halves.
-    pub last_week_hk: u16,
-    pub last_week_dk: u16,
-    /// `PLAYER_FIELD_LAST_WEEK_CONTRIBUTION`.
-    pub last_week_honor: u32,
-    /// `PLAYER_FIELD_LAST_WEEK_RANK`: last week's ladder standing, not a rank.
-    pub last_week_standing: u32,
-    /// `PLAYER_FIELD_LIFETIME_HONORBALE_KILLS` / `…_DISHONORBALE_KILLS` (the server's spellings).
+    /// `PLAYER_FIELD_LIFETIME_HONORABLE_KILLS`.
     pub lifetime_hk: u32,
-    pub lifetime_dk: u32,
-    /// `PLAYER_FIELD_BYTES` byte 3: the highest lifetime rank, internal scale. Carried raw: only
-    /// `GetPVPLifetimeStats` hides a value below 5 (`0x51a843`).
+    /// `PLAYER_FIELD_BYTES` byte 3 (`+0x1067`), the highest lifetime rank, internal scale. Carried
+    /// raw: `GetPVPLifetimeStats` hides a value below 5.
     pub highest_rank: u8,
-    /// `PLAYER_BYTES_3` byte 3: the current rank, internal scale, 0 for none; the same public
-    /// byte as [`UnitState::pvp_rank`](super::UnitState).
-    pub rank: u8,
-    /// `PLAYER_FIELD_BYTES2` byte 0: progress through the current rank, the raw byte.
-    pub rank_bar: u8,
 }
 
 /// One build-12340 `MSG_INSPECT_HONOR_STATS` reply (`0x5e7a50`): the leading byte, the kills word
@@ -88,7 +72,7 @@ impl super::UiScript {
     }
 
     /// Push or clear the local player's honor snapshot, the self getters' only source. It fires
-    /// no event: the app fires `PLAYER_PVP_KILLS_CHANGED`/`PLAYER_PVP_RANK_CHANGED` alongside.
+    /// no event: the app fires `PLAYER_PVP_KILLS_CHANGED` alongside.
     pub fn set_honor(&mut self, honor: Option<HonorState>) {
         self.model_mut().honor = honor;
     }
@@ -133,17 +117,6 @@ fn visual_rank(rank: i64) -> i64 {
     } else {
         rank - 5
     }
-}
-
-/// The f32 at `0x8026c8` (bytes `81 80 80 3b`) that both rank-progress getters multiply the bar
-/// byte by: the f32 nearest 1/255, `0.003921568859368563`, and not 1/255.
-const RANK_BAR_SCALE: f64 = f32::from_bits(0x3B80_8081) as f64;
-
-/// The rank bar's byte as the fraction the reference feeds a 0..1 `StatusBar`: `fild` then `fmul`
-/// by [`RANK_BAR_SCALE`] (`0x51aace`), with no clamp. It differs from `bar / 255.0` for every byte
-/// but 0, and a full bar gives `1.0000000091389835`, over the bar's maximum.
-fn rank_progress(bar: u8) -> f64 {
-    f64::from(bar) * RANK_BAR_SCALE
 }
 
 fn honor(lua: &Lua) -> Option<HonorState> {
@@ -289,58 +262,31 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
 
     // ── The self getters ─────────────────────────────────────────────────────────────────────
-    // Full arity on every path: the panes destructure straight into `format()` arguments, so
-    // before the first push they read as a zeroed snapshot, as a new character's would.
+    // Two values on every path: with no player object each getter pushes two zeros (`0x611a20`,
+    // `0x611ad0`, `0x611b80`), so before the first push they read as a zeroed snapshot. Build 12340
+    // registers no `GetPVPThisWeekStats` or `GetPVPLastWeekStats`.
 
-    // GetPVPSessionStats() → hk, dk.
+    // GetPVPSessionStats() → hk, honor: today's (`+0x10d4` u16, `+0x10d8`).
     g.set(
         "GetPVPSessionStats",
         lua.create_function(|lua, ()| {
             let h = honor(lua).unwrap_or_default();
-            Ok((i64::from(h.session_hk), i64::from(h.session_dk)))
+            Ok((i64::from(h.today_hk), i64::from(h.today_honor)))
         })?,
     )?;
 
-    // GetPVPYesterdayStats() → hk, dk, contribution.
+    // GetPVPYesterdayStats() → hk, honor: yesterday's (`+0x10d6` u16, `+0x10dc`).
     g.set(
         "GetPVPYesterdayStats",
         lua.create_function(|lua, ()| {
             let h = honor(lua).unwrap_or_default();
-            Ok((
-                i64::from(h.yesterday_hk),
-                i64::from(h.yesterday_dk),
-                i64::from(h.yesterday_honor),
-            ))
+            Ok((i64::from(h.yesterday_hk), i64::from(h.yesterday_honor)))
         })?,
     )?;
 
-    // GetPVPThisWeekStats() → hk, contribution: two, with no this-week dishonorable count.
-    g.set(
-        "GetPVPThisWeekStats",
-        lua.create_function(|lua, ()| {
-            let h = honor(lua).unwrap_or_default();
-            Ok((i64::from(h.this_week_hk), i64::from(h.this_week_honor)))
-        })?,
-    )?;
-
-    // GetPVPLastWeekStats() → hk, dk, contribution, standing: the ladder standing, which the pane
-    // prints through `PVP_RANK_LAST_WEEK`, not a rank.
-    g.set(
-        "GetPVPLastWeekStats",
-        lua.create_function(|lua, ()| {
-            let h = honor(lua).unwrap_or_default();
-            Ok((
-                i64::from(h.last_week_hk),
-                i64::from(h.last_week_dk),
-                i64::from(h.last_week_honor),
-                i64::from(h.last_week_standing),
-            ))
-        })?,
-    )?;
-
-    // GetPVPLifetimeStats() → hk, dk, highestRank, the highest lifetime rank (internal). One
-    // below 5 answers 0 (`0x51a843 cmp al,5; jb`, unsigned), so the pane shows NONE for a
-    // dishonorable best; 0, not nil, so its `GetPVPRankInfo(highestRank)` still gets a number.
+    // GetPVPLifetimeStats() → hk, highestRank (`+0x10e0`, `+0x1067`). A rank below 5 answers 0,
+    // not nil, so a caller's `GetPVPRankInfo(highestRank)` still gets a number. Stock
+    // `PVPHonor_Update` reads only the kills.
     g.set(
         "GetPVPLifetimeStats",
         lua.create_function(|lua, ()| {
@@ -350,18 +296,14 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             } else {
                 0
             };
-            Ok((
-                i64::from(h.lifetime_hk),
-                i64::from(h.lifetime_dk),
-                i64::from(highest),
-            ))
+            Ok((i64::from(h.lifetime_hk), i64::from(highest)))
         })?,
     )?;
 
-    // GetPVPRankProgress() → the bar fraction (`rank_progress`), 0.0 before the first push.
+    // GetPVPRankProgress() → 0: `0x608560` pushes a constant 0, as 12340 has no rank bar.
     g.set(
         "GetPVPRankProgress",
-        lua.create_function(|lua, ()| Ok(rank_progress(honor(lua).unwrap_or_default().rank_bar)))?,
+        lua.create_function(|_, ()| Ok(0.0f64))?,
     )?;
 
     // GetPVPRankInfo(rank [, unit]) → rankName, rankNumber: the title and the visual rank for an

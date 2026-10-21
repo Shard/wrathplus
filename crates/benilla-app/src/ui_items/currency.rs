@@ -155,8 +155,16 @@ pub(crate) fn feed(
     // Rebuild pending metadata every frame; only authoritative snapshot changes cross the seam.
     // VmMemo re-seeds /reload; missing self pushes an empty snapshot on logout.
     if last.as_ref() != Some(&fresh) {
+        // `PVPFrame.lua` repaints its honor and arena points on `HONOR_CURRENCY_UPDATE`, after the
+        // snapshot so the repaint reads the new values. Unresolved, labelled: the 12340 field
+        // watch behind it is untraced; this fires on either point field moving.
+        let points = |s: &WrathCurrencySnapshot| (s.honor_current, s.arena_current);
+        let currency_moved = last.as_ref().is_none_or(|l| points(l) != points(&fresh));
         script.set_wrath_currency_snapshot(fresh.clone());
         *last = Some(fresh);
+        if currency_moved {
+            script.fire_event("HONOR_CURRENCY_UPDATE", vec![]);
+        }
     }
 }
 

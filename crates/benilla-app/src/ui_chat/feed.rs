@@ -414,6 +414,8 @@ pub(crate) fn feed_chat(
     states: Res<crate::world_state::WorldStates>,
     // The language gate: the word pool, this character's fluency and the GM bit.
     langs: Res<super::language::ChatLanguages>,
+    // Item names for `TRADESKILL_LOG_*` and `FEEDPET_LOG_*`.
+    items: Res<crate::items::Items>,
     // The spam and profanity filters, which run in the reference's display function `0x49a870`.
     mut text_filter: crate::text_filter::ChatTextFilter,
 ) {
@@ -863,7 +865,31 @@ pub(crate) fn feed_chat(
                 let Some(event) = event else { continue };
                 route(&mut script, &mut windows, &event);
             }
-            Pending::Combat(line) => {
+            Pending::Combat(mut line) => {
+                // Names, ask-once within `tries`: the subject's through the name cache, an item's
+                // through the item cache; an item the server answered unknown composes as it is.
+                let mut wait = false;
+                if line.subject != 0 && line.fills.subject.is_empty() {
+                    let unit = guids.0.get(&line.subject).and_then(|e| stores.get(*e).ok());
+                    match names.resolve_unit(line.subject, unit, &commands) {
+                        Some(name) => line.fills.subject = name.to_owned(),
+                        None => wait = true,
+                    }
+                }
+                if let Some(entry) = line.item.filter(|_| line.fills.named.is_empty()) {
+                    match items.template(entry, 0, &commands).map(|t| t.name.clone()) {
+                        Some(name) => line.fills.named = name,
+                        None if !items.template_answered_unknown(entry) => wait = true,
+                        None => {}
+                    }
+                }
+                if wait {
+                    if line.tries < NAME_MAX_TRIES {
+                        line.tries += 1;
+                        still.push(Pending::Combat(line));
+                    }
+                    continue;
+                }
                 let composed = super::combat::compose_line(&script, line.family, &line.fills);
                 if let Some(text) = composed {
                     route(

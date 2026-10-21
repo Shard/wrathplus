@@ -9,7 +9,10 @@ use bevy::prelude::*;
 /// consumes it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Slot {
-    /// `%s`: a name, already localized (a faction).
+    /// `%s`: the subject's name, resolved at the drain off [`PendingCombat::subject`].
+    Subject,
+    /// `%s`: a name, already localized (a faction) or resolved at the drain
+    /// ([`PendingCombat::item`]).
     Named,
     /// `%d`: the amount.
     Amount,
@@ -25,18 +28,27 @@ pub(crate) struct Family {
 /// The value bound to each [`Slot`] for one line.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Fills {
+    /// The [`Slot::Subject`] text.
+    pub subject: String,
     /// The [`Slot::Named`] text.
     pub named: String,
     pub amount: i64,
 }
 
-/// A client-composed line queued for the drain, which resolves its template off the VM's
-/// `GlobalStrings.lua`.
+/// A client-composed line queued for the drain, which resolves its names and then its template off
+/// the VM's `GlobalStrings.lua`.
 #[derive(Clone, Debug)]
 pub(crate) struct PendingCombat {
     pub kind: ChatEventKind,
     pub family: Family,
     pub fills: Fills,
+    /// The unit naming [`Slot::Subject`], through the name cache; 0 when the family has none.
+    pub subject: u64,
+    /// The item naming [`Slot::Named`], through the item cache, as the reference's line waits on
+    /// its item callback (`0x67ca30`).
+    pub item: Option<u32>,
+    /// Drain passes spent waiting on a name.
+    pub tries: u16,
 }
 
 /// The chat-event kinds: the `ChatTypeInfo` keys benilla produces.
@@ -91,6 +103,10 @@ pub(crate) enum ChatEventKind {
     CombatMiscInfo,
     /// `0x55`, a reputation delta (`FACTION_STANDING_INCREASED`/`_DECREASED`).
     CombatFactionChange,
+    /// `0x1e`, a cast's created item (`TRADESKILL_LOG_*`, `0x50bd90`).
+    Tradeskills,
+    /// `0x1f`, the pet eating what it was fed (`FEEDPET_LOG_*`, `0x50baf0`).
+    PetInfo,
 }
 
 impl ChatEventKind {
@@ -148,6 +164,8 @@ impl ChatEventKind {
             K::BgSystemHorde,
             K::CombatMiscInfo,
             K::CombatFactionChange,
+            K::Tradeskills,
+            K::PetInfo,
         ]
     };
 }

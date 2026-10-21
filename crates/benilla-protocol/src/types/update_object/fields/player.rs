@@ -441,12 +441,24 @@ impl ObjectFields {
     pub fn player_pvp_rank(&self) -> Option<u8> {
         self.get(Field::PlayerBytes3).map(|b| (b >> 16) as u8)
     }
-    /// `PLAYER_FIELD_YESTERDAY_CONTRIBUTION` (private): yesterday's honor (`HonorMgr.cpp:918`).
+    /// `PLAYER_FIELD_KILLS` (private, field 1225): today's honorable kills in the low half and
+    /// yesterday's in the high, which `GetPVPSessionStats` (`0x611a20`) and
+    /// `GetPVPYesterdayStats` (`0x611ad0`) read as `u16`s at `+0x10d4`/`+0x10d6`.
+    pub fn player_kills(&self) -> Option<u32> {
+        self.get(Field::PlayerKills)
+    }
+    /// `PLAYER_FIELD_TODAY_CONTRIBUTION` (private): today's honor, `GetPVPSessionStats`'s second
+    /// return (`+0x10d8`).
+    pub fn player_today_contribution(&self) -> Option<u32> {
+        self.get(Field::PlayerTodayContribution)
+    }
+    /// `PLAYER_FIELD_YESTERDAY_CONTRIBUTION` (private): yesterday's honor, `GetPVPYesterdayStats`'s
+    /// second return (`+0x10dc`).
     pub fn player_yesterday_contribution(&self) -> Option<u32> {
         self.get(Field::PlayerYesterdayContribution)
     }
-    /// `PLAYER_FIELD_LIFETIME_HONORBALE_KILLS` (private, vmangos's spelling): lifetime honorable
-    /// kills (`HonorMgr.cpp:934`).
+    /// `PLAYER_FIELD_LIFETIME_HONORABLE_KILLS` (private): lifetime honorable kills,
+    /// `GetPVPLifetimeStats`'s first return (`0x611b80`, `+0x10e0`).
     pub fn player_lifetime_honorable_kills(&self) -> Option<u32> {
         self.get(Field::PlayerLifetimeHonorableKills)
     }
