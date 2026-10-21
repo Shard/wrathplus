@@ -490,7 +490,7 @@ pub(crate) mod net {
     // cache does not model them or infer timestamp-driven refresh. Match native player
     // and creature display conversion (wrath_session::cstring), not transport decoding.
     pub(super) fn drain_native_pet_names(
-        packets: Option<ResMut<crate::ui_native_pet_name::NativePetNamePackets>>,
+        packets: Option<ResMut<crate::net::wrath_pet_name_capture::NativePetNamePackets>>,
         mut names: ResMut<NameCache>,
     ) {
         let Some(mut packets) = packets else {
@@ -626,7 +626,7 @@ pub(crate) mod net {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use crossbeam_channel::TryRecvError;
 
     /// Compose a guid the way the server does: `counter | (entry << 24) | (high << 48)`.
@@ -1048,8 +1048,8 @@ mod tests {
     }
 
     /// `OBJECT_FIELD_ENTRY` and `UNIT_FIELD_PETNUMBER`, absolute descriptor indices.
-    const ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
-    const PETNUMBER: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetnumber);
+    const ENTRY: u16 = Field::ObjectEntry.index();
+    const PETNUMBER: u16 = Field::UnitPetnumber.index();
 
     fn unit(fields: &[(u16, u32)]) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_pairs(fields))

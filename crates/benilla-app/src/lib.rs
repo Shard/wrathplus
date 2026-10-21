@@ -72,6 +72,7 @@ mod loading_screen;
 mod local_state;
 mod launch_plan;
 mod login;
+mod loot;
 mod minimap;
 mod motion;
 mod nameplates;
@@ -81,6 +82,7 @@ mod npc_text;
 mod pending_item_ops;
 /// Ships in part (the FPS journal and the clocks it reads); the rest is `dev`.
 mod perf;
+mod overlay;
 mod pipe_warm;
 mod player;
 mod poi_marker;
@@ -149,6 +151,7 @@ mod ui_native_chat;
 // The native pet-name and WHO capture FIFOs live in `net` (split step 0 residue); the old paths stay.
 use net::{wrath_pet_name_capture as ui_native_pet_name, wrath_who_capture as ui_native_who};
 mod ui_craft;
+mod ui_death;
 mod ui_dialog_verbs;
 mod ui_dressup;
 mod ui_duel;

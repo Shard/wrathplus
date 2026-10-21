@@ -21,9 +21,9 @@ use crate::player::Player;
 use crate::ui_battlefield::Battlefield;
 use crate::ui_dialog_verbs::BattlefieldQueue;
 
-/// Elfarran's spawn (vmangos `creature` guid 54614, entry 14981, map 0), Stormwind's Warsong
+/// Elfarran's spawn (AzerothCore `creature` guid 208185, entry 14981, map 0), Stormwind's Warsong
 /// Gulch battlemaster; he is then found in the streamed world by his npc flag.
-const BATTLEMASTER_AT: [f32; 3] = [-8454.62, 318.85, 120.97];
+const BATTLEMASTER_AT: [f32; 3] = [-8390.29, 285.503, 120.969];
 /// Warsong Gulch's Map.dbc row, which `GetBattleGroundTypeIdByMapId` maps to template 2.
 const WSG_MAP: u32 = 489;
 /// The level the body is raised to: `battleground_template` opens WSG at 10, 20 or 21 by content

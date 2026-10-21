@@ -1,6 +1,6 @@
 //! Independent build-12340 bytes: no update-object encoder or projected descriptor fixtures.
 use crate::events::SessionEvent;
-use crate::types::{FieldLayout, ObjectFields};
+use crate::types::ObjectFields;
 use crate::wrath_events::{WrathDispatch, WrathEventAdapter, SMSG_UPDATE_OBJECT};
 
 fn guid(out: &mut Vec<u8>, value: u8) {
@@ -88,7 +88,6 @@ fn byte_stream_native_create_values_aura_remove_recreate() {
             ],
         ),
     ));
-    assert_eq!(player.layout(), FieldLayout::Wrath12340);
     assert_eq!(player.unit_health(), Some(100));
     assert_eq!(player.wrath_powers().unwrap()[6], (659, 1250));
     let quest = player.player_quest_log(24).unwrap();
@@ -100,21 +99,18 @@ fn byte_stream_native_create_values_aura_remove_recreate() {
         SMSG_UPDATE_OBJECT,
         &create(8, 3, &[(24, 91), (32, 123), (82, 0x1081)]),
     ));
-    assert_eq!(unit.layout(), FieldLayout::Wrath12340);
     assert_eq!(unit.unit_npc_flags(), 0x1081);
     let item = created(&dispatch(
         &mut adapter,
         SMSG_UPDATE_OBJECT,
         &create(9, 1, &[(14, 7), (60, 31), (61, 47)]),
     ));
-    assert_eq!(item.layout(), FieldLayout::Wrath12340);
     assert_eq!(item.item_durability(), Some(31));
     let go = created(&dispatch(
         &mut adapter,
         SMSG_UPDATE_OBJECT,
         &create(10, 5, &[(14, 0x12340009), (17, 0x07060502)]),
     ));
-    assert_eq!(go.layout(), FieldLayout::Wrath12340);
     assert_eq!(go.gameobject_state(), Some(2));
     let events = dispatch(
         &mut adapter,
@@ -124,7 +120,6 @@ fn byte_stream_native_create_values_aura_remove_recreate() {
     let SessionEvent::ObjectValues { fields, .. } = &events[0] else {
         panic!()
     };
-    assert_eq!(fields.layout(), FieldLayout::Wrath12340);
     player.merge(fields.clone());
     assert_eq!(player.unit_health(), Some(0));
     assert_eq!(player.unit_max_health(), Some(200));
@@ -169,7 +164,6 @@ fn byte_stream_native_create_values_aura_remove_recreate() {
         SMSG_UPDATE_OBJECT,
         &create(7, 4, &[(24, 77)]),
     ));
-    assert_eq!(player.layout(), FieldLayout::Wrath12340);
     assert_eq!(player.unit_health(), Some(77));
     assert_eq!(player.player_money(), Some(0));
     let events = dispatch(&mut adapter, 0x496, &[1, 7]);

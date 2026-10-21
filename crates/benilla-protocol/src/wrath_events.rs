@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::events::{EntityKind, MoveSpeeds, SessionEvent};
-use crate::types::FieldLayout;
 use crate::types::{
     AttackSwingError, CreateSpline, MoverState, ObjectFields, ObjectType as VanillaObjectType,
     TransportPose,
@@ -786,7 +785,7 @@ impl WrathEventAdapter {
                             display_id,
                             position,
                             orientation,
-                            rotation: movement.rotation.map(crate::wrath_gameplay::unpack_rotation),
+                            rotation: project_rotation(movement.rotation),
                             scale,
                             speeds: project_speeds(movement.speeds),
                             mover: project_mover(&movement),
@@ -968,7 +967,7 @@ fn native_fields(state: &TrackedObject, created: bool) -> ObjectFields {
         .filter(|(_, value)| **value != 0)
         .map(|(index, value)| (index as u16, *value))
         .collect();
-    let fields = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &pairs);
+    let fields = ObjectFields::from_pairs(&pairs);
     if created {
         fields.into_created(vanilla_type(state.object_type))
     } else {
@@ -984,7 +983,7 @@ fn native_delta(state: &TrackedObject, fields: &UpdateFields) -> ObjectFields {
         .filter(|field| state.get(field.index) != field.value)
         .map(|field| (field.index as u16, field.value))
         .collect();
-    ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &pairs)
+    ObjectFields::from_pairs(&pairs)
 }
 
 fn entity_kind(object_type: ObjectType) -> EntityKind {
@@ -1011,6 +1010,17 @@ fn native_display(object_type: ObjectType, fields: &ObjectFields) -> Option<u32>
         ObjectType::Corpse => fields.corpse_display_id(),
         _ => None,
     }
+}
+
+/// A GameObject create's `UPDATEFLAG_ROTATION` word as a quaternion. A zero word is AzerothCore's
+/// identity, `G3D::Quat()`, which it packs for an object spawned with no rotation (every temporary
+/// `0x1fc…` object in a captured session, beside real yaw quaternions on the database spawns and
+/// transports), so it is `None` and the object faces its orientation. Unresolved, labelled: build
+/// 12340's own reader of the word is untraced.
+fn project_rotation(packed: Option<i64>) -> Option<[f32; 4]> {
+    packed
+        .filter(|&word| word != 0)
+        .map(crate::wrath_gameplay::unpack_rotation)
 }
 
 fn placement(movement: &MovementBlock) -> Option<([f32; 3], f32)> {
@@ -1255,6 +1265,25 @@ mod tests {
         }
         raw_fields(&mut out, values);
         out
+    }
+
+    /// Words off a real AzerothCore 3.3.5 session: a temporary object's zero, a database spawn's
+    /// yaw (orientation 2.8012) and a tilted database spawn (orientation 3.0020).
+    #[test]
+    fn a_zero_rotation_word_is_no_rotation_and_a_real_one_is_kept() {
+        assert_eq!(project_rotation(None), None);
+        assert_eq!(project_rotation(Some(0)), None, "AC's identity: face the orientation");
+
+        let yaw = project_rotation(Some(0x0000_0000_000f_c4d6)).unwrap();
+        let half = 2.8012f32 / 2.0;
+        for (got, want) in yaw.iter().zip([0.0, 0.0, half.sin(), half.cos()]) {
+            assert!((got - want).abs() < 1e-3, "{yaw:?}");
+        }
+
+        let tilted = project_rotation(Some(0xff78_dc21_b6ef_ecf4_u64 as i64)).unwrap();
+        assert!(tilted[0] != 0.0 && tilted[1] != 0.0, "a real tilt: {tilted:?}");
+        let norm: f32 = tilted.iter().map(|c| c * c).sum();
+        assert!((norm - 1.0).abs() < 1e-3, "{tilted:?}");
     }
 
     fn raw_delta(guid: u64, values: &[(usize, u32)]) -> Vec<u8> {
@@ -1532,7 +1561,7 @@ mod tests {
                 assert!(session_events.is_empty());
             }
         }
-        assert!(ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[]).is_empty());
+        assert!(ObjectFields::from_pairs(&[]).is_empty());
     }
 
     #[test]
@@ -1817,22 +1846,19 @@ mod native_descriptor_tests {
 
     #[test]
     fn npc_flags_retain_services_absent_from_vanilla() {
-        let fields = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[(82, 0x1100_1081)]);
+        let fields = ObjectFields::from_pairs(&[(82, 0x1100_1081)]);
         assert_eq!(fields.unit_npc_flags(), 0x1100_1081);
     }
 
     #[test]
     fn final_quest_slot_preserves_unclamped_counters_and_timer() {
-        let fields = ObjectFields::from_native_pairs(
-            FieldLayout::Wrath12340,
-            &[
-                (278, 783),
-                (279, 1),
-                (280, 3 | (65535 << 16)),
-                (281, 70 << 16),
-                (282, 12345),
-            ],
-        );
+        let fields = ObjectFields::from_pairs(&[
+            (278, 783),
+            (279, 1),
+            (280, 3 | (65535 << 16)),
+            (281, 70 << 16),
+            (282, 12345),
+        ]);
         let quest = fields.player_quest_log(24).unwrap();
         assert_eq!(quest.quest_id, 783);
         assert_eq!(quest.counters, [3, 65535, 0, 70]);

@@ -44,8 +44,8 @@ struct Registrar {
     cost: u32,
 }
 
-/// The `UNIT_NPC_FLAGS` bits the 1.12 client requires, both of them, on a showlist's NPC
-/// (`0x5eec33`, `0x5eec3b`); vmangos checks only `PETITIONER` before sending.
+/// The `UNIT_NPC_FLAGS` bits the registrar requires, both of them, on a showlist's NPC; AC checks
+/// only `PETITIONER` before sending.
 const REGISTRAR_NPC_FLAGS: u32 = crate::target::cursor_mode::npc_flags::PETITIONER
     | crate::target::cursor_mode::npc_flags::TABARDDESIGNER;
 
@@ -336,19 +336,7 @@ pub(crate) mod net {
                 .0
                 .get(&list.npc)
                 .and_then(|e| stores.get(*e).ok())
-                .map(|s| {
-                    let flags = s.0.unit_npc_services();
-                    // Legacy registrar model requires both services; decode native bits first.
-                    (if flags.has(benilla_protocol::types::NpcService::Petitioner) {
-                        crate::target::cursor_mode::npc_flags::PETITIONER
-                    } else {
-                        0
-                    }) | (if flags.has(benilla_protocol::types::NpcService::TabardDesigner) {
-                        crate::target::cursor_mode::npc_flags::TABARDDESIGNER
-                    } else {
-                        0
-                    })
-                });
+                .map(|s| s.0.unit_npc_flags());
             show_list(&mut registrar, &mut vendor, list, flags);
         }
     }

@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 use benilla_protocol::ObjectFields;
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
@@ -111,10 +111,7 @@ fn feed_cost_per_invalidation() {
                 if slot == 0 { skill } else { 300 } | 300 << 16,
             ));
         }
-        ObjectStore(ObjectFields::from_field_slots(
-            FieldLayout::Wrath12340,
-            &slots,
-        ))
+        ObjectStore(ObjectFields::from_field_slots(&slots))
     };
     let player = app
         .world_mut()
@@ -123,13 +120,10 @@ fn feed_cost_per_invalidation() {
     // An auto-attack target, whose reach a swap moves.
     const TARGET: u64 = 0xF130_0000_0000_0042;
     let target_fields = |reach: f32| {
-        ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[(
-                benilla_protocol::types::Field::UnitCombatreach,
-                reach.to_bits(),
-            )],
-        ))
+        ObjectStore(ObjectFields::from_fields(&[(
+            benilla_protocol::types::Field::UnitCombatreach,
+            reach.to_bits(),
+        )]))
     };
     let target = app.world_mut().spawn(target_fields(1.5)).id();
     app.world_mut()
@@ -137,8 +131,8 @@ fn feed_cost_per_invalidation() {
         .0
         .insert(TARGET, target);
 
-    let script = UiScript::new().expect("VM");
-    crate::ui_script::load_ui_for_test(&script, "Interface\\FrameXML\\GlobalStrings.lua");
+    let mut script = UiScript::new().expect("VM");
+    crate::ui_script::load_ui_for_test(&mut script, "Interface\\FrameXML\\GlobalStrings.lua");
     app.insert_non_send_resource(script);
 
     let timed = |app: &mut App| {

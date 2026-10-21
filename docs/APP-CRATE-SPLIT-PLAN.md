@@ -46,7 +46,7 @@ The cycles come from three patterns, not from tangled features:
 
 | Crate | Layer | Today's modules (examples) | Size | Lib tests |
 |---|---|---|---|---|
-| `benilla-app-core` | shared state, schedule sets, cvar registry | `run_mode`, `local_state`, `query_cache`, `area`, `chr_classes`, `text_filter`, `text_reshape`, `glue_strings`, `crash`, `shutdown`, `pending_item_ops`, `quest_reputation`, `cvars` (registry only), `app_core` (the state extracted in step 0) | ~12k + extracted | ~150 |
+| `benilla-app-core` | shared state, schedule sets, cvar registry | `run_mode`, `local_state`, `query_cache`, `area`, `chr_classes`, `text_filter`, `text_reshape`, `glue_strings`, `crash`, `shutdown`, `pending_item_ops`, `quest_reputation`, `cvars` (registry only), `launch_plan` (the run's command line and environment), `app_core` (the state extracted in step 0) | ~12k + extracted | ~150 |
 | `benilla-app-net` | session and wire drain | `net` (with the capture FIFOs), `realmlist`, and the wire-query caches `names`, `items`, `go_templates`, `area_trigger`, `name_persist`, `creature_type` (reassigned after the move dry run) | ~25k | ~280 |
 | `benilla-app-world` | world, rendering, gameplay | `entities`, `creature_anim`, `player`, `target`, `spell`, `motion`, `swing_refusal`, `sound`, `portrait`, `minimap`, `transport`, `video`, `cursor`, `death`, `nameplates`, `vplates`, `quest_markers`, `world_state`, `loading_screen`, the effect modules (`aura_visual`, `weapon_trail`, `bowstring`, `fishing_line`, `footprints`, …) | ~136k | ~1.4k |
 | `benilla-app-ui` | FrameXML host and feeds, glue screens | `ui_script`, every `ui_*`, `bindings`, `console`, `combat_log`, `char_select`, `char_create`, `realm_select`, `login`, `glue`, `textinput`, `tutorial`, `script_calls`, `experience_ui`, `world_state_ui` | ~234k | ~2.8k |
@@ -439,14 +439,15 @@ Taken by App Migration: the `ui_items`, `ui_loot` and `ui_action` helpers world 
 | Group | References | Mechanism |
 |---|---|---|
 | Inventory walkers | `ui_items::{find_item, carried_counts, slot_guid, collect_inventory}` (+ `ItemSearch`, `InventoryScope`) from `death`, `spell::usable`, `spell::targeting::item`, `target::{lock, click}` | **Move down.** They are pure over the descriptor and `net::Objects`, so they can't go to core: a world-layer `inventory` module holds them and their two types; `ui_items` calls down to it. |
-| Item use from the death drain | `ui_items::send_item_use` from `death::drain_death` | **Move the caller up.** `drain_death` takes the `UiScript` and drains Lua requests (the soulstone use), so it is UI-layer code: it moves to a `ui_*` module, which also takes `death`'s `UiScript` edges. |
-| Loot state machine | `ui_loot::{close_interaction, begin_wrath_corpse_loot, resolve_loot_kneel}` from `creature_anim` and `target::click` | **Move down.** They touch only `LootState`, `LootLatch` and `NetCommands`: the loot state machine and its transitions move to a world-layer `loot` module; `ui_loot` keeps the Lua feed and drain. The `.after(resolve_loot_kneel)` ordering then names a world system. |
+| Item-use record | `ui_items::ItemUse` from `app_core::state::GoOpener::Key` (core) and `target::click` | **Move down.** A plain record, so it joins `GoOpener` in `app_core::state`, as the step-0 table lists; `ui_items` re-exports it. Done. |
+| Item use from the death drain | `ui_items::send_item_use` from `death::drain_death` | **Move the caller up.** `drain_death` takes the `UiScript` and drains Lua requests (the soulstone use), so it is UI-layer code: it moves to a `ui_*` module, which also takes `death`'s `UiScript` edges. Done: `ui_death` holds the feed, the drain and their tests; `death` keeps `DeathNet`, the net handlers and the ghost look. |
+| Loot state machine | `ui_loot::{close_interaction, begin_wrath_corpse_loot, resolve_loot_kneel}` from `creature_anim` and `target::click` | **Move down.** They touch only `LootState`, `LootLatch` and `NetCommands`: the loot state machine and its transitions move to a world-layer `loot` module; `ui_loot` keeps the Lua feed and drain. The `.after(resolve_loot_kneel)` ordering then names a world system. Done: `loot` holds the three and `LootKneel` (`ui_loot` re-exports them for its own tests and drain); `creature_anim`, `target::click` and `go_anim` name `crate::loot`. |
 | Attack predicate, cast-fail map | `ui_action::attack_actor_blocked` from `target::click`; `ui_action::cast_fail::from_wrath` (+ its key tables) from `spell::net` | **Move down.** A predicate over the player's store, to `target`; a pure wire map, to `spell`. `from_wrath` maps 12340 reasons onto 1.12 codes and goes away when the cast-fail codes are native. |
 | UI systems in the target chain | `script_calls::apply_script_calls`, `ui_action::drop_item::drop_item_on_unit`, `ui_action::attack_nearest_probe`, scheduled inside `target`'s plugin chain | **Move the caller up.** `target` exposes a `SystemSet` at each slot; the UI modules register their own systems into it, with the same chain order. |
 | Arena lines | `net::wrath_arena_lines` runs in `ui_script::UiFeed` `.after(ui_battlefield::drain_native)` | **Move the caller up.** It is a UI feed: its registration (or the file) moves to the UI layer beside `ui_battlefield`. Lands with the step-4 batch, which also edits `net.rs` (its clippy baseline entry is keyed on the file hash). |
-| Group presence | `ui_party::net::{member_deactivated, roster_deactivated}` from `net::{objects, session}` | **A drained message.** `net` writes the deactivated guid or roster; `ui_party` drains it the same frame, before anything reads `GroupState`, in `net`'s order. |
-| Reputation lines | `combat_log::chat::faction_standing` from `net::session` | **A drained message carrying the old and new standing.** Today it runs before the store is overwritten; the message keeps that, and `combat_log` composes the lines. |
-| Doc links | `ui_trade::answer_trade_request`, `char_select::char_login_refusal_text`, `ui_action::show_messages`, `ui_loot::drain_loot` named from `net`, `sound` | **Plain text.** Intra-doc links count as references; they become prose. The `sound` one is done; the two in `net.rs` land with the step-4 batch. |
+| Group presence | `ui_party::net::{member_deactivated, roster_deactivated}` from `net::{objects, session}` | **A drained message.** `net` writes the deactivated guid or roster; `ui_party` drains it the same frame, before anything reads `GroupState`, in `net`'s order. Done: `net::MemberDeactivated` carries the member's and the held pet's cloned stores (the despawn would drop them), written only for a roster member; `ui_party::net::on_member_deactivated` drains it as a handler on the same three kinds, registered after `net`'s, so the snapshot and stats request keep their place in the dispatch. A whole-client test pins the order. |
+| Reputation lines | `combat_log::chat::faction_standing` from `net::session` | **A drained message carrying the old and new standing.** Today it runs before the store is overwritten; the message keeps that, and `combat_log` composes the lines. Done: `net::StandingChanged { list_id, old, new }` is written before the overwrite; `combat_log::FactionStandingPlugin`, added right after `NetPlugin` (the `CombatLogPlugin` precedes it), drains it as a handler on the same kind, so the line keeps its place among the dispatch's chat lines rather than trailing them after `NetDrain`. A whole-client test pins the handler order, the pre-overwrite `old` and the overwrite. |
+| Doc links | `ui_trade::answer_trade_request`, `char_select::char_login_refusal_text`, `ui_action::show_messages`, `ui_loot::drain_loot` named from `net`, `sound` | **Plain text.** Intra-doc links count as references; they become prose. The `sound` and `net.rs` ones are done, and the new modules link no UI module. |
 
 #### Native UI's groups (claimed 2026-10-21)
 
@@ -455,10 +456,10 @@ Each lands as a behaviour-neutral unit with the usual gates, in this order.
 
 | Group | References | Mechanism | Status |
 |---|---|---|---|
-| Run conditions | `ui_script::{ingame_ui_up, seam_scale, load_stock_bindings}` | **Move down.** `ingame_ui_up` reads only `PendingEntryUiLoad` and `ClientState`, both already core, so the run condition itself moves to `app_core::ui_state` (no new resource, no frame of lag); `seam_scale` is pure and goes with it; world callers name the core path, `ui_script` re-exports both. `load_stock_bindings`' one world caller is a `vplates` test the 12340 nameplate port (Assets) rewrites; it goes with that port. | in review |
-| Drawing helpers | `ui_pass::{project_overlay, tile_quad_mesh, overlay_z, ui_render_layers}`, `ui_models::spawn_warm_tile_cam` | **Move down** to a world-layer overlay module beside the pure moves. | claimed |
-| Cast-bar feedback | `ui_cast::feed_cast_bar` from world | **Drained message.** World writes a cast-bar message; `ui_cast` drains it in its set, the same frame. | claimed |
-| Other action requests | `ui_session::feed_interact_npc`, `ui_pet::pet_stop_on_old_target_clear`, `ui_world_map::world_enter_selection`, `script_calls::{apply_script_calls, in_call_order}` | **Drained message** per row: world writes the request, the UI system that owns the session drains it in its existing set; frame order checked per row. | claimed |
+| Run conditions | `ui_script::{ingame_ui_up, seam_scale, load_stock_bindings}` | **Move down.** `ingame_ui_up` reads only `PendingEntryUiLoad` and `ClientState`, both already core, so the run condition itself moves to `app_core::ui_state` (no new resource, no frame of lag); `seam_scale` is pure and goes with it; world callers name the core path, `ui_script` re-exports both. `load_stock_bindings`' one world caller was a `vplates` test; the 12340 nameplate port (Assets, 71fed466) replaced it with a client test, closing the edge. | done |
+| Drawing helpers | `ui_pass::{project_overlay, tile_quad_mesh, overlay_z, ui_render_layers}`, `ui_models::spawn_warm_tile_cam` | **Move down.** The four `ui_pass` helpers are a new world-layer `overlay` module (`ui_pass` re-exports `ui_render_layers`, which it still uses); `spawn_warm_tile_cam` goes to `portrait` beside its twin `spawn_warm_booth`, with the tile atlas's first edge and camera order. chat_bubble, combat_text, minimap::composite, pipe_warm and vplates name the new paths. | in review |
+| Cast-bar feedback | `ui_cast::feed_cast_bar` from world | **Drained message.** The queue world already writes, `CastBarEdge`/`CastBarFeed`, moves to `spell::cast_bar`; `ui_cast` keeps the drain in its slot (`UnitFeed`, after `spell::LocalCancel`), the same frame, pinned by `a_queued_edge_reaches_the_vm_the_same_frame`. The four Esc tests that ran `feed_cast_bar` from `spell::inflight` move to `ui_cast_esc_tests.rs` over a shared `spell::cast_test_support` harness. | in review |
+| Other action requests | `ui_session::feed_interact_npc`, `ui_pet::pet_stop_on_old_target_clear`, `ui_world_map::world_enter_selection`, `script_calls::{apply_script_calls, in_call_order}` | Narrower than the dry run by now. `InteractNpc` is already `app_core::state`: world code (target::click, creature_anim, motion::facing, portrait, capture) names that path, and `target::click`'s re-click test, which runs `feed_interact_npc`, moves to `ui_session`'s tests. `pet_stop_on_old_target_clear` is ordered against by `spell::targeting::feed_targeting_to_vm`, itself a `VmMemo` user: it moves up with the `VmMemo` row. `world_enter_selection` and the `script_calls` links in target and spell docs are prose. `apply_script_calls` in the target chain was App Migration's split unit 1. | in review (`pet_stop_on_old_target_clear` with `VmMemo`) |
 | `VmMemo` (17) | `ui_script::VmMemo` users in area, cinematic, cursor, death, minimap, sound, spell, video, vplates | **Move the caller up.** Each world user is a Lua feed that already takes `UiScript`; the feed systems move to UI-side modules beside their world state, and `VmMemo` stays in `ui`. | claimed |
 
 When the pure moves and the in-flight items land, the move phase can start with `core` and `net`;
@@ -552,6 +553,33 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
 4. Unclaimed, for the manager: `BuildId` to core; the lookup rows (`ui_unit` names and snapshot,
    `ui_macro::identity`, `creature_anim::disarmed_hand`); `LetterTexts`, `LoginIntent`; the 38
    inherent impls; the test-support feature.
+
+**Re-run (Wire B, 2026-10-21, wrath-hud 333bcecb, with Native UI's lookup rows 5bd416f8).** Same
+moves, with the layer reassignment (core: the 14 modules of the table above; net: `net`,
+`realmlist` and the six wire-query caches), counted as distinct `cargo check --lib --tests` error
+sites. Raw: core 27, core+net 65. After `canonical-paths.py --apply` (2610 paths in 443 files; the
+rewritten tree builds, warnings being the re-exports it leaves unused): **core 13, core+net 20.**
+The script now also follows a relative re-export (`pub(crate) use cooldowns::Cooldowns`,
+`use ring::{…, Factions}`) into a chain; before that, 12 more core+net sites (3 of them core) (`spell::Cooldowns`,
+`ui_action::{Spells, UiError, UiErrorKeys, FillArg}`, `target::Factions`, `player::Player`,
+`creature_anim::move_flags`, `entities::CollisionHeight`) failed only because a chain stopped at a
+relative hop.
+
+| Cause | Sites | What | Owner |
+|---|---|---|---|
+| Core calls an extension-trait method | 4 | `GossipState::resolve_greeting` → `GossipGreeting::draw_greeting`, `Realms::highlight_current` → `RealmsSelect::rows` (and their `use` lines) | Done (Wire B): `open_menu`, `text_arrived` and `resolve_greeting` are `GossipGreeting`'s, `highlight_current` is `RealmsSelect`'s |
+| `Default` impl left in an upper layer | 2 | `CollisionHeight` (`entities::collision_height`), `ui_flags::Sort` (`realm_select`) | Done (Wire B): both impls moved with their types (the inherent-impl matcher did not look at trait impls) |
+| Core → spell | 3 | `Spells`' cast-time helpers take `spell::SpellModifiers` and `OP_CAST_TIME` (`app_core::state`) | Done (Wire B): `spell::SpellsCastTime` |
+| Core → ui_items | 1 | `app_core::state`'s `Key(ui_items::ItemUse)` | App Migration (`ui_items`): `ItemUse` moves down if pure |
+| Core → net | 1 (core alone only) | `app_core::interaction` reads `names::NameCache` | The method leaves core, or takes the name as an argument |
+| `cfg(test)` helper | 1 | `app_core::vm_memo` tests use the root's `test_support::{fn_parameter_lists, rust_files}` | The test moves to the root, or the helpers to a core `test_support` |
+| `launch_plan` unassigned | 1 + 2 | `run_mode` (core) and `realmlist` (net) read `launch_plan::plan()` (bad7aa42) | Done (Wire B): `launch_plan` is in the core row |
+| `net` drains UI state | 4 | `ui_party::net::{member_deactivated, roster_deactivated}` (3), `combat_log::chat::faction_standing` | App Migration's groups (unchanged) |
+| Root module alias | 2 | `names` reaches `NativePetNamePackets` through the root's `use net::{wrath_pet_name_capture as ui_native_pet_name}` | Done (Wire B): `names` names `net::wrath_pet_name_capture` |
+
+After those (860a358f, with `launch_plan` moved as core): **core 3, core+net 6**. Left: `ItemUse` and the four
+`net` drains (App Migration, in flight), the `vm_memo` test helper, and in core alone
+`app_core::interaction`'s read of `names::NameCache`.
 
 `ConsoleCommandApp` and `capture::ProbeAuctionPlugin` are not net-side. The console trait is used by
 `experience`, `video` (world) and `ui_script`. The probe plugin is named only by `dev` (tools) and in a

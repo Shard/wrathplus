@@ -38,7 +38,7 @@ fn shipped_action_bar_drives_end_to_end() {
         r"Interface\FrameXML\ReputationFrame.xml",
         BAR[2],
     ] {
-        let built = super::test_ui::load_ui(&s, file);
+        let built = super::test_ui::load_ui(&mut s, file);
         if BAR.contains(&file) {
             frames += built;
         }
@@ -168,7 +168,7 @@ fn shipped_action_bar_drives_end_to_end() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-fn load_action_bar(s: &UiScript) {
+fn load_action_bar(s: &mut UiScript) {
     super::test_ui::load_ui(s, "Interface\\FrameXML\\GlobalStrings.lua");
     super::test_ui::load_ui(s, "Interface\\FrameXML\\Fonts.xml");
     super::test_ui::load_ui(s, r"Interface\FrameXML\BasicControls.xml"); // `TEXT`
@@ -206,7 +206,7 @@ fn state_feedback_drives_cooldown_checked_and_usable_through_the_xml() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
     s.set_action(
         1,
         Some(ActionSlot {
@@ -326,7 +326,7 @@ fn a_start_behind_the_clocks_epoch_hides_the_stock_sweep() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
     s.set_action(
         1,
         Some(ActionSlot {
@@ -392,7 +392,7 @@ fn the_cooldown_sweep_paints_over_the_buttons_icon_and_ring() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
     s.set_action(
         1,
         Some(ActionSlot {
@@ -449,7 +449,7 @@ fn a_cooldown_count_addons_hook_leaves_the_sweep_running() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
     // Addons load after FrameXML, so the hook captures the stock global.
     s.run(COOLDOWN_COUNT_HOOK)
         .expect("the addon's hook installs");
@@ -556,7 +556,7 @@ fn a_cooldown_count_draws_over_the_bonus_bars_sweep() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
     s.run(COOLDOWN_COUNT_HOOK)
         .expect("the addon's hook installs");
     let level = |s: &UiScript, frame: &str| {
@@ -625,7 +625,7 @@ fn a_right_click_on_an_action_button_uses_the_action() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
 
     s.set_action(
         1,
@@ -675,7 +675,7 @@ fn shift_click_picks_up_not_uses() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
 
     s.set_action(
         1,
@@ -727,7 +727,7 @@ fn the_action_bar_lock_stops_the_drag_and_leaves_shift_click_alone() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
     assert_eq!(
         s.eval::<String>("return LOCK_ACTIONBAR").unwrap(),
         "0",
@@ -797,7 +797,7 @@ fn drag_drop_onto_another_button_hops_the_displaced_action() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
 
     s.set_action(
         1,
@@ -856,7 +856,7 @@ fn count_fontstring_follows_is_consumable_action_not_the_bag_count() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
 
     // Multi-digit counts: a single digit could match a button's one-character HotKey label.
     s.set_action(
@@ -950,7 +950,7 @@ fn macro_name_line_follows_get_action_text_through_the_xml() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
     s.set_macros(MacroState {
         account: vec![MacroView {
             name: "spawn".into(),
@@ -1029,7 +1029,7 @@ fn shipped_bag_frame_drives_end_to_end() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        let frames = load_ui(&s, file);
+        let frames = load_ui(&mut s, file);
         if file == "Interface\\FrameXML\\MainMenuBarBagButtons.xml" {
             bar_frames = frames;
         }
@@ -1108,7 +1108,7 @@ fn shipped_bag_frame_drives_end_to_end() {
         .expect("slot 1 icon visible after toggle");
     // Ask the slot's button by GetID: the buttons are numbered backwards, `…Item1` is the bag's
     // last slot (ContainerFrame.lua:425-428).
-    let button = bag_slot_button(&s, 0, 1);
+    let button = bag_slot_button(&mut s, 0, 1);
     let (bx, by) = centre_of(&mut s, &button);
     assert!(
         icon.left <= bx && bx <= icon.right && icon.bottom <= by && by <= icon.top,
@@ -1172,7 +1172,7 @@ fn state_events_leave_empty_wells_untinted() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
     // One occupied slot; 2..12 empty.
     s.set_action(
         1,
@@ -1236,7 +1236,7 @@ fn an_occupied_slot_going_empty_leaves_no_white_plate() {
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
     s.set_action(
         3,
         Some(ActionSlot {
@@ -1297,7 +1297,7 @@ fn the_bonus_action_bar_exists_hidden_and_takes_layout_calls() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_action_bar(&s);
+    load_action_bar(&mut s);
 
     assert!(
         s.eval::<bool>("return BonusActionBarFrame ~= nil").unwrap(),
@@ -1348,8 +1348,8 @@ fn the_bonus_action_bar_exists_hidden_and_takes_layout_calls() {
 #[test]
 fn the_reference_action_bar_constants_are_defined() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_action_bar(&s);
+    let mut s = UiScript::new().unwrap();
+    load_action_bar(&mut s);
 
     for (name, want) in [
         ("NUM_ACTIONBAR_PAGES", 6),
@@ -1390,8 +1390,8 @@ fn the_reference_action_bar_constants_are_defined() {
 #[test]
 fn both_reference_action_button_templates_are_inheritable() {
     benilla_formats::wow_data_or_skip!();
-    let s = UiScript::new().unwrap();
-    load_action_bar(&s);
+    let mut s = UiScript::new().unwrap();
+    load_action_bar(&mut s);
 
     // zBar's exact shape: inherit the bar template, supply your own OnLoad.
     let doc = benilla_ui::framexml::parse(
@@ -1492,7 +1492,7 @@ fn the_main_bar_pages_and_a_bonus_page_still_outranks_it() {
         r"Interface\FrameXML\ReputationFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
     ] {
-        super::test_ui::load_ui(&s, file);
+        super::test_ui::load_ui(&mut s, file);
     }
 
     assert_eq!(s.eval::<i64>("return CURRENT_ACTIONBAR_PAGE").unwrap(), 1);
@@ -1613,24 +1613,24 @@ fn bonus_bar_slides_up_with_sound_and_down_without() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\Fonts.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\UIParent.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\OptionsFrameTemplates.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\TextStatusBar.lua");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\TextStatusBar.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\MainMenuBar.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\Cooldown.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\ActionButtonTemplate.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\ActionBarFrame.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\UIParent.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\OptionsFrameTemplates.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\TextStatusBar.lua");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\TextStatusBar.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\MainMenuBar.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\Cooldown.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\ActionButtonTemplate.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\ActionBarFrame.xml");
     // `ExhaustionTick_Update` reads `ReputationWatchBar`, which ReputationFrame.xml declares.
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\ReputationFrame.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\BonusActionBarFrame.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\ReputationFrame.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\BonusActionBarFrame.xml");
     s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
     s.tick(10.0); // a nonzero clock epoch
     let _ = s.take_sounds();
@@ -1823,24 +1823,24 @@ fn bonus_bar_turnaround_continues_from_position() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\Fonts.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\UIParent.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\OptionsFrameTemplates.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\TextStatusBar.lua");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\TextStatusBar.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\MainMenuBar.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\Cooldown.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\ActionButtonTemplate.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\ActionBarFrame.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\UIParent.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\OptionsFrameTemplates.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\TextStatusBar.lua");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\TextStatusBar.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\MainMenuBar.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\Cooldown.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\ActionButtonTemplate.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\ActionBarFrame.xml");
     // `ExhaustionTick_Update` reads `ReputationWatchBar`, which ReputationFrame.xml declares.
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\ReputationFrame.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\BonusActionBarFrame.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\ReputationFrame.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\BonusActionBarFrame.xml");
     s.tick(10.0);
     let _ = s.take_sounds();
 
@@ -1892,24 +1892,24 @@ fn the_page_arrows_do_not_steal_each_other_s_clicks() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\Fonts.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\UIParent.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\OptionsFrameTemplates.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\TextStatusBar.lua");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\TextStatusBar.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\MainMenuBar.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\Cooldown.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\ActionButtonTemplate.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\ActionBarFrame.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\UIParent.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\OptionsFrameTemplates.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\TextStatusBar.lua");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\TextStatusBar.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\MainMenuBar.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\Cooldown.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\ActionButtonTemplate.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\ActionBarFrame.xml");
     // `ExhaustionTick_Update` reads `ReputationWatchBar`, which ReputationFrame.xml declares.
-    super::test_ui::load_ui(&s, r"Interface\FrameXML\ReputationFrame.xml");
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\BonusActionBarFrame.xml");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\ReputationFrame.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\BonusActionBarFrame.xml");
     // The rested marker is declared shown in DIALOG strata over the arrows (MainMenuBar.xml:415);
     // `ExhaustionTick_Update` hides it on PLAYER_ENTERING_WORLD when `GetXPExhaustion()` is nil
     // (MainMenuBar.lua:29-31), or it eats every click.

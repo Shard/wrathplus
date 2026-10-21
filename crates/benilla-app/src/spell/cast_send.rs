@@ -25,7 +25,7 @@ use bevy::prelude::*;
 use crate::items::Items;
 use crate::net::{ClientCommand, NetCommands, Objects, SelfPlayer};
 
-use super::{cast_target, validator, AutoRepeatActive};
+use super::{cast_target, validator, AutoRepeatActive, SpellsCastTime};
 use crate::ui_action::{reagent_totem_refusal, CastErrors, Spells};
 
 /// What the commit sends: `SendCast 0x6e54f0` branches on whether the pending-cast guid
@@ -73,7 +73,7 @@ impl CastCommit {
 const CLASS_ROGUE: u8 = 4;
 
 /// A player's spell press held at TryCast's attack pick (`6e4edf` → `0x612df0`), which can move
-/// the selection the ladder only reads. [`crate::script_calls`] runs the pick and resumes it.
+/// the selection the ladder only reads. The UI's `script_calls` pass runs the pick and resumes it.
 #[derive(Resource, Default)]
 pub(crate) struct HeldForPick(Option<HeldCast>);
 
@@ -850,7 +850,7 @@ mod tests {
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
-        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
+        field.index()
     }
 
     const HEARTHSTONE: u32 = 8690;
@@ -1302,10 +1302,10 @@ mod tests {
             let (mut world, rx) = combat_world(false);
             let held = world
                 .run_system_once(move |mut ladder: CastLadder| {
-                    let me = crate::net::ObjectStore(ObjectFields::from_fields(
-                        benilla_protocol::types::FieldLayout::Wrath12340,
-                        &[(benilla_protocol::types::Field::UnitBytes0, class << 8)],
-                    ));
+                    let me = crate::net::ObjectStore(ObjectFields::from_fields(&[(
+                        benilla_protocol::types::Field::UnitBytes0,
+                        class << 8,
+                    )]));
                     let ctx = cast_target::CastContext {
                         rel: cast_target::TargetRelations {
                             self_store: Some(&me),

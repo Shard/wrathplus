@@ -1,5 +1,6 @@
-//! The selection calls of the script call stream ([`crate::script_calls`]), each committed through
-//! the one SetSelection path when its turn comes, so a later call in the same pass reads it.
+//! The selection calls of the script call stream (the UI's `script_calls` pass), each committed
+//! through the one SetSelection path when its turn comes, so a later call in the same pass reads
+//! it.
 
 use bevy::prelude::*;
 
@@ -139,7 +140,7 @@ mod tests {
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
-        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
+        field.index()
     }
 
     /// A world holding what [`ScriptSelect`] reads, with a bare VM and no units.
@@ -384,24 +385,21 @@ mod tests {
         // `OBJECT_FIELD_TYPE` 2 (a hop is off a unit, typemask 8), `UNIT_FIELD_SUMMON` 8 and
         // `UNIT_FIELD_TARGET` 16, the latter two each a 2-field guid.
         let unit = |kind: u32, summon: u64, target: u64| {
-            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[
-                    (benilla_protocol::types::Field::ObjectType, 0, kind),
-                    (benilla_protocol::types::Field::UnitSummon, 0, summon as u32),
-                    (
-                        benilla_protocol::types::Field::UnitSummon,
-                        1,
-                        (summon >> 32) as u32,
-                    ),
-                    (benilla_protocol::types::Field::UnitTarget, 0, target as u32),
-                    (
-                        benilla_protocol::types::Field::UnitTarget,
-                        1,
-                        (target >> 32) as u32,
-                    ),
-                ],
-            ))
+            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&[
+                (benilla_protocol::types::Field::ObjectType, 0, kind),
+                (benilla_protocol::types::Field::UnitSummon, 0, summon as u32),
+                (
+                    benilla_protocol::types::Field::UnitSummon,
+                    1,
+                    (summon >> 32) as u32,
+                ),
+                (benilla_protocol::types::Field::UnitTarget, 0, target as u32),
+                (
+                    benilla_protocol::types::Field::UnitTarget,
+                    1,
+                    (target >> 32) as u32,
+                ),
+            ]))
         };
         const PLAYER: u32 = 0x19;
         const CREATURE: u32 = 0x09;

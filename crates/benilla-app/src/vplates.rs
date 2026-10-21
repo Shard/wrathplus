@@ -27,7 +27,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use benilla_protocol::{field, EntityKind};
-use benilla_ui::script::{unit_is_grey, PlateGeometry, PlateState};
+use benilla_ui::script::{unit_is_grey, PlateCast, PlateGeometry, PlateState};
 
 use crate::entities::{overhead_anchor, BoneAttach, OverheadFallback};
 use crate::names::NameCache;
@@ -51,6 +51,8 @@ pub(crate) struct VPlateMode {
     pub(crate) friendly_pets: bool,
     pub(crate) friendly_guardians: bool,
     pub(crate) friendly_totems: bool,
+    /// `showVKeyCastbar`: the target's plate carries its cast bar.
+    pub(crate) cast_bar: bool,
 }
 
 impl Default for VPlateMode {
@@ -64,6 +66,7 @@ impl Default for VPlateMode {
             friendly_pets: true,
             friendly_guardians: true,
             friendly_totems: true,
+            cast_bar: true,
         }
     }
 }
@@ -107,9 +110,42 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut mode: ResMut<VPlate
         "nameplateshowfriendlypets" => &mut mode.friendly_pets,
         "nameplateshowfriendlyguardians" => &mut mode.friendly_guardians,
         "nameplateshowfriendlytotems" => &mut mode.friendly_totems,
+        "showvkeycastbar" => &mut mode.cast_bar,
         _ => return,
     };
     *slot = ev.flag();
+}
+
+/// The target's cast bar (`0x720e50`): its channel draining, else its cast filling, in seconds
+/// from 0 to the cast's length; a trade-skill spell (`Attributes & 0x20`) or a missing row shows
+/// none (`0x98f0b6`). Unresolved, labelled: `0x71ab20`'s not-interruptible flag is untraced (always
+/// false, as for `UnitCastingInfo`), and the plate's own finish (green, hold, fade, `0x98e9f0`)
+/// is not modelled: the bar goes with the cast slot.
+fn target_cast(
+    casts: &crate::spell::unit_cast::UnitCasts,
+    spells: Option<&crate::ui_action::Spells>,
+    guid: u64,
+    now_ms: u32,
+) -> Option<PlateCast> {
+    let (spell_id, start, end, channel) = casts.bar_of(guid)?;
+    let def = spells?.catalog.get(spell_id)?;
+    if def.attributes & 0x20 != 0 {
+        return None;
+    }
+    let ms = |d: u32| d as f32 / 1000.0;
+    let max = ms(end.wrapping_sub(start));
+    let value = if channel {
+        ms(end.saturating_sub(now_ms))
+    } else {
+        ms(now_ms.saturating_sub(start))
+    };
+    Some(PlateCast {
+        max,
+        value: value.min(max),
+        icon: def.icon.clone(),
+        channel,
+        not_interruptible: false,
+    })
 }
 
 /// What the plate gate and the overhead names sort a unit into, by build 12340's checks.
@@ -327,6 +363,9 @@ struct PlateWorld<'w, 's> {
     /// The arena exemption from the range limit.
     map: Option<Res<'w, benilla_world::world_map::CurrentMap>>,
     maps: Option<Res<'w, benilla_assets::MapCatalogRes>>,
+    /// The target's cast bar: its cast slots and the spell's icon and attributes.
+    casts: Res<'w, crate::spell::unit_cast::UnitCasts>,
+    spells: Option<Res<'w, crate::ui_action::Spells>>,
 }
 
 /// Every frame: gate the units, seat each plate and hand the result to the widget layer as
@@ -409,6 +448,8 @@ fn drive_vplates(
             .wants(crate::spell::targeting::TargetingWants::Location),
     );
     let hovered_key = script.hovered_nameplate();
+    // The cast slots' clock (`spell::unit_cast`).
+    let now_ms = (script.now() * 1000.0) as u32;
     let clicked = script.take_nameplate_clicks();
     let my_level = self_store.and_then(|s| s.0.unit_level()).unwrap_or(1);
     let has_target = world.selection.target.is_some();
@@ -526,7 +567,7 @@ fn drive_vplates(
             &anchor_q.4,
         );
         let Some(screen) =
-            crate::ui_pass::project_overlay(cam, &cam_tf, anchor + Vec3::Y * PLATE_LIFT, viewport)
+            crate::overlay::project_overlay(cam, &cam_tf, anchor + Vec3::Y * PLATE_LIFT, viewport)
         else {
             continue;
         };
@@ -670,6 +711,15 @@ fn drive_vplates(
             alpha,
             lit,
             hovered: hover,
+            // Rank 1 (elite) or 2 (rare elite) through the template (`0x98e6e0`).
+            elite: store
+                .and_then(|s| s.0.object_entry())
+                .filter(|_| !is_player)
+                .and_then(|e| names.creature_record(e))
+                .is_some_and(|t| matches!(t.rank, 1 | 2)),
+            cast: (mode.cast_bar && world.selection.target == Some(entity))
+                .then(|| target_cast(&world.casts, world.spells.as_deref(), guid.0, now_ms))
+                .flatten(),
         });
     }
 
@@ -810,10 +860,10 @@ mod tests {
     /// player owner's totem, guardian (creator only) or pet; an NPC's own summons are creatures.
     #[test]
     fn units_sort_by_type_then_player_owner() {
-        use benilla_protocol::types::{Field, FieldLayout};
+        use benilla_protocol::types::Field;
         const PLAYER: u64 = 0x0000_0000_0000_0042;
         const NPC: u64 = 0xF130_0000_1234_0001;
-        let at = |f| FieldLayout::Wrath12340.index_of(f);
+        let at = |f: Field| f.index();
         let fields = |links: &[(Field, u64)]| {
             let pairs: Vec<(u16, u32)> = links
                 .iter()

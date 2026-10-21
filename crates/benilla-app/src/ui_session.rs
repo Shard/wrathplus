@@ -459,4 +459,74 @@ mod tests {
             "drive_display_facing must run after feed_interact_npc"
         );
     }
+
+    /// `target::click`'s re-click gate through the real [`feed_interact_npc`]: nothing arms
+    /// it before a window opens, a window arms its own NPC, and a close disarms it.
+    #[test]
+    fn the_reclick_gate_fires_only_while_that_npc_s_window_is_open() {
+        use crate::target::click::interaction_already_open_on;
+        use bevy::ecs::system::RunSystemOnce;
+
+        const NPC: u64 = 0xF130_0000_0000_0042;
+        const OTHER: u64 = 0xF130_0000_0000_0043;
+
+        let armed = |seed: &dyn Fn(&mut World)| {
+            let mut world = World::new();
+            world.init_resource::<InteractNpc>();
+            seed(&mut world);
+            world.run_system_once(feed_interact_npc).unwrap();
+            world.remove_resource::<InteractNpc>().unwrap()
+        };
+
+        // Nothing open: a first click on any NPC reaches the ladder.
+        let idle = armed(&|_| {});
+        assert!(!interaction_already_open_on(NPC, &idle));
+        assert!(!interaction_already_open_on(OTHER, &idle));
+
+        // One opener per family (a menu, a quest panel, a specialized window) arms its own NPC.
+        let with_gossip = armed(&|w| {
+            w.insert_resource(crate::ui_gossip::GossipState {
+                npc: Some(NPC),
+                ..Default::default()
+            });
+        });
+        let with_quest = armed(&|w| {
+            w.insert_resource(crate::ui_quest::QuestGiver {
+                npc: Some(NPC),
+                ..Default::default()
+            });
+        });
+        let with_trainer = armed(&|w| {
+            let mut t = crate::ui_trainer::TrainerOpen::default();
+            t.open(NPC, 0, Vec::new(), String::new());
+            w.insert_resource(t);
+        });
+        for (what, armed) in [
+            ("gossip", &with_gossip),
+            ("quest", &with_quest),
+            ("trainer", &with_trainer),
+        ] {
+            assert_eq!(armed.1, Some(NPC), "{what} did not arm the npc token");
+            // A re-click on that NPC is eaten...
+            assert!(
+                interaction_already_open_on(NPC, armed),
+                "{what}: the re-click was not suppressed"
+            );
+            // ...but a click on another NPC is not.
+            assert!(
+                !interaction_already_open_on(OTHER, armed),
+                "{what}: the gate ate a click on a different NPC"
+            );
+        }
+
+        // Closing the window disarms it, as the reference's `0x493310` zeroes the pair.
+        let closed = armed(&|w| {
+            let mut t = crate::ui_trainer::TrainerOpen::default();
+            t.open(NPC, 0, Vec::new(), String::new());
+            t.clear();
+            w.insert_resource(t);
+        });
+        assert_eq!(closed.1, None);
+        assert!(!interaction_already_open_on(NPC, &closed));
+    }
 }

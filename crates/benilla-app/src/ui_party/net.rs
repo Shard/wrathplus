@@ -1,7 +1,7 @@
 //! The group packet handlers. [`GroupState`] names the messages each packet implies and these
 //! queue them by key, as the reference's `DisplayError` (`0x496720`) takes a message id: the
-//! catalog row gives the text, the surface and the sound. [`member_deactivated`] and
-//! [`roster_deactivated`] are the object layer's hooks on a roster member's stream-out.
+//! catalog row gives the text, the surface and the sound. [`member_deactivated`] is the
+//! object layer's hook on a roster member's stream-out, fed by `net`'s [`MemberDeactivated`].
 
 use benilla_protocol::types::{GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo};
 use bevy::prelude::*;
@@ -10,7 +10,9 @@ use benilla_protocol::{SessionEvent, SessionEventKind};
 
 use super::{GroupState, GROUPTYPE_RAID};
 use crate::names::NameCache;
-use crate::net::{ClientCommand, GuidIndex, NetCommands, NetHandlerApp, ObjectStore, SelfGuid};
+use crate::net::{
+    ClientCommand, GuidIndex, MemberDeactivated, NetCommands, NetHandlerApp, ObjectStore, SelfGuid,
+};
 use crate::sound::MessageSounds;
 use crate::ui_action::{UiError, UiErrorKeys};
 use crate::ui_quest::QuestGiver;
@@ -18,7 +20,7 @@ use crate::ui_quest::QuestGiver;
 /// The join chime, played by name (`0x840404` through `0x458030`).
 const INVITE_ACCEPT_SOUND: &str = "igPlayerInviteAccept";
 
-/// One handler per group kind, plus the session-end listener.
+/// One handler per group kind, plus the session-end listener and the stream-out drain.
 pub(super) fn register(app: &mut App) {
     use SessionEventKind as K;
     app.net_handler(K::WrathGroup, on_wrath_group)
@@ -36,6 +38,9 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::ReadyCheckAnswer, on_ready_check_answer)
         .net_handler(K::WrathRaidInstanceInfo, on_wrath_raid_instance_info)
         .net_handler(K::RaidInstanceInfo, drop_raid_instance_info)
+        .net_handler(K::ObjectDestroyed, on_member_deactivated)
+        .net_handler(K::ObjectsRemoved, on_member_deactivated)
+        .net_handler(K::Worldport, on_member_deactivated)
         .net_handler(K::Disconnected, on_session_end);
 }
 
@@ -438,12 +443,43 @@ fn seat_new_records(
     }
 }
 
+/// Drains `net`'s [`MemberDeactivated`] on the despawn and transfer kinds, behind `net`'s own
+/// handlers ([`super::UiPartyPlugin`] follows [`crate::net::NetPlugin`]), so the snapshot and the stats
+/// request keep the packet's place in the dispatch.
+fn on_member_deactivated(
+    In(ev): In<SessionEvent>,
+    mut deactivated: MessageReader<MemberDeactivated>,
+    mut group: ResMut<GroupState>,
+    names: Res<NameCache>,
+    net_commands: Res<NetCommands>,
+) {
+    if !matches!(
+        ev,
+        SessionEvent::ObjectDestroyed(_)
+            | SessionEvent::ObjectsRemoved(_)
+            | SessionEvent::Worldport { .. }
+    ) {
+        return;
+    }
+    for d in deactivated.read() {
+        let pet = d.pet.as_ref();
+        member_deactivated(
+            d.guid,
+            &mut group,
+            Some(&d.member),
+            |g| pet.filter(|(guid, _)| *guid == g).map(|(_, store)| store),
+            &names,
+            &net_commands,
+        );
+    }
+}
+
 /// The despawn hook, the reference's deactivate virtual `0x5e9aa0` (object destroyed or out of
 /// range): for a roster member, snapshot the live descriptor into their record (`0x5f0880`), their
 /// pet's too while `held` finds it, with the name `names` holds for it, then request their stats
 /// (`0x4e8646`). Nothing happens off the roster or without an object, since the hook is a virtual
 /// on the object.
-pub(crate) fn member_deactivated<'a>(
+fn member_deactivated<'a>(
     guid: u64,
     group: &mut GroupState,
     store: Option<&'a ObjectStore>,
@@ -473,27 +509,6 @@ pub(crate) fn member_deactivated<'a>(
     }
 }
 
-/// [`member_deactivated`] for every streamed roster member: a cross-map transfer's teardown, where
-/// the reference destroys each object and runs the hook on each.
-pub(crate) fn roster_deactivated(
-    group: &mut GroupState,
-    index: &GuidIndex,
-    stores: &Query<&mut ObjectStore>,
-    names: &NameCache,
-    net_commands: &NetCommands,
-) {
-    let streamed: Vec<u64> = group
-        .members
-        .iter()
-        .map(|m| m.guid)
-        .filter(|g| index.0.contains_key(g))
-        .collect();
-    let held = |g: u64| index.0.get(&g).and_then(|e| stores.get(*e).ok());
-    for guid in streamed {
-        member_deactivated(guid, group, held(guid), held, names, net_commands);
-    }
-}
-
 fn command_result(
     group: &mut GroupState,
     errors: &mut crate::ui_action::UiErrorKeys,
@@ -513,7 +528,7 @@ mod tests {
     use crate::net::ClientCommand;
     use benilla_protocol::guid;
     use benilla_protocol::types::member_status;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
 
     fn member(g: u64, name: &str) -> GroupMemberEntry {
         GroupMemberEntry {
@@ -704,13 +719,13 @@ mod tests {
     // ── The out-of-range record ──────────────────────────────────────────────
 
     /// Unit descriptor field indices, build 5875.
-    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
-    const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+    const HEALTH: u16 = Field::UnitHealth.index();
+    const MAXHEALTH: u16 = Field::UnitMaxHealth.index();
     /// `UNIT_FIELD_POWER2`/`MAXPOWER2`, the rage slot (`POWER1 + POWER_RAGE`).
-    const POWER2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPower) + 1;
-    const MAXPOWER2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxPower) + 1;
-    const LEVEL: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
-    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
+    const POWER2: u16 = Field::UnitPower.index() + 1;
+    const MAXPOWER2: u16 = Field::UnitMaxPower.index() + 1;
+    const LEVEL: u16 = Field::UnitLevel.index();
+    const BYTES_0: u16 = Field::UnitBytes0.index();
 
     fn asked(rx: &crossbeam_channel::Receiver<ClientCommand>) -> Vec<u64> {
         rx.try_iter()
@@ -817,7 +832,7 @@ mod tests {
     /// carry no aura slots, so both aura blocks are empty.
     #[test]
     fn a_members_despawn_snapshots_their_auras_and_their_pets() {
-        const SUMMON: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummon);
+        const SUMMON: u16 = Field::UnitSummon.index();
         let (tx, _rx) = crossbeam_channel::unbounded();
         let net = NetCommands(tx);
         let guid = 0x1234;
@@ -829,7 +844,7 @@ mod tests {
             (SUMMON + 1, (pet_guid >> 32) as u32),
         ]));
         // `UNIT_FIELD_PETNUMBER`, the key the pet-name cache files a pet's name under.
-        const PETNUMBER: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetnumber);
+        const PETNUMBER: u16 = Field::UnitPetnumber.index();
         let pet = ObjectStore(benilla_protocol::types::ObjectFields::from_pairs(&[
             (HEALTH, 900),
             (PETNUMBER, 4),

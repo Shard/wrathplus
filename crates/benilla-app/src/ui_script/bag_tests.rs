@@ -25,7 +25,7 @@ fn bag_bar_icons_draw_above_the_action_bar_art() {
     // At this size the bag bar sits over the right end of the XP bar's notched art.
     s.set_screen_size(1600.0, 900.0);
     for file in BAG_UI {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.resolve();
     let quads = s.extract();
@@ -57,7 +57,7 @@ fn backpack_toggle_plays_open_and_close_kits() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     for file in BAG_UI {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     // `ToggleBag` opens nothing without slots (its `size > 0` guard).
@@ -108,7 +108,7 @@ fn b_opens_the_backpack_alone_and_closes_every_bag() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
 
@@ -181,7 +181,7 @@ fn shift_b_toggles_every_bag_at_once() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     s.set_container(
@@ -262,7 +262,7 @@ fn bag_bar_buttons_light_while_their_bag_is_open() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     s.set_container(
@@ -373,7 +373,7 @@ fn bag_tooltip_hangs_left_when_the_slot_sits_in_the_right_half() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
 
@@ -414,7 +414,7 @@ fn bag_tooltip_hangs_left_when_the_slot_sits_in_the_right_half() {
 
     assert_eq!(s.eval::<f64>("return GetScreenWidth()").unwrap(), 1024.0);
     // The bag anchors bottom-right, so every slot is in the right half.
-    let btn = bag_slot_button(&s, 0, 1);
+    let btn = bag_slot_button(&mut s, 0, 1);
     let ok: bool = s
         .eval(&format!("return {btn}:GetRight() >= GetScreenWidth() / 2"))
         .unwrap();
@@ -449,7 +449,7 @@ fn hovered_bag_tooltip_fills_itself_when_the_stats_land() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
 
@@ -486,7 +486,7 @@ fn hovered_bag_tooltip_fills_itself_when_the_stats_land() {
     );
     s.run("MainMenuBarBackpackButton:Click()").unwrap();
     s.resolve();
-    let btn = bag_slot_button(&s, 0, 1);
+    let btn = bag_slot_button(&mut s, 0, 1);
 
     hover(&mut s, &btn);
     assert!(s.eval::<bool>("return GameTooltip:IsVisible()").unwrap());
@@ -555,7 +555,7 @@ fn vendor_bag_hover_shows_sell_price_and_arms_the_pouch_cursor() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
 
@@ -637,8 +637,8 @@ fn vendor_bag_hover_shows_sell_price_and_arms_the_pouch_cursor() {
     s.fire_event("MERCHANT_SHOW", vec![ScriptValue::Str("Vendor".into())]);
     s.take_sounds();
     s.resolve();
-    let b1 = bag_slot_button(&s, 0, 1);
-    let b2 = bag_slot_button(&s, 0, 2);
+    let b1 = bag_slot_button(&mut s, 0, 1);
+    let b2 = bag_slot_button(&mut s, 0, 2);
 
     hover(&mut s, &b1);
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
@@ -692,7 +692,7 @@ fn readable_letter_hover_shows_the_inspect_magnifier() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
 
@@ -731,8 +731,8 @@ fn readable_letter_hover_shows_the_inspect_magnifier() {
     s.run("MainMenuBarBackpackButton:Click()").unwrap();
     s.take_sounds();
     s.resolve();
-    let b1 = bag_slot_button(&s, 0, 1);
-    let b2 = bag_slot_button(&s, 0, 2);
+    let b1 = bag_slot_button(&mut s, 0, 1);
+    let b2 = bag_slot_button(&mut s, 0, 2);
 
     hover(&mut s, &b1);
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
@@ -762,7 +762,7 @@ fn drag_across_two_slots_queues_the_same_move_a_click_pickup_would() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
 
@@ -801,8 +801,8 @@ fn drag_across_two_slots_queues_the_same_move_a_click_pickup_would() {
     s.take_sounds();
     s.resolve();
 
-    let b1 = bag_slot_button(&s, 0, 1);
-    let b5 = bag_slot_button(&s, 0, 5);
+    let b1 = bag_slot_button(&mut s, 0, 1);
+    let b5 = bag_slot_button(&mut s, 0, 5);
     let (x1, y1): (f64, f64) = s
         .eval(&format!(
             "return ({b1}:GetLeft() + {b1}:GetRight()) / 2, \
@@ -847,7 +847,7 @@ fn a_second_bag_window_feeds_and_paints_via_the_bag_bar() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
 
@@ -921,7 +921,7 @@ fn equipped_bag_window_snug_fits_its_row_count() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
 
@@ -1248,7 +1248,7 @@ fn split_okay_then_a_placement_queues_the_split_move() {
         "no move yet — only a pickup"
     );
 
-    let b5 = bag_slot_button(&s, 0, 5);
+    let b5 = bag_slot_button(&mut s, 0, 5);
     click(&mut s, &b5, "LeftButton");
     assert!(s.cursor_item().is_none());
     assert_eq!(
@@ -1277,7 +1277,7 @@ fn a_plain_click_hides_an_open_split_frame() {
     s.set_modifiers(false, false, false);
     assert!(s.eval::<bool>("return StackSplitFrame:IsShown()").unwrap());
 
-    let b9 = bag_slot_button(&s, 0, 9);
+    let b9 = bag_slot_button(&mut s, 0, 9);
     click(&mut s, &b9, "LeftButton");
     assert!(
         !s.eval::<bool>("return StackSplitFrame:IsShown()").unwrap(),
@@ -1300,7 +1300,7 @@ fn bag_slot_cooldown_sweeps_through_the_xml() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     s.tick(100.0); // a nonzero clock epoch
@@ -1359,7 +1359,7 @@ fn the_bar_bag_buttons_name_themselves_on_hover() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.resolve();
 
@@ -1478,7 +1478,7 @@ fn drawn_with(s: &mut UiScript, needle: &str) -> usize {
 
 /// The bar and bag files the keyring spans, plus `UIErrorsFrame.xml`: `PutKeyInKeyRing` reports a
 /// full ring through `UIErrorsFrame`.
-fn keyring_surface(s: &UiScript) {
+fn keyring_surface(s: &mut UiScript) {
     for file in crate::ui_script::test_ui::production_order(&[
         BAG_UI,
         &[
@@ -1499,7 +1499,7 @@ fn the_first_key_puts_the_keyring_on_the_bar() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    keyring_surface(&s);
+    keyring_surface(&mut s);
     s.set_money(0);
 
     s.set_has_key(false);
@@ -1580,7 +1580,7 @@ fn the_keyring_button_opens_a_keyring_window() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    keyring_surface(&s);
+    keyring_surface(&mut s);
     s.set_money(0);
     s.set_has_key(true);
     // Level 44: 8 slots (the 40..49 rung). The level decides; the feed carries the same 8.
@@ -1642,7 +1642,7 @@ fn a_hovered_key_shows_its_tooltip_through_its_inventory_slot() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     s.set_text_measurer(Box::new(super::FixedWidthFont(6.0)));
-    keyring_surface(&s);
+    keyring_surface(&mut s);
     s.set_money(0);
     s.set_has_key(true);
     seat_player_at_level(&mut s, 44);
@@ -1661,7 +1661,7 @@ fn a_hovered_key_shows_its_tooltip_through_its_inventory_slot() {
     .unwrap();
     s.resolve();
 
-    let key = bag_slot_button(&s, -2, 1);
+    let key = bag_slot_button(&mut s, -2, 1);
     hover(&mut s, &key);
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
     assert_eq!(
@@ -1686,7 +1686,7 @@ fn a_key_dropped_on_the_button_files_itself() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    keyring_surface(&s);
+    keyring_surface(&mut s);
     s.set_money(0);
     s.set_has_key(true);
 
@@ -1778,7 +1778,7 @@ fn an_item_push_drops_its_icon_into_the_bag_that_took_it() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     // `ForcedBackpackItem.m2` (`benilla-extract m2seq`, `m2batch`): one sequence (id 0, 1000 ms,
     // clamp) and a 0.02707 × 0.07962 box, which is 42.41 × 124.72 at 16:9, where a layout unit is
@@ -1938,7 +1938,7 @@ fn an_addon_that_hooks_toggle_backpack_receives_the_click() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
 
@@ -1986,7 +1986,7 @@ fn the_bag_slots_carry_the_references_names_and_icon_names() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
 
     for i in 0..4 {
@@ -2039,7 +2039,7 @@ fn the_backpack_buttons_ring_follows_its_own_window_through_real_clicks() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     // Stock `ToggleBag` opens nothing for a size-0 container, so the backpack is fed.

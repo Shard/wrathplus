@@ -132,7 +132,7 @@ mod tests {
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
-        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
+        field.index()
     }
 
     /// `0x6ea1e0`'s three gates, each failed alone.

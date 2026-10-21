@@ -138,7 +138,7 @@ mod merchant;
 mod messageframe;
 mod minimap;
 pub mod nameplate;
-pub use nameplate::{PlateGeometry, PlateState};
+pub use nameplate::{PlateCast, PlateGeometry, PlateState};
 mod model;
 mod modelframe;
 mod net_stats;

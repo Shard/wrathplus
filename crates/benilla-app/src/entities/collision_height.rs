@@ -8,13 +8,6 @@ use crate::net::{NetEntity, ObjectStore};
 use super::Creatures;
 
 pub(crate) use crate::app_core::state::CollisionHeight;
-impl Default for CollisionHeight {
-    /// The `CMovement` ctor's default, never `0.0`, at which every depth line collapses and the
-    /// unit swims on dry land.
-    fn default() -> Self {
-        Self(crate::player::DEFAULT_COLLISION_HEIGHT)
-    }
-}
 
 /// The display the collision height derives from: `UNIT_FIELD_NATIVEDISPLAYID`, else the rendered
 /// display when that is absent or `0` (no descriptor block yet, a synthetic mount child).
@@ -70,11 +63,11 @@ pub(super) fn stamp_collision_heights(
 mod native_display {
     use super::prism_display_id;
     use crate::net::ObjectStore;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_NATIVEDISPLAYID`, between DISPLAYID (131) and MOUNTDISPLAYID (133).
-    const NATIVE: u16 = FieldLayout::Wrath12340.index_of(Field::UnitNativeDisplayId);
+    const NATIVE: u16 = Field::UnitNativeDisplayId.index();
 
     fn store(pairs: &[(u16, u32)]) -> ObjectStore {
         ObjectStore(ObjectFields::from_pairs(pairs))

@@ -256,9 +256,9 @@ pub(crate) struct AttackSeam<'w, 's> {
     /// Our own entity.
     pub(crate) me: Query<'w, 's, Entity, With<crate::net::SelfPlayer>>,
     /// The open loot, which the selection teardown closes when it loots the outgoing target.
-    pub(crate) loot: ResMut<'w, crate::ui_loot::LootState>,
+    pub(crate) loot: ResMut<'w, crate::app_core::loot::LootState>,
     /// The loot latch: the teardown's close drops it, and the right-click loot legs arm it.
-    pub(crate) loot_latch: ResMut<'w, crate::ui_loot::LootLatch>,
+    pub(crate) loot_latch: ResMut<'w, crate::app_core::state::LootLatch>,
 }
 
 impl AttackSeam<'_, '_> {
@@ -270,11 +270,7 @@ impl AttackSeam<'_, '_> {
     pub(crate) fn close_loot_on(&mut self, outgoing: u64) {
         if self.loot.source() == Some(outgoing) {
             debug!("target: the selection teardown closes the loot on {outgoing:#x}");
-            crate::ui_loot::close_interaction(
-                &mut self.loot,
-                &mut self.loot_latch,
-                Some(&self.net),
-            );
+            crate::loot::close_interaction(&mut self.loot, &mut self.loot_latch, Some(&self.net));
         }
     }
 
@@ -822,7 +818,7 @@ impl Plugin for CreatureAnimPlugin {
                     .after(WorldStage::Net)
                     // Same frame as the loot kneel: the reference force-plays Loot 50 in the
                     // handler that arms the latch.
-                    .after(crate::ui_loot::resolve_loot_kneel)
+                    .after(crate::loot::resolve_loot_kneel)
                     // `DoEmote`'s local play, written in the chat drain.
                     .after(crate::ui_chat::ChatDrain)
                     // After Input so a sheath request (the Z toggle) executes the same frame.

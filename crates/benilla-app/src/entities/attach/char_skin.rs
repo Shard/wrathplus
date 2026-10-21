@@ -488,13 +488,10 @@ mod eye_tests {
         };
         let e = app
             .world_mut()
-            .spawn(ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[
-                    (benilla_protocol::types::Field::UnitBytes0, 1 | 6 << 8),
-                    (benilla_protocol::types::Field::PlayerBytes, 2 | 4 << 8),
-                ],
-            )))
+            .spawn(ObjectStore(benilla_protocol::ObjectFields::from_fields(&[
+                (benilla_protocol::types::Field::UnitBytes0, 1 | 6 << 8),
+                (benilla_protocol::types::Field::PlayerBytes, 2 | 4 << 8),
+            ])))
             .id();
         app.world_mut()
             .run_system_once(move |stores: Query<&ObjectStore>| {

@@ -735,13 +735,7 @@ fn drain_trade(
         if !trade.is_open() {
             continue;
         }
-        let Some((wire_bag, wire_slot)) = crate::ui_items::wire_pos_for(
-            store
-                .map(|s| s.0.layout())
-                .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340),
-            bag,
-            slot,
-        ) else {
+        let Some((wire_bag, wire_slot)) = crate::ui_items::wire_pos_for(bag, slot) else {
             info!(target: "trade", "set item: slot {id} <- bag {bag}/{slot} has no wire position — dropped");
             continue;
         };
@@ -827,7 +821,7 @@ fn resolve_trade_target(token: &str, selection: &Selection, group: &GroupState) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_protocol::types::{TradeStatus, TradeStatusExtended};
 
     fn wire_item(entry: u32) -> TradeItem {
@@ -1320,9 +1314,9 @@ mod tests {
     fn a_dead_or_ghost_initiator_is_refused() {
         // The `UNIT_FIELD_HEALTH`, `UNIT_FIELD_MAXHEALTH` and `PLAYER_FLAGS` field ids, and
         // `PLAYER_FLAGS_GHOST`.
-        const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
-        const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
-        const PLAYER_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
+        const HEALTH: u16 = Field::UnitHealth.index();
+        const MAXHEALTH: u16 = Field::UnitMaxHealth.index();
+        const PLAYER_FLAGS: u16 = Field::PlayerFlags.index();
         const GHOST: u32 = 0x10;
         for (label, fields) in [
             ("dead", vec![(HEALTH, 0u32), (MAXHEALTH, 100)]),

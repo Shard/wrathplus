@@ -41,17 +41,9 @@ pub(crate) const CVAR_REALM_NAME: &str = "realmName";
 /// dialog is up.
 const REFRESH_SECS: f32 = 5.0;
 
-pub(crate) use crate::app_core::ui_flags::{Realms, Sort, SortKey};
-impl Default for Sort {
-    fn default() -> Self {
-        Self([
-            (SortKey::Characters, false),
-            (SortKey::Load, false),
-            (SortKey::Name, false),
-            (SortKey::Type, false),
-        ])
-    }
-}
+#[cfg(test)]
+use crate::app_core::ui_flags::Sort;
+pub(crate) use crate::app_core::ui_flags::{Realms, SortKey};
 
 /// `GetRealmInfo`'s `realmDown`: flag bit 0x02, greyed and not enterable; the reference's
 /// auto-pick (`0x46ea20`) skips a realm on these low bits.
@@ -215,9 +207,22 @@ pub(crate) trait RealmsSelect {
     fn clamp_offset(&mut self);
     /// Answer a park with a realm and remember it as [`Self::current`].
     fn enter(&mut self, choice: &RealmChoice, name: String);
+    /// `RealmListUpdate` with no clicked name: the highlight is the row `GetRealmInfo` flags
+    /// `currentRealm`, [`Self::current`] case-folded, on the tab in front, or none.
+    fn highlight_current(&mut self);
 }
 
 impl RealmsSelect for Realms {
+    fn highlight_current(&mut self) {
+        self.selected = self.current.as_deref().and_then(|want| {
+            self.rows()
+                .into_iter()
+                .map(|i| &self.realms[i])
+                .find(|r| r.name.eq_ignore_ascii_case(want))
+                .map(|r| r.name.clone())
+        });
+    }
+
     fn rows(&self) -> Vec<usize> {
         let (mean, stddev) = self.stats();
         let mut rows = self.category_realms();

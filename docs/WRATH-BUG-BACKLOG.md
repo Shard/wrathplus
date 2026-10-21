@@ -10,7 +10,7 @@ listed here; they belong to the workstream backlogs.
 | 2 | 10-16 | Character eyes glow (DK eye glow on a human warrior) | geoset 1703 always on | Fixed 99f04ad5 |
 | 3 | 10-16 | Backpack does not open | `SetBagPortraitTexture` missing | Fixed d94f9756 |
 | 4 | 10-18 | Character create offers only 1.12 races/classes (no Blood Elf, Draenei, Death Knight) | App's char_create is the 1.12 screen (found by App Migration while scoping paid services) | Fixed (12340 grid) via ecbc97f3 |
-| 5 | 10-20 | Capture probes (`capture/probe_*`) still target vmangos spawn guids and server quirks | App Migration, converted to Wrath handlers in 90af10b4; low priority | Open: retarget to AzerothCore |
+| 5 | 10-20 | Capture probes (`capture/probe_*`) still target vmangos spawn guids and server quirks | App Migration, converted to Wrath handlers in 90af10b4; low priority | Partly done 2026-10-21: the 13 spawn targets checked against AzerothCore's base world SQL (`creature.sql`, `gameobject.sql`): 11 match, the WSG battlemaster moved 72 yd and the Elwynn chest (vmangos guid 3998644) is absent, retargeted to AC 30112; comments cite AC guids. `probe_charcreate`/`probe_rig` read the native `WrathCharActionResultMessage` and 12340 result codes. Open: the vmangos server-behaviour assumptions the probes cite (auction arithmetic, GM gossip filtering, BG start delay, ticket silences, charter cost) are unverified against AzerothCore until a live capture run |
 
 ## Installed-data test failures kept after Vanilla removal 6c
 

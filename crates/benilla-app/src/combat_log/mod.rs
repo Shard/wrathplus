@@ -83,9 +83,9 @@ impl Plugin for CombatLogPlugin {
             .net_handler(K::SpellInstaKillLog, on_native_logged)
             .net_handler(K::SpellDispelLog, on_native_logged)
             .net_handler(K::DispelFailed, on_native_logged)
-            .net_handler(K::ProcResist, on_unlogged)
-            .net_handler(K::SpellOrDamageImmune, on_unlogged)
-            .net_handler(K::EnchantmentLog, on_unlogged)
+            .net_handler(K::ProcResist, on_native_logged)
+            .net_handler(K::SpellOrDamageImmune, on_native_logged)
+            .net_handler(K::EnchantmentLog, on_native_logged)
             .net_handler(K::SpellLogExecute, on_spell_log_execute)
             .net_handler(K::WrathEnvironmentalDamage, on_native_logged)
             .net_handler(K::XpGain, on_xp_gain)
@@ -98,6 +98,32 @@ impl Plugin for CombatLogPlugin {
             .net_handler(K::ObjectDestroyed, on_native_only)
             .net_handler(K::ObjectsRemoved, on_native_only)
             .net_handler(K::WrathSpellLog, on_native_only);
+    }
+}
+
+/// The reputation line's handler, added right after [`crate::net::NetPlugin`] (unlike
+/// [`CombatLogPlugin`]) so it runs behind `net`'s own `SMSG_SET_FACTION_STANDING` handler, which
+/// writes the before-and-after it drains: the line keeps the packet's place among the dispatch's
+/// other chat lines.
+pub(crate) struct FactionStandingPlugin;
+
+impl Plugin for FactionStandingPlugin {
+    fn build(&self, app: &mut App) {
+        use SessionEventKind as K;
+        app.net_handler(K::ReputationDelta, on_faction_standing);
+    }
+}
+
+/// `SMSG_SET_FACTION_STANDING`'s chat lines ([`chat::faction_standing`]) from `net`'s
+/// [`crate::net::StandingChanged`], written ahead of the store's overwrite.
+fn on_faction_standing(
+    In(ev): In<SessionEvent>,
+    mut changes: MessageReader<crate::net::StandingChanged>,
+    factions: Option<Res<crate::target::ring::Factions>>,
+    mut chat_log: ResMut<ChatLog>,
+) {
+    if let SessionEvent::ReputationDelta { .. } = ev {
+        chat::faction_standing(changes.read(), factions.as_deref(), &mut chat_log);
     }
 }
 
@@ -129,6 +155,9 @@ fn on_native_logged(In(ev): In<SessionEvent>, mut l: Sinks) {
             | SessionEvent::SpellDispelLog(_)
             | SessionEvent::DispelFailed(_)
             | SessionEvent::WrathEnvironmentalDamage(_)
+            | SessionEvent::ProcResist(_)
+            | SessionEvent::SpellOrDamageImmune(_)
+            | SessionEvent::EnchantmentLog(_)
     ) {
         l.record_native(&ev);
     }
@@ -141,20 +170,6 @@ fn on_spell_log_execute(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
     if let SessionEvent::SpellLogExecute(x) = ev {
         chat::spell_log_execute(&x, &c.self_guid, &mut l.log);
     }
-}
-
-/// The combat-log packets the build-12340 log has no entry for yet, and the 1.12 sentence that
-/// showed them is gone: a resisted proc and an immune target (`SPELL_MISSED` `RESIST`/`IMMUNE` in
-/// 3.3.5), and an item enchant (`ENCHANT_APPLIED`/`ENCHANT_REMOVED`). A listed gap, said at debug
-/// so a live run can count them.
-fn on_unlogged(In(ev): In<SessionEvent>) {
-    let what = match ev {
-        SessionEvent::ProcResist(_) => "ProcResist",
-        SessionEvent::SpellOrDamageImmune(_) => "SpellOrDamageImmune",
-        SessionEvent::EnchantmentLog(_) => "EnchantmentLog",
-        _ => return,
-    };
-    debug!("combat log: no build-12340 entry for {what}");
 }
 
 fn on_spell_damage_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {

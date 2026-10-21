@@ -934,10 +934,10 @@ mod tests {
         app.init_resource::<GuidIndex>();
         if let Some(flags) = npc_flags {
             // 147 = `UNIT_NPC_FLAGS` (the descriptor index `unit_npc_flags()` reads).
-            let fields = benilla_protocol::ObjectFields::from_fields(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[(benilla_protocol::types::Field::UnitNpcFlags, flags)],
-            );
+            let fields = benilla_protocol::ObjectFields::from_fields(&[(
+                benilla_protocol::types::Field::UnitNpcFlags,
+                flags,
+            )]);
             let e = app.world_mut().spawn(ObjectStore(fields)).id();
             app.world_mut()
                 .resource_mut::<GuidIndex>()

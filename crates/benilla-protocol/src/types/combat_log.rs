@@ -179,17 +179,17 @@ pub struct DispelFailed {
     pub spell_ids: Vec<u32>,
 }
 
-/// `SMSG_ENCHANTMENTLOG`, an enchant landing on or fading from an item
-/// (`Server/Packets/Item.cpp:235-242`); a zero `caster` means it faded.
+/// `SMSG_ENCHANTMENTLOG`, an enchant landing on or fading from an item (AzerothCore
+/// `WorldPackets::Item::EnchantmentLog`, sent by `Item::SetEnchantment`): packed target and caster,
+/// `u32 item, u32 enchant`. A zero `caster` is the removal of the item's previous enchant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EnchantmentLog {
+    /// The item's owner.
+    pub target: u64,
     pub caster: u64,
-    pub owner: u64,
     pub item_entry: u32,
-    pub spell_id: u32,
-    /// False on the owner's copy, true on everyone else's; the 1.12 client picks the
-    /// enchant-added message by it.
-    pub show_affiliation: bool,
+    /// A `SpellItemEnchantment.dbc` id, not a spell.
+    pub enchant_id: u32,
 }
 
 /// One `SMSG_SPELLLOGEXECUTE` row, shaped by its effect id as vmangos writes it

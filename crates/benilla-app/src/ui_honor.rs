@@ -195,7 +195,7 @@ fn feed_honor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
+    use benilla_protocol::types::{Field, ObjectFields};
 
     fn state() -> HonorState {
         HonorState {
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn the_snapshot_splits_the_kills_word_and_reads_byte_three() {
-        let at = |field| FieldLayout::Wrath12340.index_of(field);
+        let at = |field: Field| field.index();
         let store = ObjectStore(ObjectFields::from_pairs(&[
             (at(Field::PlayerKills), 0x0007_0003),
             (at(Field::PlayerTodayContribution), 120),

@@ -19,7 +19,7 @@ use super::{
 use crate::creature_anim::{CastEvent, CastEventKind, Casting, SpellGoTargets};
 use crate::ui_action::{CastErrors, PlayerActions, Spells, UiError, UiErrorKeys};
 use crate::ui_aura::AuraDurations;
-use crate::ui_cast::{CastBarEdge, CastBarFeed};
+use crate::spell::cast_bar::{CastBarEdge, CastBarFeed};
 use crate::ui_spellbook::LearnedInTab;
 
 use benilla_protocol::{SessionEvent, SessionEventKind};
@@ -1431,8 +1431,8 @@ fn spell_chain_targets(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::types::Field;
     use benilla_protocol::types::ACTION_KIND_SPELL;
-    use benilla_protocol::types::{Field, FieldLayout};
 
     /// A catalog holding one row, so the announce tests can name a real `Attributes` value.
     fn catalog_with(id: u32, display: benilla_formats::SpellDisplay) -> Spells {
@@ -2056,9 +2056,9 @@ mod tests {
     }
 
     /// `UNIT_FIELD_CHARMEDBY` / `SUMMONEDBY` / `CREATEDBY`, two dwords each.
-    const CHARMEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby);
-    const SUMMONEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummonedby);
-    const CREATEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
+    const CHARMEDBY: u16 = Field::UnitCharmedby.index();
+    const SUMMONEDBY: u16 = Field::UnitSummonedby.index();
+    const CREATEDBY: u16 = Field::UnitCreatedby.index();
 
     /// A unit store whose `field` pair names `owner`.
     fn owned(field: u16, owner: u64) -> ObjectStore {
@@ -2282,10 +2282,10 @@ mod tests {
         assert_eq!(go_cooldowns(10, own, None, display, mods()).0, 3000);
         let pet = go_cooldowns(20, owned(SUMMONEDBY, 10), None, display, mods());
         assert_eq!(pet.1, 3000, "the pet leg takes the player's op 11");
-        let item = ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            FieldLayout::Wrath12340,
-            &[(Field::ObjectEntry, 6948)],
-        ));
+        let item = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(
+            Field::ObjectEntry,
+            6948,
+        )]));
         let used = go_cooldowns(
             10,
             ObjectStore::default(),

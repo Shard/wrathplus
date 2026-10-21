@@ -218,7 +218,7 @@ pub use trainer::{train_fail, trainer_list, trainer_spell_state, TrainerSpell};
 pub use tutorial::{TutorialFlags};
 pub use update_object::field;
 pub use update_object::{
-    power_display_scale, quest_slot_state, CorpseLook, CreateSpline, Field, FieldLayout, FieldSpan,
+    power_display_scale, quest_slot_state, CorpseLook, CreateSpline, Field, FieldSpan,
     MovementBlock, MoverState, NpcFlags, NpcService, Object, ObjectFields, ObjectType,
     OwnerFallback, PlayerSkillSlot, QuestLogSlot, UnitAuraSlot, AURA_FLAG_CANCELABLE,
     AURA_FLAG_EFF_INDEX_MASK, FIELD_PLAYER_SKILL_INFO_1_1, PLAYER_EXPLORED_ZONES_SLOTS,

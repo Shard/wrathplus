@@ -717,7 +717,7 @@ fn bank_bag_slots(
     sub_classes: Option<&crate::ui_items::ItemSubClasses>,
 ) -> BankBagSlots {
     let mut bags: BankBagSlots = Default::default();
-    let storage = crate::ui_items::StorageSlots::for_layout(store.0.layout());
+    let storage = crate::ui_items::StorageSlots::GEOMETRY;
     for (i, bag) in bags
         .iter_mut()
         .take(usize::from(storage.bank_bags))
@@ -1066,8 +1066,8 @@ fn weapon_enchant(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::types::Field;
     use benilla_protocol::types::ObjectFields;
-    use benilla_protocol::types::{Field, FieldLayout};
     use bevy::ecs::system::RunSystemOnce;
 
     const BANK_BAG_LIVE_FIRST: u32 = 68;
@@ -1076,7 +1076,7 @@ mod tests {
     #[test]
     fn a_skill_pair_folds_the_permanent_bonus_into_the_base() {
         /// `PLAYER_SKILL_INFO_1_1`: id|step, value|max, temp|perm per slot.
-        const F_SKILL: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerSkillInfo11);
+        const F_SKILL: u16 = Field::PlayerSkillInfo11.index();
         let pair = |lo: u16, hi: u16| u32::from(lo) | (u32::from(hi) << 16);
         // Slot 0: Defense (95) at 300, +10 temporary, +5 permanent.
         // Slot 1: Swords (43) at 0, with a +7 permanent that must not surface.
@@ -1113,11 +1113,11 @@ mod tests {
     }
 
     /// `PLAYER_FIELD_BANK_BAG_SLOT_1`, bank bag slot 0's guid pair.
-    const F_BANK_BAG_1: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerBankbagSlot1);
+    const F_BANK_BAG_1: u16 = Field::PlayerBankbagSlot1.index();
     /// `OBJECT_FIELD_ENTRY` on the item object.
-    const F_OBJECT_ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+    const F_OBJECT_ENTRY: u16 = Field::ObjectEntry.index();
     /// `ITEM_FIELD_STACK_COUNT`, one of the six item fields the reference's watcher covers.
-    const F_ITEM_STACK_COUNT: u16 = FieldLayout::Wrath12340.index_of(Field::ItemStackCount);
+    const F_ITEM_STACK_COUNT: u16 = Field::ItemStackCount.index();
     /// Any container entry ("Traveler's Backpack"); the feed only needs it to resolve.
     const BAG_ENTRY: u32 = 4500;
     const BAG: u64 = 0x4000_0000_0000_0abc;
@@ -1146,17 +1146,11 @@ mod tests {
             .init_resource::<crate::names::NameCache>()
             .insert_resource(NetCommands(tx));
         let fields = match bag {
-            Some(g) => ObjectFields::from_native_pairs(
-                FieldLayout::Wrath12340,
-                &[
-                    (F_BANK_BAG_1, g as u32),
-                    (F_BANK_BAG_1 + 1, (g >> 32) as u32),
-                ],
-            ),
-            None => ObjectFields::from_native_pairs(
-                FieldLayout::Wrath12340,
-                &[(F_BANK_BAG_1, 0), (F_BANK_BAG_1 + 1, 0)],
-            ),
+            Some(g) => ObjectFields::from_pairs(&[
+                (F_BANK_BAG_1, g as u32),
+                (F_BANK_BAG_1 + 1, (g >> 32) as u32),
+            ]),
+            None => ObjectFields::from_pairs(&[(F_BANK_BAG_1, 0), (F_BANK_BAG_1 + 1, 0)]),
         };
         app.world_mut().spawn((SelfPlayer, ObjectStore(fields)));
         if let Some(g) = bag {
@@ -1193,18 +1187,15 @@ mod tests {
     /// Lock identity is the live inventory ID, not the Vanilla bank item's ID on Wrath.
     #[test]
     fn bank_bag_lock_identity_follows_descriptor_geometry() {
-        use benilla_protocol::types::{Field, FieldLayout};
-        let layout = FieldLayout::Wrath12340;
+        use benilla_protocol::types::Field;
         for (live, slot) in [(68, 0), (74, 6)] {
             let mut app = world_with_bank_bag(Some(BAG));
-            let first = layout.resolve(Field::PlayerBankbagSlot1).unwrap().index + 2 * slot as u16;
+            let first = Field::PlayerBankbagSlot1.span().unwrap().index + 2 * slot as u16;
             let mut q = app
                 .world_mut()
                 .query_filtered::<&mut ObjectStore, With<SelfPlayer>>();
-            q.single_mut(app.world_mut()).unwrap().0 = ObjectFields::from_native_pairs(
-                layout,
-                &[(first, BAG as u32), (first + 1, (BAG >> 32) as u32)],
-            );
+            q.single_mut(app.world_mut()).unwrap().0 =
+                ObjectFields::from_pairs(&[(first, BAG as u32), (first + 1, (BAG >> 32) as u32)]);
             app.world_mut()
                 .resource_mut::<PendingItemOps>()
                 .add([(EQUIPMENT_BAG, live, BAG, 1)]);
@@ -1292,15 +1283,12 @@ mod tests {
                 .world_mut()
                 .query_filtered::<&mut ObjectStore, With<SelfPlayer>>();
             let mut store = q.single_mut(app.world_mut()).unwrap();
-            *store = ObjectStore(ObjectFields::from_native_pairs(
-                FieldLayout::Wrath12340,
-                &[
-                    (F_BANK_BAG_1, a as u32),
-                    (F_BANK_BAG_1 + 1, (a >> 32) as u32),
-                    (F_BANK_BAG_1 + 2, b as u32),
-                    (F_BANK_BAG_1 + 3, (b >> 32) as u32),
-                ],
-            ));
+            *store = ObjectStore(ObjectFields::from_pairs(&[
+                (F_BANK_BAG_1, a as u32),
+                (F_BANK_BAG_1 + 1, (a >> 32) as u32),
+                (F_BANK_BAG_1 + 2, b as u32),
+                (F_BANK_BAG_1 + 3, (b >> 32) as u32),
+            ]));
         };
         set_slots(&mut app, BAG, BAG2);
         crate::items::test_spawn_item(

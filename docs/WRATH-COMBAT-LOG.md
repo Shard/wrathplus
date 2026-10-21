@@ -87,7 +87,7 @@ the units and pushes into Native UI's store. Every spell entry needs a named spe
 the log (`Attributes & 0x180`, the gate each builder applies). Built:
 
 - Part 1: SWING_DAMAGE/MISSED, SPELL_DAMAGE, SPELL_PERIODIC_DAMAGE/HEAL/ENERGIZE/LEECH, SPELL_HEAL,
-  SPELL_ENERGIZE, DAMAGE_SHIELD, SPELL_MISSED, SPELL_INSTAKILL, SPELL_DISPEL, SPELL_DISPEL_FAILED,
+  SPELL_ENERGIZE, DAMAGE_SHIELD, SPELL_INSTAKILL, SPELL_DISPEL, SPELL_DISPEL_FAILED,
   PARTY_KILL, ENVIRONMENTAL_DAMAGE.
 - Casts: SPELL_CAST_START (`0x751920`, no destination), SPELL_CAST_SUCCESS (`0x7519e0`, the unit
   target), SPELL_CAST_FAILED (`0x751ad0`, our own result; group `0x2` the reason's text).
@@ -101,7 +101,20 @@ the log (`Attributes & 0x180`, the gate each builder applies). Built:
   (`0x7523d0`, the interrupted spell as the extra spell), SPELL_DURABILITY_DAMAGE(_ALL)
   (`0x7525e0`/`0x752680`), SPELL_RESURRECT (`0x752340`), SPELL_SUMMON or SPELL_CREATE by the
   destination guid's kind (`0x7522a0`).
-- UNIT_DIED (`0x752ed0`): a unit's health reaching 0 after a living reading.
+- UNIT_DIED (`0x752ed0`): a unit's health reaching 0 after a living reading. UNIT_DISSIPATES
+  instead when the unit's creature template has type 13 (gas cloud); UNIT_DESTROYED when its
+  `UNIT_CREATED_BY_SPELL`'s first effect is SUMMON (28) and that effect's `SummonProperties` row
+  has Slot 1-4 (a totem slot). Base arguments only.
+- SPELL_MISSED `RESIST` from `SMSG_PROCRESIST` (`0x260`, handler `0x750d40` in table `0x7538a0`):
+  caster, victim, spell; group `0x4004`, the `0x4000` integer 0.
+- ENCHANT_APPLIED, or ENCHANT_REMOVED for an empty caster, from `SMSG_ENCHANTMENTLOG` (`0x1D7`,
+  `0x751050`): no spell; group `0x1000` the `SpellItemEnchantment` name, then group `0x200` the
+  item; an enchant with no row or with `Flags & 0x2` logs nothing.
+- DAMAGE_SPLIT (`0x752de0`, `MOV EDI,0x2a` into the damage template `0x750660`): an
+  `SMSG_SPELLNONMELEEDAMAGELOG` with hit flag `0x8` (AzerothCore `SPELL_HIT_TYPE_SPLIT`), ahead of
+  the periodic test; the damage group as SPELL_DAMAGE's.
+- DAMAGE_SHIELD_MISSED and SPELL_PERIODIC_MISSED from `SMSG_SPELLLOGMISS` and
+  `SMSG_SPELLORDAMAGE_IMMUNE`: see "Damage-shield misses" below.
 
 Labelled:
 - the swing miss type by AC victim state, and the school as `1 << index`;
@@ -110,9 +123,29 @@ Labelled:
 - the aura snapshot diff stands in for `0x72f5d0`: a unit's first snapshot logs nothing, a re-sent
   unchanged slot reads as a refresh, and the `AttributesEx6 & 0x400` gate isn't applied;
 - the execute-log dispatcher isn't a defined function, so effects map by AzerothCore's effect ids;
-  a durability entry's item name is nil;
-- UNIT_DESTROYED (totems) and UNIT_DISSIPATES (creature type 13) aren't split from UNIT_DIED.
+  a durability or enchant entry's item name is nil;
+- UNIT_DESTROYED and ENCHANT_* source and destination: `0x752ed0`'s spell-lookup test reads
+  inverted in the decompile, taken as the found record; the enchant's caster is the source and
+  the item's owner the destination, by AzerothCore's field names;
+- a resisted proc raises no floating text (`0x750d40` calls `0x74d550(0x16)` for the local victim).
 
 Not built: SPELL_AURA_BROKEN(_SPELL) (`0x752a40`, opcode `0x14F`, which AzerothCore never sends),
-ENCHANT_APPLIED/REMOVED, SPELL_BUILDING_DAMAGE/HEAL, DAMAGE_SPLIT, DAMAGE_SHIELD_MISSED,
-SPELL_PERIODIC_MISSED/DRAIN, SPELL_LEECH, SPELL_CREATE for items.
+SPELL_BUILDING_DAMAGE/HEAL, SPELL_PERIODIC_DRAIN, SPELL_LEECH, SPELL_CREATE for items, and the
+cast's own miss list (`0x751b80`'s other callers `0x700e20`/`0x702fc0`, not decompiled).
+
+## Damage-shield misses (`0x751b80`)
+
+`0x751b80(source, dest, spell, missType, shield, periodic, age)` gates on the spell (named,
+`Attributes & 0x180` clear) and a non-zero miss type, then picks the event in `EDI` for the miss
+template `0x750500`: `periodic` gives SPELL_PERIODIC_MISSED (`0x21`), else `shield` gives
+DAMAGE_SHIELD_MISSED (`0x29`), else RANGE_MISSED or SPELL_MISSED by `AttributesEx3 & 0x8000`.
+
+- `SMSG_SPELLLOGMISS` (`0x24B`, `0x6d3090`): each row passes `shield` as a constant 1, so every
+  row is DAMAGE_SHIELD_MISSED with its miss type; a debug-format packet logs nothing. AzerothCore
+  sends it for damage-shield misses (`Unit::DealDamageShieldDamage`) and for a spell's delayed hit
+  result (`Spell.cpp:2752`); the client logs both as the shield miss, and so do we.
+- `SMSG_SPELLORDAMAGE_IMMUNE` (`0x263`, handler `0x6ce3d0`, registered by `0x6e83b0`, not the
+  combat-log table `0x7538a0`): miss type IMMUNE; `shield` is a zero log-format byte (always, from
+  AzerothCore), `periodic` a non-zero one.
+
+Labelled: the miss carries its type only; `0x750500`'s amount groups (`0x74d980`) are not traced.

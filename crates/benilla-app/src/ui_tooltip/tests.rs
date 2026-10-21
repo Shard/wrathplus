@@ -34,8 +34,8 @@ type Getter = dyn Fn(&str) -> Option<String>;
 impl TestCtx {
     pub(super) fn new() -> Self {
         let (tx, rx) = crossbeam_channel::unbounded();
-        let vm = benilla_ui::script::UiScript::new().expect("VM");
-        crate::ui_script::load_ui_for_test(&vm, "Interface\\FrameXML\\GlobalStrings.lua");
+        let mut vm = benilla_ui::script::UiScript::new().expect("VM");
+        crate::ui_script::load_ui_for_test(&mut vm, "Interface\\FrameXML\\GlobalStrings.lua");
         Self {
             items: Items::default(),
             commands: NetCommands(tx),
@@ -121,14 +121,11 @@ pub(super) fn real_spells() -> Option<Spells> {
 
 /// A unit's fields: level (34) and base mana (162).
 fn unit(level: u32, base_mana: u32) -> benilla_protocol::ObjectFields {
-    benilla_protocol::ObjectFields::from_fields(
-        benilla_protocol::types::FieldLayout::Wrath12340,
-        &[
-            (benilla_protocol::types::Field::UnitHealth, 100),
-            (benilla_protocol::types::Field::UnitLevel, level),
-            (benilla_protocol::types::Field::UnitBaseMana, base_mana),
-        ],
-    )
+    benilla_protocol::ObjectFields::from_fields(&[
+        (benilla_protocol::types::Field::UnitHealth, 100),
+        (benilla_protocol::types::Field::UnitLevel, level),
+        (benilla_protocol::types::Field::UnitBaseMana, base_mana),
+    ])
 }
 
 /// The pet bar's views scale by the pet's level (`0x6e3130` with the selector: the charm or
@@ -233,10 +230,10 @@ fn no_objects() -> crate::ui_items::TestObjects {
 }
 
 fn empty_player() -> ObjectStore {
-    ObjectStore(benilla_protocol::ObjectFields::from_fields(
-        benilla_protocol::types::FieldLayout::Wrath12340,
-        &[(benilla_protocol::types::Field::UnitHealth, 100)],
-    ))
+    ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(
+        benilla_protocol::types::Field::UnitHealth,
+        100,
+    )]))
 }
 
 /// Battle Shout rank 1's `$s1` (14 + 1d1, 0.5 a level from 1, cap 11) scales by the player's
@@ -244,8 +241,8 @@ fn empty_player() -> ObjectStore {
 /// × 5 (vmangos `Player::UpdateSkillsForLevel`), so levels 1, 11 and 60 read 15, 20 and 20.
 #[test]
 fn battle_shout_description_scales_by_the_skill_level() {
-    const FIELD_PLAYER_SKILL_INFO_1_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerSkillInfo11);
+    const FIELD_PLAYER_SKILL_INFO_1_1: u16 =
+        benilla_protocol::types::Field::PlayerSkillInfo11.index();
     let data = benilla_formats::wow_data_or_skip!();
     let mut chain = benilla_formats::open_chain(&data).expect("open chain");
     let spells = Spells {
@@ -479,16 +476,13 @@ fn cost_and_cast_cells_on_real_data() {
     let mut objs = no_objects();
     let objects = objs.get();
     // A level-60 store: max health 4000, base mana 1000 and base health 1689.
-    let store = ObjectStore(benilla_protocol::ObjectFields::from_fields(
-        benilla_protocol::types::FieldLayout::Wrath12340,
-        &[
-            (benilla_protocol::types::Field::UnitHealth, 3500),
-            (benilla_protocol::types::Field::UnitMaxHealth, 4000),
-            (benilla_protocol::types::Field::UnitLevel, 60),
-            (benilla_protocol::types::Field::UnitBaseMana, 1000),
-            (benilla_protocol::types::Field::UnitBaseHealth, 1689),
-        ],
-    ));
+    let store = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[
+        (benilla_protocol::types::Field::UnitHealth, 3500),
+        (benilla_protocol::types::Field::UnitMaxHealth, 4000),
+        (benilla_protocol::types::Field::UnitLevel, 60),
+        (benilla_protocol::types::Field::UnitBaseMana, 1000),
+        (benilla_protocol::types::Field::UnitBaseHealth, 1689),
+    ]));
 
     // Bloodrage (2687): 20% of base health; bare "Instant" on a non-mana type.
     let v = spell_tooltip_view(
@@ -608,13 +602,10 @@ fn range_cell_on_real_data() {
     assert_eq!(v.range.as_deref(), Some("5 yd range"));
 
     // A 4.0 reach: 4.0 + 4.0 + 1.3333334 = 9.333, rounded to 9.
-    let big = ObjectStore(benilla_protocol::ObjectFields::from_fields(
-        benilla_protocol::types::FieldLayout::Wrath12340,
-        &[(
-            benilla_protocol::types::Field::UnitCombatreach,
-            4.0f32.to_bits(),
-        )],
-    ));
+    let big = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(
+        benilla_protocol::types::Field::UnitCombatreach,
+        4.0f32.to_bits(),
+    )]));
     let v = spell_tooltip_view(1752, &spells, &mut t.ctx_for(&objects, 0, None, Some(&big)))
         .expect("Sinister Strike view");
     assert_eq!(v.range.as_deref(), Some("9 yd range"));
@@ -753,20 +744,17 @@ fn the_required_item_chance_and_reagent_lines_on_real_data() {
     // The chance line `Effect[0]` selects (`0x52f5b1`): ATTACK skips the passive gate. No
     // descriptor, no line; the wire's values are already percents.
     assert_eq!(v.chance, None, "no player streamed yet");
-    let rated = ObjectStore(benilla_protocol::ObjectFields::from_fields(
-        benilla_protocol::types::FieldLayout::Wrath12340,
-        &[
-            (benilla_protocol::types::Field::UnitHealth, 100),
-            (
-                benilla_protocol::types::Field::PlayerCritPercentage,
-                2.62f32.to_bits(),
-            ),
-            (
-                benilla_protocol::types::Field::PlayerDodgePercentage,
-                5.5f32.to_bits(),
-            ),
-        ],
-    ));
+    let rated = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[
+        (benilla_protocol::types::Field::UnitHealth, 100),
+        (
+            benilla_protocol::types::Field::PlayerCritPercentage,
+            2.62f32.to_bits(),
+        ),
+        (
+            benilla_protocol::types::Field::PlayerDodgePercentage,
+            5.5f32.to_bits(),
+        ),
+    ]));
     let v = spell_tooltip_view(
         6603,
         &spells,
@@ -974,16 +962,10 @@ fn the_mouseover_token_names_the_hovered_units_creature_type() {
     app.insert_resource(spells);
     let druid = app
         .world_mut()
-        .spawn(ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
-                (benilla_protocol::types::Field::UnitBytes0, NIGHT_ELF),
-                (
-                    benilla_protocol::types::Field::UnitBytes2,
-                    CAT_FORM << 24,
-                ),
-            ],
-        )))
+        .spawn(ObjectStore(ObjectFields::from_fields(&[
+            (benilla_protocol::types::Field::UnitBytes0, NIGHT_ELF),
+            (benilla_protocol::types::Field::UnitBytes2, CAT_FORM << 24),
+        ])))
         .id();
     let creature_type = |app: &mut App| {
         app.world_mut()
@@ -999,10 +981,10 @@ fn the_mouseover_token_names_the_hovered_units_creature_type() {
         .get_mut::<ObjectStore>()
         .unwrap()
         .0
-        .merge(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[(benilla_protocol::types::Field::UnitBytes2, 0)],
-        ));
+        .merge(ObjectFields::from_fields(&[(
+            benilla_protocol::types::Field::UnitBytes2,
+            0,
+        )]));
     hover_unit(&mut app, druid, DRUID);
     assert_eq!(creature_type(&mut app).as_deref(), Some("Humanoid"));
 }
@@ -1212,26 +1194,23 @@ fn the_feed_builds_the_pet_views_against_the_pet_and_rebuilds_them_on_its_level(
         .world_mut()
         .spawn((
             SelfPlayer,
-            ObjectStore(ObjectFields::from_field_slots(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[
-                    (benilla_protocol::types::Field::UnitSummon, 0, IMP as u32),
-                    (
-                        benilla_protocol::types::Field::UnitSummon,
-                        1,
-                        (IMP >> 32) as u32,
-                    ),
-                    (benilla_protocol::types::Field::UnitLevel, 0, 60),
-                ],
-            )),
+            ObjectStore(ObjectFields::from_field_slots(&[
+                (benilla_protocol::types::Field::UnitSummon, 0, IMP as u32),
+                (
+                    benilla_protocol::types::Field::UnitSummon,
+                    1,
+                    (IMP >> 32) as u32,
+                ),
+                (benilla_protocol::types::Field::UnitLevel, 0, 60),
+            ])),
         ))
         .id();
     let imp = app
         .world_mut()
-        .spawn(ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[(benilla_protocol::types::Field::UnitLevel, 14)],
-        )))
+        .spawn(ObjectStore(ObjectFields::from_fields(&[(
+            benilla_protocol::types::Field::UnitLevel,
+            14,
+        )])))
         .id();
     let mut index = app.world_mut().resource_mut::<crate::net::GuidIndex>();
     index.0.insert(ME, me);
@@ -1299,10 +1278,10 @@ fn the_feed_builds_the_pet_views_against_the_pet_and_rebuilds_them_on_its_level(
     // The imp dings: its views rebuild; the player's does not move.
     app.world_mut()
         .entity_mut(imp)
-        .insert(ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[(benilla_protocol::types::Field::UnitLevel, 15)],
-        )));
+        .insert(ObjectStore(ObjectFields::from_fields(&[(
+            benilla_protocol::types::Field::UnitLevel,
+            15,
+        )])));
     app.update();
     assert_eq!(
         descs(&mut app),

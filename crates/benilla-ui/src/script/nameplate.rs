@@ -1,9 +1,10 @@
-//! The nameplate widgets: the reference's `CGNamePlateFrame` (ctor `0x7cb250`), an anonymous
-//! `Button` parented to the `WorldFrame` (`0x7786a3`) at strata WORLD, level 1. Plate addons
-//! (`_Nameplates`, `CustomNameplates`, pfUI, ShaguTweaks) find it in `WorldFrame:GetChildren()`
-//! and read it positionally: six regions in creation order, then one child, the health bar (1.12
-//! has no cast bar). Addons take plates over, so static properties are written once, anchors
-//! when the window changes and state when it moves.
+//! The nameplate widgets: build 12340's `CGNamePlateFrame` (ctor `0x98f790`), an anonymous
+//! `Button` parented to the `WorldFrame` at strata WORLD. Plate addons find it in
+//! `WorldFrame:GetChildren()`, tell it by its second region's `Nameplate-Border`, and read it
+//! positionally: eleven regions in creation order (threat flash, health border, cast border, cast
+//! shield, spell icon, highlight, name, level, boss skull, raid icon, elite icon) and two
+//! children, the health bar then the cast bar. Addons take plates over, so static properties are
+//! written once, anchors when the window changes and state when it moves.
 //!
 //! Switching plates on and off is the app's: build 12340 has no plate verbs, and the stock V keys
 //! write the `nameplateShow*` CVars it reads.
@@ -16,14 +17,23 @@ use super::model::Model;
 use super::UiScript;
 use super::{BlendMode, FontShadow, JustifyV, RegionData, TexCoords};
 
-/// Region 1's art, and the path plate addons identify a plate by.
+/// Region 1's art, the threat flash.
+pub const FLASH_TEXTURE: &str = "Interface\\TargetingFrame\\UI-TargetingFrame-Flash";
+/// Regions 2 and 3's art, the health and cast borders; region 2's is the path plate addons
+/// identify a plate by.
 pub const BORDER_TEXTURE: &str = "Interface\\Tooltips\\Nameplate-Border";
-/// Region 2's art; pfUI reads mouseover from `glow:IsShown()` (`nameplates.lua:601`).
+/// Region 4's art, shown in the cast border's place for a cast that cannot be interrupted.
+pub const CAST_SHIELD_TEXTURE: &str = "Interface\\Tooltips\\Nameplate-CastBar-Shield";
+/// Region 6's art, the highlight; addons read mouseover from `glow:IsShown()`.
 pub const GLOW_TEXTURE: &str = "Interface\\Tooltips\\Nameplate-Glow";
-/// Region 5's art, the boss and out-of-range skull.
+/// Region 9's art, the boss and out-of-range skull.
 pub const SKULL_TEXTURE: &str = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull";
-/// Region 6's art, a 4-column atlas.
+/// Region 10's art, a 4-column atlas.
 pub const RAID_ICON_TEXTURE: &str = "Interface\\TargetingFrame\\UI-RaidTargetingIcons";
+/// Region 11's art, the elite dragon.
+pub const ELITE_TEXTURE: &str = "Interface\\Tooltips\\EliteNameplateIcon";
+/// The cast bar's colour while a cast runs, `0x98f0f3`'s `(1.0, 0.7, 0.0)`.
+pub const CAST_COLOUR: [f32; 3] = [1.0, 0.7, 0.0];
 /// The health bar's fill, which `GetStatusBarTexture()` returns.
 pub const BAR_FILL_TEXTURE: &str = "Interface\\TargetingFrame\\UI-TargetingFrame-BarFill";
 /// `NAMEPLATE_FONT`: Friz Quadrata.
@@ -88,20 +98,44 @@ pub struct PlateState {
     pub lit: bool,
     /// The pointer is on the plate: the name goes yellow (`0x7cb850`) and the glow region shows.
     pub hovered: bool,
+    /// The unit's template rank is elite or rare elite: the elite icon shows (`0x98e6e0`).
+    pub elite: bool,
+    /// The cast bar, for the target only (`0x720e50`); `None` hides it (`0x715b20`).
+    pub cast: Option<PlateCast>,
+}
+
+/// The cast bar's state, `0x98f040`'s arguments: the bar runs from 0 to `max` seconds at `value`,
+/// filling for a cast and draining for a channel (the app supplies the value either way).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlateCast {
+    pub max: f32,
+    pub value: f32,
+    /// The spell's icon path, the spell-icon region's art.
+    pub icon: Option<String>,
+    pub channel: bool,
+    /// The shield shows in the border's place (`0x98f040`'s last argument, `0x71ab20`).
+    pub not_interruptible: bool,
 }
 
 /// One pooled plate's widgets, in the reference's creation order.
 #[derive(Debug)]
 struct Plate {
     frame: FrameHandle,
+    flash: RegionHandle,
     border: RegionHandle,
+    cast_border: RegionHandle,
+    cast_shield: RegionHandle,
+    spell_icon: RegionHandle,
     glow: RegionHandle,
     name: RegionHandle,
     level: RegionHandle,
     skull: RegionHandle,
     raid: RegionHandle,
+    elite: RegionHandle,
     bar: FrameHandle,
     fill: RegionHandle,
+    cast_bar: FrameHandle,
+    cast_fill: RegionHandle,
     /// Last frame's state, so [`Plate::drive`] writes only what moved; `None` while retired.
     last: Option<PlateState>,
     /// The geometry its anchors were written under, `None` before the first lay-out. Kept per
@@ -341,8 +375,16 @@ impl Plate {
                 .collect();
         }
 
-        // The ctor's blend modes, one `0x7703f0` call per texture: BLEND, but the glow is ADD
-        // (`0x7cb36a`), which [`is_unpainted_glow`] depends on.
+        // The ctor's order (`0x98f790`) is the ABI: `GetRegions()` and `GetChildren()` return
+        // creation order. Everything is BLEND but the highlight, ADD (`0x481620(3)`), which
+        // [`is_unpainted_glow`] depends on.
+        let flash = texture(
+            model,
+            frame,
+            DrawLayer::Background,
+            FLASH_TEXTURE,
+            BlendMode::Blend,
+        );
         let border = texture(
             model,
             frame,
@@ -350,6 +392,30 @@ impl Plate {
             BORDER_TEXTURE,
             BlendMode::Blend,
         );
+        let (bar, fill) = status_bar(model, frame, strata);
+        let cast_border = texture(
+            model,
+            frame,
+            DrawLayer::Artwork,
+            BORDER_TEXTURE,
+            BlendMode::Blend,
+        );
+        // The same art turned upside down (`0x4831d0` with `(0, 1, 1, 0)`), so the cast bar's
+        // border hangs from the health border.
+        model.region_data.entry(cast_border).or_default().tex_coords =
+            Some(TexCoords::Rect([0.0, 1.0, 1.0, 0.0]));
+        let cast_shield = texture(
+            model,
+            frame,
+            DrawLayer::Artwork,
+            CAST_SHIELD_TEXTURE,
+            BlendMode::Blend,
+        );
+        let (cast_bar, cast_fill) = status_bar(model, frame, strata);
+        let spell_icon = model
+            .arena
+            .create_region(frame, RegionKind::Texture, DrawLayer::Overlay, 0)
+            .expect("live plate");
         let glow = texture(
             model,
             frame,
@@ -373,33 +439,30 @@ impl Plate {
             RAID_ICON_TEXTURE,
             BlendMode::Blend,
         );
-        // The order above is the ABI addons walk and, as 5875 has no sub-level, the draw order
-        // within a layer.
+        let elite = texture(
+            model,
+            frame,
+            DrawLayer::Border,
+            ELITE_TEXTURE,
+            BlendMode::Blend,
+        );
 
-        // The one child, below the plate's level so the border draws over the fill.
-        let bar = model.arena.create(FrameKind::StatusBar, None, Some(frame));
-        model.arena.set_frame_strata(bar, strata);
-        model.arena.set_frame_level(bar, BAR_LEVEL, true);
-        let fill = model
-            .arena
-            .create_region(bar, RegionKind::Texture, DrawLayer::Artwork, 0)
-            .expect("live bar");
-        let fill_data = model.region_data.entry(fill).or_default();
-        fill_data.texture = Some(BAR_FILL_TEXTURE.to_string());
-        // The fill keeps `CSimpleTexture`'s default BLEND (`0x76fc40`), written out as a fact.
-        fill_data.blend = BlendMode::Blend;
-        if let Some(KindState::StatusBar(sb)) =
-            model.arena.frame_mut(bar).map(|f| &mut f.kind_state)
-        {
-            sb.bar = Some(fill);
-            sb.min = 0.0;
-            sb.max = 1.0;
-            sb.value = 0.0;
-        }
-
-        for rh in [glow, skull, raid] {
+        for rh in [
+            flash,
+            cast_border,
+            cast_shield,
+            spell_icon,
+            glow,
+            skull,
+            raid,
+            elite,
+        ] {
             model.region_data.entry(rh).or_default().hidden = true;
         }
+        // The cast bar is hidden until the target casts (`0x98e7e0` hides it).
+        effects
+            .visibility
+            .extend(model.arena.set_shown(cast_bar, false));
 
         // Born retired and hidden: addons tell a live plate from a pooled one by `IsShown()`.
         effects
@@ -413,14 +476,21 @@ impl Plate {
 
         Plate {
             frame,
+            flash,
             border,
+            cast_border,
+            cast_shield,
+            spell_icon,
             glow,
             name,
             level,
             skull,
             raid,
+            elite,
             bar,
             fill,
+            cast_bar,
+            cast_fill,
             last: None,
             laid_out: None,
         }
@@ -430,9 +500,11 @@ impl Plate {
     /// reference's are real anchors too, through `SetPoint`'s own store (`0x767c70`).
     fn lay_out(model: &mut Model, i: usize, g: PlateGeometry) {
         let p = &model.nameplates.plates[i];
-        let (frame, bar) = (p.frame, p.bar);
+        let (frame, bar, cast_bar) = (p.frame, p.bar, p.cast_bar);
         let (border, glow, name, level, skull, raid) =
             (p.border, p.glow, p.name, p.level, p.skull, p.raid);
+        let (flash, cast_border, cast_shield, spell_icon, elite) =
+            (p.flash, p.cast_border, p.cast_shield, p.spell_icon, p.elite);
         let plate_id = model.frame_id(frame);
 
         // The plate's size; its position is per-frame, in `drive`.
@@ -440,7 +512,7 @@ impl Plate {
         input.width = g.width;
         input.height = g.height;
 
-        for rh in [border, glow] {
+        for rh in [flash, border, glow] {
             model.region_data.entry(rh).or_default().anchors = vec![
                 Anchor::new(Point::TopLeft, plate_id, Point::TopLeft, 0.0, 0.0),
                 Anchor::new(Point::BottomRight, plate_id, Point::BottomRight, 0.0, 0.0),
@@ -502,6 +574,57 @@ impl Plate {
         raid_data.anchors = vec![Anchor::new(Point::Right, plate_id, Point::Left, 0.0, 0.0)];
         raid_data.size = Some((g.raid_size, g.raid_size));
 
+        // The elite dragon over the level's seat (`0x98ff12`, anchored to the level text).
+        let level_id = model.region_id(level);
+        let elite_data = model.region_data.entry(elite).or_default();
+        elite_data.anchors = vec![Anchor::new(
+            Point::Center,
+            level_id,
+            Point::Center,
+            0.0,
+            0.0,
+        )];
+        elite_data.size = Some((g.skull_size * 2.0, g.skull_size * 2.0));
+
+        // The cast bar under the health border: the health bar's size, its border the health
+        // border turned over, so the bar sits as far from the border's top as the health bar from
+        // its bottom. Unresolved, labelled: the attach (`0x98f390`) scales these by runtime
+        // globals the decompile leaves unread, so the seat is the mirror image rather than the
+        // reference's own offsets, and the spell icon's size is the border's height.
+        let cast_input = model.layout_inputs.entry(cast_bar).or_default();
+        cast_input.anchors = vec![Anchor::new(
+            Point::TopLeft,
+            plate_id,
+            Point::BottomLeft,
+            g.bar_off_x,
+            -g.bar_off_y,
+        )];
+        cast_input.width = g.bar_width;
+        cast_input.height = g.bar_height;
+        let cast_id = model.frame_id(cast_bar);
+        for rh in [cast_border, cast_shield] {
+            model.region_data.entry(rh).or_default().anchors = vec![
+                Anchor::new(
+                    Point::TopLeft,
+                    cast_id,
+                    Point::TopLeft,
+                    -g.bar_off_x,
+                    g.bar_off_y,
+                ),
+                Anchor::new(
+                    Point::BottomRight,
+                    cast_id,
+                    Point::BottomRight,
+                    g.width - g.bar_off_x - g.bar_width,
+                    -(g.height - g.bar_off_y - g.bar_height),
+                ),
+            ];
+        }
+        let border_id = model.region_id(cast_border);
+        let icon_data = model.region_data.entry(spell_icon).or_default();
+        icon_data.anchors = vec![Anchor::new(Point::Right, border_id, Point::Left, 0.0, 0.0)];
+        icon_data.size = Some((g.height, g.height));
+
         // The first lay-out adds anchor targets, so the full touch; once per geometry change.
         model.touch_layout();
         model.nameplates.plates[i].laid_out = Some(g);
@@ -516,9 +639,16 @@ impl Plate {
         effects: &mut SyncEffects,
     ) {
         let p = &model.nameplates.plates[i];
-        let (frame, bar) = (p.frame, p.bar);
+        let (frame, bar, cast_bar) = (p.frame, p.bar, p.cast_bar);
         let (glow, name, level, skull, raid, fill) =
             (p.glow, p.name, p.level, p.skull, p.raid, p.fill);
+        let (cast_border, cast_shield, spell_icon, elite, cast_fill) = (
+            p.cast_border,
+            p.cast_shield,
+            p.spell_icon,
+            p.elite,
+            p.cast_fill,
+        );
         let last = p.last.clone();
         let world_id = model.frame_id(world);
 
@@ -635,6 +765,49 @@ impl Plate {
             }
         }
 
+        if last.as_ref().is_none_or(|l| l.elite != state.elite) {
+            model.region_data.entry(elite).or_default().hidden = !state.elite;
+        }
+
+        if last.as_ref().is_none_or(|l| l.cast != state.cast) {
+            match &state.cast {
+                Some(cast) => {
+                    if let Some(KindState::StatusBar(sb)) =
+                        model.arena.frame_mut(cast_bar).map(|f| &mut f.kind_state)
+                    {
+                        sb.min = 0.0;
+                        sb.max = cast.max;
+                        sb.value = cast.value.clamp(0.0, cast.max);
+                    }
+                    effects.values.push((cast_bar, cast.value));
+                    let c = CAST_COLOUR;
+                    model.region_data.entry(cast_fill).or_default().vertex_color =
+                        Some([c[0], c[1], c[2], 1.0]);
+                    // The border, or the shield in its place (`0x98f040`'s last argument).
+                    model.region_data.entry(cast_border).or_default().hidden =
+                        cast.not_interruptible;
+                    model.region_data.entry(cast_shield).or_default().hidden =
+                        !cast.not_interruptible;
+                    let icon = model.region_data.entry(spell_icon).or_default();
+                    icon.texture = cast.icon.clone();
+                    icon.hidden = false;
+                    if last.as_ref().is_none_or(|l| l.cast.is_none()) {
+                        effects
+                            .visibility
+                            .extend(model.arena.set_shown(cast_bar, true));
+                    }
+                }
+                None => {
+                    for rh in [cast_border, cast_shield, spell_icon] {
+                        model.region_data.entry(rh).or_default().hidden = true;
+                    }
+                    effects
+                        .visibility
+                        .extend(model.arena.set_shown(cast_bar, false));
+                }
+            }
+        }
+
         model.nameplates.plates[i].last = Some(state.clone());
     }
 
@@ -650,6 +823,33 @@ impl Plate {
             .extend(model.arena.set_shown(frame, false));
         model.nameplates.plates[i].last = None;
     }
+}
+
+/// One of the plate's two bars, the health bar's `CGSimpleHealthBar` and the cast bar's
+/// `CSimpleStatusBar`: one level below the plate so its border draws over the fill
+/// (`0x4910a0(level - 1)`), filled with `UI-TargetingFrame-BarFill` on the default BLEND.
+fn status_bar(
+    model: &mut Model,
+    plate: FrameHandle,
+    strata: crate::order::Strata,
+) -> (FrameHandle, RegionHandle) {
+    let bar = model.arena.create(FrameKind::StatusBar, None, Some(plate));
+    model.arena.set_frame_strata(bar, strata);
+    model.arena.set_frame_level(bar, BAR_LEVEL, true);
+    let fill = model
+        .arena
+        .create_region(bar, RegionKind::Texture, DrawLayer::Artwork, 0)
+        .expect("live bar");
+    let fill_data = model.region_data.entry(fill).or_default();
+    fill_data.texture = Some(BAR_FILL_TEXTURE.to_string());
+    fill_data.blend = BlendMode::Blend;
+    if let Some(KindState::StatusBar(sb)) = model.arena.frame_mut(bar).map(|f| &mut f.kind_state) {
+        sb.bar = Some(fill);
+        sb.min = 0.0;
+        sb.max = 1.0;
+        sb.value = 0.0;
+    }
+    (bar, fill)
 }
 
 /// One of the plate's textures, with its path and the blend mode the ctor sets (`0x7703f0`).

@@ -25,20 +25,19 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::types::{FieldLayout, NpcFlags, NpcService};
+use benilla_protocol::types::{NpcFlags, NpcService};
 use benilla_protocol::EntityKind;
 
 use super::probes::ProbeClock;
 use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity, ObjectStore, SelfPlayer};
 use crate::player::Player;
 use crate::target::click::{service_action, service_arm_native, ServiceAction, ServiceArm};
-use crate::target::cursor_mode::npc_flags as f;
 use crate::ui_gossip::GossipState;
 use benilla_ui::script::UiScript;
 
 use crate::ui_merchant::MerchantOpen;
 use crate::ui_quest::QuestGiver;
-use crate::ui_session::InteractNpc;
+use crate::app_core::state::InteractNpc;
 use crate::ui_trainer::TrainerOpen;
 
 /// How wide to look around a `.go` landing: the reference's service reach,
@@ -232,34 +231,30 @@ fn find_item_slot(script: &UiScript) -> Option<(i64, u32)> {
     Some((b.parse().ok()?, s.parse().ok()?))
 }
 
-/// Semantic services and the legacy ladder's Vanilla masks. Never apply these masks to wire bits.
-const SERVICES: [(NpcService, u32, &str); 14] = [
-    (NpcService::Gossip, f::GOSSIP, "GOSSIP"),
-    (NpcService::QuestGiver, f::QUESTGIVER, "QUESTGIVER"),
-    (NpcService::Vendor, f::VENDOR, "VENDOR"),
-    (NpcService::FlightMaster, f::FLIGHTMASTER, "FLIGHTMASTER"),
-    (NpcService::Trainer, f::TRAINER, "TRAINER"),
-    (NpcService::SpiritHealer, f::SPIRITHEALER, "SPIRITHEALER"),
-    (NpcService::SpiritGuide, f::SPIRITGUIDE, "SPIRITGUIDE"),
-    (NpcService::Innkeeper, f::INNKEEPER, "INNKEEPER"),
-    (NpcService::Banker, f::BANKER, "BANKER"),
-    (NpcService::Petitioner, f::PETITIONER, "PETITIONER"),
-    (
-        NpcService::TabardDesigner,
-        f::TABARDDESIGNER,
-        "TABARDDESIGNER",
-    ),
-    (NpcService::BattleMaster, f::BATTLEMASTER, "BATTLEMASTER"),
-    (NpcService::Auctioneer, f::AUCTIONEER, "AUCTIONEER"),
-    (NpcService::StableMaster, f::STABLEMASTER, "STABLEMASTER"),
+/// The services `flag_names` lists, by name.
+const SERVICES: [(NpcService, &str); 14] = [
+    (NpcService::Gossip, "GOSSIP"),
+    (NpcService::QuestGiver, "QUESTGIVER"),
+    (NpcService::Vendor, "VENDOR"),
+    (NpcService::FlightMaster, "FLIGHTMASTER"),
+    (NpcService::Trainer, "TRAINER"),
+    (NpcService::SpiritHealer, "SPIRITHEALER"),
+    (NpcService::SpiritGuide, "SPIRITGUIDE"),
+    (NpcService::Innkeeper, "INNKEEPER"),
+    (NpcService::Banker, "BANKER"),
+    (NpcService::Petitioner, "PETITIONER"),
+    (NpcService::TabardDesigner, "TABARDDESIGNER"),
+    (NpcService::BattleMaster, "BATTLEMASTER"),
+    (NpcService::Auctioneer, "AUCTIONEER"),
+    (NpcService::StableMaster, "STABLEMASTER"),
 ];
 
 /// A native flag word as raw hex plus dialect-aware service names.
 fn flag_names(flags: NpcFlags) -> String {
     let set: Vec<&str> = SERVICES
         .iter()
-        .filter(|(service, _, _)| flags.has(*service))
-        .map(|(_, _, name)| *name)
+        .filter(|(service, _)| flags.has(*service))
+        .map(|(_, name)| *name)
         .collect();
     let bits = flags.bits();
     match set.is_empty() {
@@ -395,7 +390,7 @@ fn service_probe(
                 true => String::new(),
                 false => format!(
                     " [note: the world DB read {} when this leg was written]",
-                    flag_names(NpcFlags::from_bits(FieldLayout::Wrath12340, leg.db_flags))
+                    flag_names(NpcFlags::from_bits(leg.db_flags))
                 ),
             };
             let Some(arm) = arm else {

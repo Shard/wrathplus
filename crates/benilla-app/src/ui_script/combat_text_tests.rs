@@ -9,10 +9,10 @@ use super::test_ui::load_ui as load_xml;
 fn load_combat_text() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, "Interface\\FrameXML\\GlobalStrings.lua"); // ENTERING_COMBAT & co.
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, "Interface\\FrameXML\\BasicControls.xml"); // TEXT()
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua"); // ENTERING_COMBAT & co.
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BasicControls.xml"); // TEXT()
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
     super::test_ui::seat_chain_addon(&mut s, "Blizzard_CombatText");
     // The options window's defaults block (`UIOptionsFrame.lua:125`), seated by hand, master on.
     s.run(
@@ -301,13 +301,13 @@ fn combat_text_master_toggle_unregisters() {
 fn the_damage_text_font_is_read_from_the_lua_global() {
     let data = benilla_formats::wow_data_or_skip!();
     let _ = data;
-    let s = UiScript::new().unwrap();
+    let mut s = UiScript::new().unwrap();
 
     // Unassigned, the reference's failure block (`0x704350`) leaves `0x703bf0`'s pre-seeded `""`,
     // which the font factory rejects.
     assert_eq!(crate::combat_text::read_damage_text_font(&s).0, None);
 
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
     assert_eq!(
         crate::combat_text::read_damage_text_font(&s).0.as_deref(),
         Some("Fonts\\FRIZQT__.TTF"),

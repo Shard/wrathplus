@@ -79,9 +79,9 @@ impl PendingEquips {
 #[derive(Resource, Default)]
 pub(crate) struct PendingBindOnUse(pub(crate) Option<PendingUse>);
 
-/// The deferred use: the [`crate::ui_items::ItemUse`] call about to be made, which carries what
+/// The deferred use: the [`crate::app_core::state::ItemUse`] call about to be made, which carries what
 /// the reference's item and target guids do.
-pub(crate) type PendingUse = crate::ui_items::ItemUse;
+pub(crate) type PendingUse = crate::app_core::state::ItemUse;
 
 /// The deferral's resources in one system parameter. [`Items`] is not in it: every caller already
 /// holds it, and a second `ResMut<Items>` in one system conflicts.

@@ -651,7 +651,7 @@ pub(crate) fn token_printf(template: &str, args: &[benilla_formats::TokenNumber]
 
 /// [`test_ui::load_ui`] for a test module outside `ui_script`, such as `ui_action::feed_tests`.
 #[cfg(test)]
-pub(crate) fn load_ui_for_test(script: &benilla_ui::script::UiScript, entry: &str) -> usize {
+pub(crate) fn load_ui_for_test(script: &mut benilla_ui::script::UiScript, entry: &str) -> usize {
     test_ui::load_ui(script, entry)
 }
 

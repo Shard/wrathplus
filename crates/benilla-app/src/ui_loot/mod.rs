@@ -20,7 +20,7 @@ use crate::ui_script::{UiFeed, UiInput};
 mod net;
 mod wrath;
 
-pub(crate) use wrath::begin_wrath_corpse_loot;
+pub(crate) use crate::loot::{close_interaction, resolve_loot_kneel, LootKneel};
 
 /// `ItemBondingType::BIND_WHEN_PICKED_UP`, the first conjunct of the `LOOT_BIND` confirm
 /// (`0x589140`: the template's bonding against 1).
@@ -81,46 +81,6 @@ impl Default for LootConfig {
             // The reference's registered `"1"`.
             show_loot_spam: true,
         }
-    }
-}
-
-/// Whether the character kneels at the latched object, the reference's predicate B `0x612710`:
-/// yes for a corpse or any GameObject but a fishing bobber, no for a live unit, an item or an
-/// unresolved guid. Recomputed each frame between the net drain and the anim driver, as the
-/// reference force-plays the pose at the arm itself (`0x5ed619`).
-#[derive(Resource, Default)]
-pub(crate) struct LootKneel(pub(crate) bool);
-
-/// `GAMEOBJECT_TYPE_ID` 17, `FISHINGNODE`: the one GameObject type that does not kneel
-/// (`0x612772`).
-const GO_TYPE_FISHINGNODE: i32 = 17;
-
-/// Recomputes [`LootKneel`]; `pub(crate)` so [`crate::creature_anim`]'s driver can order after it.
-pub(crate) fn resolve_loot_kneel(
-    latch: Res<LootLatch>,
-    index: Res<crate::net::GuidIndex>,
-    objects: Query<(&crate::net::NetEntity, &crate::net::ObjectStore)>,
-    mut kneel: ResMut<LootKneel>,
-) {
-    let allowed = latch
-        .0
-        .and_then(|guid| index.0.get(&guid).copied())
-        .and_then(|e| objects.get(e).ok())
-        .is_some_and(|(net_entity, store)| match net_entity.kind {
-            // `0x612764`: a GameObject kneels unless it is the bobber.
-            benilla_protocol::EntityKind::GameObject => {
-                store.0.gameobject_type_id() != GO_TYPE_FISHINGNODE
-            }
-            // `0x61278c`: a unit kneels once its health reads 0 off the descriptor, where an
-            // unsent field is 0 too; not `unit_is_dead`, whose `max_health` guard it lacks.
-            benilla_protocol::EntityKind::Unit | benilla_protocol::EntityKind::Player => {
-                store.0.unit_health().unwrap_or(0) == 0
-            }
-            // An item never kneels (`0x612797`); we stream none, so a lockbox latch never resolves.
-            _ => false,
-        });
-    if kneel.0 != allowed {
-        kneel.0 = allowed;
     }
 }
 
@@ -589,32 +549,6 @@ fn bind_confirm_required(
         })
 }
 
-/// `CloseInteraction 0x48f200` past its early returns, the one close every loot close shares: the
-/// latch drops (`0x48f2c9`), the release goes out when `release` is given (the `cl` argument,
-/// `0x48f2da`) and the frame closes (`0x48f33d`). Returns the closed source for
-/// [`DeadUnitDeselect`], the close's last step.
-pub(crate) fn close_interaction(
-    loot: &mut LootState,
-    latch: &mut LootLatch,
-    release: Option<&NetCommands>,
-) -> Option<u64> {
-    let source = loot.source?;
-    latch.clear_for(source);
-    if let Some(commands) = release {
-        if commands
-            .0
-            .send(ClientCommand::LootRelease { guid: source })
-            .is_ok()
-        {
-            // No-op for Vanilla's idle correlation state. Wrath must retain its source fence
-            // through target teardown/movement closes until the matching server release arrives.
-            loot.wrath.begin_release(source);
-        }
-    }
-    loot.clear();
-    Some(source)
-}
-
 /// `CloseInteraction`'s last step (`0x48f34f`–`0x48f369`): a closed source that is a unit, a
 /// player included, with `UNIT_FIELD_HEALTH` at or below 0 is deselected if it is still the
 /// selection (`0x493910(guid, 1)`). It reads the health, never the loot type, so a skinned corpse
@@ -877,10 +811,10 @@ impl LootStateRows for LootState {
 mod tests {
     use super::*;
     use benilla_protocol::types::loot_type;
+    use benilla_protocol::types::Field;
     use benilla_protocol::types::GroupMemberEntry;
     use benilla_protocol::types::ItemInfo;
     use benilla_protocol::types::ObjectFields;
-    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::EntityKind;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -890,8 +824,8 @@ mod tests {
 
     /// Descriptor field indices the predicate-B table reads.
     /// `GAMEOBJECT_BYTES_1`, the type in byte 1.
-    const F_GO_BYTES_1: u16 = FieldLayout::Wrath12340.index_of(Field::GameobjectBytes1);
-    const F_UNIT_HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+    const F_GO_BYTES_1: u16 = Field::GameobjectBytes1.index();
+    const F_UNIT_HEALTH: u16 = Field::UnitHealth.index();
 
     /// Predicate B's answer for one latched object; `None` latches a guid that does not resolve.
     fn kneels_at(object: Option<(EntityKind, &[(u16, u32)])>) -> bool {
@@ -1062,10 +996,10 @@ mod tests {
             let kind = if unit { 0x9 } else { 0x21 };
             let e = app
                 .world_mut()
-                .spawn(crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Wrath12340,
-                    &[(Field::ObjectType, kind)],
-                )))
+                .spawn(crate::net::ObjectStore(ObjectFields::from_fields(&[(
+                    Field::ObjectType,
+                    kind,
+                )])))
                 .id();
             app.world_mut()
                 .resource_mut::<crate::net::GuidIndex>()

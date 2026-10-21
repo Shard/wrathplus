@@ -14,7 +14,7 @@ use super::super::{
 use super::drive_animations;
 use crate::names::type_flags::{DO_NOT_PLAY_WOUND_ANIM, MORE_AUDIBLE, NO_FACTION_TOOLTIP};
 use crate::net::{ClientCommand, NetCommands};
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 use benilla_protocol::ObjectFields;
 
 #[cfg(test)]
@@ -174,10 +174,10 @@ fn self_sheath_unit(app: &mut App, descriptor: u8) -> Entity {
             AnimationTransitions::new(),
             AnimDriver::default(),
             crate::net::SelfPlayer,
-            crate::net::ObjectStore(ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitBytes2, u32::from(descriptor))],
-            )),
+            crate::net::ObjectStore(ObjectFields::from_fields(&[(
+                Field::UnitBytes2,
+                u32::from(descriptor),
+            )])),
             Wielded {
                 main: Some((2, 0x7)),
                 main_sheath: 3,
@@ -261,10 +261,7 @@ fn wrath_remote_automatic_reconcile_keeps_its_visual_stow() {
             AnimationPlayer::default(),
             AnimationTransitions::new(),
             AnimDriver::default(),
-            crate::net::ObjectStore(ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitBytes2, 1)],
-            )),
+            crate::net::ObjectStore(ObjectFields::from_fields(&[(Field::UnitBytes2, 1)])),
             Engaged(0),
             CastHold {
                 ranged: false,
@@ -288,10 +285,10 @@ fn wrath_self_descriptor_sheath_echo_still_applies() {
 
     app.world_mut()
         .entity_mut(unit)
-        .insert(crate::net::ObjectStore(ObjectFields::from_fields(
-            FieldLayout::Wrath12340,
-            &[(Field::UnitBytes2, 2)],
-        )));
+        .insert(crate::net::ObjectStore(ObjectFields::from_fields(&[(
+            Field::UnitBytes2,
+            2,
+        )])));
     app.update();
 
     assert_eq!(sheath_state(&app, unit), Some(2));
@@ -1261,10 +1258,7 @@ fn unit_flag_looting_kneels_stationary_units_only() {
             AnimationPlayer::default(),
             AnimationTransitions::new(),
             AnimDriver::default(),
-            crate::net::ObjectStore(ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitFlags, 0x400)],
-            )),
+            crate::net::ObjectStore(ObjectFields::from_fields(&[(Field::UnitFlags, 0x400)])),
         ))
         .id();
     let gait = |app: &App| app.world().entity(unit).get::<AnimDriver>().unwrap().gait;
@@ -1283,10 +1277,10 @@ fn unit_flag_looting_kneels_stationary_units_only() {
     app.world_mut().entity_mut(unit).remove::<MovementState>();
     app.world_mut()
         .entity_mut(unit)
-        .insert(crate::net::ObjectStore(ObjectFields::from_fields(
-            FieldLayout::Wrath12340,
-            &[(Field::UnitFlags, 0)],
-        )));
+        .insert(crate::net::ObjectStore(ObjectFields::from_fields(&[(
+            Field::UnitFlags,
+            0,
+        )])));
     app.update();
     assert_eq!(gait(&app), Some(0), "released — back to Stand");
 }
@@ -1297,7 +1291,7 @@ fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
     use benilla_protocol::types::ObjectFields;
 
     let mut app = app();
-    app.init_resource::<crate::ui_loot::LootKneel>();
+    app.init_resource::<crate::loot::LootKneel>();
     let model = ModelAnimations {
         graph: Handle::default(),
         clips: vec![clip(0, 1, true), clip(50, 2, false), clip(5, 3, true)],
@@ -1317,10 +1311,7 @@ fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
             AnimationTransitions::new(),
             AnimDriver::default(),
             crate::net::SelfPlayer,
-            crate::net::ObjectStore(ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitFlags, 0x400)],
-            )),
+            crate::net::ObjectStore(ObjectFields::from_fields(&[(Field::UnitFlags, 0x400)])),
             MovementState::default(),
         ))
         .id();
@@ -1333,15 +1324,11 @@ fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
         "the self unit ignores its own descriptor flag"
     );
 
-    app.world_mut()
-        .resource_mut::<crate::ui_loot::LootKneel>()
-        .0 = true;
+    app.world_mut().resource_mut::<crate::loot::LootKneel>().0 = true;
     app.update();
     assert_eq!(gait(&app), Some(50), "the armed latch kneels the self unit");
 
-    app.world_mut()
-        .resource_mut::<crate::ui_loot::LootKneel>()
-        .0 = false;
+    app.world_mut().resource_mut::<crate::loot::LootKneel>().0 = false;
     app.update();
     assert_eq!(
         gait(&app),
@@ -1381,10 +1368,7 @@ fn the_creep_vis_flag_prowls_the_body() {
             AnimationTransitions::new(),
             AnimDriver::default(),
             crate::net::SelfPlayer,
-            crate::net::ObjectStore(ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitBytes1, 0)],
-            )),
+            crate::net::ObjectStore(ObjectFields::from_fields(&[(Field::UnitBytes1, 0)])),
             MovementState::default(),
         ))
         .id();
@@ -1392,10 +1376,10 @@ fn the_creep_vis_flag_prowls_the_body() {
     let set_flag = |app: &mut App, v: u32| {
         app.world_mut()
             .entity_mut(unit)
-            .insert(crate::net::ObjectStore(ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitBytes1, v)],
-            )));
+            .insert(crate::net::ObjectStore(ObjectFields::from_fields(&[(
+                Field::UnitBytes1,
+                v,
+            )])));
     };
 
     app.update();
@@ -2676,7 +2660,7 @@ fn the_mount_transition_takes_bone_0_back_from_a_full_body_one_shot() {
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_MOUNTDISPLAYID` (index 133).
-    const FIELD_MOUNTDISPLAYID: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMountDisplayId);
+    const FIELD_MOUNTDISPLAYID: u16 = Field::UnitMountDisplayId.index();
     const SPELL_CAST_OMNI: u16 = 54;
     const MOUNT: u16 = 91;
 
@@ -2755,7 +2739,7 @@ fn the_mount_transition_takes_bone_0_back_from_a_full_body_one_shot() {
 fn the_dismount_cuts_the_saddle_pose_where_the_mount_up_blends_into_it() {
     use benilla_protocol::ObjectFields;
 
-    const FIELD_MOUNTDISPLAYID: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMountDisplayId);
+    const FIELD_MOUNTDISPLAYID: u16 = Field::UnitMountDisplayId.index();
     const MOUNT: u16 = 91;
     let stand_node = AnimationNodeIndex::new(1);
     let mount_node = AnimationNodeIndex::new(2);
@@ -3320,7 +3304,7 @@ fn spawn_vendor(app: &mut App) -> (Entity, Vec<AnimationNodeIndex>) {
 fn the_interaction_face_me_shuffles_its_feet_for_the_whole_turn() {
     let mut app = app();
     app.init_resource::<crate::net::GuidIndex>()
-        .init_resource::<crate::ui_session::InteractNpc>();
+        .init_resource::<crate::app_core::state::InteractNpc>();
     app.add_systems(
         Update,
         crate::motion::drive_display_facing.before(drive_animations),
@@ -3363,7 +3347,7 @@ fn the_interaction_face_me_shuffles_its_feet_for_the_whole_turn() {
 
     // Open its window. 256 ms covers the ease (ten pumps, ~160 ms) and the 250 ms blend-in.
     app.world_mut()
-        .resource_mut::<crate::ui_session::InteractNpc>()
+        .resource_mut::<crate::app_core::state::InteractNpc>()
         .0 = Some(npc);
     let (peak, held) = run(&mut app, 256, 11);
     assert!(held, "the whole turn is ShuffleLeft, got {:?}", gait(&app));
@@ -3394,7 +3378,7 @@ fn the_interaction_face_me_shuffles_its_feet_for_the_whole_turn() {
 
     // Closing it swings the vendor back to its wire facing, shuffling the other way.
     app.world_mut()
-        .resource_mut::<crate::ui_session::InteractNpc>()
+        .resource_mut::<crate::app_core::state::InteractNpc>()
         .0 = None;
     let (peak, held) = run(&mut app, 256, 12);
     assert!(held, "the swing back is ShuffleRight, got {:?}", gait(&app));
@@ -3676,7 +3660,7 @@ fn a_no_wound_creature_takes_no_flinch() {
     fn streamed(entry: u32) -> crate::net::ObjectStore {
         crate::net::ObjectStore(ObjectFields::from_pairs(&[(OBJECT_FIELD_ENTRY, entry)]))
     }
-    const OBJECT_FIELD_ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+    const OBJECT_FIELD_ENTRY: u16 = Field::ObjectEntry.index();
     const SKELETON: u32 = 1783; // a Scarlet Monastery skeleton's template entry
     const WOLF: u32 = 69;
 
@@ -3763,7 +3747,7 @@ fn the_no_wound_flag_takes_the_parry_but_not_the_dodge() {
             pose: Default::default(),
         }
     }
-    const OBJECT_FIELD_ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+    const OBJECT_FIELD_ENTRY: u16 = Field::ObjectEntry.index();
     const FLAGGED: u32 = 3870; // Stone Sleeper, which carries the bit in the world DB
     const PLAIN: u32 = 69;
 
@@ -4167,8 +4151,7 @@ mod base_anim_lock {
 mod routing {
     use super::*;
 
-    const FIELD_MOUNTDISPLAYID: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitMountDisplayId);
+    const FIELD_MOUNTDISPLAYID: u16 = benilla_protocol::types::Field::UnitMountDisplayId.index();
     const MOUNT: u16 = 91;
     const PRAY: u16 = 75; // EmoteKneel, not CLASS_A
     const CHEER: u16 = 68; // CLASS_A
@@ -4462,7 +4445,7 @@ mod emote_state {
     use crate::creature_anim::Mode;
     use crate::net::ObjectStore;
     use crate::sound::EmoteSounds;
-    use crate::ui_session::InteractNpc;
+    use crate::app_core::state::InteractNpc;
     use benilla_formats::EmoteSoundCatalog;
 
     /// Emote states: 28 plays AnimID 234 and yields to interaction (`0x2000`); 29 plays 235 and
@@ -4471,8 +4454,7 @@ mod emote_state {
     const STUBBORN: u32 = 29;
     /// `/stand`'s state 26 (vmangos `ChatHandler.cpp` `HandleTextEmoteOpcode`): AnimID 0.
     const STAND_STATE: u32 = 26;
-    const FIELD_NPC_EMOTESTATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitNpcEmotestate);
+    const FIELD_NPC_EMOTESTATE: u16 = benilla_protocol::types::Field::UnitNpcEmotestate.index();
 
     /// Real graph nodes, so loop windows complete: every clip lasts 0.1 s, and the loops are one
     /// pass per window.
