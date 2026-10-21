@@ -199,6 +199,7 @@ fn right_color(s: &mut UiScript, needle: &str) -> [f32; 4] {
 }
 
 mod bindings;
+mod heirloom;
 mod law;
 mod mechanics;
 mod set;

@@ -540,10 +540,7 @@ pub enum SessionEvent {
     /// A dismissed pet's sound (`SMSG_PET_DISMISS_SOUND`): the `CreatureModelData` column-29 kit.
     PetDismissSound { model_id: u32, position: [f32; 3] },
     /// `SMSG_ITEM_QUERY_SINGLE_RESPONSE`, by entry; `None` is unknown. Boxed, being wide.
-    ItemTemplate {
-        entry: u32,
-        info: Option<Box<ItemInfo>>,
-    },
+    ItemTemplate { entry: u32, info: Option<Box<ItemInfo>> },
     /// Native item-query metadata omitted by the shared projection. `None` is query failure.
     /// Delivered after `ItemTemplate` from the same decoded response, never inferred from it.
     WrathItemRollMetadata {
@@ -555,6 +552,8 @@ pub enum SessionEvent {
         entry: u32,
         metadata: Option<crate::wrath_items::SocketMetadata>,
     },
+    /// The same response's heirloom `[ScalingStatDistribution, ScalingStatValue]`, last.
+    WrathItemScaling(u32, Option<[u32; 2]>),
     /// One chat line (`SMSG_MESSAGECHAT`); system lines (type `0x0A`) carry GM command feedback.
     Chat(crate::types::ChatMessage),
     /// A channel notice (`SMSG_CHANNEL_NOTIFY`); `notice` selects the `tail` payload.
