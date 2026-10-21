@@ -108,28 +108,29 @@ pub struct PortraitCamera {
 pub struct PaneCamera {
     /// The record's `type` (0 portrait, 1 characterinfo, -1 fly-bys and glue); never selected on.
     pub camera_type: i32,
-    /// The rig at rest (bases plus first keys); every camera a `<Model>` pane can name is static.
+    /// The rig at rest: sequence 0 at its start.
     pub still: PortraitCamera,
-    /// The tracks in WoW space, kept only when one moves (the `Cameras\*.m2` fly-bys).
-    pub(crate) tracks: Option<Arc<benilla_formats::M2CameraTracks>>,
+    /// The v264 record, kept only when a track moves (the fly-bys and the animated glue stages,
+    /// such as `UI_Scourge`); its tracks are per sequence, like the bones'.
+    pub(crate) tracks: Option<Arc<benilla_formats::WrathCamera>>,
 }
 
 impl PaneCamera {
-    /// The rig at file-timeline `ms`, Bevy space, sampled with the reference's four-way `interp`.
-    /// `wow_to_bevy` is linear, so converting `base + track(t)` once is exact.
-    pub fn at(&self, ms: u32) -> PortraitCamera {
-        let Some(t) = self.tracks.as_deref() else {
+    /// The rig `ms` into file sequence `sequence`, Bevy space: each track composed against its
+    /// base ([`benilla_formats::sample_wrath_camera`]). A track keyed on a global sequence reads
+    /// the same `ms`. The still rig answers for a static camera or a sequence the record lacks.
+    pub fn at(&self, sequence: usize, ms: u32) -> PortraitCamera {
+        let Some(camera) = self.tracks.as_deref() else {
             return self.still;
         };
-        let add = |b: [f32; 3], v: Option<[f32; 3]>| {
-            let v = v.unwrap_or([0.0; 3]);
-            wow_to_bevy([b[0] + v[0], b[1] + v[1], b[2] + v[2]])
-        };
-        PortraitCamera {
-            eye: add(t.position_base, t.positions.sample_ms(ms)),
-            target: add(t.target_base, t.target.sample_ms(ms)),
-            roll: t.roll.sample_ms(ms).unwrap_or(self.still.roll),
-            ..self.still
+        match benilla_formats::sample_wrath_camera(camera, sequence, ms, ms) {
+            Ok(pose) => PortraitCamera {
+                eye: wow_to_bevy(pose.position),
+                target: wow_to_bevy(pose.target),
+                roll: pose.roll,
+                ..self.still
+            },
+            Err(_) => self.still,
         }
     }
 }

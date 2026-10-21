@@ -202,11 +202,11 @@ pub(super) fn feed_glue_preview(
         *showing = Some(roster.select_seq);
         preview.yaw = 0.0;
     }
-    let (race, look) = match roster.selected_char() {
-        Some(c) => (c.race, Some(GlueLook::Select(SelectLook::from(c)))),
-        None => (2, None), // UI_Orc, the reference's empty-account scene
+    let (race, class, look) = match roster.selected_char() {
+        Some(c) => (c.race, c.class, Some(GlueLook::Select(SelectLook::from(c)))),
+        None => (2, 0, None), // UI_Orc, the reference's empty-account scene
     };
-    let scene = Some(crate::portrait::GlueScene::Race(race));
+    let scene = Some(crate::portrait::GlueScene::Race { race, class });
     if preview.scene != scene {
         preview.scene = scene;
     }
