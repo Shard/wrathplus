@@ -84,7 +84,7 @@ impl Plugin for CombatLogPlugin {
             .net_handler(K::SpellDispelLog, on_native_logged)
             .net_handler(K::DispelFailed, on_native_logged)
             .net_handler(K::ProcResist, on_native_logged)
-            .net_handler(K::SpellOrDamageImmune, on_unlogged)
+            .net_handler(K::SpellOrDamageImmune, on_native_logged)
             .net_handler(K::EnchantmentLog, on_native_logged)
             .net_handler(K::SpellLogExecute, on_spell_log_execute)
             .net_handler(K::WrathEnvironmentalDamage, on_native_logged)
@@ -130,6 +130,7 @@ fn on_native_logged(In(ev): In<SessionEvent>, mut l: Sinks) {
             | SessionEvent::DispelFailed(_)
             | SessionEvent::WrathEnvironmentalDamage(_)
             | SessionEvent::ProcResist(_)
+            | SessionEvent::SpellOrDamageImmune(_)
             | SessionEvent::EnchantmentLog(_)
     ) {
         l.record_native(&ev);
@@ -142,15 +143,6 @@ fn on_spell_log_execute(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
     l.record_native(&ev);
     if let SessionEvent::SpellLogExecute(x) = ev {
         chat::spell_log_execute(&x, &c.self_guid, &mut l.log);
-    }
-}
-
-/// `SMSG_SPELLORDAMAGE_IMMUNE`, which has no traced build-12340 entry: the combat-log table
-/// `0x7538a0` registers no handler for `0x263`, and the 1.12 sentence that showed it is gone. A
-/// labelled gap, said at debug so a live run can count it.
-fn on_unlogged(In(ev): In<SessionEvent>) {
-    if let SessionEvent::SpellOrDamageImmune(_) = ev {
-        debug!("combat log: no build-12340 entry for SpellOrDamageImmune");
     }
 }
 

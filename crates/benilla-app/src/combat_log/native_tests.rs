@@ -585,3 +585,43 @@ fn proc_resists_enchants_and_split_damage_take_their_native_events() {
     assert_eq!(damage(0, false)[0].event, event::SPELL_DAMAGE);
     assert_eq!(damage(0, true)[0].event, event::SPELL_PERIODIC_DAMAGE);
 }
+
+/// `0x751b80` through its two packet callers: a spell-log miss row is `DAMAGE_SHIELD_MISSED`
+/// (`0x6d3090`'s constant flag), a zero miss type logs nothing, and an immune target is
+/// `DAMAGE_SHIELD_MISSED` `IMMUNE` for AzerothCore's zero log format (`0x6ce3d0`).
+#[test]
+fn spell_log_misses_and_immunities_are_damage_shield_misses() {
+    let misses = recorded(SessionEvent::SpellLogMiss(SpellLogMiss {
+        spell_id: 26_992,
+        caster: 1,
+        misses: vec![(2, 2), (3, 0)],
+    }));
+    assert_eq!(
+        misses
+            .iter()
+            .map(|p| (p.event, p.source, p.dest, p.spell))
+            .collect::<Vec<_>>(),
+        [(event::DAMAGE_SHIELD_MISSED, 1, 2, Some(26_992))]
+    );
+
+    let immune = |log_format| {
+        recorded(SessionEvent::SpellOrDamageImmune(SpellOutcomeLog {
+            caster: 1,
+            target: 2,
+            spell_id: 26_992,
+            log_format,
+        }))
+    };
+    for (log_format, event) in [
+        (0, event::DAMAGE_SHIELD_MISSED),
+        (1, event::SPELL_PERIODIC_MISSED),
+    ] {
+        assert_eq!(
+            immune(log_format)
+                .iter()
+                .map(|p| (p.event, p.source, p.dest, p.suffix.clone()))
+                .collect::<Vec<_>>(),
+            [(event, 1, 2, vec![V::Str("IMMUNE".into())])]
+        );
+    }
+}
