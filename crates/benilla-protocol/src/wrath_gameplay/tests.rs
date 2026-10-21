@@ -636,3 +636,42 @@ fn malformed_inputs_fail_closed() {
         Err(CodecError::TrailingBytes(1))
     ));
 }
+
+/// AzerothCore's `GameObject::UpdatePackedRotation`, the server's packer, to check the unpack
+/// against: the sign of w folds into x, y and z.
+fn ac_pack(q: [f32; 4]) -> i64 {
+    const PACK_YZ: i32 = 1 << 20;
+    const PACK_X: i32 = PACK_YZ << 1;
+    const PACK_YZ_MASK: i64 = ((PACK_YZ as i64) << 1) - 1;
+    const PACK_X_MASK: i64 = ((PACK_X as i64) << 1) - 1;
+    let w_sign: i32 = if q[3] >= 0.0 { 1 } else { -1 };
+    let x = i64::from((q[0] * PACK_X as f32) as i32 * w_sign) & PACK_X_MASK;
+    let y = i64::from((q[1] * PACK_YZ as f32) as i32 * w_sign) & PACK_YZ_MASK;
+    let z = i64::from((q[2] * PACK_YZ as f32) as i32 * w_sign) & PACK_YZ_MASK;
+    z | (y << 21) | (x << 42)
+}
+
+#[test]
+fn a_packed_rotation_unpacks_to_the_servers_quaternion_tilt_and_signs_included() {
+    let yaw = |o: f32| [0.0, 0.0, (o / 2.0).sin(), (o / 2.0).cos()];
+    // A yaw-only row, a 70° tilt about x on a yaw, negative components, and a negative w that
+    // the packer folds into the vector part.
+    let tilted = {
+        let (s, c) = (35f32.to_radians().sin(), 35f32.to_radians().cos());
+        let n = (s * s + c * c + 0.3 * 0.3).sqrt();
+        [s / n, -0.3 / n, 0.0, c / n]
+    };
+    for q in [yaw(1.97222), yaw(-2.5), tilted, [-0.5, 0.5, -0.5, -0.5]] {
+        let got = unpack_rotation(ac_pack(q));
+        // The same rotation: q and −q are one, and the packer picks w ≥ 0.
+        let sign = if q[3] < 0.0 { -1.0 } else { 1.0 };
+        for i in 0..4 {
+            assert!(
+                (got[i] - sign * q[i]).abs() < 2e-3,
+                "{q:?} -> {got:?} (component {i})"
+            );
+        }
+    }
+    // No flag on the wire is no rotation; a zero word is the identity.
+    assert_eq!(unpack_rotation(0), [0.0, 0.0, 0.0, 1.0]);
+}

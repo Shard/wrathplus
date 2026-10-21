@@ -30,6 +30,7 @@ fn create() -> SessionEvent {
         display_id: None,
         position: [1.0, 2.0, 3.0],
         orientation: 0.0,
+        rotation: None,
         scale: 1.0,
         speeds: None,
         mover: None,
