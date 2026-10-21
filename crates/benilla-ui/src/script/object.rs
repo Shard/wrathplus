@@ -260,9 +260,8 @@ pub fn frame_kind_from_tag(s: &str) -> Option<FrameKind> {
 /// record is released once the first one is made (`0x6ee439`), so a second one misses. On a miss
 /// Lua raises and XML logs `Unknown frame type: %s` and skips the node.
 pub(crate) fn registered_frame_kind(lua: &Lua, kind: &str) -> Option<FrameKind> {
-    // Wrath's `<Cooldown>` and `<QuestPOIFrame>` are plain frames here; their methods are the
-    // Wrath surface's.
-    if matches!(enum_token(kind).as_str(), "COOLDOWN" | "QUESTPOIFRAME") {
+    // Wrath's `<QuestPOIFrame>` is a plain frame here; its methods are the Wrath surface's.
+    if enum_token(kind) == "QUESTPOIFRAME" {
         return Some(FrameKind::Frame);
     }
     let frame_kind = frame_kind_from_str(kind)?;
@@ -305,6 +304,7 @@ fn frame_kind_from_str(s: &str) -> Option<FrameKind> {
         "MOVIEFRAME" => FrameKind::MovieFrame,
         "GAMETOOLTIP" => FrameKind::GameTooltip,
         "MINIMAP" => FrameKind::Minimap,
+        "COOLDOWN" => FrameKind::Cooldown,
         _ => return None,
     })
 }
@@ -513,6 +513,7 @@ fn kind_method_registries(kind: Option<FrameKind>) -> &'static [&'static str] {
             super::modelframe::REG_MODEL_METHODS,
         ],
         Some(FrameKind::Minimap) => &[super::minimap::REG_MINIMAP_METHODS],
+        Some(FrameKind::Cooldown) => &[super::wrath_surface::REG_COOLDOWN_METHODS],
         Some(FrameKind::MovieFrame) => &[super::movie::REG_MOVIEFRAME_METHODS],
         Some(FrameKind::GameTooltip) => &[super::tooltip::REG_TOOLTIP_METHODS],
         _ => &[],

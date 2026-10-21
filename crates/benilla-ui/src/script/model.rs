@@ -874,6 +874,8 @@ pub(crate) struct Model {
     pub(crate) quest_log_collapses: Vec<(u32, bool)>,
     /// Watched quest ids in watch order, pruned when a quest leaves the log.
     pub(crate) quest_log_watched: Vec<u32>,
+    /// A timed watch's expiry, in `GetTime` seconds, by quest id; a permanent watch has none.
+    pub(crate) quest_log_watch_expiry: HashMap<u32, f64>,
     /// The server's clock in Unix seconds, `None` before `SMSG_QUERY_TIME_RESPONSE`. A quest
     /// deadline is a stamp in it, and `GetQuestTimers` subtracts per call, as the reference does.
     pub(crate) server_unix_time: Option<f64>,
@@ -1530,6 +1532,7 @@ impl Model {
             spell_tooltip_waits: HashMap::new(),
             quest_log_collapses: Vec::new(),
             quest_log_watched: Vec::new(),
+            quest_log_watch_expiry: HashMap::new(),
             server_unix_time: None,
             worldmap: super::worldmap::WorldMapState::default(),
             nameplates: super::nameplate::NamePlates::default(),

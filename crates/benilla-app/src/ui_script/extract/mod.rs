@@ -1161,8 +1161,10 @@ fn convert_entry_inner(
         } => {
             use crate::portrait::PortraitSource;
             // A file pane publishes an idempotent tile request; `ui_models::compose_tiles` draws
-            // its quad each frame, so a cell packed later needs no re-conversion.
-            if let Some(path) = model.as_deref() {
+            // its quad each frame, so a cell packed later needs no re-conversion. A glue
+            // backdrop is the glue booth's scene instead, whatever file its Lua named.
+            let glue = name.as_deref().is_some_and(crate::portrait::glue_pane);
+            if let Some(path) = model.as_deref().filter(|_| !glue) {
                 let tiles = &mut booths.tiles;
                 let dpi = tiles.dpi.max(0.01);
                 let aspect = if h > 0.0 { w / h } else { 4.0 / 3.0 };

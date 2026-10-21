@@ -136,6 +136,52 @@ fn subtree_font_strings(model: &Model, f: FrameHandle) -> Vec<crate::widget::Reg
     out
 }
 
+/// The reference's pump for dirty ranges (`0x791943` marks them): after a layout pass, every
+/// scroll frame whose ranges moved since its last `OnScrollRangeChanged` gets one, so stock 3.3.5
+/// panes that never call `UpdateScrollChildRect` (the quest log's detail) learn their range.
+pub(super) fn fire_range_changes(lua: &Lua) {
+    let moved: Vec<(u32, f32, f32)> = {
+        let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+        let frames: Vec<FrameHandle> = model
+            .arena
+            .iter_frames()
+            .filter(|(_, f)| matches!(&f.kind_state, KindState::Scroll(s) if s.child.is_some()))
+            .map(|(h, _)| h)
+            .collect();
+        let mut moved = Vec::new();
+        for h in frames {
+            let ranges = (
+                scroll_range(&model, h, Axis::Horizontal),
+                scroll_range(&model, h, Axis::Vertical),
+            );
+            let id = model.frame_id(h);
+            if let Some(KindState::Scroll(s)) = model.arena.frame_mut(h).map(|f| &mut f.kind_state)
+            {
+                if s.notified != ranges {
+                    s.notified = ranges;
+                    moved.push((id, ranges.0, ranges.1));
+                }
+            }
+        }
+        moved
+    };
+    for (id, x_range, y_range) in moved {
+        if let Err(e) = event::fire_widget_handler(
+            lua,
+            id,
+            "OnScrollRangeChanged",
+            vec![
+                Value::Number(f64::from(x_range)),
+                Value::Number(f64::from(y_range)),
+            ],
+        ) {
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .record_script_error(e.to_string());
+        }
+    }
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let m = lua.create_table()?;
 
@@ -286,6 +332,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 super::UiScript::resolve_layout(&mut model);
                 let x_range = scroll_range(&model, h, Axis::Horizontal);
                 let y_range = scroll_range(&model, h, Axis::Vertical);
+                if let Some(KindState::Scroll(s)) =
+                    model.arena.frame_mut(h).map(|f| &mut f.kind_state)
+                {
+                    s.notified = (x_range, y_range);
+                }
                 (model.frame_id(h), x_range, y_range)
             };
             // The resolve can move sizes, and the reference fires `OnSizeChanged` during layout, so

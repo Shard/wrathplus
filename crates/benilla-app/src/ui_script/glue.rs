@@ -23,7 +23,10 @@ pub(crate) fn load_glue_ui(script: &UiScript) -> Vec<String> {
     };
     let core = reference_ui::core_at(GLUE_TOC, &benilla_ui::source::decode(&bytes));
     let mut toc = benilla_ui::status::Status::default();
-    let failures = core.load_files_into(script, &core.toc.files, &mut toc);
+    let mut failures = core.load_files_into(script, &core.toc.files, &mut toc);
+    // Then AzerothBench's own additions (the Realmlist button), after the whole stock glue.
+    let ours = super::addons::Addon::glue_additions();
+    failures.extend(ours.load_files(script, &ours.toc.files));
     let mut log = benilla_ui::status::Status::default();
     toc.close_into(
         &mut log,
@@ -69,6 +72,10 @@ pub(crate) fn enter_stock_login(world: &mut World) {
         .map(|r| r.address().to_string())
         .unwrap_or_default();
     script.set_glue_connection(false, &server);
+    let pinned = world
+        .get_resource::<crate::realmlist::Realmlist>()
+        .is_some_and(|r| r.pinned_by_env());
+    script.set_glue_realmlist(&server, pinned);
     super::manifest::silenced_ui_load(&mut script, |script| {
         for failure in load_glue_ui(script) {
             warn!("ui_script: GlueXML load: {failure}");
@@ -79,6 +86,13 @@ pub(crate) fn enter_stock_login(world: &mut World) {
         "SET_GLUE_SCREEN",
         vec![benilla_ui::script::ScriptValue::Str("login".into())],
     );
+    // The backdrop: AccountLogin's ModelFFX pane samples the glue booth, which stands the scene
+    // this names (`UI_MainMenu_Northrend`, `portrait::glue_booth`).
+    if let Some(mut preview) = world.get_resource_mut::<crate::portrait::GluePreview>() {
+        preview.scene = Some(crate::portrait::GlueScene::MainMenu);
+        preview.look = None;
+        preview.yaw = 0.0;
+    }
     info!("ui_script: stock glue — AccountLogin up");
     world.insert_non_send_resource(script);
 }
@@ -112,7 +126,8 @@ pub(crate) fn stock_login(
     script: Option<NonSendMut<UiScript>>,
     mut attempt: crate::login::Attempt,
     strings: Option<Res<GlueStrings>>,
-    realm_list_up: Res<crate::realm_select::Realms>,
+    mut realms: ResMut<crate::realm_select::Realms>,
+    choice: Res<crate::net::RealmChoice>,
     mut stages: MessageReader<LoginStageMessage>,
     mut failures: MessageReader<LoginFailedMessage>,
     mut exit: MessageWriter<AppExit>,
@@ -146,6 +161,29 @@ pub(crate) fn stock_login(
                 exit.write(AppExit::Success);
             }
             GlueRequest::SaveAccountName(name) => crate::login::save_account(&name),
+            GlueRequest::ChangeRealm { category, index } => {
+                crate::realm_select::glue_change_realm(&mut realms, &choice, category, index)
+            }
+            GlueRequest::RequestRealmList => crate::realm_select::glue_refresh(&choice),
+            GlueRequest::RealmListCancelled => {
+                crate::realm_select::glue_cancel(&mut realms, &choice)
+            }
+            // AzerothBench's Realmlist button: the native editor's Okay (normalize, point the
+            // session at it, keep it in realmlist.wtf and the CVar).
+            GlueRequest::SetRealmlist(text) => {
+                let realmlist = attempt.realmlist_mut();
+                if crate::login::accept_realmlist(&text, realmlist, Some(&mut *script)) {
+                    let address = realmlist.address().to_string();
+                    script.set_glue_realmlist(&address, realmlist.pinned_by_env());
+                    script.set_glue_connection(false, &address);
+                } else {
+                    open_status(
+                        &mut script,
+                        "OKAY",
+                        &format!("\"{text}\" is not a realmlist address (host or host:port)."),
+                    );
+                }
+            }
         }
     }
     for msg in stages.read() {
@@ -164,8 +202,15 @@ pub(crate) fn stock_login(
     }
     // Reaching the realm list ends the connecting dialog, as `CGlueMgr::UpdateGlueDialog`
     // (`0x46b140`) does once the login state passes `LOGIN_STATE_CONNECTING`.
-    if realm_list_up.shown && realm_list_up.is_changed() {
+    // The realm list to show, or a refresh of the one shown: the snapshot, then the engine's
+    // `OPEN_REALM_LIST` (shows the frame, or redraws it).
+    if realms.shown && realms.is_changed() {
+        use crate::realm_select::RealmsCategory;
         script.fire_event("CLOSE_STATUS_DIALOG", vec![]);
+        let tabs = crate::realm_select::glue_tabs(realms.bypass_change_detection());
+        let selected = realms.selected_category();
+        script.set_glue_realms(tabs, selected, crate::realm_select::GLUE_UPDATE_RATE);
+        script.fire_event("OPEN_REALM_LIST", vec![]);
     }
 }
 
@@ -201,6 +246,25 @@ mod tests {
             shown, "v v v v v login",
             "GlueParent AccountLogin AccountLoginUI account password screen"
         );
+        // AzerothBench's Realmlist button (`assets/ui/glue`): the stock dialog edits the address.
+        script.set_glue_realmlist("127.0.0.1", false);
+        script.run("AccountLoginRealmlistButton:Click()").unwrap();
+        assert_eq!(
+            script
+                .eval::<String>(
+                    "return tostring(AccountLoginRealmlistButton:IsVisible())..' '..GlueDialog.which..' '..\
+                     GlueDialogEditBox:GetText()"
+                )
+                .unwrap(),
+            "1 BENILLA_REALMLIST 127.0.0.1"
+        );
+        script
+            .run("GlueDialogEditBox:SetText('10.0.0.5:3724') GlueDialog_OnClick(1)")
+            .unwrap();
+        assert_eq!(
+            script.take_glue_requests(),
+            vec![GlueRequest::SetRealmlist("10.0.0.5:3724".into())]
+        );
         script
             .run(
                 "AccountLoginAccountEdit:SetText('Bob') AccountLoginPasswordEdit:SetText('hunter2') \
@@ -224,6 +288,43 @@ mod tests {
                 .unwrap(),
             "",
             "the stock handler clears the password box"
+        );
+        // The realm list the engine opens after the logon: the stock RealmList over a seeded
+        // list, and a double-click on a row is `ChangeRealm(tab, row)`.
+        let realm = |name: &str| benilla_ui::script::GlueRealm {
+            name: name.into(),
+            num_characters: 1,
+            ..Default::default()
+        };
+        script.set_glue_realms(
+            vec![benilla_ui::script::GlueRealmTab {
+                name: String::new(),
+                realms: vec![realm("AzerothCore"), realm("Second")],
+            }],
+            1,
+            5.0,
+        );
+        script.fire_event("OPEN_REALM_LIST", vec![]);
+        script.tick(0.1);
+        assert_eq!(
+            script
+                .eval::<String>(
+                    "return tostring(RealmList:IsVisible())..' '..RealmListRealmButton1:GetText()..' '..\
+                     tostring(RealmListRealmButton3:IsShown())"
+                )
+                .unwrap(),
+            // 12340's visibility queries answer 1 or nil.
+            "1 AzerothCore nil"
+        );
+        script
+            .run("RealmSelectButton_OnDoubleClick(RealmListRealmButton2, 2)")
+            .unwrap();
+        assert_eq!(
+            script.take_glue_requests(),
+            vec![GlueRequest::ChangeRealm {
+                category: 1,
+                index: 2
+            }]
         );
         let errors = script.take_errors();
         assert!(errors.is_empty(), "{errors:#?}");
@@ -250,6 +351,7 @@ mod stock_login_tests {
 
     fn app() -> (App, crossbeam_channel::Receiver<crate::net::LoginRequest>) {
         let (tx, rx) = crossbeam_channel::unbounded();
+        let (realm_tx, _realm_rx) = crossbeam_channel::unbounded();
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .init_resource::<crate::login::LoginIntent>()
@@ -257,6 +359,7 @@ mod stock_login_tests {
             .insert_resource(LoginAbandon(Default::default()))
             .insert_resource(crate::realmlist::Realmlist::unpinned("127.0.0.1"))
             .init_resource::<crate::realm_select::Realms>()
+            .insert_resource(crate::net::RealmChoice(realm_tx))
             .add_message::<LoginStageMessage>()
             .add_message::<LoginFailedMessage>()
             .add_message::<AppExit>()
@@ -321,5 +424,107 @@ mod stock_login_tests {
         app.update();
         assert_eq!(rx.try_iter().count(), 0);
         assert!(log(&mut app).starts_with("OPEN_STATUS_DIALOG:OKAY:"));
+    }
+
+    /// A realm list to show reaches the stock frames as the snapshot and `OPEN_REALM_LIST`, and the
+    /// stock `ChangeRealm` answers the park with that row's realm.
+    #[test]
+    fn the_stock_realm_list_is_fed_and_answers_the_park() {
+        let (realm_tx, realm_rx) = crossbeam_channel::unbounded();
+        let (mut app, _rx) = app();
+        app.insert_resource(crate::net::RealmChoice(realm_tx));
+        app.world_mut()
+            .non_send_resource_mut::<UiScript>()
+            .run(
+                "local f = CreateFrame('Frame') f:RegisterEvent('OPEN_REALM_LIST') \
+                 f:SetScript('OnEvent', function() OPENED = (OPENED or 0) + 1 end)",
+            )
+            .unwrap();
+        {
+            let mut realms = app
+                .world_mut()
+                .resource_mut::<crate::realm_select::Realms>();
+            realms.realms = ["AzerothCore", "Second"]
+                .into_iter()
+                .map(|name| benilla_protocol::RealmInfo {
+                    name: name.into(),
+                    address: "127.0.0.1:8085".into(),
+                    population: 1.0,
+                    characters: 1,
+                    realm_type: 0,
+                    flags: 0,
+                    category: 1,
+                    id: 1,
+                })
+                .collect();
+            realms.shown = true;
+        }
+        app.update();
+        let (opened, second) = {
+            let s = app.world_mut().non_send_resource_mut::<UiScript>();
+            (
+                s.eval::<i64>("return OPENED or 0").unwrap(),
+                s.eval::<String>("return (GetRealmInfo(1, 2))").unwrap(),
+            )
+        };
+        assert_eq!(opened, 1);
+        assert_eq!(second, "Second");
+        app.update();
+        assert_eq!(
+            app.world_mut()
+                .non_send_resource_mut::<UiScript>()
+                .eval::<i64>("return OPENED")
+                .unwrap(),
+            1,
+            "an unchanged list does not reopen"
+        );
+        app.world_mut()
+            .non_send_resource_mut::<UiScript>()
+            .run("ChangeRealm(1, 2)")
+            .unwrap();
+        app.update();
+        let sent: Vec<_> = realm_rx.try_iter().collect();
+        assert!(
+            matches!(sent.last(), Some(crate::net::RealmRequest::Enter(name)) if name == "Second"),
+            "{sent:?}"
+        );
+        assert!(!app.world().resource::<crate::realm_select::Realms>().shown);
+    }
+
+    /// The Realmlist button's address becomes the session's; one that is not an address opens the
+    /// OKAY dialog and changes nothing.
+    #[test]
+    fn the_realmlist_button_sets_the_session_address() {
+        let (mut app, _rx) = app();
+        app.world_mut()
+            .non_send_resource_mut::<UiScript>()
+            .run("BenillaSetRealmlist('logon.example.org:3725')")
+            .unwrap();
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<crate::realmlist::Realmlist>()
+                .address(),
+            "logon.example.org:3725"
+        );
+        assert_eq!(
+            app.world_mut()
+                .non_send_resource_mut::<UiScript>()
+                .eval::<String>("return (BenillaGetRealmlist())")
+                .unwrap(),
+            "logon.example.org:3725"
+        );
+        app.world_mut()
+            .non_send_resource_mut::<UiScript>()
+            .run("BenillaSetRealmlist('two words')")
+            .unwrap();
+        app.update();
+        assert!(log(&mut app).starts_with("OPEN_STATUS_DIALOG:OKAY:"));
+        assert_eq!(
+            app.world()
+                .resource::<crate::realmlist::Realmlist>()
+                .address(),
+            "logon.example.org:3725"
+        );
     }
 }
