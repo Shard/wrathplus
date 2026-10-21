@@ -75,7 +75,7 @@ fn a_letter_reads_with_the_creator_tail() {
     s.fire_event("ITEM_TEXT_READY", vec![]);
     assert!(s.eval::<bool>("return ItemTextFrame:IsShown()").unwrap());
     assert!(
-        page_blocks(&s).contains(&"\nasd\n\nFrom,\nOne\n\n".to_string()),
+        page_blocks(&s).contains(&"\nasd\n\nFrom,\nOne\n\n\n".to_string()),
         "the reference creator tail (ITEM_TEXT_FROM really is comma'd), drawn as one raw block: {:?}",
         page_blocks(&s)
     );
@@ -145,7 +145,7 @@ fn a_book_page_shows_the_paging_chrome() {
     s.fire_event("ITEM_TEXT_BEGIN", vec![]);
     s.fire_event("ITEM_TEXT_READY", vec![]);
     assert!(
-        page_blocks(&s).contains(&"\npage one\n".to_string()),
+        page_blocks(&s).contains(&"\npage one\n\n".to_string()),
         "the page body drawn: {:?}",
         page_blocks(&s)
     );
@@ -368,7 +368,7 @@ fn a_quest_givers_gossip_displaces_the_open_reader() {
     s.fire_event("ITEM_TEXT_READY", vec![]);
     assert!(s.eval::<bool>("return ItemTextFrame:IsShown()").unwrap());
     assert!(
-        s.eval::<bool>("return GetLeftFrame():GetName() == 'ItemTextFrame'")
+        s.eval::<bool>("return GetUIPanel('left'):GetName() == 'ItemTextFrame'")
             .unwrap(),
         "the registered reader seats at the left slot, not a bare Show"
     );
@@ -386,7 +386,9 @@ fn a_quest_givers_gossip_displaces_the_open_reader() {
         "gossip replaced the note — the two-window stack (both drawn at 0,-104) cannot form"
     );
     assert!(s
-        .eval::<bool>("return GossipFrame:IsShown() and GetLeftFrame():GetName() == 'GossipFrame'")
+        .eval::<bool>(
+            "return GossipFrame:IsShown() and GetUIPanel('left'):GetName() == 'GossipFrame'"
+        )
         .unwrap());
     assert!(
         s.take_item_text_close(),

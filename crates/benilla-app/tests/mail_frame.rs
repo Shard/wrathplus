@@ -270,7 +270,7 @@ fn a_letter_and_the_centre_occupant_evict_each_other() {
     .unwrap();
     assert!(
         s.eval::<bool>(
-            "return GetLeftFrame():GetName() == 'MailFrame' \
+            "return GetUIPanel('left'):GetName() == 'MailFrame' \
              and GetCenterFrame():GetName() == 'CharacterFrame'"
         )
         .unwrap(),
@@ -293,8 +293,10 @@ fn a_letter_and_the_centre_occupant_evict_each_other() {
         "the eviction is a plain vacate — nothing slides"
     );
     assert!(
-        s.eval::<bool>("return MailFrame:IsShown() and GetLeftFrame():GetName() == 'MailFrame'")
-            .unwrap(),
+        s.eval::<bool>(
+            "return MailFrame:IsShown() and GetUIPanel('left'):GetName() == 'MailFrame'"
+        )
+        .unwrap(),
         "the mailbox itself is untouched"
     );
 
@@ -485,8 +487,8 @@ fn money_button_hover_shows_the_amount_tooltip() {
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     s.run("MailItem1Button:Click()").unwrap();
 
-    // The hover is the button's inline handler, which reads `this`.
-    s.run("this = OpenMailMoneyButton OpenMailMoneyButton:GetScript(\"OnEnter\")()")
+    // The hover is the button's inline handler, called with the button as `self`.
+    s.run("OpenMailMoneyButton:GetScript(\"OnEnter\")(OpenMailMoneyButton)")
         .unwrap();
     assert!(
         s.eval::<bool>("return GameTooltip:IsShown()").unwrap(),
@@ -736,7 +738,7 @@ fn every_send_tab_box_takes_a_keystroke_not_just_the_one_with_an_onchar() {
     s.set_screen_size(1024.0, 768.0);
     load_ui(&mut s);
     s.fire_event("MAIL_SHOW", vec![]);
-    s.run("MailFrameTab_OnClick(2)").unwrap();
+    s.run("MailFrameTab_OnClick(nil, 2)").unwrap();
     s.resolve();
     assert!(s.eval::<bool>("return SendMailFrame:IsVisible()").unwrap());
 
@@ -792,7 +794,7 @@ fn the_compose_reset_clears_the_subject_and_the_attachment_together() {
     load_ui(&mut s);
     s.set_container(0, Some(one_linen_backpack()));
     s.fire_event("MAIL_SHOW", vec![]);
-    s.run("MailFrameTab_OnClick(2)").unwrap();
+    s.run("MailFrameTab_OnClick(nil, 2)").unwrap();
 
     // Pick the item up and click the send slot; the stock tab names the letter after it.
     s.run("PickupContainerItem(0, 1) ClickSendMailItemButton()")
@@ -852,7 +854,7 @@ fn send_tab() -> UiScript {
     s.set_text_measurer(Box::new(Mono));
     load_ui(&mut s);
     s.fire_event("MAIL_SHOW", vec![]);
-    s.run("MailFrameTab_OnClick(2)").unwrap();
+    s.run("MailFrameTab_OnClick(nil, 2)").unwrap();
     s.resolve();
     s
 }

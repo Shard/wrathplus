@@ -214,7 +214,7 @@ fn auction_house_show_opens_the_window_on_the_browse_tab() {
     );
 
     // Tab 3 re-skins and swaps the pane.
-    s.run("AuctionFrameTab_OnClick(3)").unwrap();
+    s.run("AuctionFrameTab_OnClick(AuctionFrameTab3)").unwrap();
     assert!(s
         .eval::<bool>("return AuctionFrameAuctions:IsShown()")
         .unwrap());
@@ -268,7 +268,7 @@ fn the_auctions_tab_cannot_repaint_before_it_has_been_shown() {
     );
 
     // Harmless once the tab has shown, the only state the app sends it in.
-    s.run("AuctionFrameTab_OnClick(3)").unwrap();
+    s.run("AuctionFrameTab_OnClick(AuctionFrameTab3)").unwrap();
     assert!(s.take_errors().is_empty(), "opening the tab is clean");
     s.fire_event("AUCTION_OWNED_LIST_UPDATE", vec![]);
     assert!(
@@ -300,7 +300,7 @@ fn the_auctions_tab_names_the_high_bidder() {
     s.set_auction(Some(snapshot));
 
     s.fire_event("AUCTION_HOUSE_SHOW", vec![]);
-    s.run("AuctionFrameTab_OnClick(3)").unwrap();
+    s.run("AuctionFrameTab_OnClick(AuctionFrameTab3)").unwrap();
     s.fire_event("AUCTION_OWNED_LIST_UPDATE", vec![]);
 
     assert_eq!(
@@ -712,7 +712,7 @@ fn the_create_gate_and_the_deposit() {
     seat_player(&mut s, 100_000);
     s.set_auction(Some(state(vec![])));
     s.fire_event("AUCTION_HOUSE_SHOW", vec![]);
-    s.run("AuctionFrameTab_OnClick(3)").unwrap();
+    s.run("AuctionFrameTab_OnClick(AuctionFrameTab3)").unwrap();
 
     // Empty slot: shut, whatever the prices say.
     assert!(
@@ -950,7 +950,7 @@ fn a_row_hover_goes_through_the_reference_tooltip_verb() {
 
     // The row hover runs clean; the harness has no item templates, so this checks the call path.
     // A direct call binds `this` as the dispatcher would, or `SetOwner(this, ...)` gets nil.
-    s.run("this = BrowseButton1Item AuctionFrameItem_OnEnter('list', 1)")
+    s.run("AuctionFrameItem_OnEnter(BrowseButton1Item, 'list', 1)")
         .unwrap();
     assert!(
         s.take_errors().is_empty(),
