@@ -14,6 +14,12 @@ struct Window {
 /// `Bindings.xml`); the NPC windows open on the event the server's answer fires, as `UIParent_OnEvent`
 /// handles it.
 const WINDOWS: &[Window] = &[
+    // The character window and its tabs (`CharacterFrame.lua:28`, Experience's), each through
+    // `ToggleCharacter` as the micro button and the tab buttons call it.
+    Window { name: "character", open: "ToggleCharacter('PaperDollFrame')", frame: "PaperDollFrame" },
+    Window { name: "reputation", open: "ToggleCharacter('ReputationFrame')", frame: "ReputationFrame" },
+    Window { name: "skills", open: "ToggleCharacter('SkillFrame')", frame: "SkillFrame" },
+    Window { name: "currency", open: "ToggleCharacter('TokenFrame')", frame: "TokenFrame" },
     Window { name: "spellbook", open: "ToggleSpellBook(BOOKTYPE_SPELL)", frame: "SpellBookFrame" },
     Window { name: "talents", open: "ToggleTalentFrame()", frame: "PlayerTalentFrame" },
     Window { name: "quest log", open: "ToggleFrame(QuestLogFrame)", frame: "QuestLogFrame" },
@@ -60,7 +66,7 @@ fn open(script: &mut UiScript, w: &Window) -> Vec<String> {
     // Close it again through the panel manager, then the game menu that closing the key bindings
     // returns to (`KeyBindingFrame` hides into `GameMenuFrame`, a center panel that refuses others).
     let _ = script.run(&format!(
-        "if {f} then HideUIPanel({f}) end HideUIPanel(GameMenuFrame)",
+        "if {f} then HideUIPanel({f}) end HideUIPanel(CharacterFrame) HideUIPanel(GameMenuFrame)",
         f = w.frame
     ));
     script.tick(0.05);
