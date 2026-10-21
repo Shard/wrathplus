@@ -256,8 +256,6 @@ pub(crate) fn run_pending_entry_load(world: &mut World) {
     world.remove_resource::<PendingEntryUiLoad>();
     let start = std::time::Instant::now();
     load_ingame_ui_on_world_entry(world);
-    // The world entry's own step after the UI load, which a `ReloadUI()` never takes.
-    crate::vplates::clear_at_world_entry(world);
     // Every entry logs the load's cost, whether the cover hid it, and the session every
     // `VmMemo` keys on.
     info!(
@@ -741,35 +739,6 @@ mod tests {
             .expect("the parked VM is back");
         assert_eq!(vm.session(), session, "the same VM, no session moved");
         assert!(world.get_non_send_resource::<ParkedBootVm>().is_none());
-    }
-
-    /// The plate bits clear at the world entry (`0x401639`, in the entry setup `0x401570`) and
-    /// not at a `ReloadUI()`, which never runs that setup. A capture world, so no UI is built.
-    #[test]
-    fn the_world_entry_clears_the_plate_bits_and_a_reload_does_not() {
-        use crate::vplates::VPlateMode;
-        let on = VPlateMode {
-            enemies: true,
-            friends: true,
-        };
-        let world_with = |on: VPlateMode| {
-            let mut world = World::new();
-            world.insert_resource(State::new(crate::char_select::ClientState::InWorld));
-            world.insert_resource(crate::run_mode::CaptureMode);
-            world.insert_resource(on);
-            world
-        };
-
-        let mut world = world_with(on);
-        world.insert_resource(PendingEntryUiLoad);
-        run_pending_entry_load(&mut world);
-        assert_eq!(*world.resource::<VPlateMode>(), VPlateMode::default());
-
-        let mut world = world_with(on);
-        world.insert_resource(ReloadUiPending(true));
-        run_pending_reload(&mut world);
-        assert!(!world.resource::<ReloadUiPending>().0, "the reload ran");
-        assert_eq!(*world.resource::<VPlateMode>(), on, "a reload keeps them");
     }
 
     /// The reference re-makes its Lua state inside `UI_Init` (`0x48fe97`).

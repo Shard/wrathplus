@@ -1578,13 +1578,12 @@ fn seed_equipped_bags(
     }
 }
 
-/// Turn enemy plates on or off as the V binding does, the verb and FrameXML's global together,
-/// so FrameXML's own replay agrees.
+/// Turn enemy plates on or off as the V binding does: its `nameplateShowEnemies` CVar.
 fn set_enemy_plates(script: Option<&benilla_ui::script::UiScript>, on: bool) {
     let lua = if on {
-        "NAMEPLATES_ON = 1; ShowNameplates()"
+        r#"SetCVar("nameplateShowEnemies", 1)"#
     } else {
-        "NAMEPLATES_ON = nil; HideNameplates()"
+        r#"SetCVar("nameplateShowEnemies", 0)"#
     };
     if let Some(Err(e)) = script.map(|s| s.run(lua)) {
         warn!("nameplates: {e}");
