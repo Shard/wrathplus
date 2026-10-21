@@ -45,3 +45,23 @@ fn an_edge_read_after_set_text_sees_the_new_box_and_its_dependents() {
     assert_eq!(check_left, 10.0 + long + 2.0);
     assert_eq!(width, long);
 }
+
+/// `GetStringHeight` (`0x48df00`): the measured, laid-out height, inline like `GetStringWidth`,
+/// and 0 with no text, where `GetHeight` floors at one unit.
+#[test]
+fn get_string_height_reads_the_measure_inline_and_zero_for_no_text() {
+    let mut s = script();
+    s.set_screen_size(800.0, 600.0);
+    s.set_text_measurer(Box::new(SevenWide));
+    let got = s
+        .eval::<(f32, f32)>(
+            r#"
+            local fs = CreateFrame("Frame"):CreateFontString(nil, "ARTWORK")
+            local empty = fs:GetStringHeight()
+            fs:SetText("Line")
+            return empty, fs:GetStringHeight()
+        "#,
+        )
+        .unwrap();
+    assert_eq!(got, (0.0, 14.0));
+}

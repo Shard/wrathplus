@@ -137,19 +137,18 @@ impl Loader<'_> {
             } else {
                 FontAttrs::Own
             };
-            // `SetText` creates the label even with no text, so its layout lands on a real region;
             // `text=` is a global-string key (`0x703bf0`).
             let label = match bt.attr("text") {
                 Some(raw) => self.resolve_text(raw, dbg),
                 None => String::new(),
             };
-            // A named label is created as a named region, not aliased after `SetText`, so its
-            // `GetName()` answers.
+            // The builder makes the label (`SetText("")` makes none, `0x96f860`): a named one as a
+            // named region, so `GetName()` answers; an unnamed one reuses the button's own.
             let bt_name = bt.name().map(|raw| framexml::resolve_name(raw, self_name));
-            if let Some(rname) = bt_name.clone() {
-                match wrapper
-                    .call_method::<Table>("CreateFontString", (rname, Option::<String>::None))
-                {
+            let own = wrapper.call_method::<Table>("GetFontString", ()).is_ok();
+            if bt_name.is_some() || !own {
+                let named = (bt_name.clone(), Option::<String>::None);
+                match wrapper.call_method::<Table>("CreateFontString", named) {
                     Ok(fs) => self.call(wrapper, "SetFontString", fs, dbg),
                     Err(e) => self
                         .report
