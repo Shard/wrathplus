@@ -91,11 +91,11 @@ impl UiScript {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn lock_inputs_preserve_valid_empty_raw_duplicates_and_packed_types() {
-        let mut ui = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut ui = UiScript::new().unwrap();
         assert_eq!(
             *ui.model_mut().wrath_lfg.locks,
             WrathLfgLockSnapshot::default()
@@ -168,7 +168,7 @@ mod tests {
             .insert(5, "Interface\\Icons\\INV_Misc_QuestionMark".into());
         let presentation = Arc::new(presentation);
         for _ in 0..2 {
-            let mut ui = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+            let mut ui = UiScript::new().unwrap();
             ui.run("received=0; local f=CreateFrame('Frame'); f:RegisterEvent('LFG_LOCK_INFO_RECEIVED'); f:RegisterEvent('LFG_UPDATE_RANDOM_INFO'); f:SetScript('OnEvent',function() received=received+1 end)").unwrap();
             ui.set_wrath_lfg_lock_snapshot(snapshot.clone());
             ui.set_wrath_lfg_presentation(presentation.clone());

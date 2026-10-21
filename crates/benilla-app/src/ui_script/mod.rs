@@ -163,16 +163,6 @@ fn default_ui_scale() -> f32 {
         .unwrap_or(DEFAULT_UI_SCALE)
 }
 
-/// The seam scale `s`, window px per UI unit (`windowH/768 × uiScale`), used at every crossing of
-/// the VM boundary; identity for a degenerate window (h ≤ 0, before winit).
-pub(crate) fn seam_scale(window_h: f32, ui_scale: f32) -> f32 {
-    if window_h > 0.0 {
-        window_h / 768.0 * ui_scale
-    } else {
-        1.0
-    }
-}
-
 /// The Lua UI host (a `NonSend` resource: an mlua VM is `!Send`) and its per-frame passes.
 pub(crate) struct UiScriptPlugin;
 
@@ -359,8 +349,9 @@ fn arbitrate_pointer_over_ui(
 
 /// The session lifecycle: the VM's birth, identity, death and reload.
 mod lifecycle;
+pub(crate) use crate::app_core::ui_state::{ingame_ui_up, seam_scale};
 pub(crate) use lifecycle::{
-    end_ui_session, ingame_ui_up, run_pending_reload, setup_script, AddOnIdentity,
+    end_ui_session, run_pending_reload, setup_script, AddOnIdentity,
     LeavingWorldArmed, PendingEntryUiLoad, ReloadUiPending,
 };
 // Test-only: other modules' tests consume these, and a plain re-export would warn unused.

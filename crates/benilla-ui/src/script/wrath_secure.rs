@@ -191,11 +191,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptCall, ScriptDialect, SpellBookState, SpellSlotView, UiScript};
+    use crate::script::{ScriptCall, SpellBookState, SpellSlotView, UiScript};
 
     #[test]
     fn calls_ride_the_queue_in_native_shapes() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_spellbook(SpellBookState {
             tabs: Vec::new(),
             slots: vec![SpellSlotView {

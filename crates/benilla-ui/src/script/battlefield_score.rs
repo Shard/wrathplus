@@ -461,7 +461,7 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     fn row(name: &str, faction: i32, kb: u32, deaths: u32, honor: u32) -> BattlefieldScoreRow {
         BattlefieldScoreRow {
@@ -482,7 +482,7 @@ mod tests {
     }
 
     fn board() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_battlefield_scores(BattlefieldScores {
             rows: vec![
                 row("Bob", 0, 3, 1, 50),

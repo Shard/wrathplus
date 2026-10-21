@@ -997,7 +997,7 @@ mod tests {
 
     #[test]
     fn a_sub_header_with_its_own_bar_nests_its_children() {
-        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut expedition = header(1052, 30, "Horde Expedition");
         expedition.parent_id = 1097;
         expedition.has_rep = true;

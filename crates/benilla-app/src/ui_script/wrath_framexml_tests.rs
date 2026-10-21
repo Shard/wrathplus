@@ -11,6 +11,9 @@ mod census_arity;
 #[path = "wrath_census_fixtures.rs"]
 mod census_fixtures;
 
+#[path = "wrath_windows_tests.rs"]
+mod windows;
+
 /// One chunk's `Name(` sites: `function Name(` definitions, `:Name(` methods, and bare global
 /// calls, less the names the chunk binds with `local` ([`census_lexer::local_names`]).
 fn scan_calls(
@@ -122,17 +125,35 @@ fn census(script: &mut UiScript, failures: &[String]) -> usize {
     seen.iter().filter(|(l, _)| !l.starts_with("WARN")).count()
 }
 
-#[test]
-#[ignore = "reads the installed Wrath client; run with WOW_CLIENT_PROFILE=wrath WOW_DATA=…"]
-fn installed_wrath_framexml_builds_the_stock_hud() {
-    let data = benilla_formats::wow_data_or_skip!();
-    // Every attribute name the loader reads, for the unhandled-attribute audit.
-    benilla_ui::framexml::record_queried_attributes(true);
+/// The session's player unit, a Human Warrior at `level`, as the fixtures' guid reads it.
+fn stock_player(level: u32) -> UnitState {
+    UnitState {
+        exists: true,
+        // The fixtures' player guid, so `UnitGUID("player")` answers as in a session.
+        guid: 0x0100_0000_0000_0001,
+        name: Some("Benchone".into()),
+        level,
+        race: Some("Human".into()),
+        race_file: Some("Human".into()),
+        class: Some("Warrior".into()),
+        class_file: Some("WARRIOR".into()),
+        faction_group: Some("Alliance".into()),
+        faction_group_localized: Some("Alliance".into()),
+        health: 60,
+        max_health: 60,
+        ..Default::default()
+    }
+}
+
+/// The live session's UI as `lifecycle::new_vm` and world entry build it from the installed client:
+/// class names, account, resolution, player record and unit, the addon reply, the CVar seed, the
+/// whole FrameXML load, the login events and the first tick. Returns the VM and its load failures.
+fn stock_session(data: &std::path::Path) -> (UiScript, Vec<String>) {
     let mut script = UiScript::new().unwrap();
     // A live VM receives its display modes before FrameXML; UIParent uses their aspect ratio.
     script.set_screen_size(1600.0, 1000.0);
     // As `lifecycle::new_vm` seeds it: stock `Constants.lua` fills the class names at file scope.
-    let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+    let mut chain = benilla_formats::open_chain(data).expect("open chain");
     script.set_localized_class_names(
         benilla_formats::load_chr_classes(&mut chain)
             .expect("ChrClasses.dbc")
@@ -147,25 +168,7 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
         name: "Benchone".into(), race: Some(("Human".into(), "Human".into())),
         class: Some(("Warrior".into(), "WARRIOR".into())), sex: 2,
     });
-    script.set_unit(
-        "player",
-        Some(UnitState {
-            exists: true,
-            // The fixtures' player guid, so `UnitGUID("player")` answers as in a session.
-            guid: 0x0100_0000_0000_0001,
-            name: Some("Benchone".into()),
-            level: 1,
-            race: Some("Human".into()),
-            race_file: Some("Human".into()),
-            class: Some("Warrior".into()),
-            class_file: Some("WARRIOR".into()),
-            faction_group: Some("Alliance".into()),
-            faction_group_localized: Some("Alliance".into()),
-            health: 60,
-            max_health: 60,
-            ..Default::default()
-        }),
-    );
+    script.set_unit("player", Some(stock_player(1)));
     eprintln!(
         "default bindings: {} rows",
         super::manifest::default_bindings().len()
@@ -187,6 +190,16 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
     let started = std::time::Instant::now();
     script.tick(0.1);
     eprintln!("first tick: {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
+    (script, failures)
+}
+
+#[test]
+#[ignore = "reads the installed Wrath client; run with WOW_CLIENT_PROFILE=wrath WOW_DATA=…"]
+fn installed_wrath_framexml_builds_the_stock_hud() {
+    let data = benilla_formats::wow_data_or_skip!();
+    // Every attribute name the loader reads, for the unhandled-attribute audit.
+    benilla_ui::framexml::record_queried_attributes(true);
+    let (mut script, failures) = stock_session(&data);
     for w in script.warnings().iter().filter(|w| w.contains("converge")) {
         eprintln!("CYCLE {w}");
     }

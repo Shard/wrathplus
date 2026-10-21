@@ -12,7 +12,8 @@
 use bevy::camera::{PerspectiveProjection, Projection};
 use bevy::prelude::*;
 
-use crate::net::{ObjectStore, SelfPlayer};
+use crate::net::wrath_auras::PacketAuras;
+use crate::net::{Guid, SelfPlayer};
 use crate::ui_action::Spells;
 use benilla_world::view::{WorldCamera, CAM_FOVY};
 
@@ -37,23 +38,26 @@ impl ScopedView {
     }
 }
 
-/// Drives the projection from aura 76 in our own aura slots only, as the reference gates it: the
-/// aura field is public, so another player's spyglass must not zoom ours.
+/// Drives the projection from aura 76 among our own auras only, as the reference gates it: every
+/// unit's auras stream, so another player's spyglass must not zoom ours. Build 12340's auras
+/// arrive by `SMSG_AURA_UPDATE`, held in [`PacketAuras`] by guid.
 pub(super) fn apply_scoped_view(
-    self_q: Query<&ObjectStore, With<SelfPlayer>>,
+    self_q: Query<&Guid, With<SelfPlayer>>,
+    auras: Option<Res<PacketAuras>>,
     spells: Option<Res<Spells>>,
     mut scoped: ResMut<ScopedView>,
     mut projections: Query<&mut Projection, With<WorldCamera>>,
 ) {
     let catalog = spells.as_ref().map(|s| &s.catalog);
-    scoped.zoom = self_q
+    let own = self_q
         .single()
         .ok()
+        .and_then(|guid| auras.as_deref()?.by_guid.get(&guid.0));
+    scoped.zoom = own
         .zip(catalog)
-        .and_then(|(_store, catalog)| {
-            // 12340 descriptors carry no aura slots; native auras arrive by packet.
-            std::iter::empty::<benilla_protocol::types::UnitAuraSlot>().find_map(|slot| {
-                let rec = catalog.get(slot.spell_id)?;
+        .and_then(|(own, catalog)| {
+            own.iter().find_map(|stamped| {
+                let rec = catalog.get(stamped.aura.spell_id)?;
                 (0..3).find_map(|i| {
                     // The reference reads the misc value from the aura name's own effect index.
                     (rec.effect_apply_aura[i] == SPELL_AURA_FAR_SIGHT)
@@ -103,5 +107,41 @@ mod tests {
             "unscoped restores OUR default, never the reference's stored 90"
         );
         assert!(!none.active());
+    }
+
+    /// Our own `SMSG_AURA_UPDATE` snapshot drives the scope, and only ours: the Ornate Spyglass
+    /// (12883, aura 76, misc 15) on another player leaves our camera alone.
+    #[test]
+    fn our_packet_spyglass_aura_zooms_and_anothers_does_not() {
+        const ME: u64 = 0x11;
+        const OTHER: u64 = 0x22;
+        let mut app = App::new();
+        let mut spells = Spells::empty_for_tests();
+        spells.catalog =
+            benilla_formats::SpellCatalog::from_displays(std::collections::HashMap::from([(
+                12883,
+                benilla_formats::SpellDisplay {
+                    effect_apply_aura: [SPELL_AURA_FAR_SIGHT, 0, 0],
+                    effect_misc_value: [15, 0, 0],
+                    ..Default::default()
+                },
+            )]));
+        app.insert_resource(spells)
+            .init_resource::<ScopedView>()
+            .add_systems(Update, apply_scoped_view);
+        app.world_mut().spawn((SelfPlayer, Guid(ME)));
+        let zoom = |app: &App| app.world().resource::<ScopedView>().zoom;
+
+        crate::net::wrath_auras::set_for_test(app.world_mut(), OTHER, &[(0, 12883)]);
+        app.update();
+        assert_eq!(zoom(&app), None, "another player's spyglass");
+
+        crate::net::wrath_auras::set_for_test(app.world_mut(), ME, &[(3, 12883)]);
+        app.update();
+        assert_eq!(zoom(&app), Some(15.0 / REFERENCE_DEFAULT_DEGREES));
+
+        crate::net::wrath_auras::set_for_test(app.world_mut(), ME, &[]);
+        app.update();
+        assert_eq!(zoom(&app), None, "the aura's removal restores the view");
     }
 }

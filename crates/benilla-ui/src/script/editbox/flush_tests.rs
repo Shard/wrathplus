@@ -516,7 +516,7 @@ fn on_cursor_changed_reports_the_first_row_at_plus_zero() {
 /// its named OnCursorChanged handler must run before the following scroll update.
 #[test]
 fn wrath_debugtools_cursor_setter_drives_scrolling_edit_geometry() {
-    let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_text_measurer(Box::new(Mono));
     s.set_screen_size(800.0, 600.0);
     s.run(r#"

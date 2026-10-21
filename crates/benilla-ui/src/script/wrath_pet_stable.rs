@@ -43,11 +43,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn the_pair_reads_the_pushed_state() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert!(s
             .eval::<bool>("return GetPetTalentTree() == nil and IsAtStableMaster() == false")
             .unwrap());

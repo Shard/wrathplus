@@ -131,11 +131,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn overrides_lay_over_the_live_keys_by_priority_and_clear_per_owner() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run("A = CreateFrame('Frame') B = CreateFrame('Frame')")
             .unwrap();
         let before = s.keybinds_generation();
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn a_click_form_command_clicks_the_named_button() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run(
             "Clicked = nil MyButton = CreateFrame('Button', 'MyButton') \
              MyButton:SetScript('OnClick', function(self, button) Clicked = button end)",

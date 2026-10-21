@@ -252,8 +252,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::ScriptDialect;
-
+    
     fn companion(spell_id: u32, active: bool) -> CompanionView {
         CompanionView {
             creature_id: spell_id + 1000,
@@ -266,7 +265,7 @@ mod tests {
     }
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_wrath_companions(WrathCompanions {
             lists: [
                 vec![companion(10, false), companion(11, true)],

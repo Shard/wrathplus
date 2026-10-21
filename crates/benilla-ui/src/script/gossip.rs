@@ -352,8 +352,7 @@ mod tests {
 
     #[test]
     fn wrath_gossip_rows_are_native_and_keep_all_columns() {
-        use crate::script::ScriptDialect;
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+                let mut s = UiScript::new().unwrap();
         let mut m = menu();
         m.quests = vec![
             super::GossipQuestRow {

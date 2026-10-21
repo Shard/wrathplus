@@ -201,11 +201,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::script::{
-        PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, ScriptDialect, UiScript,
+        PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, UiScript,
         UnitState, WrathGroup, WrathGroupMember,
     };
     fn fixture(raid: bool) -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_party(PartyState {
             leader_guid: 1,
             members: vec![PartyMemberInfo {

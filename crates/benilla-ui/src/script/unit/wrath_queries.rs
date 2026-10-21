@@ -412,12 +412,12 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::script::{
-        party::PartyState, party::RaidMemberInfo, ScriptDialect, UiScript, UnitState,
+        party::PartyState, party::RaidMemberInfo, UiScript, UnitState,
     };
 
     #[test]
     fn the_flag_readers_read_their_descriptor_bits() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_unit(
             "player",
             Some(UnitState {
@@ -474,7 +474,7 @@ mod tests {
 
     #[test]
     fn focus_unit_asks_for_the_named_units_guid_and_clear_focus_for_none() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_unit(
             "target",
             Some(UnitState {
@@ -499,7 +499,7 @@ mod tests {
     #[test]
     fn selection_colour_friends_and_class_names_follow_build_12340() {
         use crate::script::social::{FriendInfo, SocialState};
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let unit = |reaction, player_controlled, can_attack| UnitState {
             exists: true,
             reaction,
@@ -543,7 +543,7 @@ mod tests {
 
     #[test]
     fn the_lfg_timers_answer_their_aura_expiry_or_nothing() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert!(s
             .eval::<bool>("return select('#', GetLFGDeserterExpiration()) == 0 and select('#', GetLFGRandomCooldownExpiration()) == 0")
             .unwrap());

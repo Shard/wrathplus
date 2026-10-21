@@ -337,7 +337,7 @@ fn drive_vplates(
     let scale = window.map_or(1.0, |w| w.scale_factor());
     // Everything below is in window px, divided by this once for the widget layer's units.
     let seam = window.map_or(1.0, |w| {
-        crate::ui_script::seam_scale(w.height(), ui_scale.0)
+        crate::app_core::ui_state::seam_scale(w.height(), ui_scale.0)
     });
     let mut states: Vec<PlateState> = Vec::new();
 

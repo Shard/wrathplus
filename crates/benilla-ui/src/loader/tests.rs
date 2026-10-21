@@ -8,7 +8,7 @@ mod loader_tests {
 
     #[test]
     fn wrath_xml_attributes_are_typed_inherited_and_ready_before_onload() {
-        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         let doc = parse(
             r#"<Ui>
             <Frame name="Offsets" virtual="true"><Attributes>
@@ -2568,7 +2568,7 @@ mod chunk_name_tests {
 
     #[test]
     fn wrath_xml_chunks_keep_the_explicit_addon_owner_abi_through_nested_xml() {
-        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         let doc = parse(
             r#"<Ui><Script>local addon, private = ...; private.inline = addon</Script><Include file="Nested.xml"/></Ui>"#,
         );
@@ -2589,7 +2589,7 @@ mod chunk_name_tests {
 
     #[test]
     fn wrath_function_handlers_and_named_formals_are_compiled() {
-        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run("function NamedHandler(self) FUNCTION_SELF = self end")
             .unwrap();
         let doc = parse(
@@ -2650,7 +2650,7 @@ fn wrath_animations_exist_before_owner_onload_and_timer_finishes() {
     use crate::script::UiScript;
     let parse = |text: &str| crate::framexml::parse(text).unwrap();
     let no_files = |_: &str| None;
-    let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     let doc = parse(
         r#"<Ui><Frame name="AnimFixture"><Animations><AnimationGroup parentKey="pulse" looping="BOUNCE"><Alpha name="$parentPulser" change="-.7" duration=".75"/></AnimationGroup><AnimationGroup parentKey="timer"><Animation duration="1"><Scripts><OnFinished>FINISHED = self:GetParent():GetParent() == AnimFixture</OnFinished></Scripts></Animation></AnimationGroup></Animations><Scripts><OnLoad>AnimFixturePulser:Stop(); self.timer:Play(); READY = self.pulse:GetLooping()</OnLoad></Scripts></Frame></Ui>"#,
     );
@@ -2663,7 +2663,7 @@ fn wrath_animations_exist_before_owner_onload_and_timer_finishes() {
 
 #[test]
 fn wrath_scale_rotation_xml_loaded_before_onload() {
-    let s = crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let s = crate::script::UiScript::new().unwrap();
     let doc = crate::framexml::parse(r#"<Ui><Frame name="TransformXml"><Animations><AnimationGroup parentKey="group"><Scale parentKey="scale" scaleX="2" scaleY="3" duration="1"><Origin point="TOPLEFT" x="4" y="5"/></Scale><Rotation parentKey="rotation" degrees="90" duration="1"/></AnimationGroup></Animations><Scripts><OnLoad>local x,y=self.group.scale:GetScale(); XMLTRANSFORM=x==2 and y==3 and self.group.rotation:GetDegrees()==90; local p,x,y=self.group.scale:GetOrigin(); XMLORIGIN=p=='TOPLEFT' and x==4 and y==5</OnLoad></Scripts></Frame></Ui>"#).unwrap();
     let report=super::load(&s,&doc,&|_: &str| None);
     assert!(report.errors.is_empty(),"{report:?}");
@@ -2674,7 +2674,7 @@ fn wrath_scale_rotation_xml_loaded_before_onload() {
 /// MailFrame's inline body uses them, while DebugTools uses function=.
 #[test]
 fn wrath_inline_cursor_script_binds_native_geometry_names() {
-    let s = crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let s = crate::script::UiScript::new().unwrap();
     let doc = crate::framexml::parse(r#"<Ui><EditBox name="CursorXml" autoFocus="false"><Scripts><OnCursorChanged>self.cursorOffset = y-10; self.cursorHeight = h; X=x; W=w;</OnCursorChanged></Scripts></EditBox></Ui>"#).unwrap();
     let report = super::load(&s, &doc, &|_: &str| None);
     assert!(report.errors.is_empty(), "{report:?}");

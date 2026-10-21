@@ -857,7 +857,7 @@ mod tests {
 
     #[test]
     fn wrath_watch_move_uses_watch_positions() {
-        let mut s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_quest_log(QuestLogState {
             entries: (1..=3)
                 .map(|quest_id| QuestLogEntryView {
@@ -891,7 +891,7 @@ mod tests {
 
     #[test]
     fn wrath_log_rewards_and_watch_index_follow_selection() {
-        let mut s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_quest_log(QuestLogState {
             entries: vec![QuestLogEntryView {
                 quest_id: 55,
@@ -1592,7 +1592,7 @@ mod tests {
     /// 0, no tag, group 0, nils and quest 0.
     #[test]
     fn wrath_titles_answer_nine_with_zeroed_header_and_miss_fields() {
-        let mut s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_quest_log(QuestLogState {
             entries: vec![
                 QuestLogEntryView {

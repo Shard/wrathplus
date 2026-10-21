@@ -413,7 +413,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::script::{
-        ItemTemplateView, ScriptDialect, UiScript, WrathLfgCatalog, WrathLfgDungeon, WrathLfgLock,
+        ItemTemplateView, UiScript, WrathLfgCatalog, WrathLfgDungeon, WrathLfgLock,
         WrathLfgLockSnapshot, WrathLfgMemberLocks, WrathLfgPlayerLocks, WrathLfgPresentation,
         WrathLfgPreview, WrathLfgRewardItem,
     };
@@ -443,7 +443,7 @@ mod tests {
     }
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_wrath_lfg_catalog(
             Arc::new(WrathLfgCatalog {
                 dungeons: vec![
@@ -720,7 +720,7 @@ mod tests {
 
     #[test]
     fn joinable_reads_self_then_party_locks_outside_raids() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_wrath_lfg_catalog(
             Arc::new(WrathLfgCatalog {
                 dungeons: vec![

@@ -108,7 +108,7 @@ pub(super) fn register(app: &mut App) {
             Update,
             feed.in_set(crate::ui_script::UiFeed)
                 .after(crate::ui_unit::UnitFeed)
-                .run_if(crate::ui_script::ingame_ui_up),
+                .run_if(crate::app_core::ui_state::ingame_ui_up),
         );
 }
 
