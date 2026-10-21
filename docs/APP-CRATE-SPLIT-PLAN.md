@@ -48,8 +48,8 @@ The cycles come from three patterns, not from tangled features:
 |---|---|---|---|---|
 | `benilla-app-core` | shared state, schedule sets, cvar registry | `run_mode`, `local_state`, `query_cache`, `area`, `chr_classes`, `text_filter`, `text_reshape`, `glue_strings`, `crash`, `shutdown`, `pending_item_ops`, `quest_reputation`, `cvars` (registry only), `launch_plan` (the run's command line and environment), `app_core` (the state extracted in step 0) | ~12k + extracted | ~150 |
 | `benilla-app-net` | session and wire drain | `net` (with the capture FIFOs), `realmlist`, and the wire-query caches `names`, `items`, `go_templates`, `area_trigger`, `name_persist`, `creature_type` (reassigned after the move dry run) | ~25k | ~280 |
-| `benilla-app-world` | world, rendering, gameplay | `entities`, `creature_anim`, `player`, `target`, `spell`, `motion`, `swing_refusal`, `sound`, `portrait`, `minimap`, `transport`, `video`, `cursor`, `death`, `nameplates`, `vplates`, `quest_markers`, `world_state`, `loading_screen`, the effect modules (`aura_visual`, `weapon_trail`, `bowstring`, `fishing_line`, `footprints`, …) | ~136k | ~1.4k |
-| `benilla-app-ui` | FrameXML host and feeds, glue screens | `ui_script`, every `ui_*`, `bindings`, `console`, `combat_log`, `char_select`, `char_create`, `realm_select`, `login`, `glue`, `textinput`, `tutorial`, `script_calls`, `experience_ui`, `world_state_ui` | ~234k | ~2.8k |
+| `benilla-app-world` | world, rendering, gameplay | `entities`, `creature_anim`, `player`, `target`, `spell`, `motion`, `swing_refusal`, `sound`, `portrait`, `minimap`, `transport`, `video`, `cursor`, `death`, `nameplates`, `vplates`, `quest_markers`, `world_state`, `loading_screen`, the effect modules (`aura_visual`, `weapon_trail`, `bowstring`, `fishing_line`, `footprints`, …), the 2-D primitives (`overlay`: the quad types and model tiles; `ui_text`, the text engine), the guild session `guild`, and `game_tip` (the loading screen's tip) | ~136k | ~1.4k |
+| `benilla-app-ui` | FrameXML host and feeds, glue screens | `ui_script`, every `ui_*` but `ui_text`, `bindings`, `console`, `combat_log`, `char_select`, `char_create`, `realm_select`, `login`, `glue`, `textinput`, `tutorial`, `script_calls`, `experience_ui`, `world_state_ui`, `shipped_cvars` (every row source sits at or below ui) | ~234k | ~2.8k |
 | `benilla-app-tools` | capture, harness, dev | `capture`, `addon_harness`, `perf`, `debug_panel`, `dev`, `hover_log`, `showcase_capture`, `preflight`, `probe_shield` | ~35k | ~100 |
 | `benilla-app` (root) | assembly | `lib.rs` (`run`, `run_with`), `game_plugins`, the bins, `tests/` | ~1.4k | few |
 
@@ -635,6 +635,39 @@ So of the 76 sites, 27 are mechanical (the fixture 7, the pure moves 15 of which
 two aliases, the asset path, the test helper, the `Default` impl), and 49 are four design
 questions: where the 2-D primitives live (20), how world reaches ui systems (10) and ui-feature
 traits (8), and how the root hands `ui_script` the cvar table (11).
+
+**Decisions (manager, 2026-10-22), applied by Wire B:**
+
+1. The 2-D drawing primitives are rendering, not UI logic: they move down into the world
+   `overlay` module (`UiQuad`, `UiQuads`, `UiQuadMask`, `UvRect`, `UiQuadMaterial`,
+   `PlayerUiCamera`, and the model tiles `UiModelTiles`, `TileRequest`, `Cell`), and `ui_text`,
+   the text engine, is a world module whole (its one ui reach, the addon root, is
+   `local_state::addons_root`). `minimap`, `nameplates`, `chat_bubble`, `combat_text` and
+   `portrait` stay world.
+2. World calling ui: the caller moves up, or a pure helper moves down. The spell-failure combat
+   log entry and the death durability line register in `combat_log` (two owners pinned on
+   `WrathSpellFailure`); `melee_center_text` and `classify_source` are `combat_text::center`;
+   the totem and reagent check is `spell::reagents`; `InputHooks` and the tutorial ids are
+   `app_core::tutorial`; `game_tip` is a world module (it serves the loading screen); the three
+   world tests that assembled ui plugins moved to the root or stopped needing them.
+3. A ui-feature trait called from world moves to its type's layer when its body is pure: the
+   console registry and `ConsoleCommandApp` are `app_core::console`; `AuraDurations::set` is
+   inherent again (its trace switch is `app_core::state::aura_trace_period`); `ChatLogFeed`'s
+   world caller moved up (above).
+4. `shipped_cvars` is a ui module (final decision): every row source sits at or below ui.
+
+The guild session is a world module, `guild` (state, identity cache, sort, chat lines and packet
+handlers); `ui_guild` keeps the feed and the plugin. It cannot be core: its identity asks send
+through `NetCommands`.
+
+**Re-measured** on ed8df006 (wrath-hud 83cff406 with de01d1ce and dcff03f2, which also moved
+`player_token_guid` to `target::unit_tokens` and `wow_font` to `ui_text`), canonical-paths
+applied (2740 paths): **world pass 0** (core + net + world build, lib and tests); **ui pass 1**,
+`ui_script::content`'s `include_dir!("$CARGO_MANIFEST_DIR/assets/ui")`. That one is the move
+step's: the asset tree moves with the ui crate, or the path names `benilla-app`'s, as does
+`overlay`'s `embedded://benilla_app/shaders/ui_quad.wgsl`. Every layer below tools now resolves
+downward. Not yet measured: the tools pass, and what only separate crates report (the
+visibility widening and inherent impls on a type from another crate).
 
 ## Moving a layer out (steps 1 to 4)
 

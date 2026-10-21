@@ -85,7 +85,7 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
         1
     );
     assert_eq!(census[&K::DurabilityDamageDeath].len(), 1);
-    assert!(census[&K::DurabilityDamageDeath][0].contains("death::net::on_durability_damage_death"));
+    assert!(census[&K::DurabilityDamageDeath][0].contains("combat_log::on_durability_damage_death"));
     app.world_mut().resource_mut::<crate::net::SelfGuid>().0 = Some(42);
     let entity = app.world_mut().spawn(Transform::default()).id();
     app.world_mut()

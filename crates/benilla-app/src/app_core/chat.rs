@@ -497,3 +497,46 @@ pub(crate) enum SlotState {
     /// token (`0x49c0e0`), which keeps the window's registration.
     Suspended,
 }
+
+/// The kind's row in the shipped default colour table (`.rdata 0x804710`), which the chat bubble
+/// and the edit box header tint with; the window's line colour is `ChatTypeInfo`'s.
+pub(crate) fn default_color(kind: ChatEventKind) -> [u8; 3] {
+    use ChatEventKind as K;
+    match kind {
+        K::Say => [255, 255, 255],
+        K::Party => [170, 170, 255],
+        K::Raid => [255, 127, 0],
+        K::Guild => [64, 255, 64],
+        K::Officer => [64, 192, 64],
+        K::Yell => [255, 64, 64],
+        K::Whisper | K::WhisperInform | K::Afk | K::Dnd => [255, 128, 255],
+        K::Emote | K::TextEmote => [255, 128, 64],
+        K::System => [255, 255, 0],
+        K::MonsterSay => [255, 255, 159],
+        K::MonsterYell => [255, 64, 64],
+        K::MonsterEmote => [255, 128, 64],
+        K::MonsterWhisper => [179, 179, 179],
+        K::Channel => [255, 192, 192],
+        K::ChannelJoin | K::ChannelLeave | K::ChannelList => [192, 128, 128],
+        K::ChannelNotice | K::ChannelNoticeUser => [192, 192, 192],
+        K::Ignored => [255, 0, 0],
+        // `ChatTypeInfo["FILTERED"]` has no colour (`ChatFrame.lua:112`), so the line takes the
+        // window's default, white; no bubble or edit box header shows this kind.
+        K::Filtered => [255, 255, 255],
+        K::Skill => [85, 85, 255],
+        K::Loot => [0, 170, 0],
+        K::Money => [255, 255, 0],
+        K::CombatXpGain => [111, 111, 255],
+        K::CombatHonorGain => [224, 202, 10],
+        K::RaidLeader | K::RaidWarning | K::RaidBossEmote | K::BattlegroundLeader => {
+            [255, 219, 183]
+        }
+        K::Battleground => [255, 127, 0],
+        K::BgSystemNeutral => [255, 120, 10],
+        K::BgSystemAlliance => [0, 174, 239],
+        K::BgSystemHorde => [255, 0, 0],
+        K::CombatMiscInfo | K::CombatFactionChange => [128, 128, 255],
+        // Untraced in 12340's table; neither kind speaks in a bubble or the edit box.
+        K::Tradeskills | K::PetInfo => [255, 255, 255],
+    }
+}

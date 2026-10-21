@@ -592,6 +592,44 @@ impl TestDeps {
     }
 }
 
+/// A test's object index: a world to seed with items, and the [`Objects`] lookup over it. Seed
+/// first, then read: `get()` borrows the world while its answer lives, so call sites write
+/// `&objs.get()` inline.
+#[cfg(test)]
+pub(crate) struct TestObjects {
+    world: World,
+    state: bevy::ecs::system::SystemState<Objects<'static, 'static>>,
+}
+
+#[cfg(test)]
+impl TestObjects {
+    pub(crate) fn new() -> Self {
+        let mut world = World::new();
+        world.init_resource::<GuidIndex>();
+        let state = bevy::ecs::system::SystemState::new(&mut world);
+        Self { world, state }
+    }
+
+    /// One item instance in the index, as the wire's `ItemCreate` makes it.
+    pub(crate) fn spawn(&mut self, guid: u64, fields: ObjectFields) {
+        test_spawn_item(&mut self.world, guid, fields, false);
+    }
+
+    /// The same for a container instance (`TYPEMASK_CONTAINER`).
+    pub(crate) fn spawn_container(&mut self, guid: u64, fields: ObjectFields) {
+        test_spawn_item(&mut self.world, guid, fields, true);
+    }
+
+    pub(crate) fn get(&mut self) -> Objects<'_, '_> {
+        self.state.get(&self.world)
+    }
+}
+
+/// `ItemSubClass.dbc`: the slot and type line's alternate-proficiency and hidden-name gates; the
+/// item tooltip loads it (`ui_items`).
+#[derive(Resource)]
+pub(crate) struct ItemSubClasses(pub(crate) benilla_formats::ItemSubClassCatalog);
+
 /// [`spawn_item`] straight into a test world, without the command queue.
 #[cfg(test)]
 pub(crate) fn test_spawn_item(

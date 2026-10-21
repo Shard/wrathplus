@@ -570,28 +570,7 @@ pub(crate) fn race_pvp_team(race: u8) -> i8 {
     }
 }
 
-/// Resolve a UnitPopup token to the other player's guid it names: `"target"` when it is a player,
-/// `"partyN"` through the roster; `"player"` and anything unresolved answer `None`.
-pub(crate) fn player_token_guid(
-    token: &str,
-    selection: &Selection,
-    group: &crate::ui_party::GroupState,
-) -> Option<u64> {
-    match token {
-        "target" => selection
-            .guid
-            .filter(|g| benilla_protocol::guid::is_player(*g)),
-        "player" => None,
-        tok => tok
-            .strip_prefix("party")
-            .and_then(|n| n.parse::<usize>().ok())
-            .and_then(|n| n.checked_sub(1))
-            .and_then(|n| group.party_slots().nth(n))
-            .map(|m| m.guid),
-    }
-}
-
-pub(crate) use crate::target::unit_tokens::UnitTokens;
+pub(crate) use crate::target::unit_tokens::{player_token_guid, UnitTokens};
 
 /// Squared distance as the reference sums it: `f32` widened to `f64`, `(dz² + dx²) + dy²`
 /// (`0x48a26f..0x48a27d`, shared by `CanInspect` `0x48a1b0` and `CheckInteractDistance`

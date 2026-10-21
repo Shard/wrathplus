@@ -14,6 +14,7 @@ use benilla_formats::SpellCatalog;
 use benilla_protocol::types::{UnitAuraSlot, AURA_FLAG_CANCELABLE, UNIT_AURA_POSITIVE_SLOTS};
 use benilla_ui::script::{AuraState, ScriptValue, TrackingState, UiScript};
 
+use crate::app_core::state::aura_trace_period as trace_period;
 use crate::char_select::ClientState;
 use crate::net::{
     ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, Reputations, SelfPlayer,
@@ -114,21 +115,6 @@ struct AuraFeedMemo {
     native_last: Option<Vec<crate::net::wrath_auras::StampedAura>>,
     /// Every other unit's list, by guid, the resolver's inputs and their pushes.
     units: units::UnitAuras,
-}
-
-/// The `BENILLA_AURA_TRACE` period in seconds; a set value that is not a positive number means 1 s.
-fn trace_period() -> Option<f64> {
-    static PERIOD: std::sync::OnceLock<Option<f64>> = std::sync::OnceLock::new();
-    *PERIOD.get_or_init(|| {
-        let v = std::env::var("BENILLA_AURA_TRACE").ok()?;
-        Some(
-            v.trim()
-                .parse::<f64>()
-                .ok()
-                .filter(|p| *p > 0.0)
-                .unwrap_or(1.0),
-        )
-    })
 }
 
 /// One trace tick: each drawn aura's time left beside its button's text, the button polling
@@ -655,31 +641,6 @@ fn drain_aura_cancels(script: Option<NonSendMut<UiScript>>, net: Res<NetCommands
     };
     for spell_id in script.take_cancel_aura_requests() {
         let _ = net.0.send(ClientCommand::CancelAura { spell_id });
-    }
-}
-
-/// `AuraDurations`'s methods that need this module (the type lives in `app_core` for the crate split).
-pub(crate) trait AuraDurationsTrace {
-    /// Records one `SMSG_UPDATE_AURA_DURATION`.
-    fn set(&mut self, slot: u8, remaining_ms: u32, now: f64);
-}
-
-impl AuraDurationsTrace for AuraDurations {
-    fn set(&mut self, slot: u8, remaining_ms: u32, now: f64) {
-        let total = f64::from(remaining_ms) / 1000.0;
-        if trace_period().is_some() {
-            info!(
-                "aura trace: SMSG_UPDATE_AURA_DURATION slot {slot} = {remaining_ms} ms @ {now:.2}"
-            );
-        }
-        self.by_slot.insert(
-            slot,
-            DurationStamp {
-                total,
-                expires_at: now + total,
-                received_at: now,
-            },
-        );
     }
 }
 

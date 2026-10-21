@@ -121,3 +121,24 @@ impl UnitTokens<'_, '_> {
         self.held(pet?)
     }
 }
+
+/// Resolve a UnitPopup token to the other player's guid it names: `"target"` when it is a player,
+/// `"partyN"` through the roster; `"player"` and anything unresolved answer `None`.
+pub(crate) fn player_token_guid(
+    token: &str,
+    selection: &Selection,
+    group: &GroupState,
+) -> Option<u64> {
+    match token {
+        "target" => selection
+            .guid
+            .filter(|g| benilla_protocol::guid::is_player(*g)),
+        "player" => None,
+        tok => tok
+            .strip_prefix("party")
+            .and_then(|n| n.parse::<usize>().ok())
+            .and_then(|n| n.checked_sub(1))
+            .and_then(|n| group.party_slots().nth(n))
+            .map(|m| m.guid),
+    }
+}

@@ -2,8 +2,8 @@
 //! keeps the second wire count independently, and routes by the uncapped count.
 //! BG/arena cross-realm local augmentation (006b8290) is not implemented here.
 use super::*;
+use crate::net::wrath_who_capture::NativeWhoPackets;
 use crate::net::ClientCommand;
-use crate::ui_native_who::NativeWhoPackets;
 use benilla_protocol::{
     types::{WhoEntry, WhoResults},
     wrath_who::Packet,

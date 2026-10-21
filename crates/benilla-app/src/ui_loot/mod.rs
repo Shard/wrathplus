@@ -72,24 +72,7 @@ pub(crate) enum LootAction {
     },
 }
 
-pub(crate) use crate::app_core::state::{LootConfig, LootLatch};
-impl Default for LootConfig {
-    fn default() -> Self {
-        Self {
-            // Off leaves 1.12's shift-click as the only auto-loot.
-            auto_loot: false,
-            // The reference's registered `"1"`.
-            show_loot_spam: true,
-        }
-    }
-}
-
-/// A movement start that closes the loot: the reference's guard `0x60e990`, called by every
-/// movement-start emitter, turning included, but not by mouse-look facing. No loot target reaches
-/// the range gate `0x493230`, so there is no distance leash. vmangos also releases on movement
-/// (`MovementHandler.cpp:1104`), but the close is the client's.
-#[derive(Resource, Default)]
-pub(crate) struct LootMoveStart(pub(crate) bool);
+pub(crate) use crate::app_core::state::{LootConfig, LootLatch, LootMoveStart};
 
 pub(crate) struct UiLootPlugin;
 
