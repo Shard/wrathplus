@@ -142,8 +142,8 @@ fn armor_guy_shows_red_broken_yellow_damaged_and_hides_clean() {
     assert!(s.errors().is_empty(), "errors: {:?}", s.errors());
 }
 
-/// Item flag `0x10` forces red and `0x08` (wrapped) silences the region (`0x4c7faa`, `0x4c7fc8`);
-/// region 12 is low ammo (20 or fewer carried reads 3), which the 1.12 FrameXML never reads.
+/// Item flag `0x10` forces red and `0x08` (wrapped) silences the region (`0x5e8fe0`); region 12
+/// is low ammo (20 or fewer carried reads 1), which stock `DurabilityFrame.lua` never reads.
 #[test]
 fn flag_bits_and_the_low_ammo_region() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -157,7 +157,7 @@ fn flag_bits_and_the_low_ammo_region() {
     s.set_inventory_slots(inv);
     assert_eq!(
         s.eval::<i64>("return GetInventoryAlertStatus(9)").unwrap(),
-        4,
+        2,
         "force-red bit → broken at full durability"
     );
     assert_eq!(cell_color(&mut s, WEAPON_CELL), Some(RED));
@@ -180,12 +180,12 @@ fn flag_bits_and_the_low_ammo_region() {
     s.set_inventory_slots(inv);
     assert_eq!(
         s.eval::<i64>("return GetInventoryAlertStatus(12)").unwrap(),
-        3,
-        "low carried ammo reads 3 on the 12th region"
+        1,
+        "low carried ammo reads 1 on the 12th region"
     );
     assert!(
         !s.eval::<bool>("return DurabilityFrame:IsShown()").unwrap(),
-        "the 1.12 armor guy never shows for ammo"
+        "the armor guy never shows for ammo"
     );
     assert!(s.errors().is_empty(), "errors: {:?}", s.errors());
 }
@@ -340,8 +340,8 @@ fn a_late_side_glyph_refreshes_the_seat_while_the_frame_stays_shown() {
     assert!(s.errors().is_empty(), "errors: {:?}", s.errors());
 }
 
-/// `QuestWatchFrame` is last in the right-side walk, seated at the running `anchorY` after the
-/// durability frame's height (`UIParent.lua:1770`).
+/// `WatchFrame` is last in the right-side walk, seated at the running `anchorY`, which the shown
+/// durability frame lowers by its height and 10 (`UIParent.lua:1918`, `:1937`).
 #[test]
 fn the_quest_tracker_stacks_below_the_durability_guy() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -366,6 +366,7 @@ fn the_quest_tracker_stacks_below_the_durability_guy() {
         "Interface\\FrameXML\\QuestFrame.xml",
         "Interface\\FrameXML\\QuestLogFrame.xml",
         "Interface\\FrameXML\\DurabilityFrame.xml",
+        "Interface\\FrameXML\\WatchFrame.xml",
     ] {
         load_xml(&mut s, f);
     }
@@ -376,10 +377,10 @@ fn the_quest_tracker_stacks_below_the_durability_guy() {
     s.resolve();
 
     let dur_bottom: f32 = s.eval("return DurabilityFrame:GetBottom()").unwrap();
-    let watch_top: f32 = s.eval("return QuestWatchFrame:GetTop()").unwrap();
+    let watch_top: f32 = s.eval("return WatchFrame:GetTop()").unwrap();
     assert!(
-        (watch_top - dur_bottom).abs() <= 0.5,
-        "tracker top {watch_top} must sit flush under the durability bottom {dur_bottom}"
+        (watch_top - (dur_bottom - 10.0)).abs() <= 0.5,
+        "tracker top {watch_top} must sit 10 under the durability bottom {dur_bottom}"
     );
     assert!(s.errors().is_empty(), "errors: {:?}", s.errors());
 }

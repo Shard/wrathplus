@@ -30,15 +30,17 @@ fn setup() -> UiScript {
         "Interface\\FrameXML\\MainMenuBar.xml",
         r"Interface\FrameXML\MainMenuBarMicroButtons.xml",
         // `HelpFrame_OnShow` calls `UpdateMicroButtons()` before `GetGMStatus()`
-        // (`HelpFrame.lua:178`), so the micro row and the bar's button kit load too.
+        // (`HelpFrame.lua:59-61`), so the micro row and the bar's button kit load too.
         "Interface\\FrameXML\\Cooldown.xml",
         "Interface\\FrameXML\\ActionButtonTemplate.xml",
         "Interface\\FrameXML\\ActionBarFrame.xml",
-        // `TicketStatusFrame_OnEvent` re-anchors `TemporaryEnchantFrame` before it arms the
-        // repoll (`HelpFrame.lua:494`).
+        // `TicketStatusFrame_OnShow` re-anchors `ConsolidatedBuffs` (`HelpFrame.lua:408-410`).
         "Interface\\FrameXML\\BuffFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
         "Interface\\FrameXML\\HelpFrame.xml",
+        // The start page `ToggleHelpFrame` opens, and whose buttons `UPDATE_TICKET` swaps
+        // (`HelpFrame.lua:155-172`).
+        "Interface\\FrameXML\\KnowledgeBaseFrame.xml",
     ] {
         load_xml(&mut s, file);
     }
@@ -76,49 +78,50 @@ fn open_ticket_args(
     ]
 }
 
-/// With a ticket the form is an editor (Save Changes, Exit); a bare `arg1 = 0` makes it a form.
+/// With a ticket the form is an editor (Save Changes, its description in the box); `UPDATE_TICKET`
+/// with no arguments makes it a form again (`HelpFrame.lua:96-174`).
 #[test]
-fn an_open_ticket_turns_the_form_into_an_editor_and_a_zero_turns_it_back() {
+fn an_open_ticket_turns_the_form_into_an_editor_and_no_ticket_turns_it_back() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = setup();
-    s.run("ShowUIPanel(HelpFrame) HelpFrame_ShowFrame(\"OpenTicket\")")
-        .unwrap();
+    s.run("HelpFrame_ShowFrame(\"OpenTicket\")").unwrap();
 
     s.fire_event(
         "UPDATE_TICKET",
         open_ticket_args(7, "Where is this NPC?", 0.25, 2.5, 0.01),
     );
     assert_eq!(
-        s.eval::<String>("return HelpFrameOpenTicketText:GetText()")
+        s.eval::<String>("return HelpFrameOpenTicketEditBox:GetText()")
             .unwrap(),
         "Where is this NPC?",
         "arg2 is the description"
     );
     assert_eq!(
-        s.eval::<i64>("return HelpFrameOpenTicket.ticketType")
-            .unwrap(),
-        7,
-        "arg1 is the category"
+        s.eval::<(String, String)>(
+            "return HelpFrameOpenTicketSubmit:GetText(), HelpFrameOpenTicketLabel:GetText()"
+        )
+        .unwrap(),
+        ("Save Changes".into(), "Your Current Issue:".into())
     );
-    assert_eq!(
-        s.eval::<i64>("return HelpFrameOpenTicket.hasTicket")
-            .unwrap(),
-        1
-    );
+    assert!(s
+        .eval::<bool>("return KnowledgeBaseFrameEditTicket:IsShown()")
+        .unwrap());
 
-    // No ticket: a bare 0.
-    s.fire_event("UPDATE_TICKET", vec![ScriptValue::Int(0)]);
+    s.fire_event("UPDATE_TICKET", vec![]);
     assert_eq!(
-        s.eval::<String>("return HelpFrameOpenTicketText:GetText()")
+        s.eval::<String>("return HelpFrameOpenTicketEditBox:GetText()")
             .unwrap(),
         "",
         "the editor empties"
     );
-    assert!(
-        s.eval::<bool>("return HelpFrameOpenTicket.hasTicket == nil")
+    assert_eq!(
+        s.eval::<String>("return HelpFrameOpenTicketSubmit:GetText()")
             .unwrap(),
-        "and stops believing it has a ticket"
+        "Submit"
     );
+    assert!(!s
+        .eval::<bool>("return KnowledgeBaseFrameEditTicket:IsShown()")
+        .unwrap());
 }
 
 #[test]
@@ -134,7 +137,7 @@ fn the_ticket_toast_follows_the_ticket() {
             .unwrap(),
         "a ticket raises the toast"
     );
-    s.fire_event("UPDATE_TICKET", vec![ScriptValue::Int(0)]);
+    s.fire_event("UPDATE_TICKET", vec![]);
     assert!(
         !s.eval::<bool>("return TicketStatusFrame:IsVisible()")
             .unwrap(),
@@ -142,7 +145,8 @@ fn the_ticket_toast_follows_the_ticket() {
     );
 }
 
-/// `TicketStatus_OnUpdate` re-asks every `GMTICKET_CHECK_INTERVAL`, 600 s (`HelpFrame.lua:162`).
+/// `TicketStatusFrame_OnUpdate` re-asks every `GMTICKET_CHECK_INTERVAL`, 600 s, while a ticket is
+/// open (`HelpFrame.lua:4`, `:391-402`).
 #[test]
 fn the_toast_repolls_the_server_only_after_the_full_interval() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -153,22 +157,27 @@ fn the_toast_repolls_the_server_only_after_the_full_interval() {
     );
     let _ = s.take_gm_ticket_intents();
 
-    s.run("TicketStatus_OnUpdate(599)").unwrap();
+    s.run("TicketStatusFrame_OnUpdate(TicketStatusFrame, 599)")
+        .unwrap();
     assert!(s.take_gm_ticket_intents().is_empty(), "not yet");
-    s.run("TicketStatus_OnUpdate(2)").unwrap();
+    s.run("TicketStatusFrame_OnUpdate(TicketStatusFrame, 2)")
+        .unwrap();
     assert_eq!(
         s.take_gm_ticket_intents(),
         vec![GmTicketIntent::Ask],
         "600s elapsed — re-ask"
     );
-    s.run("TicketStatus_OnUpdate(1)").unwrap();
+    s.run("TicketStatusFrame_OnUpdate(TicketStatusFrame, 1)")
+        .unwrap();
     assert!(
         s.take_gm_ticket_intents().is_empty(),
         "and the clock restarts"
     );
 }
 
-/// `HelpFrame_OnShow` asks the server for the queue status (`HelpFrame.lua:180`).
+/// `ToggleHelpFrame` opens the knowledge base page (`UIParent.lua:431-442`); the window's
+/// `OnShow` asks the queue status and the page's asks it again with the ticket
+/// (`HelpFrame.lua:61`, `KnowledgeBaseFrame.lua:51-52`).
 #[test]
 fn toggling_the_window_opens_it_and_asks_for_the_queue_status() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -177,12 +186,17 @@ fn toggling_the_window_opens_it_and_asks_for_the_queue_status() {
     assert!(s.eval::<bool>("return HelpFrame:IsVisible()").unwrap());
     assert_eq!(
         s.take_gm_ticket_intents(),
-        vec![GmTicketIntent::AskStatus],
+        vec![
+            GmTicketIntent::AskStatus,
+            GmTicketIntent::AskStatus,
+            GmTicketIntent::Ask
+        ],
         "OnShow calls GetGMStatus — the gate must not run on an assumption"
     );
     assert!(
-        s.eval::<bool>("return HelpFrameHome:IsVisible()").unwrap(),
-        "and it opens on Home"
+        s.eval::<bool>("return KnowledgeBaseFrame:IsVisible()")
+            .unwrap(),
+        "and it opens on the knowledge base"
     );
 
     s.run("ToggleHelpFrame()").unwrap();
@@ -200,26 +214,25 @@ fn the_ticket_text_grows_with_its_lines_and_its_scroll_frame_ranges_over_them() 
     // past the frame.
     const GLYPH: f64 = 60.0;
     s.set_text_measurer(Box::new(super::FixedWidthFont(GLYPH as f32)));
-    s.run("ShowUIPanel(HelpFrame) HelpFrame_ShowFrame(\"OpenTicket\")")
-        .unwrap();
+    s.run("HelpFrame_ShowFrame(\"OpenTicket\")").unwrap();
     s.resolve();
     s.tick(0.016);
     s.resolve();
     assert_eq!(
-        s.eval::<f64>("return HelpFrameOpenTicketText:GetHeight()")
+        s.eval::<f64>("return HelpFrameOpenTicketEditBox:GetHeight()")
             .unwrap(),
         12.0,
         "empty, the box is one line: the authored 357 lasts until the first flush"
     );
 
-    s.run(r#"HelpFrameOpenTicketText:SetText(string.rep("x", 400))"#)
+    s.run(r#"HelpFrameOpenTicketEditBox:SetText(string.rep("x", 400))"#)
         .unwrap();
     s.tick(0.016);
     s.resolve();
     // Wrapped at the box's own 541: no insets.
     let height = (400.0 * GLYPH / 541.0).ceil() * 12.0;
     assert_eq!(
-        s.eval::<f64>("return HelpFrameOpenTicketText:GetHeight()")
+        s.eval::<f64>("return HelpFrameOpenTicketEditBox:GetHeight()")
             .unwrap(),
         height
     );
@@ -271,12 +284,11 @@ fn the_ticket_texts_caret_moves_by_rows_and_lines() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = setup();
     s.set_text_measurer(Box::new(Rows));
-    s.run("ShowUIPanel(HelpFrame) HelpFrame_ShowFrame(\"OpenTicket\")")
-        .unwrap();
+    s.run("HelpFrame_ShowFrame(\"OpenTicket\")").unwrap();
     s.resolve();
     s.run(
-        "HelpFrameOpenTicketText:SetText('Stuck in\\nthe mine') \
-         HelpFrameOpenTicketText:SetFocus()",
+        "HelpFrameOpenTicketEditBox:SetText('Stuck in\\nthe mine') \
+         HelpFrameOpenTicketEditBox:SetFocus()",
     )
     .unwrap();
     s.tick(0.016);
@@ -291,7 +303,7 @@ fn the_ticket_texts_caret_moves_by_rows_and_lines() {
     mv(&mut s, EditUnit::Line, true, true);
     s.char_input("a cave");
     assert_eq!(
-        s.eval::<String>("return HelpFrameOpenTicketText:GetText()")
+        s.eval::<String>("return HelpFrameOpenTicketEditBox:GetText()")
             .unwrap(),
         "Stuck in,\na cave"
     );
