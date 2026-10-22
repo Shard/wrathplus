@@ -1,55 +1,16 @@
 //! The app half of the verbs behind the stock `StaticPopup.lua` dialogs: the packet feeds that
-//! raise them and the drains behind their buttons, for the pet trainer's unlearn, the instance
-//! boot countdown, the area spirit healer's wave, the battleground queue and the meeting stone.
-//! A meeting stone's click runs the stone's own use slot, which refuses a join client-side or
-//! sends `CMSG_MEETINGSTONE_JOIN`, never the shared `CMSG_GAMEOBJ_USE`.
+//! raise them and the drains behind their buttons, for the instance boot countdown, the area
+//! spirit healer's wave and the battleground queue; and a summoning stone's click, which 3.3.5
+//! sends as `CMSG_GAMEOBJ_USE`. 12340 has no meeting-stone queue and no pet untrainer.
 
 use std::time::Instant;
 
-use benilla_protocol::types::MeetingStoneNotice;
 use benilla_ui::script::{ScriptValue, UiScript};
 use bevy::ecs::system::NonSendMut;
 use bevy::prelude::*;
 
-use crate::area::AreaTableRes;
-use crate::creature_anim::spell_visual::{meeting_stone_join_fx, SpellKitFx, SpellVisuals};
-use crate::names::NameCache;
-
 use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
 use crate::ui_script::{UiFeed, UiInput};
-use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
-
-/// The pet trainer's pending question: the latch (`0xc4d7b0/b4`) and the cost (`0xc4d7b8`).
-#[derive(Resource, Default)]
-pub(crate) struct PetUnlearnState {
-    npc: Option<u64>,
-    cost: u32,
-    ask: bool,
-}
-
-impl PetUnlearnState {
-    /// The inbound `SMSG_PET_UNLEARN_CONFIRM`: latch and owe the dialog.
-    pub(crate) fn ask(&mut self, npc: u64, cost: u32) {
-        self.npc = Some(npc);
-        self.cost = cost;
-        self.ask = true;
-    }
-
-    fn pending(&self) -> Option<u64> {
-        self.npc
-    }
-}
-
-impl NpcSession for PetUnlearnState {
-    fn npc(&self) -> Option<u64> {
-        self.npc
-    }
-    fn close(&mut self) {
-        self.npc = None;
-        self.cost = 0;
-        self.ask = false;
-    }
-}
 
 /// The instance-boot clock (`[0xb4e34c]`), and what the last packet owes the UI.
 #[derive(Resource, Default)]
@@ -93,9 +54,7 @@ const SPIRIT_GUIDE_ACQUIRE_YD: f32 = 20.0;
 /// inside 20 yd is kept until 22.
 const SPIRIT_GUIDE_RETAIN_YD: f32 = SPIRIT_GUIDE_ACQUIRE_YD * 1.1;
 
-pub(crate) use crate::app_core::interaction::{
-    AreaSpiritHealer, MeetingStone, MeetingStoneUse, StoneText,
-};
+pub(crate) use crate::app_core::interaction::{AreaSpiritHealer, MeetingStoneUse};
 
 /// The two battleground queue slots (`0xbea4b8`, `0x40` bytes each, written by
 /// `SMSG_BATTLEFIELD_STATUS` `0x54ae40`), each stamped with the moment its status landed, and the
@@ -280,178 +239,6 @@ impl BattlefieldQueue {
     }
 }
 
-/// `SStrPrintf`'s buffer at the rebuild: 256 bytes, so 255 of text.
-const STONE_TEXT_BYTES: usize = 255;
-
-/// A `GlobalStrings` value as the client's `GetText` reads it: `""` when the global is missing
-/// (`0x882748`, the shared empty string, never NULL).
-fn global_text(script: &UiScript, key: &str) -> String {
-    script
-        .lua()
-        .globals()
-        .get::<String>(key)
-        .unwrap_or_default()
-}
-
-/// The area's localized name, or `None` where the reference's three-part AreaTable resolve fails.
-fn area_name(areas: Option<&AreaTableRes>, id: u32) -> Option<&str> {
-    areas.and_then(|a| a.0.name(id))
-}
-
-/// The status-text rebuild `0x4ca070`: `MEETINGSTONE_TOOLTIP` (or `""` when missing) over the
-/// queued area's name (or `UNKNOWN`), printed into a 256-byte buffer.
-fn build_stone_text(script: &UiScript, areas: Option<&AreaTableRes>, area: u32) -> String {
-    let name = area_name(areas, area)
-        .map(str::to_string)
-        .unwrap_or_else(|| global_text(script, "UNKNOWN"));
-    let mut text = global_text(script, "MEETINGSTONE_TOOLTIP").replacen("%s", &name, 1);
-    if text.len() > STONE_TEXT_BYTES {
-        let mut cut = STONE_TEXT_BYTES;
-        while !text.is_char_boundary(cut) {
-            cut -= 1;
-        }
-        text.truncate(cut);
-    }
-    text
-}
-
-/// The `0x295` handler's five-way table (`0x4ca3a4`): status 0 names the old area and is silent
-/// without its row, status 1 names the new one and is silent when unchanged, past 4 is silent.
-fn stone_line(
-    script: &UiScript,
-    areas: Option<&AreaTableRes>,
-    old: u32,
-    new: u32,
-    status: u8,
-) -> Option<crate::ui_action::Shown> {
-    match status {
-        0 => {
-            let name = area_name(areas, old)?;
-            crate::ui_action::keyed_line_s(script, "ERR_MEETING_STONE_LEFT_QUEUE_S", &[name])
-        }
-        1 => {
-            if new == old {
-                return None;
-            }
-            let name = area_name(areas, new)
-                .map(str::to_string)
-                .unwrap_or_else(|| global_text(script, "UNKNOWN"));
-            crate::ui_action::keyed_line_s(script, "ERR_MEETING_STONE_IN_QUEUE_S", &[&name])
-        }
-        2 => crate::ui_action::keyed_line(script, "ERR_MEETING_STONE_OTHER_MEMBER_LEFT"),
-        3 => crate::ui_action::keyed_line(script, "ERR_MEETING_STONE_PARTY_KICKED_FROM_QUEUE"),
-        4 => crate::ui_action::keyed_line(script, "ERR_MEETING_STONE_MEMBER_STILL_IN_QUEUE"),
-        _ => None,
-    }
-}
-
-/// The meeting-stone feed's other inputs, bundled to stay under Bevy's system-parameter limit.
-#[derive(bevy::ecs::system::SystemParam)]
-pub(crate) struct MeetingStoneInputs<'w, 's> {
-    areas: Option<Res<'w, AreaTableRes>>,
-    names: Res<'w, NameCache>,
-    commands: Res<'w, NetCommands>,
-    visuals: Option<Res<'w, SpellVisuals>>,
-    fx: MessageWriter<'w, SpellKitFx>,
-    self_q: Query<'w, 's, Entity, With<SelfPlayer>>,
-    tutorials: Option<MessageWriter<'w, crate::tutorial::TutorialEvent>>,
-}
-
-/// The meeting stone's feed: the `0x295` lines and the rebuild per arrival; the four display
-/// replies; the two globals pushed when they moved.
-fn feed_meeting_stone(
-    script: Option<NonSendMut<UiScript>>,
-    mut stone: ResMut<MeetingStone>,
-    mut inputs: MeetingStoneInputs,
-    mut sink: crate::ui_action::MessageSink,
-) {
-    let Some(mut script) = script else {
-        return;
-    };
-    let areas = inputs.areas.as_deref();
-    let mut lines = Vec::new();
-
-    for (old, status) in std::mem::take(&mut stone.updates) {
-        let new = stone.area;
-        lines.extend(stone_line(&script, areas, old, new, status));
-        if status == 1 && new != old {
-            // Status 1's extra block (`0x4ca363`): `Effect_C` kind `0xc` on the local player,
-            // then the Meeting Stones tutorial.
-            if let (Some(visuals), Ok(entity)) = (inputs.visuals.as_deref(), inputs.self_q.single())
-            {
-                if let Some(fx) = meeting_stone_join_fx(visuals, entity) {
-                    inputs.fx.write(fx);
-                }
-            }
-            if let Some(t) = inputs.tutorials.as_mut() {
-                t.write(crate::tutorial::TutorialEvent::trigger(
-                    crate::tutorial::id::MEETING_STONES,
-                ));
-            }
-        }
-        // Every status, silent or out of range, rebuilds. No event: 12340's event table has no
-        // `MEETINGSTONE_CHANGED`.
-        let text = build_stone_text(&script, areas, new);
-        stone.text = StoneText::Built(text.clone());
-        stone.dirty = false;
-        script.set_meeting_stone(new, Some(text));
-    }
-
-    for notice in std::mem::take(&mut stone.notices) {
-        match notice {
-            MeetingStoneNotice::Success => {
-                lines.extend(crate::ui_action::keyed_line(
-                    &script,
-                    "ERR_MEETING_STONE_SUCCESS",
-                ));
-            }
-            MeetingStoneNotice::InProgress => {
-                lines.extend(crate::ui_action::keyed_line(
-                    &script,
-                    "ERR_MEETING_STONE_IN_PROGRESS",
-                ));
-            }
-            MeetingStoneNotice::MemberAdded { guid } => stone.pending_members.push(guid),
-            MeetingStoneNotice::JoinFailed { code } => {
-                let key = match code {
-                    1 => "ERR_MEETING_STONE_MUST_BE_LEADER",
-                    2 => "ERR_MEETING_STONE_GROUP_FULL",
-                    3 => "ERR_MEETING_STONE_NO_RAID_GROUP",
-                    _ => continue,
-                };
-                lines.extend(crate::ui_action::keyed_line(&script, key));
-            }
-        }
-    }
-    // `0x299`'s name-cache callback: the line when the name lands, nothing until then.
-    let pending = std::mem::take(&mut stone.pending_members);
-    for guid in pending {
-        match inputs
-            .names
-            .resolve(guid, &inputs.commands)
-            .map(str::to_string)
-        {
-            Some(name) => lines.extend(crate::ui_action::keyed_line_s(
-                &script,
-                "ERR_MEETING_STONE_MEMBER_ADDED_S",
-                &[&name],
-            )),
-            None => stone.pending_members.push(guid),
-        }
-    }
-    if !lines.is_empty() {
-        crate::ui_action::show_messages(&mut script, &mut sink, "ui_dialog_verbs", lines);
-    }
-
-    if std::mem::take(&mut stone.dirty) {
-        let text = match &stone.text {
-            StoneText::None => None,
-            StoneText::Built(t) => Some(t.clone()),
-        };
-        script.set_meeting_stone(stone.area, text);
-    }
-}
-
 /// The use drain: a click on a meeting stone, which build 12340 calls a summoning stone. 3.3.5 has
 /// no `CMSG_MEETINGSTONE_JOIN`: AzerothCore's 0x292 is `CMSG_SET_SAVED_INSTANCE_EXTEND`, and a
 /// type-23 stone is reached only through `CMSG_GAMEOBJ_USE` (`GameObject::Use`, which casts the
@@ -479,11 +266,6 @@ fn drain_meeting_stone_joins(
     }
 }
 
-/// The leave-world sweep's leg: the text dropped, the area kept.
-fn meeting_stone_leave_world(mut stone: ResMut<MeetingStone>) {
-    stone.leave_world();
-}
-
 /// Drop the cached spirit guide when the world does, so no healer, wave or event reaches the
 /// next session; the reference clears it only through `0x4921c0`, its world-leave path untraced.
 fn area_spirit_healer_leave_world(mut spirit: ResMut<AreaSpiritHealer>) {
@@ -492,7 +274,6 @@ fn area_spirit_healer_leave_world(mut spirit: ResMut<AreaSpiritHealer>) {
 
 pub(crate) fn feed_dialog_verbs(
     script: Option<NonSendMut<UiScript>>,
-    mut pet: ResMut<PetUnlearnState>,
     mut boot: ResMut<InstanceBoot>,
     mut spirit: ResMut<AreaSpiritHealer>,
     mut queue: ResMut<BattlefieldQueue>,
@@ -503,11 +284,6 @@ pub(crate) fn feed_dialog_verbs(
         return;
     };
     let now = Instant::now();
-
-    script.set_pet_untrainer_pending(pet.pending().is_some());
-    // No dialog event: 12340's event table has no `CONFIRM_PET_UNLEARN` (the 3.x client has no
-    // pet untrainer), so the owed ask is consumed silently.
-    pet.ask = false;
 
     script.set_instance_boot_secs(boot.secs(now));
     for event in std::mem::take(&mut boot.events) {
@@ -540,34 +316,15 @@ pub(crate) fn feed_dialog_verbs(
     }
 }
 
-/// The pet trainer's confirm and the spirit healer's accept, the two drains over a latch.
+/// The spirit healer's accept, drained over its latch.
 fn drain_latch_verbs(
     script: Option<NonSendMut<UiScript>>,
-    pet: Res<PetUnlearnState>,
     spirit: Res<AreaSpiritHealer>,
-    self_q: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<NetCommands>,
-    mut sink: crate::ui_action::MessageSink,
 ) {
     let Some(mut script) = script else {
         return;
     };
-
-    // ConfirmPetUnlearn: `cost > coinage` shows ERR_NOT_ENOUGH_MONEY. Otherwise nothing goes out
-    // either: 3.3.5's `CMSG_PET_UNLEARN` is `STATUS_NEVER` in AzerothCore (`Opcodes.cpp`, 0x2F0),
-    // which resets pet talents from the gossip option instead.
-    if script.take_pet_unlearn_confirms() > 0 && pet.pending().is_some() {
-        let money = self_q
-            .single()
-            .ok()
-            .and_then(|store| store.0.player_money())
-            .unwrap_or(0);
-        if pet.cost > money {
-            if let Some(line) = crate::ui_action::keyed_line(&script, "ERR_NOT_ENOUGH_MONEY") {
-                crate::ui_action::show_messages(&mut script, &mut sink, "ui_dialog_verbs", [line]);
-            }
-        }
-    }
 
     // AcceptAreaSpiritHeal: the cached healer's guid, nothing without one.
     let accepts = script.take_area_spirit_accepts();
@@ -577,14 +334,6 @@ fn drain_latch_verbs(
                 .0
                 .send(ClientCommand::AreaSpiritHealerQueue { healer });
         }
-    }
-}
-
-/// `CancelMeetingStoneRequest`, drained: 3.3.5 has no meeting-stone queue to leave (AzerothCore's 0x293
-/// is `SMSG_LFG_OFFER_CONTINUE`), so nothing goes out.
-fn drain_queue_verbs(script: Option<NonSendMut<UiScript>>) {
-    if let Some(mut script) = script {
-        let _ = script.take_meeting_stone_cancels();
     }
 }
 
@@ -696,16 +445,13 @@ mod net {
     use benilla_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
 
-    use super::{AreaSpiritHealer, BattlefieldQueue, InstanceBoot, MeetingStone, PetUnlearnState};
+    use super::{AreaSpiritHealer, BattlefieldQueue, InstanceBoot};
     use crate::net::NetHandlerApp;
 
     pub(super) fn register(app: &mut App) {
         use SessionEventKind as K;
-        app.net_handler(K::PetUnlearnConfirm, on_pet_unlearn_confirm)
-            .net_handler(K::RaidGroupOnly, on_raid_group_only)
+        app.net_handler(K::RaidGroupOnly, on_raid_group_only)
             .net_handler(K::AreaSpiritHealerTime, on_area_spirit_healer_time)
-            .net_handler(K::MeetingStoneSetQueue, on_meeting_stone)
-            .net_handler(K::MeetingStoneNotice, on_meeting_stone)
             .net_handler(K::Disconnected, on_session_end);
     }
 
@@ -713,25 +459,6 @@ mod net {
     /// (`[0x8457cc]` to -1); vmangos sends no clear for a player who logged out.
     fn on_session_end(In(_): In<SessionEvent>, mut queue: ResMut<BattlefieldQueue>) {
         *queue = BattlefieldQueue::default();
-    }
-
-    /// The pet trainer's question; a zero guid shows `ERR_TALENT_WIPE_ERROR` instead.
-    fn on_pet_unlearn_confirm(
-        In(ev): In<SessionEvent>,
-        mut unlearn: ResMut<PetUnlearnState>,
-        mut errors: ResMut<crate::ui_action::UiErrorKeys>,
-    ) {
-        if let SessionEvent::PetUnlearnConfirm { trainer, cost } = ev {
-            if trainer == 0 {
-                debug!("net: pet unlearn refused (zero trainer) — no dialog");
-                errors
-                    .0
-                    .push(crate::ui_action::UiError::key("ERR_TALENT_WIPE_ERROR"));
-            } else {
-                debug!("net: trainer {trainer:#x} asks to unlearn the pet for {cost} copper");
-                unlearn.ask(trainer, cost);
-            }
-        }
     }
 
     fn on_raid_group_only(In(ev): In<SessionEvent>, mut boot: ResMut<InstanceBoot>) {
@@ -745,14 +472,6 @@ mod net {
             spirit.on_time(healer, ms, std::time::Instant::now());
         }
     }
-
-    fn on_meeting_stone(In(ev): In<SessionEvent>, mut stone: ResMut<MeetingStone>) {
-        match ev {
-            SessionEvent::MeetingStoneSetQueue { area, status } => stone.apply(area, status),
-            SessionEvent::MeetingStoneNotice(notice) => stone.apply_notice(notice),
-            _ => {}
-        }
-    }
 }
 
 pub(crate) struct UiDialogVerbsPlugin;
@@ -760,16 +479,13 @@ pub(crate) struct UiDialogVerbsPlugin;
 impl Plugin for UiDialogVerbsPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
-        app.init_resource::<PetUnlearnState>()
-            .init_resource::<InstanceBoot>()
+        app.init_resource::<InstanceBoot>()
             .init_resource::<AreaSpiritHealer>()
             .init_resource::<BattlefieldQueue>()
-            .init_resource::<MeetingStone>()
             .add_message::<MeetingStoneUse>()
             .add_systems(
                 Update,
                 (
-                    close_npc_session_out_of_range::<PetUnlearnState>.before(feed_dialog_verbs),
                     // Gated on the in-game interface: vmangos can send `SMSG_RAID_GROUP_ONLY` in
                     // the login burst (`Player.cpp:18686`), and an `INSTANCE_BOOT_START` fired at
                     // the boot VM would be lost; the queue waits instead.
@@ -783,14 +499,12 @@ impl Plugin for UiDialogVerbsPlugin {
                         .after(crate::target::TargetUpdate)
                         .run_if(crate::ui_script::ingame_ui_up)
                         .in_set(crate::char_select::InWorldGated),
-                    feed_meeting_stone.in_set(UiFeed),
                     // Before the target chain, where the poll and the click can change the
                     // healer: the reference resolves an Accept press in the UI dispatch, before
                     // its pick and poll run later in the frame.
                     drain_latch_verbs
                         .after(UiInput)
                         .before(crate::target::TargetUpdate),
-                    drain_queue_verbs.after(UiInput),
                     // After the target chain, which writes `MeetingStoneUse`, so the join leaves
                     // on the click's own frame.
                     drain_meeting_stone_joins
@@ -800,7 +514,7 @@ impl Plugin for UiDialogVerbsPlugin {
             )
             .add_systems(
                 OnExit(crate::char_select::ClientState::InWorld),
-                (meeting_stone_leave_world, area_spirit_healer_leave_world),
+                area_spirit_healer_leave_world,
             );
     }
 }
@@ -1188,103 +902,6 @@ mod tests {
         spirit.on_time(0x77, 30_000, now);
         assert!(spirit.in_range);
         assert_eq!(spirit.secs(now), 30);
-    }
-
-    #[test]
-    fn the_stone_latches_the_old_area_before_storing_the_new() {
-        let mut stone = MeetingStone::default();
-        stone.apply(1519, 1);
-        stone.apply(1519, 1);
-        stone.apply(0, 0);
-        stone.apply(12, 9);
-        assert_eq!(stone.area, 12);
-        assert_eq!(stone.updates, vec![(0, 1), (1519, 1), (1519, 0), (0, 9)]);
-        stone.leave_world();
-        assert_eq!(
-            stone.area, 12,
-            "the leave-world sweep leaves the area alone"
-        );
-        assert_eq!(stone.text, StoneText::None);
-    }
-
-    #[test]
-    fn the_status_table_and_the_rebuild_follow_the_handler() {
-        let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-        let areas =
-            AreaTableRes(benilla_formats::load_area_table_catalog(&mut chain).expect("AreaTable"));
-        let s = UiScript::new().unwrap();
-        s.run(
-            r#"MEETINGSTONE_TOOLTIP = "Looking for more for %s" UNKNOWN = "Unknown"
-               ERR_MEETING_STONE_LEFT_QUEUE_S = "You are no longer queued for %s."
-               ERR_MEETING_STONE_IN_QUEUE_S = "You are now in the queue to join a party for %s."
-               ERR_MEETING_STONE_OTHER_MEMBER_LEFT = "left"
-               ERR_MEETING_STONE_PARTY_KICKED_FROM_QUEUE = "kicked"
-               ERR_MEETING_STONE_MEMBER_STILL_IN_QUEUE = "still""#,
-        )
-        .unwrap();
-        let a = Some(&areas);
-        let text = |l: Option<crate::ui_action::Shown>| l.map(|l| l.text().to_string());
-        assert_eq!(
-            text(stone_line(&s, a, 1519, 0, 0)).as_deref(),
-            Some("You are no longer queued for Stormwind City.")
-        );
-        assert_eq!(
-            text(stone_line(&s, a, 0, 0, 0)),
-            None,
-            "no row for area 0: silent"
-        );
-        assert_eq!(text(stone_line(&s, a, 999_999, 0, 0)), None);
-        assert_eq!(
-            text(stone_line(&s, a, 0, 1519, 1)).as_deref(),
-            Some("You are now in the queue to join a party for Stormwind City.")
-        );
-        assert_eq!(
-            text(stone_line(&s, a, 0, 999_999, 1)).as_deref(),
-            Some("You are now in the queue to join a party for Unknown.")
-        );
-        assert_eq!(
-            text(stone_line(&s, a, 1519, 1519, 1)),
-            None,
-            "unchanged: skipped"
-        );
-        assert_eq!(text(stone_line(&s, a, 0, 0, 2)).as_deref(), Some("left"));
-        assert_eq!(text(stone_line(&s, a, 0, 0, 3)).as_deref(), Some("kicked"));
-        assert_eq!(text(stone_line(&s, a, 0, 0, 4)).as_deref(), Some("still"));
-        assert_eq!(
-            text(stone_line(&s, a, 0, 0, 5)),
-            None,
-            "past the table: nothing"
-        );
-        assert_eq!(
-            build_stone_text(&s, a, 1519),
-            "Looking for more for Stormwind City"
-        );
-        assert_eq!(build_stone_text(&s, a, 0), "Looking for more for Unknown");
-        s.run("MEETINGSTONE_TOOLTIP = string.rep('x', 300) .. '%s'")
-            .unwrap();
-        assert_eq!(
-            build_stone_text(&s, a, 1519).len(),
-            STONE_TEXT_BYTES,
-            "the 256-byte buffer"
-        );
-        s.run("MEETINGSTONE_TOOLTIP = nil").unwrap();
-        assert_eq!(
-            build_stone_text(&s, a, 1519),
-            "",
-            "a missing template is GetText's empty string, not the unreachable %s fallback"
-        );
-    }
-
-    #[test]
-    fn the_pet_question_latches_and_closes_like_the_talent_wipe() {
-        let mut pet = PetUnlearnState::default();
-        pet.ask(0x2b, 10_000);
-        assert_eq!(pet.pending(), Some(0x2b));
-        assert!(pet.ask);
-        pet.close();
-        assert_eq!(pet.pending(), None);
-        assert_eq!(pet.cost, 0);
     }
 
     #[test]
