@@ -6,13 +6,15 @@ use mlua::{Lua, MultiValue, Value};
 
 use super::Model;
 
-/// `IsInInstance()`'s type word for a `Map.dbc` `InstanceType`: the reference's table at
-/// `0x83de58`, and `"none"` from 4 up.
+/// `IsInInstance()`'s type word for a `Map.dbc` `InstanceType`, `"none"` from 5 up. 3.3.5's 4 is
+/// the arena, which stock code tests for (`Blizzard_BattlefieldMinimap.lua:24-33`). Labelled: the
+/// words are `GetInstanceInfo`'s table (12340 `0xac8074`); `IsInInstance`'s own is untraced.
 pub fn instance_type_name(instance_type: u32) -> &'static str {
     match instance_type {
         1 => "party",
         2 => "raid",
         3 => "pvp",
+        4 => "arena",
         _ => "none",
     }
 }

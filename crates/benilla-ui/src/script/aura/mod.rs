@@ -52,9 +52,9 @@ pub struct AuraState {
     pub channeled: bool,
 }
 
-/// The player's active tracking aura, the reference's tracking global (`0xbc6378`): the cache
-/// rebuild records a spell with a tracking effect (`0x2c`, `0x2d`, `0x97`) there instead of in
-/// the display cache, and `GetTrackingTexture` (`0x4e4a20`) reads it.
+/// The player's active tracking aura, 12340's `[0xbeba68]`: an aura of one of the book's tracking
+/// spells, set as it lands (`0x727760` → `0x57ea30`); `GetTrackingTexture` (`0x57f4f0`) shows its
+/// icon.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TrackingState {
     /// `Spell.dbc` id, the `CMSG_CANCEL_AURA` payload of `CancelTrackingBuff`.
@@ -177,9 +177,15 @@ impl super::UiScript {
         }
     }
 
-    /// Push or clear the player's active [`TrackingState`].
+    /// Push or clear the player's active [`TrackingState`]. A newly active tracking spell drops
+    /// the selected type row, as 12340's aura apply does (`0x727760` → `0x57ea30`).
     pub fn set_tracking(&mut self, tracking: Option<TrackingState>) {
-        self.model_mut().tracking = tracking;
+        let mut model = self.model_mut();
+        let new_spell = tracking.as_ref().map(|t| t.spell_id);
+        if new_spell.is_some() && new_spell != model.tracking.as_ref().map(|t| t.spell_id) {
+            model.wrath_tracking_selection = None;
+        }
+        model.tracking = tracking;
     }
 
     /// The spell ids of the buffs (`helpful`) or debuffs of the unit `token` names, in the order
@@ -234,22 +240,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
     player_buff::install(lua)?;
     tracking::install(lua)?;
-
-    // GetTrackingTexture() (`0x4e4a20`): the tracking spell's icon or nil, which shows or hides
-    // the stock `MiniMapTrackingFrame` (`Minimap.xml:150-159`).
-    g.set(
-        "GetTrackingTexture",
-        lua.create_function(|lua, ()| {
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(
-                if model.wrath_tracking_selection == Some(1) {
-                    Some("Interface\\Minimap\\Tracking\\TrivialQuests".into())
-                } else {
-                    model.tracking.as_ref().and_then(|t| t.icon.clone())
-                },
-            )
-        })?,
-    )?;
 
     // CancelTrackingBuff() (`0x4e4a80`), the tracking frame's right-click: queues the tracking
     // spell's id behind its `AFLAG_CANCELABLE`; with no tracking it is a no-op.
@@ -388,9 +378,9 @@ mod tests {
     #[test]
     fn tracking_bindings_read_the_pushed_state_and_cancel_by_spell_id() {
         let mut s = script();
-        assert!(s
-            .eval::<bool>("return GetTrackingTexture() == nil")
-            .unwrap());
+        // Nothing tracked: the folder's `None` icon, never nil (`0x57f4f0`).
+        let none = "Interface\\Minimap\\Tracking\\None";
+        assert_eq!(s.eval::<String>("return GetTrackingTexture()").unwrap(), none);
         s.eval::<()>("CancelTrackingBuff()").unwrap();
         assert!(s.take_cancel_aura_requests().is_empty());
 
@@ -416,9 +406,7 @@ mod tests {
         assert!(s.take_cancel_aura_requests().is_empty());
 
         s.set_tracking(None);
-        assert!(s
-            .eval::<bool>("return GetTrackingTexture() == nil")
-            .unwrap());
+        assert_eq!(s.eval::<String>("return GetTrackingTexture()").unwrap(), none);
     }
 
     #[test]
