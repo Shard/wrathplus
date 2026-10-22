@@ -1,6 +1,9 @@
 # Raw descriptor bitfield dialect audit
 
-Status: no pending rows, 2026-10-16 (App Migration reconciliation); tracked findings from 2026-10-15. App follow-up after NPC fix `98321cbf`
+Status: closed, 2026-10-22: no pending rows. The last one, the Wrath special-area projection
+(`0x800` sanctuary, `0x80` arena, `0x1000000` combat, per `0x51ba50`), is in `area.rs` with tests;
+its ordinary-territory gate stays labelled. Reconciled 2026-10-16 (App Migration); tracked
+findings from 2026-10-15. App follow-up after NPC fix `98321cbf`
 (integrated as `705ebdd0`). No behavioral changes in this document. No client launched.
 Auction work remains paused. Protocol semantic predicates belong to Native Descriptor.
 

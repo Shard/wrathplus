@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The land gate chain: every gate in order, stopping at the first failure.
 #
-# fmt, loc, clippy, test, test-no-install, doc-links, pass-span-lint, player-tests, enforcer,
+# fmt, loc, ws2, clippy, test, test-no-install, doc-links, pass-span-lint, player-tests, enforcer,
 # enforcer-no-install. A failure prints the gate's log tail and exits nonzero; a green
 # run stamps the tree, which then re-greens without running. GATES_FORCE=1 runs the chain anyway,
 # WOW_DATA picks the install (set and empty: none) and TMPDIR holds the scratch files; the script
@@ -109,6 +109,9 @@ run fmt cargo fmt --all -- --check
 # The LoC ratchet: a tracked `.rs` file over 500 lines fails unless it is within its
 # scripts/quality/loc-baseline.json allowance; an offender may shrink, never grow.
 run loc scripts/quality/run.sh loc
+# WS2: production benilla-app and benilla-world code names descriptor fields through `Field`, never
+# a raw index, a `FIELD_*` constant or a literal `from_pairs` key (docs/WRATH-NATIVE-PLAN.md).
+run ws2 scripts/quality/run.sh ws2
 # The clippy ratchet: every warning fails unless scripts/quality/clippy-baseline.json names it.
 run clippy env AZB_QUALITY_LOCKED=1 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$root/target}" \
     scripts/quality/run.sh clippy --workspace
