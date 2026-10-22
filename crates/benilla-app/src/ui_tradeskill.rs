@@ -212,9 +212,7 @@ fn load_spell_focus(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
 fn open_trade_skill(
     mut opens: ResMut<TradeSkillOpens>,
     mut open: ResMut<TradeSkillOpen>,
-    mut craft_open: ResMut<crate::ui_craft::CraftOpen>,
     skill_lines: Option<Res<SkillLines>>,
-    spells: Option<Res<Spells>>,
     mut repeat: ResMut<TradeSkillRepeat>,
 ) {
     for spell_id in opens.0.drain(..) {
@@ -226,36 +224,21 @@ fn open_trade_skill(
             warn!("ui_tradeskill: opener {spell_id} has no SkillLineAbility row — dropped");
             continue;
         };
-        // `0x6e4bd7`: a nonzero `EffectMiscValue[0]` opens the CraftFrame (Enchanting 3, Beast
-        // Training 1), zero the TradeSkillFrame. The value is the craft type the client keeps at
-        // `0xbdcfb8`, which the Craft window filters and sorts on.
-        let craft_type = spells
-            .as_deref()
-            .and_then(|s| s.catalog.get(spell_id))
-            .and_then(|d| u32::try_from(d.effect_misc_value[0]).ok())
-            .unwrap_or(0);
-        if craft_type != 0 {
-            debug!(
-                "ui_tradeskill: opener {spell_id} opens the CraftFrame (line {line}, craft type {craft_type})"
-            );
-            craft_open.line = Some(line);
-            craft_open.craft_type = craft_type;
-        } else {
-            // `0x5de120`: our own opener on our own open book closes it.
-            if open.link.is_none() && open.line == Some(line) {
-                debug!("ui_tradeskill: opener {spell_id} closes skill line {line}");
-                open.close();
-                repeat.clear();
-                continue;
-            }
-            debug!("ui_tradeskill: opener {spell_id} opens skill line {line}");
-            if open.line != Some(line) {
-                repeat.clear();
-            }
-            open.line = Some(line);
-            open.spell = spell_id;
-            open.link = None;
+        // 3.3.5 has no Craft window: every opener, Enchanting's included, opens this book.
+        // `0x5de120`: our own opener on our own open book closes it.
+        if open.link.is_none() && open.line == Some(line) {
+            debug!("ui_tradeskill: opener {spell_id} closes skill line {line}");
+            open.close();
+            repeat.clear();
+            continue;
         }
+        debug!("ui_tradeskill: opener {spell_id} opens skill line {line}");
+        if open.line != Some(line) {
+            repeat.clear();
+        }
+        open.line = Some(line);
+        open.spell = spell_id;
+        open.link = None;
     }
 }
 
@@ -888,7 +871,6 @@ mod tests {
         app.init_resource::<TradeSkillOpens>()
             .init_resource::<TradeSkillOpen>()
             .init_resource::<TradeSkillRepeat>()
-            .init_resource::<crate::ui_craft::CraftOpen>()
             .insert_resource(SkillLines {
                 catalog: alchemy(true),
             })

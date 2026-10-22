@@ -25,7 +25,6 @@ mod instance;
 mod items;
 mod loot;
 mod mail;
-mod meeting_stone;
 mod mirror_timer;
 mod movement;
 mod packet;
@@ -118,7 +117,7 @@ pub use guild::{
     guild_rank, guild_rank_right, GuildCommandResult, GuildEventNotice, GuildInfo,
     GuildQueryResponse, GuildRoster, GuildRosterMember, GUILD_INFO_MAX_LENGTH,
     GUILD_MOTD_MAX_LENGTH, GUILD_NAME_MAX_LENGTH, GUILD_NOTE_MAX_LENGTH, GUILD_RANKS_MAX_COUNT,
-    GUILD_RANKS_MIN_COUNT, GUILD_RANK_MAX_LENGTH, GUILD_RANK_RIGHT_ORDER,
+    GUILD_RANKS_MIN_COUNT, GUILD_RANK_MAX_LENGTH,
 };
 pub use instance::RaidGroupOnly;
 pub use items::{
@@ -136,9 +135,6 @@ pub use mail::{
     mail_message_type, mail_take_money,
     MailAttachment, MailListEntry,
 };
-pub use meeting_stone::{
-    MeetingStoneNotice, MeetingStoneSetQueue,
-};
 pub use mirror_timer::{
     MirrorTimerKind,
     MirrorTimerStart,
@@ -149,7 +145,7 @@ pub use movement::{
 pub use packet::{CreatureQueryInfo, MonsterMoveFacing};
 pub use pet::{
     pet_action, pet_tame_failure_key, PetActionEntry, PetMode, PetSpellCooldown,
-    PetSpells, PetUnlearnConfirm, PET_ACTION_SLOTS, PET_ACT_COMMAND, PET_ACT_DISABLED,
+    PetSpells, PET_ACTION_SLOTS, PET_ACT_COMMAND, PET_ACT_DISABLED,
     PET_ACT_ENABLED, PET_ACT_PASSIVE, PET_ACT_REACTION, PET_AUTOCAST_ALLOWED, PET_AUTOCAST_ON,
     PET_COMMAND_ATTACK, PET_COMMAND_DISMISS, PET_COMMAND_FOLLOW, PET_COMMAND_STAY,
     PET_COOLDOWN_PERMANENT, PET_REACT_AGGRESSIVE, PET_REACT_DEFENSIVE, PET_REACT_PASSIVE,

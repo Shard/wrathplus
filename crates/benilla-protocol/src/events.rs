@@ -348,8 +348,6 @@ pub enum SessionEvent {
     },
     /// `MSG_TALENT_WIPE_CONFIRM`, `cost` in copper; accepting echoes it, declining sends nothing.
     TalentWipeConfirm { trainer: u64, cost: u32 },
-    /// `SMSG_PET_UNLEARN_CONFIRM`: accept with `CMSG_PET_UNLEARN`; declining sends nothing.
-    PetUnlearnConfirm { trainer: u64, cost: u32 },
     /// The instance-boot clock (`SMSG_RAID_GROUP_ONLY`): a positive delay arms it
     /// (`INSTANCE_BOOT_START`), zero clears it (`INSTANCE_BOOT_STOP`) and shows `reason` 1 or 2.
     RaidGroupOnly { delay_ms: u32, reason: u32 },
@@ -373,10 +371,6 @@ pub enum SessionEvent {
     GroupJoinedBattleground { result: u32 },
     /// `SMSG_BATTLEGROUND_PLAYER_JOINED`/`_LEFT`, printed once the name cache has the guid.
     BattlegroundPlayer { guid: u64, joined: bool },
-    /// The meeting-stone queue state (`SMSG 0x295`): the area queued for and a status byte.
-    MeetingStoneSetQueue { area: u32, status: u8 },
-    /// One of the meeting stone's four chat-line-only replies (`0x297/0x298/0x299/0x2BB`).
-    MeetingStoneNotice(crate::types::MeetingStoneNotice),
     /// The tutorial bank bytes (`SMSG_TUTORIAL_FLAGS`); the client copies both its banks from them.
     TutorialFlags(Vec<u8>),
     /// The bind took (`SMSG_PLAYERBOUND`); `area` matches the [`Self::BindPoint`] sent beside it.

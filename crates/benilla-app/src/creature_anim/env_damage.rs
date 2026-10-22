@@ -51,7 +51,7 @@ pub(super) fn hard_landing_dust(
             pushes.write(super::KitPush {
                 entity: l.entity,
                 kit_id,
-                seq: seq.next(),
+                seq: seq.advance(),
             });
         }
     }

@@ -142,8 +142,8 @@ pub(super) fn hyperlink_item_fields(link: &str) -> Option<(u32, u32, u32)> {
 }
 
 /// The id-keyed render; on a miss, the ask and a name-only line, as `SetBagItem`'s miss path. The
-/// engine's own item hovers reach it from Rust (the action bar's, `SetTrainerService`,
-/// `SetCraftSpell`): 1.12's `Set*Item` bindings all name a container, so no Lua method takes an id.
+/// engine's own item hovers reach it from Rust (the action bar's, `SetTrainerService`): the
+/// `Set*Item` bindings all name a container, so no Lua method takes an id.
 pub(super) fn render_by_id(
     lua: &Lua,
     this: &Table,
@@ -318,8 +318,8 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                     .push(link);
                 return Ok(());
             }
-            // The only other link it takes, the craft window's `|Henchant:<spellId>|h[name]|h`
-            // (`GetCraftItemLink`): the spell's own tooltip, behind its producer's castUI gate
+            // The only other link it takes, an enchanting recipe's `|Henchant:<spellId>|h[name]|h`:
+            // the spell's own tooltip, behind its producer's castUI gate
             // (`0x532243`).
             if let Some(spell) = hyperlink_enchant_spell(&link) {
                 return super::tooltip_spell::set_spell_by_id(
@@ -1105,34 +1105,6 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
         )?,
     )?;
 
-    // GameTooltip:SetCraftItem(craftIndex, reagentIndex): the reagent's item
-    // (`Blizzard_CraftUI.xml:33`); a craft has no product item, so both arguments are required. A
-    // bad index does nothing.
-    m.set(
-        "SetCraftItem",
-        lua.create_function(
-            |lua, (this, craft_index, reagent_index): (Table, usize, usize)| {
-                let found = {
-                    let model = lua.app_data_ref::<Model>().expect("model app_data");
-                    let Some(c) = &model.craft else {
-                        return Ok(());
-                    };
-                    let Some(recipe) = craft_index.checked_sub(1).and_then(|i| c.recipes.get(i))
-                    else {
-                        return Ok(());
-                    };
-                    reagent_index
-                        .checked_sub(1)
-                        .and_then(|i| recipe.reagents.get(i))
-                        .map(|r| (r.item, r.name.clone()))
-                };
-                let Some((item_id, fb_name)) = found else {
-                    return Ok(());
-                };
-                render_by_id(lua, &this, item_id, fb_name, None)
-            },
-        )?,
-    )?;
 
     Ok(())
 }

@@ -86,12 +86,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 match &m {
                     Value::String(s) if number(&m).is_none() => {
                         let name = s.to_str()?.to_string();
-                        (1..=2 * super::MAX_MACROS).find(|&i| {
-                            model
-                                .macros
-                                .get(i)
-                                .is_some_and(|v| v.name.eq_ignore_ascii_case(&name))
-                        })
+                        Some(model.macros.index_by_name(&name)).filter(|&i| i > 0)
                     }
                     _ => number(&m)
                         .and_then(|n| usize::try_from(n as i64).ok())

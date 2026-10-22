@@ -1,4 +1,4 @@
-//! The in-game interface: the core, the player's own stock FrameXML as their chain's
+//! Th in-game interface: the core, the player's own stock FrameXML as their chain's
 //! `FrameXML.toc` lists it ([`reference_ui::core`]) and then its `Bindings.xml`
 //! ([`load_core_bindings`]), then benilla's layer, [`LAYER_MANIFEST`], every entry of which is
 //! ours and loads after the whole core.
@@ -26,16 +26,6 @@ pub(super) fn manifest_files() -> Vec<String> {
 #[cfg(test)]
 pub(super) fn shipped_manifest_files() -> Vec<String> {
     Addon::wrath_bootstrap().toc.files
-}
-
-/// Runs `BuffButtons_UpdatePositions` at load, which `BuffFrame_OnLoad` never calls: until the
-/// stock `UIOptionsFrame.lua`'s `VARIABLES_LOADED` arm runs it (l.206), the second buff row and
-/// the debuff row keep `BuffFrame.xml`'s anchors whatever `SHOW_BUFF_DURATIONS` says.
-#[cfg(test)]
-pub(super) fn apply_buff_durations(script: &UiScript) -> Result<(), String> {
-    script
-        .run("if BuffButtons_UpdatePositions then BuffButtons_UpdatePositions() end")
-        .map_err(|e| e.to_string())
 }
 
 /// What a screen-size change re-runs, from `extract::tick_script`'s resize arm: the Wrath root's

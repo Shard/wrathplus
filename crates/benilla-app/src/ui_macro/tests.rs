@@ -5,12 +5,21 @@ use benilla_ui::script::{MacroState, MacroView, UiScript};
 
 use crate::local_state::test_env::{EnvGuard, ENV_LOCK};
 
+/// An account macro under id 1.
 fn macro_view(name: &str, body: &str) -> MacroView {
     MacroView {
+        id: 1,
         name: name.into(),
         texture: Some("Interface\\Icons\\Ability_Ambush".into()),
         body: body.into(),
-        local_only: false,
+    }
+}
+
+/// A character macro under the first character id.
+fn character_view(name: &str, body: &str) -> MacroView {
+    MacroView {
+        id: benilla_ui::script::CHARACTER_MACRO_BASE + 1,
+        ..macro_view(name, body)
     }
 }
 
@@ -30,7 +39,7 @@ fn a_saved_macro_table_round_trips_through_benilla_macros() {
 
     let state = MacroState {
         account: vec![macro_view("Ambush", "/cast Ambush\n/say pew")],
-        character: vec![macro_view("Charge", "/cast Charge")],
+        character: vec![character_view("Charge", "/cast Charge")],
     };
     crate::local_state::write_atomic(&account, &super::store::write(&state.account)).unwrap();
     crate::local_state::write_atomic(&character, &super::store::write(&state.character)).unwrap();
@@ -42,8 +51,11 @@ fn a_saved_macro_table_round_trips_through_benilla_macros() {
     );
 
     let back = MacroState {
-        account: super::store::parse(&std::fs::read_to_string(&account).unwrap()),
-        character: super::store::parse(&std::fs::read_to_string(&character).unwrap()),
+        account: super::store::parse(&std::fs::read_to_string(&account).unwrap(), 0),
+        character: super::store::parse(
+            &std::fs::read_to_string(&character).unwrap(),
+            benilla_ui::script::CHARACTER_MACRO_BASE,
+        ),
     };
     assert_eq!(back, state);
     std::fs::remove_dir_all(&tmp).ok();
@@ -125,16 +137,16 @@ fn running_a_macro_runs_its_lines_through_the_references_edit_box() {
     assert!(s.take_chat_sends().is_empty());
 }
 
-/// Index 19 is the first per-character macro (18 per tab).
+/// Index 37 is the first per-character macro (`MAX_ACCOUNT_MACROS` + 1).
 #[test]
 fn a_character_macro_runs_by_its_own_index() {
     benilla_formats::wow_data_or_skip!();
     let mut s = ui();
     s.set_macros(MacroState {
         account: Vec::new(),
-        character: vec![macro_view("Charge", "/say Charge")],
+        character: vec![character_view("Charge", "/say Charge")],
     });
-    assert!(super::run_macro(&mut s, 19));
+    assert!(super::run_macro(&mut s, 37));
     assert_eq!(
         s.take_chat_sends()
             .iter()

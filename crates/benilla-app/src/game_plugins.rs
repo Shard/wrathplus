@@ -45,7 +45,6 @@ use crate::ui_binder::UiBinderPlugin;
 use crate::ui_cast::UiCastPlugin;
 use crate::ui_char::UiCharPlugin;
 use crate::ui_chat::UiChatPlugin;
-use crate::ui_craft::UiCraftPlugin;
 use crate::ui_dialog_verbs::UiDialogVerbsPlugin;
 use crate::ui_duel::UiDuelPlugin;
 use crate::ui_follow::UiFollowPlugin;
@@ -268,7 +267,6 @@ impl PluginGroup for GamePlugins {
             .add(UiTaxiPlugin)
             .add(UiTradeSkillPlugin)
             .add(crate::ui_native::wrath_state_feed::WrathStateFeedPlugin)
-            .add(UiCraftPlugin)
             .add(UiLootPlugin)
             .add(UiLootRollPlugin)
             .add(UiQuestPlugin)
@@ -753,7 +751,7 @@ pub(crate) mod schedule_tests {
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_671;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_587;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {
@@ -1203,8 +1201,6 @@ pub(crate) mod schedule_tests {
          "`feed.vm: VmMemo<CharFeedMemo>`; `vm_reset` fires every transition on a fresh memo"),
         ("ui_chat/recruitment.rs", "guild_recruitment_cascade", Because::SelfHealing,
          "`pending` is held until the zone mask and zone id are settled, which happens on the entry VM"),
-        ("ui_dialog_verbs.rs", "feed_meeting_stone", Because::SelfHealing,
-         "the query is sent once per VM (`asked: VmMemo<bool>`), so the entry VM re-asks and the reply lands after the UI is up"),
         ("ui_duel.rs", "feed_duel", Because::PlayerRoundTrip,
          "a duel exists only after someone's Duel cast, and the server ends any duel at logout; FINISHED/bounds ride `VmMemo<FedDuel>` (another player's act: coincidence-only residual)"),
         ("ui_follow.rs", "feed_follow", Because::MemoLatched,

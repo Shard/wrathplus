@@ -1,9 +1,8 @@
 //! The verbs the stock `StaticPopup.lua` dialogs call: the instance-boot and area spirit healer
-//! clocks, the meeting stone pair and the pet untrain pair.
+//! clocks. 12340 has no meeting-stone queue and no pet untrainer, so neither verb set exists.
 
-use mlua::{Lua, Value};
+use mlua::Lua;
 
-use super::binding_abi::flag;
 use super::Model;
 
 /// The area spirit healer's aura (`0xA18`), the only cancel-aura spell that also fires
@@ -11,16 +10,6 @@ use super::Model;
 pub const AREA_SPIRIT_HEALER_SPELL: u32 = 2584;
 
 impl super::UiScript {
-    /// `ConfirmPetUnlearn()` calls since the last drain.
-    pub fn take_pet_unlearn_confirms(&mut self) -> u32 {
-        std::mem::take(&mut self.model_mut().pet_unlearn_confirms)
-    }
-
-    /// What `CheckPetUntrainerDist()` answers: a pending question whose trainer is in reach.
-    pub fn set_pet_untrainer_pending(&mut self, pending: bool) {
-        self.model_mut().pet_untrainer_pending = pending;
-    }
-
     /// `GetInstanceBootTimeRemaining()`'s answer, whole seconds (0 idle).
     pub fn set_instance_boot_secs(&mut self, secs: u32) {
         self.model_mut().instance_boot_secs = secs;
@@ -36,19 +25,6 @@ impl super::UiScript {
     /// `AcceptAreaSpiritHeal()` calls since the last drain, each a `0x2E3` to send.
     pub fn take_area_spirit_accepts(&mut self) -> u32 {
         std::mem::take(&mut self.model_mut().area_spirit_accepts)
-    }
-
-    /// `CancelMeetingStoneRequest()` calls since the last drain.
-    pub fn take_meeting_stone_cancels(&mut self) -> u32 {
-        std::mem::take(&mut self.model_mut().meeting_stone_cancels)
-    }
-
-    /// The meeting stone's two globals: the queued area id (`0xb72038`, 0 for none) and the
-    /// cached status text (`0xb7203c`, `None` outside the world), which the app rebuilds.
-    pub fn set_meeting_stone(&mut self, area: u32, status_text: Option<String>) {
-        let mut model = self.model_mut();
-        model.meeting_stone_area = area;
-        model.meeting_stone_status_text = status_text;
     }
 }
 
@@ -96,55 +72,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, ()| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             Ok(i64::from(model.area_spirit_secs))
-        })?,
-    )?;
-
-    // `0x4ca5a0`: an empty `0x293` gated on party leadership (the app's); only the reply clears.
-    g.set(
-        "CancelMeetingStoneRequest",
-        lua.create_function(|lua, ()| {
-            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            model.meeting_stone_cancels += 1;
-            Ok(())
-        })?,
-    )?;
-
-    // `0x4ca570`: the number `1` or nil, never `0` (truthy, it would pin the icon) or a boolean.
-    g.set(
-        "IsInMeetingStoneQueue",
-        lua.create_function(|lua, ()| {
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(flag(model.meeting_stone_area != 0))
-        })?,
-    )?;
-
-    // `0x4ca5b0`: a string or nil, never `""` for nothing.
-    g.set(
-        "GetMeetingStoneStatusText",
-        lua.create_function(|lua, ()| {
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(match &model.meeting_stone_status_text {
-                Some(text) => Value::String(lua.create_string(text)?),
-                None => Value::Nil,
-            })
-        })?,
-    )?;
-
-    // `0x48d1c0`: `1` or nil, never `0`; the app tests the range to the latched trainer.
-    g.set(
-        "CheckPetUntrainerDist",
-        lua.create_function(|lua, ()| {
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(flag(model.pet_untrainer_pending))
-        })?,
-    )?;
-    // `0x48dca0`: the app holds the latch and the money gate, and sends `0x2F0`.
-    g.set(
-        "ConfirmPetUnlearn",
-        lua.create_function(|lua, ()| {
-            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            model.pet_unlearn_confirms += 1;
-            Ok(())
         })?,
     )?;
 
@@ -212,50 +139,5 @@ mod tests {
             s.take_cancel_aura_requests(),
             vec![super::AREA_SPIRIT_HEALER_SPELL]
         );
-    }
-
-    #[test]
-    fn the_meeting_stone_pair_answers_one_or_nil_and_string_or_nil() {
-        let mut s = UiScript::new().unwrap();
-        assert_eq!(s.arity("IsInMeetingStoneQueue()").unwrap(), 1);
-        assert!(s
-            .eval::<bool>("return IsInMeetingStoneQueue() == nil")
-            .unwrap());
-        assert!(s
-            .eval::<bool>("return GetMeetingStoneStatusText() == nil")
-            .unwrap());
-        s.set_meeting_stone(1519, Some("Looking for more for Stormwind City".into()));
-        assert_eq!(s.eval::<i64>("return IsInMeetingStoneQueue()").unwrap(), 1);
-        assert_eq!(
-            s.eval::<String>("return GetMeetingStoneStatusText()")
-                .unwrap(),
-            "Looking for more for Stormwind City"
-        );
-        s.set_meeting_stone(0, Some("Unknown".into()));
-        assert!(
-            s.eval::<bool>("return IsInMeetingStoneQueue() == nil")
-                .unwrap(),
-            "area 0: not queued, whatever the text says"
-        );
-        assert_eq!(
-            s.eval::<String>("return GetMeetingStoneStatusText()")
-                .unwrap(),
-            "Unknown"
-        );
-    }
-
-    #[test]
-    fn the_pet_pair_counts_and_answers_one_or_nil() {
-        let mut s = UiScript::new().unwrap();
-        assert!(s
-            .eval::<bool>("return CheckPetUntrainerDist() == nil")
-            .unwrap());
-        s.set_pet_untrainer_pending(true);
-        assert_eq!(s.eval::<i64>("return CheckPetUntrainerDist()").unwrap(), 1);
-        s.run("ConfirmPetUnlearn() ConfirmPetUnlearn() CancelMeetingStoneRequest()")
-            .unwrap();
-        assert_eq!(s.take_pet_unlearn_confirms(), 2);
-        assert_eq!(s.take_meeting_stone_cancels(), 1);
-        assert!(s.errors().is_empty(), "{:?}", s.errors());
     }
 }

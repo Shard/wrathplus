@@ -12,16 +12,11 @@ use mlua::{Lua, MultiValue, Value};
 use super::binding_abi;
 use super::Model;
 
-/// The thirteen rank rights in `GuildControlGetRankFlags`' return order, which is also the
-/// checkbox order and `GuildControlSetRankFlag`'s index: only position ties a flag to its checkbox
-/// (`FriendsFrame.lua:874-884`). The labels are `GUILDCONTROL_OPTION1..13`
-/// (`GlobalStrings.lua:2036-2048`).
-///
-/// Not bit order: Promote and Demote (5, 6) are `0x80` and `0x100`, above Invite and Remove
-/// (7, 8) at `0x10` and `0x20`, so `1 << (i - 1)` is wrong for nine of the thirteen. The bits are
-/// vmangos `GuildRankRights` (`Guild/Guild.h:56-74`) without the `GR_RIGHT_EMPTY` `0x40` it ORs
-/// into each; `0x40`, `0x400` and `0x800` are none of the thirteen.
-pub const RANK_RIGHT_BITS: [u32; 13] = [
+/// The seventeen rank rights in `GuildControlGetRankFlags`' return order, also the checkbox order
+/// and `GuildControlSetRankFlag`'s index (`FriendsFrame.lua:1782-1793`); 14 has no checkbox. Not
+/// bit order: Promote and Demote (5, 6) sit above Invite and Remove (7, 8), so `1 << (i - 1)` is
+/// wrong. The masks are 12340's table at `0xad07b8`; `0x40`, `0x400` and `0x800` are none of them.
+pub const RANK_RIGHT_BITS: [u32; 17] = [
     0x0000_0001, // 1  Guildchat Listen
     0x0000_0002, // 2  Guildchat Speak
     0x0000_0004, // 3  Officerchat Listen
@@ -35,6 +30,10 @@ pub const RANK_RIGHT_BITS: [u32; 13] = [
     0x0000_4000, // 11 View Officer Note
     0x0000_8000, // 12 Edit Officer Note
     0x0001_0000, // 13 Modify Guild Info
+    0x0002_0000, // 14 (no checkbox)
+    0x0004_0000, // 15 Repair
+    0x0008_0000, // 16 Gold
+    0x0010_0000, // 17 Create Guild Event
 ];
 
 /// One-based indices into [`RANK_RIGHT_BITS`], numbered as `GUILDCONTROL_OPTION<n>`.
@@ -161,9 +160,9 @@ pub struct GuildState {
 pub struct GuildRankEdit {
     /// The 1-based rank `GuildControlSetRank` last loaded, 0 for none.
     pub rank: u32,
-    /// The thirteen staged checkboxes in [`RANK_RIGHT_BITS`] order, one slot per flag as the
+    /// The seventeen staged checkboxes in [`RANK_RIGHT_BITS`] order, one slot per flag as the
     /// binding stages them, so the save leaves every other bit of the live rights alone.
-    pub staged: [bool; 13],
+    pub staged: [bool; RANK_RIGHT_BITS.len()],
 }
 
 /// Outbound guild intents, drained by the app ([`UiScript::take_guild_requests`]).
@@ -636,7 +635,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
             let rank = u32::try_from(index).ok().filter(|i| *i >= 1).unwrap_or(0);
             let rights = live_rights(&model, rank);
-            let mut staged = [false; 13];
+            let mut staged = [false; RANK_RIGHT_BITS.len()];
             for (slot, bit) in staged.iter_mut().zip(RANK_RIGHT_BITS) {
                 *slot = rights & bit != 0;
             }
@@ -645,10 +644,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GuildControlGetRankFlags() (`0x4d1fe0`): thirteen returns in `RANK_RIGHT_BITS` order, from
+    // GuildControlGetRankFlags() (`0x5cc3e0`): seventeen returns in `RANK_RIGHT_BITS` order, from
     // the loaded rank's live rights, never the staging buffer, so a click shows only once the save
     // round-trips and a new roster lands. `GuildControlPopupFrame_OnLoad` calls it before any rank
-    // is loaded (`FriendsFrame.lua:801`), when all thirteen are nil.
+    // is loaded, when all seventeen are nil.
     g.set(
         "GuildControlGetRankFlags",
         lua.create_function(|lua, ()| {
@@ -663,7 +662,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GuildControlSetRankFlag(index, enabled) (`0x4d2070`): stage one checkbox, 1 to 13.
+    // GuildControlSetRankFlag(index, enabled) (`0x5ca2b0`): stage one checkbox, 1 to 17.
     g.set(
         "GuildControlSetRankFlag",
         lua.create_function(|lua, (index, enabled): (i64, Value)| {
@@ -680,11 +679,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GuildControlSaveRank(name) (`0x4d20d0`): the edit box's name (`FriendsFrame.lua:839`) and the
+    // GuildControlSaveRank(name) (`0x5cb170`): the edit box's name (`FriendsFrame.lua:839`) and the
     // staged flags as one `CMSG_GUILD_RANK` for the loaded rank. A name failing `gated_rank_name`
     // is a silent no-op; vmangos stores an empty one (`Handlers/GuildHandler.cpp:586`). The fold
     // sets or clears each staged bit over the freshly read live rights (`or mask[k]` /
-    // `and ~mask[k]`), so a right can be turned off and bits outside the thirteen, such as `0x40`,
+    // `and ~mask[k]`), so a right can be turned off and bits outside the seventeen, such as `0x40`,
     // which the reference never tests, ride through as the server sent them.
     g.set(
         "GuildControlSaveRank",
@@ -785,7 +784,7 @@ mod tests {
 
     #[test]
     fn the_rank_right_table_is_not_a_shift() {
-        assert_eq!(RANK_RIGHT_BITS.len(), 13, "one bit per GUILDCONTROL_OPTION");
+        assert_eq!(RANK_RIGHT_BITS.len(), 17, "one bit per GUILDCONTROL_OPTION");
         assert_eq!(RANK_RIGHT_BITS[right::PROMOTE - 1], 0x80);
         assert_eq!(RANK_RIGHT_BITS[right::DEMOTE - 1], 0x100);
         assert_eq!(RANK_RIGHT_BITS[right::INVITE - 1], 0x10);
@@ -805,14 +804,13 @@ mod tests {
         }
     }
 
-    /// `0x40`, vmangos's `GR_RIGHT_EMPTY`, is none of the thirteen and never tested by the
-    /// reference.
+    /// `0x40` is none of the seventeen and never tested by the reference.
     #[test]
-    fn saving_a_rank_preserves_bits_outside_the_thirteen_and_can_clear() {
+    fn saving_a_rank_preserves_bits_outside_the_seventeen_and_can_clear() {
         // Live: Invite (0x10) + Set MOTD (0x1000), plus the untouchable 0x40.
         let live = 0x0000_0040 | RANK_RIGHT_BITS[right::INVITE - 1] | RANK_RIGHT_BITS[8];
         // Staged: the user unticked Set MOTD and ticked Promote.
-        let mut staged = [false; 13];
+        let mut staged = [false; RANK_RIGHT_BITS.len()];
         staged[right::INVITE - 1] = true;
         staged[right::PROMOTE - 1] = true;
 
@@ -828,7 +826,7 @@ mod tests {
         assert_eq!(
             folded & 0x0000_0040,
             0x0000_0040,
-            "0x40 is outside the thirteen and must ride through untouched"
+            "0x40 is outside the seventeen and must ride through untouched"
         );
         assert_ne!(folded & RANK_RIGHT_BITS[right::PROMOTE - 1], 0, "ticked");
         assert_eq!(

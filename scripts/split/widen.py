@@ -5,7 +5,10 @@
 # ///
 """Widen exactly what a crate boundary hides: check one crate, find every item, field, method or
 module the compiler calls private (E0603, E0616, E0624, E0451; a `pub use` past its item's
-visibility, E0364 and E0365), make its declaration `pub`, and repeat until none is left. The crate
+visibility, E0364 and E0365), make its declaration `pub`, and repeat until none is left. A
+`#[cfg(test)]` item another crate's code reaches (the compiler's "found an item that was configured
+out ... the item is gated here") is opened to `#[cfg(any(test, feature = "test-support"))]`: only
+what is reached, so a helper only its own crate's tests use stays `cfg(test)`. The crate
 split's move step (scripts/split/move-layers.sh), one layer crate at a time, bottom-up:
 
   uv run scripts/split/widen.py -p benilla-app-net        # dry run: what it would widen
@@ -60,6 +63,124 @@ def code_of(m):
     if not code and re.match(r"type `[^`]+` is private", m.get("message", "")):
         return "private-type"
     return code or "other"
+
+
+TEST_GATE = "#[cfg(test)]"
+OPEN_GATE = '#[cfg(any(test, feature = "test-support"))]'
+
+
+def gate_spans(m):
+    """The `#[cfg(test)]` lines gating the items an error found configured out."""
+    out = []
+    for child in m.get("children", []):
+        if "configured out" not in (child.get("message") or ""):
+            continue
+        for sp in child.get("spans", []):
+            if (sp.get("label") or "") == "the item is gated here":
+                out.append((sp["file_name"], sp["line_start"]))
+    return out
+
+
+UNRESOLVED = {"E0425", "E0412", "E0422", "E0432", "E0433", "E0531", "E0599"}
+
+
+def find_gated(root, m):
+    """A lookup in the same scope, a method call (E0599) or a constructor function sharing a type
+    alias's name (E0423 "found type alias") reports no "configured out" note: find the
+    `#[cfg(test)]` gating a declaration of the name the error cannot find (its own attribute or its
+    `impl` block's), in the error's own file first, then its crate, then the other app crates. A
+    method's hits are narrowed to `impl`s of the type the error names; `None` unless exactly one
+    turns up at the first level that has any."""
+    code = (m.get("code") or {}).get("code")
+    msg = m.get("message", "")
+    if code not in UNRESOLVED and not (code == "E0423" and "found type alias" in msg):
+        return None
+    names = re.findall(r"`(?:[\w:]*::)?(\w+)", msg)
+    if code == "E0423":
+        names = re.findall(r"found type alias `(?:[\w:]*::)?(\w+)`", msg)
+    sp = next((s for s in m.get("spans", []) if s.get("is_primary")), None)
+    if not names or not sp:
+        return None
+    name = names[0]
+    owner = None
+    if code == "E0599":
+        # The type the method was looked up on, through ECS and smart-pointer wrappers:
+        # `Mut<'_, LetterTexts>` is `LetterTexts`'s.
+        quoted = re.findall(r"`([^`]*)`", msg)
+        wrappers = {"Mut", "Ref", "Res", "ResMut", "Box", "Rc", "Arc", "Option", "NonSend", "NonSendMut"}
+        types = [t for t in re.findall(r"\b([A-Z]\w*)", quoted[1] if len(quoted) > 1 else "") if t not in wrappers]
+        owner = types[0] if types else None
+    decl = re.compile(r"^(\s*)(?:pub(?:\s*\([^)]*\))?\s+)?(?:(?:const|unsafe|async)\s+)*"
+                      r"(?:fn|struct|enum|type|trait|const|static|mod|union)\s+" + re.escape(name) + r"\b")
+
+    def gate_above(lines, i):
+        k = i - 1
+        while k >= 0 and (lines[k].strip().startswith("#[") or lines[k].strip().startswith("///")):
+            if lines[k].strip() == TEST_GATE:
+                return k + 1
+            k -= 1
+        return None
+
+    def scan(paths):
+        hits = []
+        for path in paths:
+            lines = open(os.path.join(root, path)).read().split("\n")
+            for i, l in enumerate(lines):
+                d = decl.match(l)
+                if not d:
+                    # A gated `pub use` re-export of the name (a glob import reaches it).
+                    if (code != "E0599" and re.match(r"^\s*pub(?:\s*\([^)]*\))?\s+use\b", l)
+                            and re.search(r"\b" + re.escape(name) + r"\b", l) and gate_above(lines, i)):
+                        hits.append((path, gate_above(lines, i)))
+                    continue
+                # The enclosing `impl`, if the declaration is indented inside one.
+                impl = None
+                for j in range(i - 1, -1, -1):
+                    mi = re.match(r"^(\s*)impl\b", lines[j])
+                    if mi and len(mi.group(1)) < len(d.group(1)):
+                        impl = j
+                        break
+                if owner and (impl is None or not re.search(r"\b" + re.escape(owner) + r"\b", lines[impl])):
+                    continue
+                g = gate_above(lines, i) or (impl is not None and gate_above(lines, impl))
+                if g:
+                    hits.append((path, g))
+        return list(dict.fromkeys(hits))
+
+    def rs(top):
+        return [os.path.relpath(os.path.join(dp, f), root) for dp, _, fs in os.walk(os.path.join(root, top))
+                for f in fs if f.endswith(".rs")]
+
+    # A `#[cfg(test)] use` of the name in the error's own file: imports are file-local.
+    if code in UNRESOLVED and code != "E0599":
+        lines = open(os.path.join(root, sp["file_name"])).read().split("\n")
+        for i, l in enumerate(lines):
+            if re.match(r"^\s*(?:pub(?:\s*\([^)]*\))?\s+)?use\b", l) and re.search(r"\b" + re.escape(name) + r"\b", l):
+                g = gate_above(lines, i)
+                if g:
+                    return sp["file_name"], g
+
+    crate_src = "/".join(sp["file_name"].split("/")[:3])  # crates/<crate>/src
+    app = app_prefix(root)
+    others = [p for base in sorted(os.listdir(os.path.join(root, "crates"))) if base.startswith(app)
+              and f"crates/{base}/src" != crate_src for p in rs(f"crates/{base}/src")]
+    for paths in ([sp["file_name"]], rs(crate_src), others):
+        hits = scan(paths)
+        if hits:
+            return hits[0] if len(hits) == 1 else None
+    return None
+
+
+def open_gate(root, rel, line_no):
+    """Turn the `#[cfg(test)]` at `line_no` into the test-support gate; `True` when it changed.
+    Any other gate (a `dev` feature, a platform) is not this tool's to open."""
+    path = os.path.join(root, rel)
+    lines = open(path).read().split("\n")
+    if lines[line_no - 1].strip() != TEST_GATE:
+        return False
+    lines[line_no - 1] = lines[line_no - 1].replace(TEST_GATE, OPEN_GATE)
+    open(path, "w").write("\n".join(lines))
+    return True
 
 
 def def_spans(m):
@@ -236,9 +357,18 @@ def main():
     for rnd in range(args.rounds):
         diags = check(args.package, env)
         priv = [d for d in diags if code_of(d) in PRIVACY]
-        if not priv:
+        gates = list(dict.fromkeys(g for d in diags for g in (gate_spans(d) or [find_gated(root, d)]) if g))
+        if not priv and not gates:
             break
         progress = 0
+        for g in gates:
+            key = (os.path.relpath(os.path.join(root, g[0]), root), g[1])
+            if key in seen:
+                continue
+            seen.add(key)
+            if not args.apply or open_gate(root, *key):
+                widened["configured-out"] += 1
+                progress += args.apply
         for d in priv:
             span = def_span(d)
             if span is None and code_of(d) in ("E0364", "E0365"):
@@ -275,11 +405,11 @@ def main():
                     widened[code_of(d)] += 1
                     progress += 1
                     break
-        print(f"round {rnd + 1}: {len(priv)} privacy errors, {progress} declarations widened", file=sys.stderr)
+        print(f"round {rnd + 1}: {len(priv)} privacy errors, {len(gates)} test gates, {progress} declarations widened or opened", file=sys.stderr)
         if not args.apply or progress == 0:
             break
     diags = check(args.package, env)
-    rest = collections.Counter(code_of(d) for d in diags if code_of(d) not in PRIVACY)
+    rest = collections.Counter(code_of(d) for d in diags if code_of(d) not in PRIVACY and not gate_spans(d))
     left = sum(1 for d in diags if code_of(d) in PRIVACY)
     verb = "widened" if args.apply else "would widen (first round)"
     print(f"{args.package}: {verb} {sum(widened.values())} declarations ({dict(widened)}); privacy errors left {left}")

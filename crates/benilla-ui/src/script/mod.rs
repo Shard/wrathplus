@@ -89,7 +89,6 @@ mod chat_window;
 mod clip;
 mod colorselect;
 mod container;
-mod craft;
 mod cursor;
 mod death;
 pub mod diagnostics;
@@ -316,7 +315,6 @@ pub use container::{
     BagAutoStore, ContainerMove, ContainerSlot, ContainerState, EnchantView, PendingWrap,
     PetitionSlotView, RandomPropertyView, UiCursorMode,
 };
-pub use craft::{CraftReagent, CraftRecipe, CraftState, CraftTooltip};
 pub use cursor::money::coin_icon;
 pub use cursor::{
     CursorAction, CursorEquipmentSet, CursorGuildBankItem, CursorItem, CursorItemId, CursorMacro,
@@ -367,7 +365,10 @@ pub use loot_roll::wrath::{
     State as WrathLootRollsState,
 };
 pub use loot_roll::{LootRollEntry, LootRollsState};
-pub use macros::{MacroBinding, MacroState, MacroView, MAX_MACROS, MAX_MACRO_BODY, MAX_MACRO_NAME};
+pub use macros::{
+    macro_action_id, macro_action_word, MacroBinding, MacroState, MacroView, CHARACTER_MACRO_BASE,
+    MAX_ACCOUNT_MACROS, MAX_CHARACTER_MACROS, MAX_MACRO_BODY, MAX_MACRO_NAME,
+};
 pub use mail::wrath::{
     Attachment as WrathMailAttachment, Inbox as WrathMailInbox, Row as WrathMailRow,
     WrathMailRequest,
@@ -845,7 +846,6 @@ impl UiScript {
         dressup::install(&lua)?;
         tabard::install(&lua)?;
         tradeskill::install(&lua)?;
-        craft::install(&lua)?;
         reputation::install(&lua)?;
         skills::install(&lua)?;
         item_stats::install(&lua)?;

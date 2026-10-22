@@ -21,11 +21,6 @@ use benilla_protocol::wrath_guild_rank::{SaveRank, TabPermission};
 
 use super::{last_online, GuildState, Identity, RosterRow, ROSTER_REQUEST_THROTTLE_SECS};
 
-/// `CHAT_FLAG_AFK` and `CHAT_FLAG_DND` (`GlobalStrings.lua:534-535`), which the reference loads at
-/// `0x4d1404` and `0x4d13ed`.
-const CHAT_FLAG_AFK: &str = "<AFK>";
-const CHAT_FLAG_DND: &str = "<DND>";
-
 /// What the feed last announced, so the events fire on edges rather than every frame.
 #[derive(Default)]
 pub(super) struct FedGuild {
@@ -75,7 +70,10 @@ pub(super) fn feed_guild(
     let identity = guild.identity(guild_id).cloned();
     let identity = identity.as_ref();
 
-    let rows = display_rows(&guild, areas.as_deref().map(|a| &a.0), identity);
+    // The away tag is the string table's, by key, as `GetGuildRosterInfo` (`0x5cc9c0`) reads it.
+    let get = |key: &str| script.lua().globals().get::<String>(key).ok();
+    let away = |presence: u8| status_key(presence).and_then(&get).unwrap_or_default();
+    let rows = display_rows(&guild, areas.as_deref().map(|a| &a.0), identity, &away);
     let display_order: Vec<u64> = rows.iter().map(|r| r.guid).collect();
     let selection = index_of(&display_order, guild.selection);
     guild.display_order = display_order;
@@ -206,11 +204,12 @@ pub(super) fn display_rows(
     guild: &GuildState,
     areas: Option<&AreaTableCatalog>,
     identity: Option<&Identity>,
+    away: &dyn Fn(u8) -> String,
 ) -> Vec<RosterRow> {
     let mut rows: Vec<RosterRow> = guild
         .members
         .iter()
-        .map(|m| row(m, areas, identity))
+        .map(|m| row(m, areas, identity, away))
         .collect();
     guild.sort.order(&mut rows, guild.show_offline);
     rows
@@ -222,6 +221,7 @@ fn row(
     m: &GuildRosterMember,
     areas: Option<&AreaTableCatalog>,
     identity: Option<&Identity>,
+    away: &dyn Fn(u8) -> String,
 ) -> RosterRow {
     let online = m.is_online();
     RosterRow {
@@ -247,7 +247,7 @@ fn row(
             note: m.public_note.clone(),
             officer_note: m.officer_note.clone(),
             online,
-            status: status_tag(m.presence).to_string(),
+            status: away(m.presence),
             // No float on the wire for an online member; the formatter reads all zeroes as nil.
             last_online: if online {
                 Default::default()
@@ -258,16 +258,13 @@ fn row(
     }
 }
 
-/// The away tag, `GetGuildRosterInfo`'s tenth return: always a string, `""` rather than nil. DND
-/// is tested before AFK (`0x4d13e4`, `0x4d13fb`), so a member flagged both shows as DND.
-pub(super) fn status_tag(presence: u8) -> &'static str {
+/// The global naming `GetGuildRosterInfo`'s tenth return, whose value it is, or `""` for none. DND
+/// is tested before AFK (`0x5cc9c0`), so a member flagged both shows as DND.
+pub(super) fn status_key(presence: u8) -> Option<&'static str> {
     if presence & guild_presence::DND != 0 {
-        CHAT_FLAG_DND
-    } else if presence & guild_presence::AFK != 0 {
-        CHAT_FLAG_AFK
-    } else {
-        ""
+        return Some("CHAT_FLAG_DND");
     }
+    (presence & guild_presence::AFK != 0).then_some("CHAT_FLAG_AFK")
 }
 
 /// The 1-based row of a guid in the shown order, `0` when absent, as `GetGuildRosterSelection
@@ -470,13 +467,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dnd_wins_over_afk_and_the_tag_is_always_a_string() {
+    fn dnd_wins_over_afk() {
         use guild_presence::{AFK, DND, OFFLINE, ONLINE};
-        assert_eq!(status_tag(ONLINE | AFK | DND), "<DND>");
-        assert_eq!(status_tag(ONLINE | DND), "<DND>");
-        assert_eq!(status_tag(ONLINE | AFK), "<AFK>");
-        assert_eq!(status_tag(ONLINE), "");
-        assert_eq!(status_tag(OFFLINE), "", "never nil, even offline");
+        assert_eq!(status_key(ONLINE | AFK | DND), Some("CHAT_FLAG_DND"));
+        assert_eq!(status_key(ONLINE | DND), Some("CHAT_FLAG_DND"));
+        assert_eq!(status_key(ONLINE | AFK), Some("CHAT_FLAG_AFK"));
+        assert_eq!(status_key(ONLINE), None);
+        assert_eq!(status_key(OFFLINE), None);
     }
 
     #[test]
@@ -505,7 +502,7 @@ mod tests {
             public_note: "alt".into(),
             officer_note: String::new(),
         };
-        let row = row(&member, None, None);
+        let row = row(&member, None, None, &|_| String::new());
         assert_eq!(row.info.level, 42);
         assert_eq!(row.info.class, "Mage");
         assert!(!row.info.online);
@@ -523,7 +520,9 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            row(&member, None, None).info.last_online,
+            row(&member, None, None, &|_| String::new())
+                .info
+                .last_online,
             Default::default()
         );
     }

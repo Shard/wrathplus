@@ -776,7 +776,7 @@ pub(super) fn drain_chat_input(
                         chat_out.anim.write(crate::creature_anim::EmoteAnim {
                             entity,
                             anim_id: anim as u16,
-                            seq: play_seq.next(),
+                            seq: play_seq.advance(),
                             via_player: false,
                         });
                     }
@@ -810,7 +810,7 @@ pub(super) fn drain_chat_input(
                             entity,
                             spell_id,
                             kind,
-                            seq: play_seq.next(),
+                            seq: play_seq.advance(),
                         });
                         // A selected caster's GO hits us, so a missile flies end to end; a
                         // self-cast has no target. `ground` sends the pure dest shape instead, a
@@ -829,7 +829,7 @@ pub(super) fn drain_chat_input(
                                     misses: Vec::new(),
                                     dest,
                                     ammo_display_id: None,
-                                    seq: play_seq.next(),
+                                    seq: play_seq.advance(),
                                 });
                             } else if let Some(me) = me.filter(|&m| m != entity) {
                                 go_targets.write(crate::creature_anim::SpellGoTargets {
@@ -841,7 +841,7 @@ pub(super) fn drain_chat_input(
                                     // A real GO carries the caster's ammo; this flies the
                                     // Rough Arrow, display id 5996.
                                     ammo_display_id: Some(5996),
-                                    seq: play_seq.next(),
+                                    seq: play_seq.advance(),
                                 });
                             }
                         }

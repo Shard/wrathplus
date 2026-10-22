@@ -120,9 +120,6 @@ pub(super) struct InspectStores<'w, 's> {
     /// The GO template cache: a TEXT object's page and the tooltip ladder's highlight column
     /// and name.
     go_templates: Res<'w, crate::go_templates::GameObjectTemplates>,
-    /// The meeting-stone queue (`[0xb72038]`), part of MEETINGSTONE(23)'s highlightable term, so
-    /// the card's `interact` verdict reads the same predicate as the cursor.
-    stone: Option<Res<'w, crate::ui_dialog_verbs::MeetingStone>>,
     /// The published GameObject mouseover the tooltip reads; the card's own dev pick bypasses the
     /// publish, so this shows when the two differ.
     hovered_go: Res<'w, crate::target::HoveredObject>,
@@ -208,7 +205,8 @@ pub(super) fn inspect_ui(
     let (reputations, plates, plate_mode) =
         (&*stores.reputations, &stores.plates.0, &*stores.plate_mode);
     let go_templates = &*stores.go_templates;
-    let queued_area = stores.stone.as_deref().map_or(0, |s| s.area);
+    // No meeting-stone queue in 3.3.5: the cursor's unqueued 0 (`GoGateInputs::queued_area`).
+    let queued_area = 0;
     let hovered_go = &*stores.hovered_go;
     // The picked submesh's shading payload, off the hit entity itself.
     let tag_line = mouseover

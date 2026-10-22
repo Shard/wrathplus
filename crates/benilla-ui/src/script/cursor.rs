@@ -183,12 +183,11 @@ pub struct CursorPetAction {
     pub texture: Option<String>,
 }
 
-/// A macro payload from `PickupMacro`, mode 8: the bare macro id (`[0xb4e2fc]`), which
-/// `PlaceAction` accepts (`0x4e62e0`). It has no source slot, so a refused place leaves it held.
+/// `PickupMacro`'s payload, mode 8 (`0x520be0`); no source slot, so a refused place leaves it held.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CursorMacro {
-    /// The 1-based macro index: 1..=18 account, 19..=36 character.
-    pub index: u32,
+    /// The macro's stable id ([`super::MacroView::id`]), `[0xbd07e8]`.
+    pub id: u32,
     pub texture: Option<String>,
 }
 
@@ -510,7 +509,7 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
                 Some(CursorPayload::Merchant(m)) => {
                     vec![text("merchant")?, Value::Integer(i64::from(m.row) + 1)]
                 }
-                Some(CursorPayload::Macro(m)) => vec![text("macro")?, Value::Integer(m.index.into())],
+                Some(CursorPayload::Macro(m)) => super::macros::cursor_info(lua, &model.macros, m)?,
                 _ => Vec::new(),
             };
             Ok(mlua::MultiValue::from_vec(out))

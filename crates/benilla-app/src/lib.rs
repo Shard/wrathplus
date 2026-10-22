@@ -151,7 +151,6 @@ mod ui_arena_team;
 mod ui_native_chat;
 // The native pet-name and WHO capture FIFOs live in `net` (split step 0 residue); the old paths stay.
 use net::{wrath_pet_name_capture as ui_native_pet_name, wrath_who_capture as ui_native_who};
-mod ui_craft;
 mod ui_death;
 mod ui_dialog_verbs;
 mod ui_dressup;

@@ -384,10 +384,9 @@ pub(crate) fn go_highlightable(
     )
 }
 
-/// MEETINGSTONE's override for one stone, `template.data[2] == [0xb72038]`. `queued_area` is the
-/// reference's global: 0 until the `SMSG_MEETINGSTONE_SETQUEUE` handler (`0x4ca230`) writes it
-/// (zeroed at `0x4c9eec`). An unanswered template reads not queued; a `data[2]` of 0 matches the
-/// unqueued 0, as in the reference.
+/// MEETINGSTONE's override for one stone, 1.12's `template.data[2] == [0xb72038]`. `queued_area`
+/// is always 0 in 3.3.5, which has no queue (`GoGateInputs::queued_area`, labelled). An
+/// unanswered template reads not queued; a `data[2]` of 0 matches the unqueued 0.
 pub(crate) fn meeting_stone_queued(area: Option<u32>, queued_area: u32) -> bool {
     area.is_some_and(|a| a == queued_area)
 }
@@ -586,8 +585,6 @@ pub(super) struct CursorInputs<'w, 's> {
     keys: Res<'w, ButtonInput<KeyCode>>,
     // `[player+0x1d28/2c]`, the object whose loot window is open.
     loot_latch: Res<'w, crate::ui_loot::LootLatch>,
-    // `[0xb72038]`, the queued area; absent in a headless build, which reads as not queued.
-    stone: Option<Res<'w, crate::ui_dialog_verbs::MeetingStone>>,
     /// `CanAttack`'s creature metadata and controller lookup.
     relations: super::RelationInputs<'w, 's>,
 }
@@ -612,7 +609,6 @@ pub(super) fn classify(
         loot_cfg,
         keys,
         loot_latch,
-        stone,
         relations,
     } = inputs;
     let can_auto_interact = crate::player::can_auto_interact(
@@ -636,7 +632,8 @@ pub(super) fn classify(
             channel_owned: fishing_channel_owned(Some(self_store), hovered_object.guid),
             meeting_stone_queued: meeting_stone_queued(
                 tmpl.and_then(|t| t.meeting_stone).map(|m| m.area),
-                stone.as_deref().map_or(0, |s| s.area),
+                // No queue in 3.3.5: the unqueued 0 (`GoGateInputs::queued_area`).
+                0,
             ),
         };
         if !go_highlightable(store, reaction, overrides) {

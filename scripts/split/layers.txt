@@ -1,8 +1,8 @@
 # Module -> layer for the crate split (docs/APP-CRATE-SPLIT-PLAN.md). Every top-level module of
 # benilla-app's lib.rs not listed here stays in the root; every ui_* module not listed elsewhere is ui.
 # scripts/split/move-layers.sh reads it; one line per layer, in dependency order.
-core: run_mode local_state query_cache area chr_classes text_filter text_reshape glue_strings crash shutdown pending_item_ops quest_reputation cvars launch_plan app_core
+core: run_mode local_state query_cache area chr_classes text_filter text_reshape glue_strings crash shutdown pending_item_ops quest_reputation cvars launch_plan app_core wrath_vehicle_seats
 net: net realmlist names items go_templates area_trigger name_persist creature_type
 world: entities creature_anim player target spell motion swing_refusal sound portrait minimap transport video cursor death nameplates vplates quest_markers world_state loading_screen aura_visual weapon_trail bowstring fishing_line footprints asset_churn blob_shadow camera_shake chat_bubble cinematic combat_text doodad_events experience experience_ao go_anim inventory loot overlay pipe_warm poi_marker area_poi raid_marks ranged_flex screen_fade screenshot shaders opaque2d smart_rect world_backdrop ui_text game_tip guild
-ui: bindings console combat_log char_select char_create realm_select login glue textinput tutorial script_calls experience_ui world_state_ui npc_text quest_rewards wrath_vehicle_seats shipped_cvars
+ui: bindings console combat_log char_select char_create realm_select login glue textinput tutorial script_calls experience_ui world_state_ui npc_text quest_rewards shipped_cvars
 tools: capture addon_harness perf debug_panel dev hover_log showcase_capture preflight probe_shield

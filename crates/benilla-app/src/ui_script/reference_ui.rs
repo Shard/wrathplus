@@ -1555,7 +1555,7 @@ mod tests {
             .collect();
         assert!(
             ghosts.is_empty(),
-            "benilla fires {} event(s) the 1.12 client does not have — a Classic Era name, or one \
+            "benilla fires {} event(s) the 12340 client does not have — a 1.12 name, or one \
              invented here. Nothing in the stock UI can ever listen for these:\n  {}",
             ghosts.len(),
             ghosts.join("\n  ")

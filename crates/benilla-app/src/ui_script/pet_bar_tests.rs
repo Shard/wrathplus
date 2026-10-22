@@ -1,6 +1,6 @@
 //! The pet action bar, stock `PetActionBarFrame.xml`, from a pushed slot list to its quads.
 
-use benilla_ui::script::{PetActionView, QuadContent, UiScript};
+use benilla_ui::script::{PetActionView, QuadContent, UiScript, UnitState};
 
 use super::test_ui::load_ui as load_xml;
 
@@ -36,6 +36,17 @@ pub(super) fn load_pet_bar(s: &mut UiScript) {
     ] {
         load_xml(s, file);
     }
+    // A pet in the world: 3.3.5 shows the bar only for a visible pet with an action bar
+    // (`PetHasActionBar() and UnitIsVisible("pet")`, PetActionBarFrame.lua:38-41).
+    s.set_unit(
+        "pet",
+        Some(UnitState {
+            exists: true,
+            has_object: true,
+            name: Some("Snarl".into()),
+            ..UnitState::default()
+        }),
+    );
 }
 
 /// A token slot's `name` is a `GlobalStrings` key: the two the tests read, at their stock values.
@@ -172,17 +183,17 @@ fn the_shipped_pet_bar_drives_end_to_end() {
         1,
         "only Claw can autocast"
     );
-    let shines: Vec<_> = quads
-        .iter()
-        .filter(|q| q.rect.is_none_or(|r| (r.top + r.bottom) / 2.0 >= 50.0))
-        .filter(|q| matches!(&q.content, QuadContent::ModelPane { model: Some(p), model_scale, .. }
-            if p == "Interface\\Buttons\\UI-AutoCastButton.mdx" && (*model_scale - 1.2).abs() < 1e-6))
-        .collect();
-    assert_eq!(
-        shines.len(),
-        1,
-        "the shine pane on Claw alone — enabled, not merely allowed"
-    );
+    // The shine is `AutoCastShine_AutoCastStart` on the button's `Shine` sparkles
+    // (PetActionBarFrame.lua:139-144, UIParent.lua:3477-3493): Claw's alone, enabled, not merely
+    // allowed.
+    let sparkling = |s: &UiScript, n: u32| {
+        s.eval::<bool>(&format!(
+            "return PetActionButton{n}Shine.sparkles[1]:IsVisible() and true or false"
+        ))
+        .unwrap()
+    };
+    assert!(sparkling(&s, 4), "Claw sparkles");
+    assert!(!sparkling(&s, 1), "Attack does not");
 
     // TOPLEFT at MainMenuBar's BOTTOMLEFT (0, 0) + (36, 97) (UIParent.lua:1589,1736): the 43-tall
     // frame spans y[54,97], and button 1 at (36, 2) in it is x[72,102] y[56,86].
@@ -202,20 +213,14 @@ fn the_shipped_pet_bar_drives_end_to_end() {
     s.resolve();
     let gone = s.extract();
     assert_eq!(textures(&gone, "Interface\\PetActionBar\\UI-PetBar"), 0);
-    assert!(
-        !gone.iter().any(
-            |q| matches!(&q.content, QuadContent::ModelPane { model: Some(p), .. }
-            if p == "Interface\\Buttons\\UI-AutoCastButton.mdx")
-        ),
-        "the shine pane hides with its bar"
-    );
+    assert!(!sparkling(&s, 4), "the shine hides with its bar");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Left casts, right flips autocast, and a left click on an active Attack calls it off
-/// (`IsPetAttackActive`, PetActionBarFrame.lua:257-265).
+/// Left casts and right flips autocast (`PetActionButton_OnClick`, PetActionBarFrame.lua:287-293);
+/// 3.3.5's handler has no Attack call-off fork, so an active Attack's click casts it too.
 #[test]
-fn clicks_route_through_the_attack_toggle_fork() {
+fn clicks_cast_on_the_left_and_flip_autocast_on_the_right() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
@@ -233,11 +238,8 @@ fn clicks_route_through_the_attack_toggle_fork() {
     };
 
     click(&mut s, 87.0, 71.0, "LeftButton");
-    assert_eq!(s.take_pet_stop_attacks(), 1);
-    assert!(
-        s.take_pet_actions().is_empty(),
-        "the call-off replaces the press, it does not accompany it"
-    );
+    assert_eq!(s.take_pet_stop_attacks(), 0, "no Lua call-off fork");
+    assert_eq!(s.take_pet_actions(), vec![1]);
 
     let mut slots = hunter_slots();
     slots[0].active = false;
@@ -369,8 +371,9 @@ fn pet_bar_row(with_multibar: bool) -> (usize, f32) {
     (shelf, attack_top)
 }
 
-/// With the bottom-left bar up, `UIParent_ManageFramePositions` raises the pet bar 43 px and hides
-/// its shelf art, which would draw across that row (UIParent.lua:1589,1706-1708).
+/// With the bottom-left bar up, `UIParent_ManageFramePositions` raises the pet bar by
+/// `actionBarOffset` (45 px) and hides its shelf art, which would draw across that row
+/// (UIParent.lua:1163,1201).
 #[test]
 fn the_pet_bar_rises_and_sheds_its_shelf_over_the_bottom_left_bar() {
     benilla_formats::wow_data_or_skip!();
@@ -385,8 +388,8 @@ fn the_pet_bar_rises_and_sheds_its_shelf_over_the_bottom_left_bar() {
 
     let risen = low_top - high_top;
     assert!(
-        (risen.abs() - 43.0).abs() < 0.5,
-        "the bar must rise by the ref's 43 px (moved {risen})"
+        (risen.abs() - 45.0).abs() < 0.5,
+        "the bar must rise by actionBarOffset's 45 px (moved {risen})"
     );
 }
 
@@ -406,7 +409,7 @@ fn dragging_a_pet_spell_between_slots_moves_it_through_the_shipped_handlers() {
     // Slot 5 is empty, so its button hides until the grid comes up.
     assert!(!s.eval::<bool>("return PetActionButton5:IsShown()").unwrap());
 
-    s.run("this = PetActionButton4; PetActionButton_OnDragStart()")
+    s.run("PetActionButton_OnDragStart(PetActionButton4)")
         .unwrap();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert_eq!(
@@ -425,7 +428,7 @@ fn dragging_a_pet_spell_between_slots_moves_it_through_the_shipped_handlers() {
         "the grid reveals the empty slots to drop onto"
     );
 
-    s.run("this = PetActionButton5; PetActionButton_OnReceiveDrag()")
+    s.run("PetActionButton_OnReceiveDrag(PetActionButton5)")
         .unwrap();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert_eq!(
@@ -442,8 +445,8 @@ fn dragging_a_pet_spell_between_slots_moves_it_through_the_shipped_handlers() {
     assert!(s.cursor_payload().is_none());
 }
 
-/// `LOCK_ACTIONBAR` stops both drag ends (PetActionBarFrame.lua:270,278) but not the shift-click
-/// pick-up (PetActionBarFrame.lua:254-255).
+/// `LOCK_ACTIONBAR` stops both drag ends (PetActionBarFrame.lua:302-316) but not the modified-click
+/// pick-up (`PICKUPACTION`, PetActionBarFrame.lua:295-300).
 #[test]
 fn the_lock_stops_the_pet_bar_drag_but_not_its_shift_click() {
     benilla_formats::wow_data_or_skip!();
@@ -456,7 +459,7 @@ fn the_lock_stops_the_pet_bar_drag_but_not_its_shift_click() {
     s.resolve();
 
     s.run(r#"LOCK_ACTIONBAR = "1""#).unwrap();
-    s.run("this = PetActionButton4; PetActionButton_OnDragStart()")
+    s.run("PetActionButton_OnDragStart(PetActionButton4)")
         .unwrap();
     assert!(
         s.take_pet_set_actions().is_empty(),
@@ -465,15 +468,14 @@ fn the_lock_stops_the_pet_bar_drag_but_not_its_shift_click() {
     assert!(s.cursor_payload().is_none());
 
     s.set_modifiers(true, false, false);
-    s.run("this = PetActionButton4; PetActionButton_OnClick(\"LeftButton\")")
-        .unwrap();
+    s.run("PetActionButton4:Click(\"LeftButton\")").unwrap();
     s.set_modifiers(false, false, false);
     assert_eq!(
         s.take_pet_set_actions(),
         vec![vec![(3, CLAW_WORD & 0xFFFF_0000)]],
         "shift-click picked it up despite the lock"
     );
-    s.run("this = PetActionButton5; PetActionButton_OnReceiveDrag()")
+    s.run("PetActionButton_OnReceiveDrag(PetActionButton5)")
         .unwrap();
     assert!(
         s.take_pet_set_actions().is_empty(),
@@ -481,7 +483,7 @@ fn the_lock_stops_the_pet_bar_drag_but_not_its_shift_click() {
     );
 
     s.run(r#"LOCK_ACTIONBAR = "0""#).unwrap();
-    s.run("this = PetActionButton5; PetActionButton_OnReceiveDrag()")
+    s.run("PetActionButton_OnReceiveDrag(PetActionButton5)")
         .unwrap();
     assert_eq!(
         s.take_pet_set_actions(),
@@ -491,7 +493,8 @@ fn the_lock_stops_the_pet_bar_drag_but_not_its_shift_click() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Shift is tested above the button split (PetActionBarFrame.lua:254): either button picks up.
+/// The template's `OnClick` forks on `IsModifiedClick()` before the button split
+/// (PetActionBarFrame.xml:48-54): a `PICKUPACTION` chord picks up with either button.
 #[test]
 fn shift_clicking_a_pet_button_picks_it_up_rather_than_casting() {
     benilla_formats::wow_data_or_skip!();
@@ -503,12 +506,9 @@ fn shift_clicking_a_pet_button_picks_it_up_rather_than_casting() {
     s.fire_event("PET_BAR_UPDATE", vec![]);
     s.resolve();
 
-    s.run(
-        "IsShiftKeyDown = function() return 1 end \
-         this = PetActionButton4 \
-         PetActionButton_OnClick('RightButton')",
-    )
-    .unwrap();
+    s.set_modifiers(true, false, false);
+    s.run("PetActionButton4:Click('RightButton')").unwrap();
+    s.set_modifiers(false, false, false);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert!(
         s.take_pet_actions().is_empty() && s.take_pet_autocast_toggles().is_empty(),

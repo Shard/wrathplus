@@ -1,16 +1,49 @@
 use benilla_ui::script::{
-    QuadContent, ScriptValue, SelectionRequest, SoundRequest, UiScript, UnitState,
+    QuadContent, ScriptValue, SelectionRequest, SoundRequest, UiScript, UnitPowerState, UnitState,
 };
 
-use super::test_ui::{hover, load_ui as load_xml, unhover};
+use super::test_ui::load_ui as load_xml;
+
+#[path = "unit_frame_text_tests.rs"]
+mod text;
+
+/// A snapshot as the app's feed pushes one: the active power in its slot of the seven 3.3.5
+/// resources (`UnitPower` reads only those), and a player with a side, which the stock PvP panes
+/// concatenate on their own events (`PVPBattlegroundFrame.lua:123`, `BattlefieldFrame.lua:387`).
+trait Seat {
+    fn seat(&mut self, token: &str, state: Option<UnitState>);
+}
+
+impl Seat for UiScript {
+    fn seat(&mut self, token: &str, state: Option<UnitState>) {
+        let state = state.map(|mut u| {
+            if u.powers.is_none() {
+                let mut powers = [UnitPowerState::default(); 7];
+                // The wire scale: rage and runic power in tenths, happiness in thousandths.
+                let scale = match u.power_type {
+                    1 | 6 => 10,
+                    4 => 1000,
+                    _ => 1,
+                };
+                if let Some(slot) = powers.get_mut(usize::from(u.power_type)) {
+                    *slot = UnitPowerState {
+                        current: u.power * scale,
+                        maximum: u.max_power * scale,
+                    };
+                }
+                u.powers = Some(powers);
+            }
+            if token == "player" && u.faction_group.is_none() {
+                u.faction_group = Some("Alliance".into());
+            }
+            u
+        });
+        self.set_unit(token, state);
+    }
+}
 
 /// The unit frames' load prefix, in the production order.
 fn load_unit_frames(s: &mut UiScript) {
-    load_unit_frames_with(s, &[]);
-}
-
-/// [`load_unit_frames`] with `extra` merged in.
-fn load_unit_frames_with(s: &mut UiScript, extra: &[&str]) {
     const UNIT_FRAMES: &[&str] = &[
         // Stock `GlobalStrings.lua` first, as the app runs it: the unit-frame files read it at load
         // (`CombatFeedback.lua:6-17`, `UnitFrame.lua:2-7`).
@@ -35,12 +68,12 @@ fn load_unit_frames_with(s: &mut UiScript, extra: &[&str]) {
         // `FACTION_BAR_COLORS` (`ReputationFrame.lua:3`) for stock `GameTooltip_UnitColor`.
         r"Interface\FrameXML\ReputationFrame.lua",
     ];
-    for file in super::test_ui::production_order(&[UNIT_FRAMES, extra]) {
+    for file in super::test_ui::production_order(&[UNIT_FRAMES]) {
         load_xml(s, file);
     }
 }
 
-/// The stock unit frames driven by snapshots: bar fill, the target's hide and show, a late name.
+/// The stock unit frames driven by snapshots: bar fill, the target's hide and show, a name update.
 #[test]
 fn shipped_unit_frames_drive_end_to_end() {
     benilla_formats::wow_data_or_skip!();
@@ -61,7 +94,7 @@ fn shipped_unit_frames_drive_end_to_end() {
 
     // `PLAYER_ENTERING_WORLD` repaints the whole frame (`PlayerFrame.lua:96-100`); a bar's own
     // events repaint only that bar (`UnitFrame.lua:150-151`, `:190-199`).
-    s.set_unit(
+    s.seat(
         "player",
         Some(UnitState {
             exists: true,
@@ -96,15 +129,7 @@ fn shipped_unit_frames_drive_end_to_end() {
         .unwrap();
     assert!(ok, "player frame painted from the snapshot");
 
-    // Blank while unresolved: `PlayerName` has no `text=` (`PlayerFrame.xml:58`).
-    assert_eq!(
-        s.eval::<Option<String>>("return PlayerName:GetText()")
-            .unwrap(),
-        None,
-        "no name yet: the stock file has no \"Unknown\" literal to fall back on"
-    );
-
-    s.set_unit(
+    s.seat(
         "player",
         Some(UnitState {
             exists: true,
@@ -127,9 +152,9 @@ fn shipped_unit_frames_drive_end_to_end() {
         "Benilla"
     );
 
-    // A powerless target's bar runs empty, not hidden: only a bar with a `TextString` hides when
-    // trackless (`TextStatusBar.lua:55-56`), and `TargetFrame.xml:486-487` names undeclared ones.
-    s.set_unit(
+    // A powerless target's bar hides: it has a `TextString` (`TargetFrame.lua:58-59`), and a
+    // trackless bar with one hides unless `alwaysShow` (`TextStatusBar.lua:78-85`).
+    s.seat(
         "target",
         Some(UnitState {
             exists: true,
@@ -153,17 +178,17 @@ fn shipped_unit_frames_drive_end_to_end() {
             r#"
             local _, pmax = TargetFrameManaBar:GetMinMaxValues()
             return TargetFrame:IsVisible()
-               and TargetFrameManaBar:GetValue() == 0 and pmax == 0
-               and TargetFrameManaBar.TextString == nil -- the reference declares no text region
-               and TargetName:GetText() == "Young Wolf"
-               and TargetLevelText:GetText() == "3"
-               and not TargetDeadText:IsShown() -- living target: no dead word
+               and pmax == 0 and not TargetFrameManaBar:IsShown()
+               and TargetFrameManaBar.TextString == TargetFrameTextureFrameManaBarText
+               and TargetFrameTextureFrameName:GetText() == "Young Wolf"
+               and TargetFrameTextureFrameLevelText:GetText() == "3"
+               and not TargetFrameTextureFrameDeadText:IsShown() -- living target: no dead word
         "#,
         )
         .unwrap();
     assert!(
         ok,
-        "target frame painted; a powerless unit's power bar runs empty over an empty track"
+        "target frame painted; a powerless unit's power bar hides"
     );
     // `TargetFrame_OnShow` picks the kit (`TargetFrame.lua:104-112`); reaction 4 is neutral.
     assert_eq!(
@@ -205,7 +230,7 @@ fn shipped_unit_frames_drive_end_to_end() {
         .expect("target health fill at 60% of 119px");
     assert!((bar_rect.width() - 71.4).abs() < 0.01);
 
-    s.set_unit("target", None);
+    s.seat("target", None);
     s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
     assert!(!s.eval::<bool>("return TargetFrame:IsVisible()").unwrap());
     assert_eq!(
@@ -216,7 +241,7 @@ fn shipped_unit_frames_drive_end_to_end() {
         "deselect plays the lost-target kit"
     );
 
-    s.set_unit(
+    s.seat(
         "target",
         Some(UnitState {
             exists: true,
@@ -263,7 +288,7 @@ fn unit_combat_drives_the_player_hit_indicator() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&mut s);
-    s.set_unit(
+    s.seat(
         "player",
         Some(UnitState {
             exists: true,
@@ -349,25 +374,17 @@ fn unit_combat_drives_the_player_hit_indicator() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Stock `PlayerFrame_OnClick` (`PlayerFrame.lua:156-172`) targets the player on a left click and
-/// opens the SELF popup on a right click: no menu solo, the leader's rows in a party.
+/// The player frame is a secure unit button (`PlayerFrame.lua:48`, `SecureTemplates.lua:555-571`):
+/// a left click targets the player, a right click opens the SELF popup (`PlayerFrame.lua:498-504`).
+/// Solo it still offers Set Focus, PvP, the difficulties and the marks; a party leader's adds the
+/// loot rows and Leave (`UnitPopup.lua:138`).
 #[test]
 fn left_clicking_the_player_frame_targets_self() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&mut s);
-
-    s.set_unit(
-        "player",
-        Some(UnitState {
-            exists: true,
-            health: 72,
-            max_health: 100,
-            ..UnitState::default()
-        }),
-    );
-    s.fire_event("UNIT_HEALTH", vec![ScriptValue::Str("player".into())]);
+    seat_self(&mut s);
     s.resolve();
     assert!(
         s.take_selection_requests().is_empty(),
@@ -383,12 +400,21 @@ fn left_clicking_the_player_frame_targets_self() {
         s.take_selection_requests().is_empty(),
         "right-click queues no target"
     );
-    // Solo, every SELF row but Cancel is gated off (`UnitPopup.lua:69`, no PvP row): no menu.
-    assert!(
-        s.eval::<bool>("return not DropDownList1:IsVisible()")
-            .unwrap(),
-        "no SELF menu while solo"
+    assert_eq!(
+        menu_values(&s),
+        [
+            "Benilla",
+            "SET_FOCUS",
+            "PVP_FLAG",
+            "DUNGEON_DIFFICULTY",
+            "RAID_DIFFICULTY",
+            "RESET_INSTANCES",
+            "RAID_TARGET_ICON",
+            "CANCEL"
+        ],
+        "the solo SELF menu"
     );
+    s.run("HideDropDownMenu(1)").unwrap();
 
     s.mouse_button(cx as f32, cy as f32, "LeftButton", true);
     s.mouse_button(cx as f32, cy as f32, "LeftButton", false);
@@ -398,46 +424,41 @@ fn left_clicking_the_player_frame_targets_self() {
         "left-click queues a self-target"
     );
 
-    s.set_party(benilla_ui::script::PartyState {
-        members: vec![benilla_ui::script::PartyMemberInfo {
-            name: "Alice".into(),
-            guid: 0xA11CE,
-        }],
-        leader_index: 0, // we lead
-        // The player's own guid, unset; 0 is also the ungrouped sentinel, but there is a member.
-        leader_guid: 0,
-        own_guid: 0,
-        raid: Vec::new(),
-        loot_method: "group".into(),
-        master_looter: None,
-        master_looter_guid: 0,
-        loot_threshold: 2,
-    });
+    s.set_party(leading_alice());
     s.mouse_button(cx as f32, cy as f32, "RightButton", true);
     s.mouse_button(cx as f32, cy as f32, "RightButton", false);
-    assert!(
-        s.eval::<bool>("return DropDownList1:IsVisible()").unwrap(),
-        "the SELF menu opens for a party leader"
-    );
     assert_eq!(
-        s.eval::<i64>("return DropDownList1.numButtons").unwrap(),
-        6,
-        "title + Loot Method + Loot Threshold + Leave Party + Raid Target Icon + Cancel"
+        menu_values(&s),
+        [
+            "Benilla",
+            "SET_FOCUS",
+            "PVP_FLAG",
+            "LOOT_METHOD",
+            "LOOT_THRESHOLD",
+            "OPT_OUT_LOOT_TITLE",
+            "DUNGEON_DIFFICULTY",
+            "RAID_DIFFICULTY",
+            "RESET_INSTANCES",
+            "RAID_TARGET_ICON",
+            "LEAVE",
+            "CANCEL"
+        ],
+        "the party leader's SELF menu"
     );
-    // `PARTY_LEAVE` is "Leave party", lower-case (`GlobalStrings.lua:2991`).
+    // `PARTY_LEAVE` is "Leave party", lower-case (`GlobalStrings.lua`).
     assert_eq!(
-        s.eval::<String>("return DropDownList1Button4:GetText()")
+        s.eval::<String>("return DropDownList1Button11:GetText()")
             .unwrap(),
         "Leave party"
     );
     assert!(
-        s.eval::<bool>("return DropDownList1Button2ExpandArrow:IsVisible()")
+        s.eval::<bool>("return DropDownList1Button4ExpandArrow:IsVisible()")
             .unwrap(),
         "Loot Method is nested for the leader"
     );
     s.resolve();
     let (rx, ry) = s
-        .eval::<(f64, f64)>("return DropDownList1Button4:GetCenter()")
+        .eval::<(f64, f64)>("return DropDownList1Button11:GetCenter()")
         .unwrap();
     s.mouse_button(rx as f32, ry as f32, "LeftButton", true);
     s.mouse_button(rx as f32, ry as f32, "LeftButton", false);
@@ -454,6 +475,55 @@ fn left_clicking_the_player_frame_targets_self() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
+/// The player as the app seats it: a snapshot and the guid table's `player` row.
+fn seat_self(s: &mut UiScript) {
+    s.seat(
+        "player",
+        Some(UnitState {
+            exists: true,
+            guid: 0x10,
+            name: Some("Benilla".into()),
+            health: 72,
+            max_health: 100,
+            ..UnitState::default()
+        }),
+    );
+    s.set_unit_guids(&benilla_ui::script::UnitGuids {
+        player: 0x10,
+        ..Default::default()
+    });
+    s.fire_event("UNIT_HEALTH", vec![ScriptValue::Str("player".into())]);
+}
+
+/// A party of us and Alice, which we lead.
+fn leading_alice() -> benilla_ui::script::PartyState {
+    benilla_ui::script::PartyState {
+        members: vec![benilla_ui::script::PartyMemberInfo {
+            name: "Alice".into(),
+            guid: 0xA11CE,
+        }],
+        leader_index: 0,
+        leader_guid: 0x10,
+        own_guid: 0x10,
+        raid: Vec::new(),
+        loot_method: "group".into(),
+        master_looter: None,
+        master_looter_guid: 0,
+        loot_threshold: 2,
+    }
+}
+
+/// The shown rows of the open level-1 list, by value.
+fn menu_values(s: &UiScript) -> Vec<String> {
+    s.eval(
+        "local t = {} for i = 1, DropDownList1.numButtons do \
+             local b = _G['DropDownList1Button'..i] \
+             if b:IsShown() then t[#t + 1] = tostring(b.value) end \
+         end return t",
+    )
+    .unwrap()
+}
+
 /// A leader opens the SELF popup, hovers Raid Target Icon (a `hasArrow` row's OnEnter opens
 /// `DropDownList2`) and clicks Skull; the mark queues against the menu's unit.
 #[test]
@@ -462,31 +532,8 @@ fn raid_mark_clicks_through_the_nested_level() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&mut s);
-
-    s.set_unit(
-        "player",
-        Some(UnitState {
-            exists: true,
-            health: 72,
-            max_health: 100,
-            ..UnitState::default()
-        }),
-    );
-    s.fire_event("UNIT_HEALTH", vec![ScriptValue::Str("player".into())]);
-    s.set_party(benilla_ui::script::PartyState {
-        members: vec![benilla_ui::script::PartyMemberInfo {
-            name: "Alice".into(),
-            guid: 0xA11CE,
-        }],
-        leader_index: 0, // we lead: the mark rows are leader-gated
-        leader_guid: 0,  // the player's own guid; this fixture leaves it unset
-        own_guid: 0,
-        raid: Vec::new(),
-        loot_method: "group".into(),
-        master_looter: None,
-        master_looter_guid: 0,
-        loot_threshold: 2,
-    });
+    seat_self(&mut s);
+    s.set_party(leading_alice()); // the mark rows are leader-gated
     s.resolve();
 
     let (cx, cy) = s
@@ -494,19 +541,14 @@ fn raid_mark_clicks_through_the_nested_level() {
         .unwrap();
     s.mouse_button(cx as f32, cy as f32, "RightButton", true);
     s.mouse_button(cx as f32, cy as f32, "RightButton", false);
-    assert!(
-        s.eval::<bool>("return DropDownList1:IsVisible()").unwrap(),
-        "the SELF menu opens"
-    );
     s.resolve();
-
     assert_eq!(
-        s.eval::<String>("return DropDownList1Button5:GetText()")
+        s.eval::<String>("return DropDownList1Button10.value")
             .unwrap(),
-        "Raid Target Icon"
+        "RAID_TARGET_ICON"
     );
     let (rx, ry) = s
-        .eval::<(f64, f64)>("return DropDownList1Button5:GetCenter()")
+        .eval::<(f64, f64)>("return DropDownList1Button10:GetCenter()")
         .unwrap();
     s.mouse_move(rx as f32, ry as f32);
     assert!(
@@ -520,17 +562,18 @@ fn raid_mark_clicks_through_the_nested_level() {
     );
     s.resolve();
 
+    // Each mark wears its colour code (`UnitPopup.lua`'s `RAID_TARGET_8` row).
     assert_eq!(
         s.eval::<String>("return DropDownList2Button8:GetText()")
             .unwrap(),
-        "Skull"
+        "|cFFf9f9f9Skull|r"
     );
     let (sx, sy) = s
         .eval::<(f64, f64)>("return DropDownList2Button8:GetCenter()")
         .unwrap();
     s.mouse_button(sx as f32, sy as f32, "LeftButton", true);
     s.mouse_button(sx as f32, sy as f32, "LeftButton", false);
-    // The row calls stock `SetRaidTargetIcon` (`TargetFrame.lua:486-492`), whose body is the
+    // The row calls stock `SetRaidTargetIcon` (`TargetFrame.lua:703-709`), whose body is the
     // engine verb `SetRaidTarget(unit, 0 or index)`.
     assert_eq!(
         s.take_party_requests(),
@@ -559,8 +602,8 @@ fn raid_mark_clicks_through_the_nested_level() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Stock `TargetFrame_CheckLevel` (`TargetFrame.lua:119-142`) over stock `GetDifficultyColor`
-/// (`QuestLogFrame.lua:14-20`, `:585-599`): an attackable target's number takes its difficulty
+/// Stock `TargetFrame_CheckLevel` (`TargetFrame.lua:236-259`) over stock `GetQuestDifficultyColor`
+/// (`UIParent.lua:3358-3372`, `Constants.lua:403-410`): an attackable target's number takes its difficulty
 /// colour, and a corpse or `UnitLevel` −1 (hostile, 10+ up) shows the skull instead.
 #[test]
 fn shipped_target_frame_runs_the_level_law() {
@@ -568,28 +611,14 @@ fn shipped_target_frame_runs_the_level_law() {
     use benilla_ui::script::PlayerReqState;
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    // `GetDifficultyColor`'s load chain: the stock quest log window.
-    load_unit_frames_with(
-        &mut s,
-        &[
-            r"Interface\FrameXML\UIPanelTemplates.lua",
-            r"Interface\FrameXML\UIPanelTemplates.xml",
-            r"Interface\FrameXML\CharacterFrameTemplates.xml", // the window tab
-            r"Interface\FrameXML\StaticPopup.xml",
-            r"Interface\FrameXML\MainMenuBarMicroButtons.xml",
-            "Interface\\FrameXML\\ItemButtonTemplate.xml",
-            "Interface\\FrameXML\\QuestFrame.xml",
-            "Interface\\FrameXML\\QuestLogFrame.xml",
-            "Interface\\FrameXML\\MerchantFrame.xml",
-        ],
-    );
+    load_unit_frames(&mut s);
     // Level 3 on both feeds, which the app keeps in step: the snapshot `UnitLevel("player")` reads
     // and the requirement state the −1 gate and `GetQuestGreenRange` read.
     s.set_player_req_state(PlayerReqState {
         level: 3,
         ..Default::default()
     });
-    s.set_unit(
+    s.seat(
         "player",
         Some(UnitState {
             exists: true,
@@ -602,7 +631,7 @@ fn shipped_target_frame_runs_the_level_law() {
         }),
     );
 
-    s.set_unit(
+    s.seat(
         "target",
         Some(UnitState {
             exists: true,
@@ -619,9 +648,9 @@ fn shipped_target_frame_runs_the_level_law() {
     let ok: bool = s
         .eval(
             r#"
-            local lvl = getglobal("TargetLevelText")
-            local skull = getglobal("TargetHighLevelTexture")
-            local c = GetDifficultyColor(8)
+            local lvl = getglobal("TargetFrameTextureFrameLevelText")
+            local skull = getglobal("TargetFrameTextureFrameHighLevelTexture")
+            local c = GetQuestDifficultyColor(8)
             return lvl:IsShown() ~= nil and skull:IsShown() == nil
                and tostring(lvl:GetText()) == "8"
                and c.r == 1.00 and c.g == 0.10 and c.b == 0.10
@@ -630,7 +659,7 @@ fn shipped_target_frame_runs_the_level_law() {
         .unwrap();
     assert!(ok, "attackable +5: red number, no skull ({:?})", s.errors());
 
-    s.set_unit(
+    s.seat(
         "target",
         Some(UnitState {
             exists: true,
@@ -647,8 +676,8 @@ fn shipped_target_frame_runs_the_level_law() {
     let ok: bool = s
         .eval(
             r#"
-            local lvl = getglobal("TargetLevelText")
-            local skull = getglobal("TargetHighLevelTexture")
+            local lvl = getglobal("TargetFrameTextureFrameLevelText")
+            local skull = getglobal("TargetFrameTextureFrameHighLevelTexture")
             return UnitLevel("target") == -1
                and skull:IsShown() ~= nil and lvl:IsShown() == nil
         "#,
@@ -658,7 +687,7 @@ fn shipped_target_frame_runs_the_level_law() {
 
     // A dead mob is not a corpse: `UnitIsCorpse` (`0x5161c0`) checks for a corpse object and
     // `UnitLevel` (`0x517fc0`) ignores health, so its number shows.
-    s.set_unit(
+    s.seat(
         "target",
         Some(UnitState {
             exists: true,
@@ -675,8 +704,8 @@ fn shipped_target_frame_runs_the_level_law() {
     let ok: bool = s
         .eval(
             r#"
-            local lvl = getglobal("TargetLevelText")
-            local skull = getglobal("TargetHighLevelTexture")
+            local lvl = getglobal("TargetFrameTextureFrameLevelText")
+            local skull = getglobal("TargetFrameTextureFrameHighLevelTexture")
             return UnitIsCorpse("target") == nil
                and lvl:IsShown() ~= nil and skull:IsShown() == nil
                and tostring(lvl:GetText()) == "8"
@@ -689,7 +718,7 @@ fn shipped_target_frame_runs_the_level_law() {
         s.errors()
     );
 
-    s.set_unit(
+    s.seat(
         "target",
         Some(UnitState {
             exists: true,
@@ -703,7 +732,7 @@ fn shipped_target_frame_runs_the_level_law() {
     let ok: bool = s
         .eval(
             r#"
-            local skull = getglobal("TargetHighLevelTexture")
+            local skull = getglobal("TargetFrameTextureFrameHighLevelTexture")
             return UnitIsCorpse("target") == 1 and skull:IsShown() ~= nil
         "#,
         )
@@ -715,7 +744,7 @@ fn shipped_target_frame_runs_the_level_law() {
         level: 30,
         ..Default::default()
     });
-    s.set_unit(
+    s.seat(
         "player",
         Some(UnitState {
             exists: true,
@@ -730,7 +759,7 @@ fn shipped_target_frame_runs_the_level_law() {
     let ok: bool = s
         .eval(
             r#"
-            local g, t = GetDifficultyColor(23), GetDifficultyColor(22)
+            local g, t = GetQuestDifficultyColor(23), GetQuestDifficultyColor(22)
             return GetQuestGreenRange() == 7
                and g.r == 0.25 and g.g == 0.75 and g.b == 0.25
                and t.r == 0.50 and t.g == 0.50 and t.b == 0.50
@@ -751,11 +780,9 @@ fn pvp_icon_follows_the_three_branch_law() {
     load_unit_frames(&mut s);
     let _ = s.take_sounds(); // the frames' own load-time kits (target hide) aren't ours
 
-    let icon_shown = |s: &UiScript, unit: &str| -> bool {
-        s.eval(&format!(
-            "return {unit}PVPIcon:IsVisible() and true or false"
-        ))
-        .unwrap()
+    let icon_shown = |s: &UiScript, icon: &str| -> bool {
+        s.eval(&format!("return {icon}:IsVisible() and true or false"))
+            .unwrap()
     };
     let icon_path = |s: &mut UiScript, needle: &str| -> bool {
         s.resolve();
@@ -778,14 +805,14 @@ fn pvp_icon_follows_the_three_branch_law() {
         ..UnitState::default()
     };
 
-    s.set_unit("player", Some(alliance_player(false, false)));
+    s.seat("player", Some(alliance_player(false, false)));
     s.fire_event("UNIT_FACTION", vec![ScriptValue::Str("player".into())]);
-    assert!(!icon_shown(&s, "Player"), "unflagged shows none");
+    assert!(!icon_shown(&s, "PlayerPVPIcon"), "unflagged shows none");
     assert!(s.take_sounds().is_empty(), "no sound while unflagged");
 
-    s.set_unit("player", Some(alliance_player(true, false)));
+    s.seat("player", Some(alliance_player(true, false)));
     s.fire_event("UNIT_FACTION", vec![ScriptValue::Str("player".into())]);
-    assert!(icon_shown(&s, "Player"));
+    assert!(icon_shown(&s, "PlayerPVPIcon"));
     assert!(icon_path(&mut s, "UI-PVP-Alliance"), "faction leg art");
     assert_eq!(
         s.take_sounds(),
@@ -796,13 +823,13 @@ fn pvp_icon_follows_the_three_branch_law() {
     s.fire_event("UNIT_HEALTH", vec![ScriptValue::Str("player".into())]);
     assert!(s.take_sounds().is_empty(), "repaints don't re-sound");
 
-    s.set_unit("player", Some(alliance_player(true, true)));
+    s.seat("player", Some(alliance_player(true, true)));
     s.fire_event("UNIT_FACTION", vec![ScriptValue::Str("player".into())]);
     assert!(icon_path(&mut s, "UI-PVP-FFA"), "FFA wins the branch");
     let _ = s.take_sounds();
 
     // No side, no icon however flagged: the `factionGroup and UnitIsPVP` gate.
-    s.set_unit(
+    s.seat(
         "target",
         Some(UnitState {
             exists: true,
@@ -818,11 +845,11 @@ fn pvp_icon_follows_the_three_branch_law() {
     );
     s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
     assert!(
-        !icon_shown(&s, "Target"),
+        !icon_shown(&s, "TargetFrameTextureFramePVPIcon"),
         "flagged but sideless draws no icon"
     );
 
-    s.set_unit(
+    s.seat(
         "target",
         Some(UnitState {
             exists: true,
@@ -837,7 +864,7 @@ fn pvp_icon_follows_the_three_branch_law() {
         }),
     );
     s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
-    assert!(icon_shown(&s, "Target"));
+    assert!(icon_shown(&s, "TargetFrameTextureFramePVPIcon"));
     assert!(icon_path(&mut s, "UI-PVP-Horde"), "the target's own side");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
@@ -881,7 +908,7 @@ fn flagged_friendly_player_plate_is_green() {
         ..UnitState::default()
     };
 
-    s.set_unit("target", Some(friendly_player(false)));
+    s.seat("target", Some(friendly_player(false)));
     s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
     let blue = plate_color(&mut s);
     assert!(
@@ -889,7 +916,7 @@ fn flagged_friendly_player_plate_is_green() {
         "an unflagged friendly player is blue, got {blue:?}"
     );
 
-    s.set_unit("target", Some(friendly_player(true)));
+    s.seat("target", Some(friendly_player(true)));
     s.fire_event("UNIT_FACTION", vec![ScriptValue::Str("target".into())]);
     let green = plate_color(&mut s);
     assert!(
@@ -925,7 +952,7 @@ fn revered_and_exalted_npc_targets_read_their_ranks_and_plates_are_green() {
         let none = crate::target::RelationContext::none();
         let reaction =
             crate::ui_unit::unit_reaction(Some(&factions), &reps, &guard, Some(&me), none);
-        s.set_unit(
+        s.seat(
             "target",
             Some(UnitState {
                 exists: true,
@@ -958,9 +985,9 @@ fn revered_and_exalted_npc_targets_read_their_ranks_and_plates_are_green() {
     }
 }
 
-/// Stock `TargetFrame_CheckClassification` (`TargetFrame.lua:205-218`), asserted on the drawn
-/// quads: elite, rare-elite and world boss share the Elite art (1.12 ships no rare-elite border),
-/// and `UNIT_CLASSIFICATION_CHANGED` alone repaints it.
+/// Stock `TargetFrame_CheckClassification` (`TargetFrame.lua:286-305`), asserted on the drawn
+/// quads: elite and world boss share the Elite art, rare-elite has its own Rare-Elite art, and
+/// `UNIT_CLASSIFICATION_CHANGED` alone repaints it.
 #[test]
 fn target_frame_border_follows_the_classification_law() {
     benilla_formats::wow_data_or_skip!();
@@ -1001,7 +1028,7 @@ fn target_frame_border_follows_the_classification_law() {
         ..UnitState::default()
     };
 
-    s.set_unit("target", Some(mob(0)));
+    s.seat("target", Some(mob(0)));
     s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
     let v = borders(&mut s);
     assert_eq!(
@@ -1014,8 +1041,12 @@ fn target_frame_border_follows_the_classification_law() {
         "rank 0 wears the plain border, got {v:?}"
     );
 
-    for (rank, word) in [(1, "elite"), (2, "rareelite"), (3, "worldboss")] {
-        s.set_unit("target", Some(mob(rank)));
+    for (rank, word, art) in [
+        (1, "elite", "UI-TargetingFrame-Elite"),
+        (2, "rareelite", "UI-TargetingFrame-Rare-Elite"),
+        (3, "worldboss", "UI-TargetingFrame-Elite"),
+    ] {
+        s.seat("target", Some(mob(rank)));
         s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
         let v = borders(&mut s);
         assert_eq!(
@@ -1024,12 +1055,12 @@ fn target_frame_border_follows_the_classification_law() {
             word
         );
         assert!(
-            has(&v, "UI-TargetingFrame-Elite") && !has(&v, "UI-TargetingFrame-Rare"),
-            "rank {rank} ({word}) takes the Elite border, got {v:?}"
+            has(&v, art) && !has(&v, "UI-TargetingFrame-Rare"),
+            "rank {rank} ({word}) takes {art}, got {v:?}"
         );
     }
 
-    s.set_unit("target", Some(mob(4)));
+    s.seat("target", Some(mob(4)));
     s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
     let v = borders(&mut s);
     assert_eq!(
@@ -1043,13 +1074,13 @@ fn target_frame_border_follows_the_classification_law() {
     );
 
     // A creature query landing on the current target raises its rank; the event alone repaints.
-    s.set_unit("target", Some(mob(0)));
+    s.seat("target", Some(mob(0)));
     s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
     assert!(
         !has(&borders(&mut s), "UI-TargetingFrame-Elite"),
         "precondition: plain border before the query lands"
     );
-    s.set_unit("target", Some(mob(1)));
+    s.seat("target", Some(mob(1)));
     s.fire_event(
         "UNIT_CLASSIFICATION_CHANGED",
         vec![ScriptValue::Str("target".into())],
@@ -1084,7 +1115,7 @@ fn the_ring_art_paints_over_the_bars() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&mut s);
-    s.set_unit(
+    s.seat(
         "player",
         Some(UnitState {
             exists: true,
@@ -1172,7 +1203,7 @@ fn the_party_art_paints_over_the_bars() {
     load_xml(&mut s, "Interface\\FrameXML\\PetFrame.xml");
     load_xml(&mut s, r"Interface\FrameXML\ReputationFrame.lua"); // FACTION_BAR_COLORS
 
-    s.set_unit(
+    s.seat(
         "party1",
         Some(UnitState {
             exists: true,
@@ -1283,14 +1314,14 @@ fn a_feigning_target_paints_empty_bars_and_the_dead_text() {
         })
     };
 
-    s.set_unit("target", hunter(1200, 300, false));
+    s.seat("target", hunter(1200, 300, false));
     s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
     let alive: bool = s
         .eval(
             r#"
             local hb, pb = TargetFrameHealthBar, TargetFrameManaBar
             return hb:GetValue() == 1200 and pb:GetValue() == 300
-               and not TargetDeadText:IsShown()
+               and not TargetFrameTextureFrameDeadText:IsShown()
         "#,
         )
         .unwrap();
@@ -1298,7 +1329,7 @@ fn a_feigning_target_paints_empty_bars_and_the_dead_text() {
 
     // He feigns. The reference fires both events on the flag's edge (`0x6004c5`, `0x6004f0`);
     // each stock bar listens only for its own (`UnitFrame.lua:150-151`, `:190-199`).
-    s.set_unit("target", hunter(0, 0, true));
+    s.seat("target", hunter(0, 0, true));
     s.fire_event("UNIT_HEALTH", vec![ScriptValue::Str("target".into())]);
     s.fire_event("UNIT_MANA", vec![ScriptValue::Str("target".into())]);
     let (hp, hmax, mana, mmax): (f64, f64, f64, f64) = (
@@ -1317,12 +1348,13 @@ fn a_feigning_target_paints_empty_bars_and_the_dead_text() {
         "the mana bar empties, it does not disappear — UnitManaMax 0x5177e0 is ungated"
     );
     assert!(
-        s.eval::<bool>("return TargetDeadText:IsShown() and true or false")
+        s.eval::<bool>("return TargetFrameTextureFrameDeadText:IsShown() and true or false")
             .unwrap(),
         "TargetFrame_CheckDead's UnitHealth(unit) <= 0 test, tripped by the flag"
     );
     assert_eq!(
-        s.eval::<String>("return TargetDeadText:GetText()").unwrap(),
+        s.eval::<String>("return TargetFrameTextureFrameDeadText:GetText()")
+            .unwrap(),
         "Dead",
         "the WORD is the GlobalString `DEAD` (l.898), never the key: a literal \"DEAD\" here \
          is the caps bug seen on Onyxia"
@@ -1333,7 +1365,7 @@ fn a_feigning_target_paints_empty_bars_and_the_dead_text() {
         "UnitIsDead 0x517ac0's dynflag leg reaches the API too — as the number 1"
     );
 
-    s.set_unit("target", hunter(1200, 300, false));
+    s.seat("target", hunter(1200, 300, false));
     s.fire_event("UNIT_HEALTH", vec![ScriptValue::Str("target".into())]);
     s.fire_event("UNIT_MANA", vec![ScriptValue::Str("target".into())]);
     let up: bool = s
@@ -1341,7 +1373,7 @@ fn a_feigning_target_paints_empty_bars_and_the_dead_text() {
             r#"
             return TargetFrameHealthBar:GetValue() == 1200
                and TargetFrameManaBar:GetValue() == 300
-               and not TargetDeadText:IsShown()
+               and not TargetFrameTextureFrameDeadText:IsShown()
                and not UnitIsDead("target")
         "#,
         )
@@ -1358,7 +1390,7 @@ fn the_player_frame_flashes_zzz_while_resting() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&mut s);
-    s.set_unit(
+    s.seat(
         "player",
         Some(UnitState {
             exists: true,
@@ -1398,8 +1430,7 @@ fn the_player_frame_flashes_zzz_while_resting() {
     );
 
     let a0: f64 = s.eval("return PlayerStatusTexture:GetAlpha()").unwrap();
-    s.run("this = PlayerFrame; PlayerFrame_OnUpdate(0.25)")
-        .unwrap();
+    s.run("PlayerFrame_OnUpdate(PlayerFrame, 0.25)").unwrap();
     let a1: f64 = s.eval("return PlayerStatusTexture:GetAlpha()").unwrap();
     assert!(
         (a0 - a1).abs() > 0.1,
@@ -1455,7 +1486,7 @@ fn the_rest_badge_covers_the_level_number() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&mut s);
-    s.set_unit(
+    s.seat(
         "player",
         Some(UnitState {
             exists: true,
@@ -1499,214 +1530,8 @@ fn the_rest_badge_covers_the_level_number() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// The Status Bar Text switch pins numerals on the `textLockable` bars: the player's two
-/// (`PlayerFrame.xml:302`, `:330`), the pet's two and the XP bar. The target's bars have no text
-/// region (`TargetFrame.xml:486-487` names undeclared ones); a hover there shows the unit tooltip.
-#[test]
-fn status_bar_text_paints_the_player_numerals_but_not_the_targets() {
-    benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&mut s);
-
-    let alive = |health: u32, power: u32, power_type: u8| UnitState {
-        exists: true,
-        name: Some("Somebody".into()),
-        health,
-        max_health: 100,
-        level: 12,
-        power_type,
-        power,
-        max_power: 80,
-        dead: false,
-        reaction: 4,
-        // Else the disconnect leg pins the bar full, with no prefix (`UnitFrame.lua:214-220`).
-        is_connected: true,
-        ..UnitState::default()
-    };
-    s.set_unit("player", Some(alive(72, 45, 1))); // power_type 1 = RAGE
-    s.set_unit("target", Some(alive(50, 20, 0)));
-    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
-    s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
-
-    let text = |s: &UiScript, name: &str| -> String {
-        s.eval::<String>(&format!("return tostring(({name}:GetText()) or \"\")"))
-            .unwrap()
-    };
-    let shown = |s: &UiScript, name: &str| -> bool {
-        s.eval::<bool>(&format!("return {name}:IsShown()")).unwrap()
-    };
-
-    assert!(!shown(&s, "PlayerFrameHealthBarText"));
-    assert!(!shown(&s, "PlayerFrameManaBarText"));
-
-    // On, through the switch's own event, with no repaint.
-    s.register_cvars([("statusBarText", "0")]);
-    s.run("SetCVar(\"statusBarText\", \"1\", \"STATUS_BAR_TEXT\")")
-        .unwrap();
-    s.tick(0.0);
-    assert!(
-        shown(&s, "PlayerFrameHealthBarText"),
-        "your own health numerals pin on"
-    );
-    // No prefix: `CharacterFrame_OnLoad` sets "Health" (`CharacterFrame.lua:55`) and this fixture
-    // has no character window; a full run reads "Health 72 / 100".
-    assert_eq!(
-        text(&s, "PlayerFrameHealthBarText"),
-        "72 / 100",
-        "no prefix without the character window, which is what sets HEALTH"
-    );
-    // `UnitFrame_UpdateManaType` sets the power bar's prefix on every update (`UnitFrame.lua:129`).
-    assert_eq!(
-        s.eval::<String>("return PlayerFrameManaBar.prefix")
-            .unwrap(),
-        "Rage",
-        "the prefix follows the resource — this player runs on rage"
-    );
-    // The string still lacks it, as in the reference: `CVAR_UPDATE` only shows the string
-    // (`TextStatusBar.lua:14-24`), and its last render ran before the prefix was set
-    // (`UnitFrame.lua:219-220`) with the switch off (`:130-132`). The next repaint labels it.
-    assert_eq!(
-        text(&s, "PlayerFrameManaBarText"),
-        "45 / 80",
-        "flipping the switch shows the string, it does not re-render it"
-    );
-
-    assert!(
-        s.eval::<bool>(
-            "return TargetFrameHealthBarText == nil and TargetFrameManaBarText == nil \
-             and TargetFrameHealthBar.TextString == nil and TargetFrameManaBar.TextString == nil"
-        )
-        .unwrap(),
-        "the reference declares no numerals on the target frame, at any switch setting"
-    );
-
-    // Through the real pointer path: the tooltip arm reads `this` (`TextStatusBar.xml:16-26`).
-    hover(&mut s, "TargetFrameHealthBar");
-    assert!(
-        s.eval::<bool>(
-            "return GameTooltip:IsShown() and GameTooltip:IsOwned(TargetFrameHealthBar)"
-        )
-        .unwrap(),
-        "the target's bar hover is a tooltip, not numerals ({:?})",
-        s.errors()
-    );
-    assert!(
-        s.eval::<String>("return tostring(GameTooltipTextLeft1:GetText())")
-            .unwrap()
-            .contains("Somebody"),
-        "and it is the unit's own plate"
-    );
-    unhover(&mut s);
-    assert!(
-        s.eval::<bool>("return not GameTooltip:IsShown()").unwrap(),
-        "the template's OnLeave hides it (ref TextStatusBar.xml l.28-31)"
-    );
-
-    // Switched off, a hover still reveals the player's numerals (`TextStatusBar.lua:77-102`).
-    s.run("SetCVar(\"statusBarText\", \"0\", \"STATUS_BAR_TEXT\")")
-        .unwrap();
-    s.tick(0.0);
-    assert!(!shown(&s, "PlayerFrameHealthBarText"));
-    hover(&mut s, "PlayerFrameHealthBar");
-    assert!(
-        shown(&s, "PlayerFrameHealthBarText"),
-        "hover shows them even with the option off ({:?})",
-        s.errors()
-    );
-    unhover(&mut s);
-    assert!(
-        !shown(&s, "PlayerFrameHealthBarText"),
-        "and go away again — the lockShow refcount balances"
-    );
-    s.run("SetCVar(\"statusBarText\", \"1\", \"STATUS_BAR_TEXT\")")
-        .unwrap();
-    s.tick(0.0);
-
-    s.set_unit("player", Some(alive(31, 45, 1)));
-    s.fire_event("UNIT_HEALTH", vec![ScriptValue::Str("player".into())]);
-    assert_eq!(text(&s, "PlayerFrameHealthBarText"), "31 / 100");
-
-    // `UNIT_DISPLAYPOWER` re-labels through `UnitFrame_UpdateManaType` (`UnitFrame.lua:40-43`).
-    s.set_unit("player", Some(alive(31, 60, 3)));
-    s.fire_event("UNIT_DISPLAYPOWER", vec![ScriptValue::Str("player".into())]);
-    assert_eq!(text(&s, "PlayerFrameManaBarText"), "Energy 60 / 80");
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-}
-
-/// The numeral strings sit the reference's distance apart: the pet's bars are 70×8 at (47,-22) and
-/// (47,-29), a 7px pitch, so its mana text drops clear to (82,-38) under a bar that ends at -37
-/// (`PetFrame.xml:87-104`).
-#[test]
-fn no_two_numeral_strings_overlap_on_any_frame() {
-    benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    load_unit_frames(&mut s);
-
-    let alive = |health: u32, power: u32| UnitState {
-        exists: true,
-        name: Some("Onehunter".into()),
-        health,
-        max_health: health,
-        level: 40,
-        power_type: 0,
-        power,
-        max_power: power,
-        dead: false,
-        reaction: 4,
-        ..UnitState::default()
-    };
-    s.set_unit("player", Some(alive(4122, 3300)));
-    s.set_unit("target", Some(alive(4122, 3300)));
-    s.set_unit("pet", Some(alive(256, 100)));
-    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
-    s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
-    s.fire_event("UNIT_PET", vec![ScriptValue::Str("player".into())]);
-    s.register_cvars([("statusBarText", "0")]);
-    s.run("SetCVar(\"statusBarText\", \"1\", \"STATUS_BAR_TEXT\")")
-        .unwrap();
-    s.tick(0.0);
-
-    // Measure at NumberFontNormal's size (14px tall, about 7px a digit): unmeasured, a
-    // CENTER-anchored string takes its owner's rect. Answers land a frame late, so settle.
-    for _ in 0..4 {
-        let answers: Vec<(u32, f32, f32, u64)> = s
-            .fontstrings_needing_measure()
-            .into_iter()
-            .map(|r| (r.id, r.text.chars().count() as f32 * 7.0, 14.0, r.key))
-            .collect();
-        s.set_measured_text_unwrapped(&answers);
-        s.tick(0.05);
-        s.resolve();
-    }
-
-    // The check is the seats' separation, not box overlap: the player's seats are 12px apart
-    // (`PlayerFrame.xml:79-96`) at a 14px font, so their boxes overlap while the ink does not.
-    for (frame, upper, lower, want) in [
-        (
-            "player",
-            "PlayerFrameHealthBarText",
-            "PlayerFrameManaBarText",
-            12.0,
-        ),
-        ("pet", "PetFrameHealthBarText", "PetFrameManaBarText", 11.0),
-    ] {
-        let mid = |s: &UiScript, n: &str| -> f64 {
-            s.eval::<f64>(&format!("return ({n}:GetTop() + {n}:GetBottom()) / 2"))
-                .unwrap()
-        };
-        let apart = mid(&s, upper) - mid(&s, lower);
-        assert!(
-            (apart - want).abs() < 0.51,
-            "{frame}: the numerals sit {apart:.1} px apart, the reference authors {want:.0}"
-        );
-    }
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-}
-
-/// Addons hook `UnitFrame_OnEnter` by capturing and replacing the global
-/// (`TipBuddy.lua:2770-2773`), so the stock `this`-shaped names must exist.
+/// Addons hook `UnitFrame_OnEnter` by capturing and replacing the global, so the stock names must
+/// exist; in 3.3.5 the handler takes the frame as `self` (`UnitFrame.lua:120-134`).
 #[test]
 fn the_unit_frame_hover_hooks_carry_the_references_names() {
     benilla_formats::wow_data_or_skip!();
@@ -1726,12 +1551,11 @@ fn the_unit_frame_hover_hooks_carry_the_references_names() {
         r#"
         HOVERS = 0
         local original = UnitFrame_OnEnter
-        function UnitFrame_OnEnter()
+        function UnitFrame_OnEnter(self)
             HOVERS = HOVERS + 1
-            original()
+            original(self)
         end
-        this = PlayerFrame
-        UnitFrame_OnEnter()
+        UnitFrame_OnEnter(PlayerFrame)
     "#,
     )
     .unwrap();
@@ -1748,7 +1572,7 @@ fn the_unit_frame_hover_hooks_carry_the_references_names() {
     );
 }
 
-/// Stock `SetRaidTargetIconTexture` (`TargetFrame.lua:475-484`) puts each mark on its cell of the
+/// Stock `SetRaidTargetIconTexture` (`TargetFrame.lua:692-701`) puts each mark on its cell of the
 /// 4×4 sheet; its row divides by `ROWS`, not `COLUMNS`, which is harmless at 4×4.
 #[test]
 fn the_raid_mark_helper_maps_each_index_to_its_cell() {
@@ -1796,7 +1620,7 @@ fn the_player_frame_wears_the_leader_and_master_looter_icons() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&mut s);
-    s.set_unit(
+    s.seat(
         "player",
         Some(UnitState {
             exists: true,
@@ -1863,17 +1687,17 @@ fn the_player_frame_wears_the_leader_and_master_looter_icons() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// The globals the stock unit-frame files declare exist, 1.12's `ManaBar` names and never the later
-/// `PowerBar`: addons read them unguarded (ShaguTweaks' `health-numbers.lua:22`). The list is the
-/// reference's own, so additions pass and only an absence fails.
+/// The globals the stock 3.3.5 unit-frame files declare exist: addons read them unguarded. The list
+/// is the reference's own (`PlayerFrame.xml`, `TargetFrame.xml:178-466` as `TargetFrame`,
+/// `PetFrame.xml`), so additions pass and only an absence fails.
 #[test]
 fn the_unit_frames_publish_every_name_the_reference_declares() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_unit_frames(&mut s);
 
-    // Names from `PlayerFrame.xml`, `TargetFrame.xml` and `PetFrame.xml`, less virtual templates
-    // and the buff and debuff buttons; collected so a failure reports the whole gap.
+    // Less virtual templates and the buff and debuff buttons; collected so a failure reports the
+    // whole gap.
     let mut missing = Vec::new();
     for name in [
         // PlayerFrame.xml
@@ -1892,6 +1716,8 @@ fn the_unit_frames_publish_every_name_the_reference_declares() {
         "PlayerFrameManaBar",
         "PlayerFrameManaBarText",
         "PlayerFrameTexture",
+        "PlayerFrameVehicleTexture",
+        "PlayerGuideIcon",
         "PlayerHitIndicator",
         "PlayerLeaderIcon",
         "PlayerLevelText",
@@ -1899,24 +1725,30 @@ fn the_unit_frames_publish_every_name_the_reference_declares() {
         "PlayerName",
         "PlayerPortrait",
         "PlayerPVPIcon",
+        "PlayerPVPTimerText",
         "PlayerRestGlow",
         "PlayerRestIcon",
         "PlayerStatusGlow",
         "PlayerStatusTexture",
-        // TargetFrame.xml
-        "TargetDeadText",
+        // TargetFrame.xml, `TargetFrameTemplate` as `TargetFrame`
         "TargetFrame",
         "TargetFrameBackground",
+        "TargetFrameFlash",
         "TargetFrameHealthBar",
         "TargetFrameManaBar",
         "TargetFrameNameBackground",
-        "TargetFrameTexture",
+        "TargetFramePortrait",
         "TargetFrameTextureFrame",
-        "TargetHighLevelTexture",
-        "TargetLevelText",
-        "TargetName",
-        "TargetPortrait",
-        "TargetPVPIcon",
+        "TargetFrameTextureFrameDeadText",
+        "TargetFrameTextureFrameHealthBarText",
+        "TargetFrameTextureFrameHighLevelTexture",
+        "TargetFrameTextureFrameLeaderIcon",
+        "TargetFrameTextureFrameLevelText",
+        "TargetFrameTextureFrameManaBarText",
+        "TargetFrameTextureFrameName",
+        "TargetFrameTextureFramePVPIcon",
+        "TargetFrameTextureFrameRaidTargetIcon",
+        "TargetFrameTextureFrameTexture",
         // PetFrame.xml
         "PetAttackModeTexture",
         "PetFrame",
@@ -1943,29 +1775,23 @@ fn the_unit_frames_publish_every_name_the_reference_declares() {
          by name finds nil: {missing:?}"
     );
 
-    // The colour table is `ManaBarColor` (`UnitFrame.lua:2`); 1.12 has no `PowerBarColor`.
-    assert!(s.eval::<bool>("return ManaBarColor ~= nil").unwrap());
-    assert!(
-        s.eval::<bool>("return PowerBarColor == nil").unwrap(),
-        "PowerBarColor is the later client's name — 1.12 has no such global"
-    );
+    // The colour table is `PowerBarColor`, keyed by token and by index (`UnitFrame.lua:2-20`).
+    assert!(s
+        .eval::<bool>("return PowerBarColor.MANA.b == 1 and PowerBarColor[0] == PowerBarColor.MANA")
+        .unwrap());
 
-    // The frame fields `UnitFrame_Initialize` sets (`UnitFrame.lua:13-14`), read off the frame.
+    // The frame fields `UnitFrame_Initialize` sets (`UnitFrame.lua:34-39`), read off the frame.
     assert!(
         s.eval::<bool>("return PlayerFrame.manabar ~= nil and PlayerFrame.healthbar ~= nil")
             .unwrap(),
         "the reference's field names are `manabar`/`healthbar`, both lowercase"
     );
-
-    // ShaguTweaks' own line, in shape (health-numbers.lua:22).
-    s.run("TargetFrameManaBar:SetStatusBarColor(0, 0, 1)")
-        .unwrap();
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
 
-/// `PLAYER_FLAGS_CHANGED`'s only 1.12 consumer, `TargetFrame.lua:88-95`, refreshes the target's
-/// leader crown (1.12 has no AFK or DND badge on a unit frame), so leadership passing to the held
-/// target shows without a re-target.
+/// The target frame's `PLAYER_FLAGS_CHANGED` arm (`TargetFrame.lua:188-195`, registered with
+/// `showLeader`, `:74-76`) refreshes the leader crown, so leadership passing to the held target
+/// shows without a re-target.
 #[test]
 fn the_target_leader_crown_follows_player_flags_changed() {
     benilla_formats::wow_data_or_skip!();
@@ -1993,14 +1819,16 @@ fn the_target_leader_crown_follows_player_flags_changed() {
             ..UnitState::default()
         })
     };
-    let crown =
-        |s: &UiScript| -> bool { s.eval::<bool>("return TargetLeaderIcon:IsShown()").unwrap() };
+    let crown = |s: &UiScript| -> bool {
+        s.eval::<bool>("return TargetFrameTextureFrameLeaderIcon:IsShown()")
+            .unwrap()
+    };
 
-    s.set_unit("target", mate(false));
+    s.seat("target", mate(false));
     s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
     assert!(!crown(&s), "not the leader: no crown");
 
-    s.set_unit("target", mate(true));
+    s.seat("target", mate(true));
     // The control first: the handler is gated on `arg1 == "target"`, so another token does nothing.
     s.fire_event(
         "PLAYER_FLAGS_CHANGED",
@@ -2018,7 +1846,7 @@ fn the_target_leader_crown_follows_player_flags_changed() {
     assert!(crown(&s), "the crown appears without a re-target");
 
     // And back down: the event fires on the flags' XOR-diff, so the clear edge fires it too.
-    s.set_unit("target", mate(false));
+    s.seat("target", mate(false));
     s.fire_event(
         "PLAYER_FLAGS_CHANGED",
         vec![ScriptValue::Str("target".into())],

@@ -886,9 +886,8 @@ fn feed_game_time(
     script.set_game_time(minute / 60, minute % 60);
 }
 
-/// The app half of the `<Minimap>` widget. The zone label feed is `crate::area`'s: the reference
-/// fires `MINIMAP_ZONE_CHANGED` from the same area-update pass as the `ZONE_CHANGED` family
-/// (`0x494970` beside `0x494780`).
+/// The app half of the `<Minimap>` widget. The zone label feed is `crate::area`'s; the stock
+/// minimap repaints it on the `ZONE_CHANGED` family (`Minimap.xml:745`).
 pub(crate) struct MinimapPlugin;
 
 /// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the

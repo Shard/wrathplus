@@ -27,7 +27,7 @@ pub(crate) struct NockLatch;
 pub(crate) struct PlaySeq(pub(crate) u64);
 
 impl PlaySeq {
-    pub(crate) fn next(&mut self) -> u64 {
+    pub(crate) fn advance(&mut self) -> u64 {
         self.0 += 1;
         self.0
     }
