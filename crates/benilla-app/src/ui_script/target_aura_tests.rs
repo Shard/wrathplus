@@ -1,4 +1,5 @@
-//! The stock target frame's aura rows (`TargetFrame.lua:263`) under a stubbed feed.
+//! The stock 3.3.5 target frame's aura rows (`TargetFrame_UpdateAuras`, `TargetFrame.lua:342`)
+//! under a stubbed feed.
 //! BuffFrame.xml loads first for the `DebuffTypeColor` and `RefreshBuffs` the frames use.
 
 use benilla_ui::script::{AuraState, QuadContent, ScriptValue, UiScript, UnitGuids, UnitState};
@@ -73,7 +74,7 @@ fn debuff(spell_id: u32, name: &str, count: u8, debuff_type: Option<&str>) -> Au
         icon: Some(format!("Interface\\Icons\\Spell_{spell_id}")),
         count,
         debuff_type: debuff_type.map(Into::into),
-        // The 1.12 wire carries no duration for another unit's auras.
+        // No duration: the cooldown sweep stays hidden.
         duration: 0.0,
         expiration_time: 0.0,
         helpful: false,
@@ -114,6 +115,12 @@ fn anchor(s: &UiScript, name: &str) -> (String, String, String, f64, f64) {
     .unwrap()
 }
 
+/// Whether the named button was ever created.
+fn exists(s: &UiScript, name: &str) -> bool {
+    s.eval::<bool>(&format!("return _G[{name:?}] ~= nil"))
+        .unwrap()
+}
+
 fn size(s: &UiScript, name: &str) -> (f64, f64) {
     s.eval(&format!("return {name}:GetWidth(), {name}:GetHeight()"))
         .unwrap()
@@ -135,27 +142,33 @@ fn a_hostile_target_draws_debuffs_first_with_tint_and_count() {
 
     assert!(shown(&s, "TargetFrameDebuff1"), "first debuff shows");
     assert!(shown(&s, "TargetFrameDebuff2"), "second debuff shows");
+    // 3.3.5 creates a button only for an aura that exists (`TargetFrame.lua:413-421`).
     assert!(
-        !shown(&s, "TargetFrameDebuff3"),
-        "no third debuff — button hides"
+        !exists(&s, "TargetFrameDebuff3"),
+        "no third debuff, no button"
     );
     assert!(shown(&s, "TargetFrameBuff1"), "the buff shows");
-    assert!(!shown(&s, "TargetFrameBuff2"), "no second buff");
+    assert!(!exists(&s, "TargetFrameBuff2"), "no second buff");
 
-    // Hostile: debuffs open at BOTTOMLEFT (5, 32), buffs under Debuff7 (`TargetFrame.lua:329`).
+    // Hostile: debuffs open at BOTTOMLEFT (5, 32), buffs under the debuff container
+    // (`TargetFrame_UpdateBuffAnchor`, `:535`).
     let (p, rel, rp, x, y) = anchor(&s, "TargetFrameDebuff1");
     assert_eq!(
         (p.as_str(), rel.as_str(), rp.as_str(), x, y),
         ("TOPLEFT", "TargetFrame", "BOTTOMLEFT", 5.0, 32.0),
         "hostile: debuffs first"
     );
-    let (_, rel, _, _, _) = anchor(&s, "TargetFrameBuff1");
-    assert_eq!(rel, "TargetFrameDebuff7", "hostile: buffs below row 2");
+    let (p, rel, rp, x, y) = anchor(&s, "TargetFrameBuff1");
+    assert_eq!(
+        (p.as_str(), rel.as_str(), rp.as_str(), x, y),
+        ("TOPLEFT", "TargetFrameDebuffs", "BOTTOMLEFT", 0.0, -3.0),
+        "hostile: buffs under the debuff row"
+    );
 
-    // Under the wrap (2 < 6): full 21px icons, 23px borders.
-    assert_eq!(size(&s, "TargetFrameDebuff1"), (21.0, 21.0));
-    assert_eq!(size(&s, "TargetFrameDebuff1Border"), (23.0, 23.0));
-    assert_eq!(size(&s, "TargetFrameBuff1"), (21.0, 21.0));
+    // Not cast by the player or its pet: SMALL_AURA_SIZE 17, borders 2 wider (`:13`, `:593`).
+    assert_eq!(size(&s, "TargetFrameDebuff1"), (17.0, 17.0));
+    assert_eq!(size(&s, "TargetFrameDebuff1Border"), (19.0, 19.0));
+    assert_eq!(size(&s, "TargetFrameBuff1"), (17.0, 17.0));
 
     // Stack count shows only above 1.
     assert_eq!(
@@ -220,31 +233,36 @@ fn a_friendly_target_puts_the_buff_row_first() {
     let (p, rel, rp, x, y) = anchor(&s, "TargetFrameDebuff1");
     assert_eq!(
         (p.as_str(), rel.as_str(), rp.as_str(), x, y),
-        ("TOPLEFT", "TargetFrameBuff1", "BOTTOMLEFT", 0.0, -2.0),
-        "friendly: debuffs under the buff row"
+        ("TOPLEFT", "TargetFrameBuffs", "BOTTOMLEFT", 0.0, -3.0),
+        "friendly: debuffs under the buff container (`TargetFrame_UpdateDebuffAnchor`, `:563`)"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
+/// Six small auras fill the 122px row (6 × 17 + 5 × 4); the seventh opens a second row under
+/// the first (`TargetFrame_UpdateAuraPositions`, `:489`).
 #[test]
-fn reaching_the_wrap_shrinks_the_first_row_to_17px() {
+fn a_seventh_aura_opens_a_second_row_under_the_first() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    let debuffs: Vec<AuraState> = (0..6)
+    let debuffs: Vec<AuraState> = (0..7)
         .map(|i| debuff(1000 + i, &format!("D{i}"), 1, None))
         .collect();
     target(&mut s, 2, debuffs);
 
-    // 6 debuffs reach the wrap: 17px icons, 19px borders, first row only (`TargetFrame.lua:349`).
-    assert_eq!(size(&s, "TargetFrameDebuff1"), (17.0, 17.0));
-    assert_eq!(size(&s, "TargetFrameDebuff1Border"), (19.0, 19.0));
-    assert_eq!(size(&s, "TargetFrameBuff1"), (17.0, 17.0));
-
-    // Below the wrap they grow back; the feed re-fires UNIT_AURA on the change.
-    s.set_unit_auras(TARGET, Some(vec![debuff(1000, "D0", 1, None)]));
-    s.fire_event("UNIT_AURA", vec![ScriptValue::Str("target".into())]);
-    assert_eq!(size(&s, "TargetFrameDebuff1"), (21.0, 21.0));
-    assert_eq!(size(&s, "TargetFrameDebuff1Border"), (23.0, 23.0));
+    let (p, rel, rp, x, y) = anchor(&s, "TargetFrameDebuff6");
+    assert_eq!(
+        (p.as_str(), rel.as_str(), rp.as_str(), x, y),
+        ("TOPLEFT", "TargetFrameDebuff5", "TOPRIGHT", 4.0, 0.0),
+        "the sixth still fits the row"
+    );
+    let (p, rel, rp, x, y) = anchor(&s, "TargetFrameDebuff7");
+    assert_eq!(
+        (p.as_str(), rel.as_str(), rp.as_str(), x, y),
+        ("TOPLEFT", "TargetFrameDebuff1", "BOTTOMLEFT", 0.0, -3.0),
+        "the seventh wraps"
+    );
+    assert_eq!(size(&s, "TargetFrameDebuff7"), (17.0, 17.0));
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
