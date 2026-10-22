@@ -56,7 +56,12 @@ pub(crate) fn stock_create_up(state: Option<Res<State<ClientState>>>) -> bool {
 #[derive(Resource, Default)]
 pub(crate) struct StockCreate {
     pending: Option<String>,
+    /// `NameGen.dbc`, read once off the install for `GetRandomName`.
+    name_gen: Option<NameLists>,
 }
+
+/// Names per (race, sex).
+type NameLists = HashMap<(u8, u8), Vec<String>>;
 
 /// The create list: Alliance then Horde, ascending race id, the order `GetAvailableRaces`
 /// (`0x4e1880`) walks and `CharacterCreate.xml`'s two button columns show.
@@ -102,6 +107,7 @@ pub(crate) fn catalog(
     cat: &CharCreateCatalog,
     classes: Option<&ChrClasses>,
     death_knight: bool,
+    name_gen: NameLists,
 ) -> GlueCreateCatalog {
     let tag = |race: u8| {
         if ALLIANCE.contains(&race) {
@@ -168,6 +174,7 @@ pub(crate) fn catalog(
         valid,
         dials,
         backgrounds,
+        names: name_gen,
     }
 }
 
@@ -185,10 +192,20 @@ fn enter_stock_create(
         return;
     };
     let death_knight = roster.chars.iter().any(|c| c.level >= 55);
+    let name_gen = pending
+        .name_gen
+        .get_or_insert_with(|| {
+            benilla_formats::wow_data()
+                .and_then(|data| benilla_formats::open_chain(&data).ok())
+                .and_then(|mut chain| benilla_formats::name_gen::load_name_gen(&mut chain).ok())
+                .unwrap_or_default()
+        })
+        .clone();
     script.set_glue_create_catalog(self::catalog(
         &catalog.0,
         classes.as_deref().map(|c| &c.0),
         death_knight,
+        name_gen,
     ));
     script.seed_glue_create_rng(time.elapsed().as_nanos() as u64 ^ 0x5DEE_CE66);
     pending.pending = None;
@@ -293,3 +310,7 @@ pub(crate) fn drive_stock_create(
 #[cfg(test)]
 #[path = "glue_create_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "glue_options_tests.rs"]
+mod options_tests;
