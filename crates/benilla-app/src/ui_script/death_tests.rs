@@ -256,8 +256,7 @@ fn xp_loss_two_step_confirm_then_range_hide() {
         "the sickness duration formats into CONFIRM_XP_LOSS: {text}"
     );
     // OnAccept reads `this:GetParent()`, so `this` is the button, as in the XML OnClick.
-    s.run("this = StaticPopup1Button1 StaticPopup_OnClick(StaticPopup1, 1) this = nil")
-        .unwrap();
+    s.run("StaticPopup_OnClick(StaticPopup1, 1)").unwrap();
     assert!(s.eval::<bool>("return StaticPopup1:IsVisible()").unwrap());
     assert!(s.take_death_actions().is_empty());
     let text = s
@@ -267,8 +266,7 @@ fn xp_loss_two_step_confirm_then_range_hide() {
         text.starts_with("Remember, if you find your corpse"),
         "the second-ask text: {text}"
     );
-    s.run("this = StaticPopup1Button1 StaticPopup_OnClick(StaticPopup1, 1) this = nil")
-        .unwrap();
+    s.run("StaticPopup_OnClick(StaticPopup1, 1)").unwrap();
     assert_eq!(s.take_death_actions(), vec![DeathAction::AcceptXpLoss]);
     assert!(!s.eval::<bool>("return StaticPopup1:IsVisible()").unwrap());
 
@@ -318,8 +316,7 @@ fn xp_loss_cancel_then_reconfirm_reshows_with_the_alert_dress() {
             .unwrap(),
         "showAlert shows the DialogAlertIcon"
     );
-    s.run("this = StaticPopup1Button2 StaticPopup_OnClick(StaticPopup1, 2) this = nil")
-        .unwrap();
+    s.run("StaticPopup_OnClick(StaticPopup1, 2)").unwrap();
     assert!(!s.eval::<bool>("return StaticPopup1:IsVisible()").unwrap());
     assert!(s.take_death_actions().is_empty());
     s.fire_event("CONFIRM_XP_LOSS", vec![]);

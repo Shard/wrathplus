@@ -2079,7 +2079,7 @@ mod tests {
         script.set_screen_size(1024.0, 768.0);
         let _ = load_wrath_third_party(&mut script, None, &[], true);
 
-        // Discovered and described, not run; one row, the chain's twelve hidden by the reply.
+        // Discovered and described, not run; one row, the chain's secure built-ins hidden by the reply.
         seat_stock_addon_reply(&mut script);
         assert_eq!(script.eval::<i64>("return GetNumAddOns()").ok(), Some(1));
         assert_eq!(

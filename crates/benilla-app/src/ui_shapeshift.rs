@@ -5,12 +5,14 @@
 //! `AttributesEx2 & 0x10`; the bar sorts by `StanceBarOrder`, negative last, then spell id
 //! (`0x4b2bb0`).
 //!
-//! Only a change of membership or order fires `UPDATE_SHAPESHIFT_FORMS`, the reference's
-//! learn/unlearn edge (`0x4b28ff`, `0x4b2e43`), because the stock `ShapeshiftBar_Update` rebuilds
-//! the shelf on every fire. A castability change fires `SPELL_UPDATE_USABLE`, as `0x4b31c0` does.
-//! Active form, texture and cooldown push silently and repaint on `PLAYER_AURAS_CHANGED` (a form's
-//! aura holds a slot, warrior stances included) and `SPELL_UPDATE_COOLDOWN`, so the feed runs
-//! before both; a cooldown's expiry fires nothing.
+//! The edges are 12340's. Only a change of membership or order fires `UPDATE_SHAPESHIFT_FORMS`,
+//! the learn, unlearn and sort signals (`0x54252d`, `0x53fe44`, `0x542647`), because the stock
+//! `ShapeshiftBar_Update` rebuilds the shelf on every fire. A castability flip fires
+//! `UPDATE_SHAPESHIFT_USABLE` then `SPELL_UPDATE_USABLE` (`0x53d17f`, `0x53d19c`). A move of the
+//! active form fires `UPDATE_SHAPESHIFT_FORM` (`0x6da39a`, `0x6e806f`), as does a stance-bar aura
+//! without `MOD_SHAPESHIFT` going up or down (`0x72213f`, `0x727830`), which lights a paladin aura.
+//! A cooldown pushes silently: the cooldown flush fires `UPDATE_SHAPESHIFT_COOLDOWN` just ahead of
+//! `SPELL_UPDATE_COOLDOWN` (`0x53bac0`), so the feed runs before it; an expiry fires nothing.
 
 use std::time::Instant;
 
@@ -74,9 +76,12 @@ pub(crate) enum FormsEdge {
     Unchanged,
     /// Membership or order: `UPDATE_SHAPESHIFT_FORMS`.
     List,
-    /// Castability: `SPELL_UPDATE_USABLE`.
+    /// Castability: `UPDATE_SHAPESHIFT_USABLE` and `SPELL_UPDATE_USABLE`, then
+    /// `UPDATE_SHAPESHIFT_FORM` when the active form moved too.
     Usable,
-    /// Active form, texture or cooldown: pushed, announced by other feeds' events.
+    /// The active form, and with it the texture: `UPDATE_SHAPESHIFT_FORM`.
+    Form,
+    /// Cooldown only: pushed, announced by the cooldown flush.
     Silent,
 }
 
@@ -102,9 +107,12 @@ pub(crate) fn push_forms(
         .any(|(o, n)| o.castable != n.castable)
     {
         FormsEdge::Usable
+    } else if active_moved(old, &fresh) {
+        FormsEdge::Form
     } else {
         FormsEdge::Silent
     };
+    let form_too = edge == FormsEdge::Usable && active_moved(old, &fresh);
     if edge == FormsEdge::Unchanged {
         return edge;
     }
@@ -112,10 +120,33 @@ pub(crate) fn push_forms(
     script.set_shapeshift_forms(fresh);
     match edge {
         FormsEdge::List => script.fire_event("UPDATE_SHAPESHIFT_FORMS", vec![]),
-        FormsEdge::Usable => script.fire_event("SPELL_UPDATE_USABLE", vec![]),
+        FormsEdge::Usable => {
+            script.fire_event("UPDATE_SHAPESHIFT_USABLE", vec![]);
+            script.fire_event("SPELL_UPDATE_USABLE", vec![]);
+            if form_too {
+                script.fire_event("UPDATE_SHAPESHIFT_FORM", vec![]);
+            }
+        }
+        FormsEdge::Form => script.fire_event("UPDATE_SHAPESHIFT_FORM", vec![]),
         FormsEdge::Silent | FormsEdge::Unchanged => {}
     }
     edge
+}
+
+/// `SPELL_UPDATE_COOLDOWN` as 12340's `0x53bac0` fires it: `UPDATE_SHAPESHIFT_COOLDOWN` just
+/// ahead while the stance bar has a form.
+pub(crate) fn fire_spell_update_cooldown(script: &mut UiScript) {
+    if script.num_shapeshift_forms() > 0 {
+        script.fire_event("UPDATE_SHAPESHIFT_COOLDOWN", vec![]);
+    }
+    script.fire_event("SPELL_UPDATE_COOLDOWN", vec![]);
+}
+
+/// Whether any form's active ring or texture moved, over lists of one membership.
+fn active_moved(old: &[ShapeshiftFormView], fresh: &[ShapeshiftFormView]) -> bool {
+    old.iter()
+        .zip(fresh)
+        .any(|(o, n)| o.active != n.active || o.texture != n.texture)
 }
 
 pub(crate) struct UiShapeshiftPlugin;

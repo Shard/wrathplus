@@ -52,7 +52,7 @@ pub(crate) struct TrainerTooltipSubjects {
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct TrainerFeed;
 
-mod net;
+pub(crate) mod net;
 mod reeval;
 
 pub(crate) struct UiTrainerPlugin;
@@ -299,10 +299,10 @@ pub(crate) fn feed_trainer(
     let Some(skill_lines) = skill_lines.as_deref() else {
         return;
     };
-    // The per-list reset goes in before the snapshot, so `TRAINER_SHOW` finds it; the stock window
-    // re-applies its saved filter only on its own `ADDON_LOADED`.
+    // The per-list reset goes in before the snapshot, so `TRAINER_SHOW` finds it. The filter is the
+    // `serviceTypeFilter` CVar, which no list resets.
     if open.fresh_list {
-        script.reset_trainer_list_state(open.trainer_type);
+        script.reset_trainer_list_state();
         open.fresh_list = false;
     }
     // The player's money, level and skill triggers, read every frame so the reader never backs up.

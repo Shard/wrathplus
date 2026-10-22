@@ -1,19 +1,86 @@
-//! The stock cast bar (`CastingBarFrame.lua`): the fill tracking the clock, the green completion
-//! flash and fade, red Failed with its 1 s hold, the channel bar draining. The state tests read the
-//! Lua back, which cannot see what paints; the draw-list tests below see the flash.
+//! The stock 3.3.5 cast bar (`CastingBarFrame.lua`): the fill tracking the clock, the green
+//! completion flash and fade, red Failed with its 1 s hold, the green channel bar draining. The
+//! bar reads `UnitCastingInfo`/`UnitChannelInfo` on each `UNIT_SPELLCAST_*` edge, so a cast here is
+//! seated as App seats it: the snapshot first, then the event (`wrath_unit_casts`).
 
-use benilla_ui::script::{ExtractedQuad, QuadContent, ScriptValue, UiScript};
+use std::collections::HashMap;
+
+use benilla_ui::script::{
+    ExtractedQuad, QuadContent, ScriptValue, UiScript, UnitGuids, UnitState, WrathUnitCast,
+};
 
 use super::test_ui::load_ui as load_xml;
+
+const PLAYER: u64 = 0x10;
+const CAST_ID: u8 = 7;
 
 fn harness() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    // The stock file sets `CastingBarText` to the `FAILED` global (`CastingBarFrame.lua:61`).
-    load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
-    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
     load_xml(&mut s, "Interface\\FrameXML\\CastingBarFrame.xml");
+    s.set_unit(
+        "player",
+        Some(UnitState {
+            exists: true,
+            name: Some("Probefour".into()),
+            guid: PLAYER,
+            ..Default::default()
+        }),
+    );
+    // `UnitCastingInfo("player")` resolves the token through the resolver's guids.
+    s.set_unit_guids(&UnitGuids {
+        player: PLAYER,
+        ..Default::default()
+    });
     s
+}
+
+/// The player's cast or channel, `ms` long from now, published before its start event.
+fn seat(s: &mut UiScript, name: &str, ms: u32, channel: bool) {
+    let now = (s.eval::<f64>("return GetTime()").unwrap() * 1000.0) as u32;
+    let cast = WrathUnitCast {
+        spell_id: 116,
+        name: name.into(),
+        icon: "Interface\\Icons\\Spell_Frost_FrostBolt02".into(),
+        cast_count: if channel { 0 } else { CAST_ID },
+        start_ms: now,
+        end_ms: now + ms,
+        ..Default::default()
+    };
+    let one = HashMap::from([(PLAYER, cast)]);
+    if channel {
+        s.set_wrath_unit_casts(HashMap::new(), one);
+    } else {
+        s.set_wrath_unit_casts(one, HashMap::new());
+    }
+}
+
+fn cast(s: &mut UiScript, name: &str, ms: u32) {
+    seat(s, name, ms, false);
+    s.fire_event("UNIT_SPELLCAST_START", vec![player()]);
+}
+
+fn channel(s: &mut UiScript, name: &str, ms: u32) {
+    seat(s, name, ms, true);
+    s.fire_event("UNIT_SPELLCAST_CHANNEL_START", vec![player()]);
+}
+
+fn player() -> ScriptValue {
+    ScriptValue::Str("player".into())
+}
+
+/// `UNIT_SPELLCAST_STOP` and friends carry `unit, spell, rank, castID` (the arms compare arg 4).
+fn spell_event(s: &mut UiScript, event: &str) {
+    s.set_wrath_unit_casts(HashMap::new(), HashMap::new());
+    s.fire_event(
+        event,
+        vec![
+            player(),
+            ScriptValue::Str("Frostbolt".into()),
+            ScriptValue::Str(String::new()),
+            ScriptValue::Int(i64::from(CAST_ID)),
+        ],
+    );
 }
 
 fn bar_value(s: &UiScript) -> f64 {
@@ -25,6 +92,15 @@ fn bar_color(s: &UiScript) -> (f64, f64, f64) {
         .unwrap()
 }
 
+fn shown(s: &UiScript) -> bool {
+    s.eval::<bool>("return CastingBarFrame:IsShown() == 1")
+        .unwrap()
+}
+
+fn close3(c: (f64, f64, f64), want: (f64, f64, f64)) -> bool {
+    (c.0 - want.0).abs() < 1e-6 && (c.1 - want.1).abs() < 1e-6 && (c.2 - want.2).abs() < 1e-6
+}
+
 /// One frame in the app's order (`tick_script`, then `paint_script`): OnUpdate, resolve, draw list.
 fn frame(s: &mut UiScript, dt: f32) -> Vec<ExtractedQuad> {
     s.tick(dt);
@@ -32,10 +108,13 @@ fn frame(s: &mut UiScript, dt: f32) -> Vec<ExtractedQuad> {
     s.extract()
 }
 
-/// The texture quad whose art path ends in `leaf`, if any.
-fn tex_quad<'a>(quads: &'a [ExtractedQuad], leaf: &str) -> Option<&'a ExtractedQuad> {
+/// The cast bar's own texture quad whose art path ends in `leaf`, if any: the session's other
+/// bars share the art.
+fn tex_quad<'a>(s: &UiScript, quads: &'a [ExtractedQuad], leaf: &str) -> Option<&'a ExtractedQuad> {
     quads.iter().find(|q| match &q.content {
-        QuadContent::Texture { path: Some(p), .. } => p.ends_with(leaf),
+        QuadContent::Texture { path: Some(p), .. } => {
+            p.ends_with(leaf) && s.quad_owner_name(q.target).as_deref() == Some("CastingBarFrame")
+        }
         _ => false,
     })
 }
@@ -44,25 +123,19 @@ fn tex_quad<'a>(quads: &'a [ExtractedQuad], leaf: &str) -> Option<&'a ExtractedQ
 fn cast_fills_then_completes_green_and_fades() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    assert!(
-        !s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap(),
-        "hidden at load"
-    );
+    assert!(!shown(&s), "hidden at load");
 
-    // SPELLCAST_START(name, ms): shown, orange, named, anchored to the clock.
-    s.fire_event(
-        "SPELLCAST_START",
-        vec![ScriptValue::Str("Frostbolt".into()), ScriptValue::Int(3000)],
-    );
-    assert!(s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap());
+    cast(&mut s, "Frostbolt", 3000);
+    assert!(shown(&s));
     assert_eq!(
-        s.eval::<String>("return CastingBarText:GetText()").unwrap(),
+        s.eval::<String>("return CastingBarFrameText:GetText()")
+            .unwrap(),
         "Frostbolt"
     );
-    let (r, g, b) = bar_color(&s);
     assert!(
-        (r - 1.0).abs() < 1e-6 && (g - 0.7).abs() < 1e-6 && b.abs() < 1e-6,
-        "casting is orange (got {r} {g} {b})"
+        close3(bar_color(&s), (1.0, 0.7, 0.0)),
+        "casting is orange (CastingBarFrame.lua:82): {:?}",
+        bar_color(&s)
     );
 
     let start = bar_value(&s);
@@ -72,32 +145,26 @@ fn cast_fills_then_completes_green_and_fades() {
     let mid = bar_value(&s);
     assert!(
         (mid - start - 1.5).abs() < 0.05,
-        "1.5s of ticks advance the fill by 1.5 (got {})",
+        "1.5 s of ticks advance the fill by 1.5 (got {})",
         mid - start
     );
 
-    s.fire_event("SPELLCAST_STOP", vec![]);
+    spell_event(&mut s, "UNIT_SPELLCAST_STOP");
     assert_eq!(bar_color(&s), (0.0, 1.0, 0.0), "completed is green");
     for _ in 0..30 {
         s.tick(0.1);
     }
-    assert!(
-        !s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap(),
-        "the flash+fade ends hidden"
-    );
+    assert!(!shown(&s), "the flash and fade end hidden");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
+/// Pushback re-reads `UnitCastingInfo` on `UNIT_SPELLCAST_DELAYED` (CastingBarFrame.lua:163-185):
+/// the window moves out, and the bar neither hides nor fails.
 #[test]
 fn a_hit_pushes_the_bar_back_it_does_not_cancel() {
     benilla_formats::wow_data_or_skip!();
-    // Pushback (`SMSG_SPELL_DELAYED` fires `SPELLCAST_DELAYED`) slides the window out and never
-    // hides or fails the bar (`CastingBarFrame.lua:69-74`).
     let mut s = harness();
-    s.fire_event(
-        "SPELLCAST_START",
-        vec![ScriptValue::Str("Fireball".into()), ScriptValue::Int(3000)],
-    );
+    cast(&mut s, "Fireball", 3000);
     for _ in 0..15 {
         s.tick(0.1);
     }
@@ -109,15 +176,27 @@ fn a_hit_pushes_the_bar_back_it_does_not_cancel() {
         "half-way: ~1.5 s left (got {remaining_before})"
     );
 
-    s.fire_event("SPELLCAST_DELAYED", vec![ScriptValue::Int(500)]);
+    // The server's delay moves the end out by 500 ms; App republishes, then fires.
+    let model_start = s
+        .eval::<f64>("return select(5, UnitCastingInfo('player'))")
+        .unwrap() as u32;
+    let end = s
+        .eval::<f64>("return select(6, UnitCastingInfo('player'))")
+        .unwrap() as u32;
+    let delayed = WrathUnitCast {
+        name: "Fireball".into(),
+        cast_count: CAST_ID,
+        start_ms: model_start,
+        end_ms: end + 500,
+        ..Default::default()
+    };
+    s.set_wrath_unit_casts(HashMap::from([(PLAYER, delayed)]), HashMap::new());
+    s.fire_event("UNIT_SPELLCAST_DELAYED", vec![player()]);
+    assert!(shown(&s), "a hit never hides the bar");
     assert!(
-        s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap(),
-        "a hit never hides the bar"
-    );
-    let (r, g, b) = bar_color(&s);
-    assert!(
-        (r - 1.0).abs() < 1e-6 && (g - 0.7).abs() < 1e-6 && b.abs() < 1e-6,
-        "still orange — not failed/red (got {r} {g} {b})"
+        close3(bar_color(&s), (1.0, 0.7, 0.0)),
+        "still orange, not failed red: {:?}",
+        bar_color(&s)
     );
     let (_, max_after) = s.eval::<(f64, f64)>(minmax).unwrap();
     assert!(
@@ -127,26 +206,25 @@ fn a_hit_pushes_the_bar_back_it_does_not_cancel() {
     let remaining_after = max_after - bar_value(&s);
     assert!(
         (remaining_after - remaining_before - 0.5).abs() < 0.05,
-        "the cast now has ~0.5 s more to run (spark jumped back): {remaining_before} -> {remaining_after}"
+        "the cast has ~0.5 s more to run: {remaining_before} -> {remaining_after}"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
+/// `UNIT_SPELLCAST_FAILED` with the cast's own castID turns the bar red, writes `FAILED` and holds
+/// it `CASTING_BAR_HOLD_TIME` before the fade (CastingBarFrame.lua:143-162).
 #[test]
 fn failed_cast_turns_red_holds_then_fades() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    s.fire_event(
-        "SPELLCAST_START",
-        vec![ScriptValue::Str("Frostbolt".into()), ScriptValue::Int(3000)],
-    );
-    s.fire_event("SPELLCAST_FAILED", vec![]);
+    cast(&mut s, "Frostbolt", 3000);
+    spell_event(&mut s, "UNIT_SPELLCAST_FAILED");
     assert_eq!(bar_color(&s), (1.0, 0.0, 0.0), "failed is red");
     assert_eq!(
-        s.eval::<String>("return CastingBarText:GetText()").unwrap(),
+        s.eval::<String>("return CastingBarFrameText:GetText()")
+            .unwrap(),
         "Failed"
     );
-
     for _ in 0..5 {
         s.tick(0.1);
     }
@@ -158,38 +236,28 @@ fn failed_cast_turns_red_holds_then_fades() {
     for _ in 0..30 {
         s.tick(0.1);
     }
-    assert!(
-        !s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap(),
-        "after the hold the fade ends hidden"
-    );
+    assert!(!shown(&s), "after the hold the fade ends hidden");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
+/// A channel opens green and drains (CastingBarFrame.lua:186-210); its update re-anchors the
+/// window, and its stop flashes and fades.
 #[test]
 fn channel_counts_down_not_up() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    // SPELLCAST_CHANNEL_START is (ms, name), reversed from START. The name is the word
-    // "Channeling" for all but 9 of the 323 channeled spells (`ui_cast::channel_start_args`).
-    s.fire_event(
-        "SPELLCAST_CHANNEL_START",
-        vec![
-            ScriptValue::Int(6000),
-            ScriptValue::Str("Channeling".into()),
-        ],
-    );
-    assert!(s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap());
+    channel(&mut s, "Arcane Missiles", 6000);
+    assert!(shown(&s));
     assert_eq!(
-        s.eval::<String>("return CastingBarText:GetText()").unwrap(),
-        "Channeling"
+        s.eval::<String>("return CastingBarFrameText:GetText()")
+            .unwrap(),
+        "Arcane Missiles",
+        "the player's own channel shows its name"
     );
-
-    // A channel opens orange like a cast (`CastingBarFrame.lua:76`, `:21`); green is only the
-    // completion flash. The Era client's green channel bar is not 1.12's.
-    let (r, g, b) = bar_color(&s);
-    assert!(
-        (r - 1.0).abs() < 1e-6 && (g - 0.7).abs() < 1e-6 && b.abs() < 1e-6,
-        "a channel opens orange, exactly like a cast (got {r} {g} {b})"
+    assert_eq!(
+        bar_color(&s),
+        (0.0, 1.0, 0.0),
+        "a 3.3.5 channel opens green"
     );
 
     let full = bar_value(&s);
@@ -199,73 +267,47 @@ fn channel_counts_down_not_up() {
     let after_1s = bar_value(&s);
     assert!(
         (full - after_1s - 1.0).abs() < 0.05,
-        "a channel drains: 1s of ticks take the value DOWN by 1 (got {})",
+        "a channel drains: 1 s of ticks take the value down by 1 (got {})",
         full - after_1s
     );
 
-    // The server's mid-channel update re-anchors the window to the time it has left.
-    s.fire_event("SPELLCAST_CHANNEL_UPDATE", vec![ScriptValue::Int(2000)]);
+    // The server's mid-channel update: 2 s left, republished, then fired.
+    seat(&mut s, "Arcane Missiles", 2000, true);
+    s.fire_event("UNIT_SPELLCAST_CHANNEL_UPDATE", vec![player()]);
     s.tick(0.1);
     let corrected = bar_value(&s);
     assert!(
         corrected < after_1s,
-        "an update to 2s-left pulls the fill further down ({corrected} < {after_1s})"
+        "an update to 2 s left pulls the fill down ({corrected} < {after_1s})"
     );
 
-    s.fire_event("SPELLCAST_CHANNEL_STOP", vec![]);
-    assert_eq!(bar_color(&s), (0.0, 1.0, 0.0), "channel end flashes green");
+    spell_event(&mut s, "UNIT_SPELLCAST_CHANNEL_STOP");
     for _ in 0..30 {
         s.tick(0.1);
     }
-    assert!(
-        !s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap(),
-        "ends hidden"
-    );
+    assert!(!shown(&s), "ends hidden");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// A channel that runs out closes on the bar's own clock: vmangos defers the stop by 1000 ms on a
-/// natural end and sends it at once only on an interrupt (`Spell.cpp:4906-4916`). The stock
-/// `OnUpdate` clamps at `endTime` and fades with no green flash, and the late stop lands on a
-/// hidden frame, which both stop-arm guards ignore.
+/// A channel that runs out closes on the bar's own clock, and a late stop lands on a hidden frame,
+/// which the stop arm ignores.
 #[test]
 fn a_finished_channel_fades_on_its_own_clock_and_the_late_stop_is_inert() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    s.fire_event(
-        "SPELLCAST_CHANNEL_START",
-        vec![
-            ScriptValue::Int(1000),
-            ScriptValue::Str("Channeling".into()),
-        ],
-    );
-    assert!(s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap());
-
+    channel(&mut s, "Arcane Missiles", 1000);
+    assert!(shown(&s));
     for _ in 0..9 {
         s.tick(0.1);
     }
-    assert!(
-        s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap(),
-        "still channelling at 0.9 s of a 1 s channel"
-    );
-    let (r, g, b) = bar_color(&s);
-    assert!(
-        (r - 1.0).abs() < 1e-6 && (g - 0.7).abs() < 1e-6 && b.abs() < 1e-6,
-        "never flashes green — a finished channel fades, it does not complete (got {r} {g} {b})"
-    );
-
+    assert!(shown(&s), "still channelling at 0.9 s of a 1 s channel");
     for _ in 0..40 {
         s.tick(0.1);
     }
+    assert!(!shown(&s), "the bar closed on its own clock");
+    spell_event(&mut s, "UNIT_SPELLCAST_CHANNEL_STOP");
     assert!(
-        !s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap(),
-        "the bar closed on its own clock, a full second before the server says so"
-    );
-
-    // The deferred stop, about 1 s after the fill emptied.
-    s.fire_event("SPELLCAST_CHANNEL_STOP", vec![]);
-    assert!(
-        !s.eval::<bool>("return CastingBarFrame:IsShown()").unwrap(),
+        !shown(&s),
         "the late stop lands on a hidden frame and does nothing"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -279,23 +321,20 @@ const BORDER: &str = "UI-CastingBar-Border";
 const FILL: &str = "UI-StatusBar";
 
 /// The completion flash, an additive texture over the whole frame, stays hidden through the cast:
-/// every casting `OnUpdate` hides it (`CastingBarFrame.lua:109`).
+/// every casting `OnUpdate` hides it.
 #[test]
 fn the_flash_stays_hidden_for_the_whole_cast() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    s.fire_event(
-        "SPELLCAST_START",
-        vec![ScriptValue::Str("Frostbolt".into()), ScriptValue::Int(3000)],
-    );
+    cast(&mut s, "Frostbolt", 3000);
     for i in 0..25 {
         let quads = frame(&mut s, 0.1);
         assert!(
-            tex_quad(&quads, FLASH).is_none(),
+            tex_quad(&s, &quads, FLASH).is_none(),
             "tick {i}: the flash must not draw during a cast"
         );
         assert!(
-            tex_quad(&quads, SPARK).is_some(),
+            tex_quad(&s, &quads, SPARK).is_some(),
             "tick {i}: the spark rides the fill's leading edge"
         );
     }
@@ -303,52 +342,46 @@ fn the_flash_stays_hidden_for_the_whole_cast() {
 }
 
 /// On completion the flash shows at alpha 0 and each `OnUpdate` adds `CASTING_BAR_FLASH_STEP`
-/// (0.2), once per frame whatever its length (`CastingBarFrame.lua:132-139`). The spark hides, and
+/// (0.2), once per frame whatever its length (CastingBarFrame.lua:290-300). The spark hides, and
 /// the frame stays opaque until the ramp ends.
 #[test]
 fn the_flash_blooms_from_zero_only_on_completion() {
     benilla_formats::wow_data_or_skip!();
     const REF_TICK: f32 = 1.0 / 30.0; // any frame time: the ramp steps once per OnUpdate
     let mut s = harness();
-    s.fire_event(
-        "SPELLCAST_START",
-        vec![ScriptValue::Str("Frostbolt".into()), ScriptValue::Int(3000)],
-    );
+    cast(&mut s, "Frostbolt", 3000);
     frame(&mut s, 0.1);
-    s.fire_event("SPELLCAST_STOP", vec![]);
+    spell_event(&mut s, "UNIT_SPELLCAST_STOP");
 
     // The frame is opaque through the ramp, so the quad's alpha is the flash's own.
     for (i, expected) in [0.2f32, 0.4, 0.6, 0.8, 1.0].into_iter().enumerate() {
         let quads = frame(&mut s, REF_TICK);
-        let flash = tex_quad(&quads, FLASH).expect("the flash draws after completion");
+        let flash = tex_quad(&s, &quads, FLASH).expect("the flash draws after completion");
         assert!(
             (flash.alpha - expected).abs() < 1e-5,
             "ramp step {i}: flash alpha {} != {expected}",
             flash.alpha
         );
         assert!(
-            tex_quad(&quads, SPARK).is_none(),
+            tex_quad(&s, &quads, SPARK).is_none(),
             "ramp step {i}: the spark is hidden once the cast lands"
         );
     }
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Only `SPELLCAST_STOP` and `SPELLCAST_CHANNEL_STOP` arm the ramp (`CastingBarFrame.lua:35-54`).
+/// Only the stop arms set the flash ramp (CastingBarFrame.lua:118-142); a failure never does.
 #[test]
 fn a_failed_cast_never_flashes() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    s.fire_event(
-        "SPELLCAST_START",
-        vec![ScriptValue::Str("Frostbolt".into()), ScriptValue::Int(3000)],
-    );
+    cast(&mut s, "Frostbolt", 3000);
     frame(&mut s, 0.1);
-    s.fire_event("SPELLCAST_FAILED", vec![]);
+    spell_event(&mut s, "UNIT_SPELLCAST_FAILED");
     for i in 0..25 {
         let quads = frame(&mut s, 0.1);
         assert!(
-            tex_quad(&quads, FLASH).is_none(),
+            tex_quad(&s, &quads, FLASH).is_none(),
             "tick {i}: a failed cast must not bloom"
         );
     }
@@ -361,13 +394,10 @@ fn a_failed_cast_never_flashes() {
 fn the_fill_draws_beneath_the_border_art() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    s.fire_event(
-        "SPELLCAST_START",
-        vec![ScriptValue::Str("Frostbolt".into()), ScriptValue::Int(3000)],
-    );
+    cast(&mut s, "Frostbolt", 3000);
     let quads = frame(&mut s, 0.1);
-    let fill = tex_quad(&quads, FILL).expect("fill");
-    let border = tex_quad(&quads, BORDER).expect("border");
+    let fill = tex_quad(&s, &quads, FILL).expect("fill");
+    let border = tex_quad(&s, &quads, BORDER).expect("border");
     assert!(
         fill.z < border.z,
         "the fill (z {}) draws before the border art (z {})",
@@ -382,15 +412,12 @@ fn the_fill_draws_beneath_the_border_art() {
 fn the_fill_crops_its_texture_rather_than_stretching_it() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    s.fire_event(
-        "SPELLCAST_START",
-        vec![ScriptValue::Str("Frostbolt".into()), ScriptValue::Int(4000)],
-    );
+    cast(&mut s, "Frostbolt", 4000);
     for _ in 0..10 {
         frame(&mut s, 0.1);
     }
     let quads = frame(&mut s, 0.0);
-    let fill = tex_quad(&quads, FILL).expect("fill");
+    let fill = tex_quad(&s, &quads, FILL).expect("fill");
     let QuadContent::Texture { tex_coords, .. } = &fill.content else {
         panic!("fill is a texture")
     };
@@ -416,93 +443,32 @@ fn bottom(s: &UiScript, name: &str) -> f64 {
         .unwrap()
 }
 
-/// The stock manage pass re-seats the cast bar and `ChatFrame1` over the bottom bars shown; the
-/// XML anchors (55, 85) are pre-pass defaults. Each sum is the stock table's base plus its bar
-/// and `pet` terms, with chat's extra 23 when both apply (`UIParent.lua:1657-1659`).
+/// The stock manage pass seats the cast bar from `UIPARENT_MANAGED_FRAME_POSITIONS`
+/// (UIParent.lua:1186): `menuBarTop` plus its `yOffset`, plus `bottomEither` once a bottom
+/// multibar shows (`UIParent_ManageFramePosition`, :1225-1270).
 #[test]
 fn managed_positions_track_the_bottom_bar_stack() {
     benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
-    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\BasicControls.xml");
-    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml"); // TOOLTIP_DEFAULT_COLOR for the dropdowns
-    load_xml(&mut s, "Interface\\FrameXML\\UIMenu.xml"); // the kit the chat menus build from
-    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\UIPanelTemplates.lua");
-    load_xml(&mut s, "Interface\\FrameXML\\UIPanelTemplates.xml");
-    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\ChatFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\FloatingChatFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\CastingBarFrame.xml");
-
-    // The load-time pass with no bars shown: the bare bases.
+    let mut s = harness();
+    let row = |s: &UiScript, key: &str| -> f64 {
+        s.eval::<f64>(&format!(
+            "return UIPARENT_MANAGED_FRAME_POSITIONS.CastingBarFrame.{key}"
+        ))
+        .unwrap()
+    };
     s.run("UIParent_ManageFramePositions()").unwrap();
+    s.resolve();
+    // `menuBarTop` is a file local: 55 on this 4:3 screen (`UpdateMenuBarTop`, :1167-1175).
+    let base = 55.0 + row(&s, "yOffset");
+    assert_eq!(bottom(&s, "CastingBarFrame"), base, "menuBarTop + yOffset");
+
+    s.run("SHOW_MULTI_ACTIONBAR_1 = 1 MultiActionBar_Update() UIParent_ManageFramePositions()")
+        .unwrap();
     s.resolve();
     assert_eq!(
         bottom(&s, "CastingBarFrame"),
-        60.0,
-        "baseY replaces the XML 55"
+        base + row(&s, "bottomEither"),
+        "a shown bottom bar raises it by bottomEither"
     );
-    assert_eq!(bottom(&s, "ChatFrame1"), 85.0, "chat baseY");
-
-    // Both bottom multibars on: `bottomEither` for the cast bar, `bottomLeft` for chat. The flags
-    // come from `SHOW_MULTI_ACTIONBAR_1`/`_2`, not the frames (`UIParent.lua:1599-1607`).
-    s.run("SHOW_MULTI_ACTIONBAR_1 = 1 SHOW_MULTI_ACTIONBAR_2 = 1 UIParent_ManageFramePositions()")
-        .unwrap();
-    s.resolve();
-    assert_eq!(bottom(&s, "CastingBarFrame"), 100.0, "60 + bottomEither 40");
-    assert_eq!(bottom(&s, "ChatFrame1"), 102.0, "85 + bottomLeft 17");
-
-    // The stance bar shows: the pet term, plus chat's both-flags extra. The pass's stance-bar arm
-    // (`UIParent.lua:1705-1732`) shows and hides the bar's three shelf textures by name, unguarded.
-    s.run(
-        "local t = { Show = function() end, Hide = function() end } \
-         ShapeshiftBarLeft, ShapeshiftBarMiddle, ShapeshiftBarRight = t, t, t",
-    )
-    .unwrap();
-    s.run(
-        "ShapeshiftBarFrame = ShapeshiftBarFrame or CreateFrame(\"Frame\", \"ShapeshiftBarFrame\") \
-         ShapeshiftBarFrame:Show() UIParent_ManageFramePositions()",
-    )
-        .unwrap();
-    s.resolve();
-    assert_eq!(bottom(&s, "CastingBarFrame"), 140.0, "60 + 40 + pet 40");
-    assert_eq!(
-        bottom(&s, "ChatFrame1"),
-        142.0,
-        "85 + 17 + pet 17 + both-flags 23"
-    );
-
-    s.run("ShapeshiftBarFrame:Hide() UIParent_ManageFramePositions()")
-        .unwrap();
-    s.resolve();
-    assert_eq!(bottom(&s, "CastingBarFrame"), 100.0);
-    assert_eq!(bottom(&s, "ChatFrame1"), 102.0);
-}
-
-/// `CastingBarFrame_OnLoad` publishes `CastingBarFrameStatusBar` as an alias of the bar itself
-/// (`CastingBarFrame.lua:16`): in 1.12 the casting bar is the StatusBar, with no child. Addons
-/// drive the bar through it, so this asserts identity, not just existence.
-#[test]
-fn the_casting_bar_publishes_its_status_bar_alias() {
-    benilla_formats::wow_data_or_skip!();
-    let s = harness();
-    assert!(
-        s.eval::<bool>("return CastingBarFrameStatusBar ~= nil")
-            .unwrap(),
-        "the reference publishes this name in CastingBarFrame_OnLoad"
-    );
-    assert!(
-        s.eval::<bool>("return CastingBarFrameStatusBar == CastingBarFrame")
-            .unwrap(),
-        "the alias IS the bar — 1.12 has no separate child StatusBar"
-    );
-    s.run("CastingBarFrameStatusBar:SetMinMaxValues(0, 10) CastingBarFrameStatusBar:SetValue(4)")
-        .unwrap();
-    assert!((bar_value(&s) - 4.0).abs() < 1e-9);
+    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }

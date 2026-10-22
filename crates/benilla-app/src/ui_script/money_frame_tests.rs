@@ -96,7 +96,7 @@ fn set_type_rewires_the_source_the_mouse_and_the_collapse() {
         );
     }
 
-    s.run("TestPurse.staticMoney = 7 this = TestPurse MoneyFrame_SetType(\"STATIC\") this = nil")
+    s.run("TestPurse.staticMoney = 7 MoneyFrame_SetType(TestPurse, \"STATIC\")")
         .unwrap();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert_eq!(
@@ -114,8 +114,7 @@ fn set_type_rewires_the_source_the_mouse_and_the_collapse() {
     // STATIC collapses without `showSmallerCoins`: 7 copper is copper alone.
     assert_eq!(shown(&s, "TestPurse"), (false, false, true));
 
-    s.run("this = TestPurse MoneyFrame_SetType(\"PLAYER\") this = nil")
-        .unwrap();
+    s.run("MoneyFrame_SetType(TestPurse, \"PLAYER\")").unwrap();
     assert_eq!(
         coins(&s, "TestPurse"),
         ("1".into(), "23".into(), "45".into())
@@ -138,10 +137,8 @@ fn showsmallercoins_is_what_keeps_the_zero_coins_visible() {
         "PLAYER showSmallerCoins = \"Backpack\" keeps the zero silver and copper (ref l.30)"
     );
 
-    s.run(
-        "TestPurse.staticMoney = 50000 this = TestPurse MoneyFrame_SetType(\"STATIC\") this = nil",
-    )
-    .unwrap();
+    s.run("TestPurse.staticMoney = 50000 MoneyFrame_SetType(TestPurse, \"STATIC\")")
+        .unwrap();
     assert_eq!(
         shown(&s, "TestPurse"),
         (true, false, false),
@@ -149,7 +146,7 @@ fn showsmallercoins_is_what_keeps_the_zero_coins_visible() {
     );
 
     // Under a collapsing type, a copper-only amount drops the leading zero coins.
-    s.run("TestPurse.staticMoney = 42 this = TestPurse MoneyFrame_UpdateMoney() this = nil")
+    s.run("TestPurse.staticMoney = 42 MoneyFrame_UpdateMoney(TestPurse)")
         .unwrap();
     assert_eq!(shown(&s, "TestPurse"), (false, false, true));
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -159,8 +156,7 @@ fn showsmallercoins_is_what_keeps_the_zero_coins_visible() {
 fn update_paints_a_static_frame_by_name_and_resizes_it() {
     benilla_formats::wow_data_or_skip!();
     let s = harness(0);
-    s.run("this = TestPurse MoneyFrame_SetType(\"STATIC\") this = nil")
-        .unwrap();
+    s.run("MoneyFrame_SetType(TestPurse, \"STATIC\")").unwrap();
 
     s.run("MoneyFrame_Update(\"TestPurse\", 20304)").unwrap(); // 2g 3s 4c
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -215,7 +211,7 @@ fn the_large_template_measures_with_the_nineteen_pixel_icon() {
 fn an_unknown_money_type_leaves_the_frame_on_the_one_it_had() {
     benilla_formats::wow_data_or_skip!();
     let s = harness(12_345);
-    s.run("this = TestPurse MoneyFrame_SetType(\"NOT_A_TYPE\") this = nil")
+    s.run("MoneyFrame_SetType(TestPurse, \"NOT_A_TYPE\")")
         .unwrap();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert_eq!(
@@ -305,10 +301,8 @@ fn the_money_type_table_carries_all_seven_reference_types() {
         );
     }
     for t in ["SEND_MAIL", "SEND_MAIL_COD"] {
-        s.run(&format!(
-            "this = TestPurse MoneyFrame_SetType(\"{t}\") this = nil"
-        ))
-        .unwrap();
+        s.run(&format!("MoneyFrame_SetType(TestPurse, \"{t}\")"))
+            .unwrap();
         assert!(
             s.errors().is_empty(),
             "{t}: script errors: {:?}",

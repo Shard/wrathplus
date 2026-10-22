@@ -50,6 +50,12 @@ impl super::UiScript {
             .collect();
     }
 
+    /// The bar's form count, `GetNumShapeshiftForms`'s answer; the cooldown flush fires
+    /// `UPDATE_SHAPESHIFT_COOLDOWN` only while it is nonzero (12340 `0x53bac5`).
+    pub fn num_shapeshift_forms(&self) -> usize {
+        self.model_mut().shapeshift_forms.len()
+    }
+
     /// Take the `CastShapeshiftForm` calls out of the call stream, as form spells; the app casts
     /// each, or cancels it when it is the active form.
     pub fn take_shapeshift_casts(&mut self) -> Vec<u32> {

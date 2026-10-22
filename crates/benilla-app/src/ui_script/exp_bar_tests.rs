@@ -52,7 +52,7 @@ fn the_xp_bar_takes_the_mouse_and_explains_itself() {
         "the XP strip must be mouse-enabled or the hover never fires"
     );
 
-    s.run("this = MainMenuExpBar MainMenuExpBar:GetScript(\"OnEnter\")()")
+    s.run("MainMenuExpBar:GetScript(\"OnEnter\")(MainMenuExpBar)")
         .unwrap();
     assert_eq!(
         s.eval::<String>("return GameTooltipTextLeft1:GetText()")
@@ -71,7 +71,7 @@ fn the_xp_bar_takes_the_mouse_and_explains_itself() {
         "the default-corner anchor"
     );
 
-    s.run("this = MainMenuExpBar MainMenuExpBar:GetScript(\"OnLeave\")()")
+    s.run("MainMenuExpBar:GetScript(\"OnLeave\")(MainMenuExpBar)")
         .unwrap();
     assert!(
         !s.eval::<bool>("return GameTooltip:IsVisible()").unwrap(),
@@ -278,7 +278,7 @@ fn the_xp_bar_numerals_show_on_hover() {
     s.set_player_xp(1234, 5678);
     s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
 
-    s.run("this = MainMenuExpBar MainMenuExpBar:GetScript(\"OnEnter\")()")
+    s.run("MainMenuExpBar:GetScript(\"OnEnter\")(MainMenuExpBar)")
         .unwrap();
     assert_eq!(
         s.eval::<String>("return MainMenuBarExpText:GetText()")
@@ -291,7 +291,7 @@ fn the_xp_bar_numerals_show_on_hover() {
 
     // `HideTextStatusBarText` reads `this.isZero` where it means `bar` (`TextStatusBar.lua:95`);
     // the engine always binds `this` during dispatch, so the test does too.
-    s.run("this = MainMenuExpBar MainMenuExpBar:GetScript(\"OnLeave\")() this = nil")
+    s.run("MainMenuExpBar:GetScript(\"OnLeave\")(MainMenuExpBar)")
         .unwrap();
     assert!(
         !s.eval::<bool>("return MainMenuBarExpText:IsShown()")
@@ -310,7 +310,7 @@ fn the_rest_state_line_joins_the_held_open_tooltip() {
     s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
 
     s.run("SHOW_NEWBIE_TIPS = \"1\"").unwrap();
-    s.run("this = MainMenuExpBar MainMenuExpBar:GetScript(\"OnEnter\")()")
+    s.run("MainMenuExpBar:GetScript(\"OnEnter\")(MainMenuExpBar)")
         .unwrap();
     assert_eq!(
         s.eval::<f64>("return ExhaustionTick.timer").unwrap(),
