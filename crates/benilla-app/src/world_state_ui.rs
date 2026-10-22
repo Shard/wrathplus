@@ -160,8 +160,15 @@ fn feed_world_state_ui(
 
 pub(crate) struct WorldStateUiPlugin;
 
+/// `showBattlefieldMinimap` (12340 `0x51ee3c`, default "0"): the zone map's toggle writes "1" in a
+/// battleground and "2" elsewhere (Blizzard_BattlefieldMinimap.lua:19-36), and the world-state
+/// frame reads it (`WorldStateFrame.lua:378`).
+pub(crate) const CVARS: &[crate::cvars::Registered] =
+    &[crate::cvars::same("showBattlefieldMinimap", "0")];
+
 impl Plugin for WorldStateUiPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.add_systems(Startup, load_world_state_ui.after(AssetSet::Open))
             .add_systems(Update, feed_world_state_ui.after(crate::ui_script::UiInput));
     }

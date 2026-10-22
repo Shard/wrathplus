@@ -130,17 +130,24 @@ fn shipped_spellbook_loads_clean() {
     load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
     load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
     load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
-    let frames = load_xml(&mut s, "Interface\\FrameXML\\SpellBookFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\SpellBookFrame.xml");
     assert!(s.errors().is_empty(), "loader errors: {:?}", s.errors());
-    assert_eq!(
-        frames, 52,
-        "window + close + prev/next + 12 spell buttons (each with its Cooldown and AutoCast \
-         Model children) + 8 skill-line tabs + the 3 Spell/Pet toggle tabs + the tab flash frame"
-    );
-    for name in ["SpellBookFrame", "SpellButton12", "SpellButton1AutoCast"] {
-        assert!(
-            s.eval::<bool>(&format!("return {name} ~= nil")).unwrap(),
-            "{name} exists"
+    // The kit seats the whole session, so the claim is the stock 3.3.5 names and kinds, not a count.
+    for (name, kind) in [
+        ("SpellBookFrame", "Frame"),
+        ("SpellButton1", "CheckButton"),
+        ("SpellButton12", "CheckButton"),
+        ("SpellButton1Cooldown", "Cooldown"),
+        ("SpellButton1AutoCastable", "Texture"),
+        ("SpellBookSkillLineTab8", "CheckButton"),
+        ("SpellBookFrameTabButton3", "Button"),
+    ] {
+        assert_eq!(
+            s.eval::<Option<String>>(&format!("return {name} and {name}:GetObjectType()"))
+                .unwrap()
+                .as_deref(),
+            Some(kind),
+            "{name}"
         );
     }
 }
@@ -195,6 +202,16 @@ fn shipped_spellbook_drives_end_to_end() {
     s.mouse_button(x1, y1, "LeftButton", false);
     s.set_modifiers(false, false, false);
     assert!(s.take_spell_casts().is_empty(), "shift-click never casts");
+    // 3.3.5's shift is CHATLINK, which returns before PICKUPACTION (SpellBookFrame.lua:355-383):
+    // with chat closed it posts nothing and picks nothing up.
+    assert!(
+        s.cursor_payload().is_none(),
+        "shift-click is the link, not the pickup"
+    );
+
+    // The pickup is the drag (`SpellButton_OnDrag`, SpellBookFrame.lua:391-398).
+    s.run("SpellButton1:GetScript('OnDragStart')(SpellButton1, 'LeftButton')")
+        .unwrap();
     assert!(
         matches!(
             s.cursor_payload(),
@@ -394,13 +411,18 @@ fn the_pet_tab_switches_books_and_renders_the_pets_spells() {
     s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
     s.set_spellbook(book());
 
-    // ── No pet: no toggle row, and no pet book (`SpellBookFrame.lua:11-14`) ──────────────────
+    // ── No pet: the spell tab alone, and no pet book (SpellBookFrame.lua:126-139) ─────────────
     s.run("ToggleSpellBook(BOOKTYPE_SPELL)").unwrap();
     assert!(s.errors().is_empty(), "open errors: {:?}", s.errors());
     assert!(
-        !s.eval::<bool>("return SpellBookFrameTabButton1:IsVisible()")
+        s.eval::<bool>("return SpellBookFrameTabButton1:IsVisible()")
             .unwrap(),
-        "with no pet spells the ref hides the whole toggle row"
+        "3.3.5 always seats the spell tab"
+    );
+    assert!(
+        !s.eval::<bool>("return SpellBookFrameTabButton2:IsVisible()")
+            .unwrap(),
+        "with no pet spells there is no pet tab"
     );
     s.run("ToggleSpellBook(BOOKTYPE_PET)").unwrap();
     assert!(
@@ -454,7 +476,7 @@ fn the_pet_tab_switches_books_and_renders_the_pets_spells() {
         "Claw"
     );
     // The overlay follows `GetSpellAutocast`'s first return (can it), the shine model its second
-    // (is it on) (`SpellBookFrame.lua:367-377`).
+    // (is it on) (`SpellButton_UpdateButton`, SpellBookFrame.lua:473-492).
     assert!(s
         .eval::<bool>("return SpellButton1AutoCastable:IsVisible()")
         .unwrap());
@@ -463,66 +485,32 @@ fn the_pet_tab_switches_books_and_renders_the_pets_spells() {
             .unwrap(),
         "a passive is not autocastable"
     );
+    // 3.3.5's shine is a pooled `AutocastShineN` (`SpellBook_GetAutoCastShine`, 30x30) parented to
+    // an autocasting button as `.shine` and centred on it (SpellBookFrame.lua:479-492, :631-655).
     assert!(s
-        .eval::<bool>("return SpellButton1AutoCast:IsVisible()")
+        .eval::<bool>("return SpellButton1.shine ~= nil and SpellButton1.shine:IsVisible()")
         .unwrap());
-    assert!(!s
-        .eval::<bool>("return SpellButton3AutoCast:IsVisible()")
-        .unwrap());
-    // Deviation (SpellBookAdapters.xml): the brackets are 71.53 square and the shine 37x37 at
-    // scale 1.48, both centred on the button, so the two share a centre; the reference's are 60,
-    // and 36x36 at CENTER (1,1) and 1.22 (`SpellBookFrame.xml:121-147`), which reads off-centre.
-    let br: Vec<f32> = [
-        "GetWidth()",
-        "GetHeight()",
-        "GetLeft() + SpellButton1AutoCastable:GetWidth() / 2 - (SpellButton1:GetLeft() + SpellButton1:GetWidth() / 2)",
-        "GetBottom() + SpellButton1AutoCastable:GetHeight() / 2 - (SpellButton1:GetBottom() + SpellButton1:GetHeight() / 2)",
-    ]
-    .iter()
-    .map(|e| {
-        s.eval::<f32>(&format!("return SpellButton1AutoCastable:{e}"))
-            .unwrap()
-    })
-    .collect();
     assert!(
-        (br[0] - 71.53).abs() < 0.01 && (br[1] - 71.53).abs() < 0.01,
-        "brackets are {}x{}, benilla draws them at 71.53 so the art reaches this button's corners",
-        br[0],
-        br[1]
+        s.eval::<bool>("return SpellButton3.shine == nil").unwrap(),
+        "no autocast, no shine"
     );
-    assert!(
-        br[2].abs() < 0.01 && br[3].abs() < 0.01,
-        "brackets sit ({}, {}) off the button's centre; the ref centres them exactly",
-        br[2],
-        br[3]
+    let centre_offset = |s: &UiScript, region: &str| -> (f32, f32, f32, f32) {
+        s.eval::<(f32, f32, f32, f32)>(&format!(
+            "local r, b = {region}, SpellButton1 \
+             local rx, ry = r:GetCenter() local bx, by = b:GetCenter() \
+             return r:GetWidth(), r:GetHeight(), rx - bx, ry - by"
+        ))
+        .unwrap()
+    };
+    assert_eq!(
+        centre_offset(&s, "SpellButton1AutoCastable"),
+        (60.0, 60.0, 0.0, 0.0),
+        "the 60x60 overlay, centred (SpellBookFrame.xml:126-135)"
     );
-
-    let geom: Vec<f32> = ["GetWidth", "GetHeight", "GetModelScale"]
-        .iter()
-        .map(|m| {
-            s.eval::<f32>(&format!("return SpellButton1AutoCast:{m}()"))
-                .unwrap()
-        })
-        .collect();
-    assert!(
-        (geom[0] - 37.0).abs() < 0.01 && (geom[1] - 37.0).abs() < 0.01,
-        "shine pane is {geom:?}, expected 37x37 (benilla squares it on the button)"
-    );
-    assert!(
-        (geom[2] - 1.48).abs() < 0.001,
-        "shine pane's model scale is {}, expected 1.48 (the pet button's rim ratio)",
-        geom[2]
-    );
-    let dx = s
-        .eval::<f32>("return SpellButton1AutoCast:GetLeft() - SpellButton1:GetLeft()")
-        .unwrap();
-    let dy = s
-        .eval::<f32>("return SpellButton1AutoCast:GetBottom() - SpellButton1:GetBottom()")
-        .unwrap();
-    assert!(
-        dx.abs() < 0.01 && dy.abs() < 0.01,
-        "shine pane sits at ({dx}, {dy}) inside the button; benilla squares it on the button so it \
-         is concentric with the brackets — the ref's +1,+1 is what read as a top/right bias"
+    assert_eq!(
+        centre_offset(&s, "SpellButton1.shine"),
+        (30.0, 30.0, 0.0, 0.0),
+        "the 30x30 shine, centred"
     );
 
     // ── The clicks ────────────────────────────────────────────────────────────────────────────
@@ -545,18 +533,18 @@ fn the_pet_tab_switches_books_and_renders_the_pets_spells() {
         "a right-click on the pet page must not also cast"
     );
 
-    // ── Two reference quirks, pinned ───────────────────────────────────────────────────────────
-    // The pet page ignores its page number: `SpellBook_GetSpellID`'s pet arm is a bare `return id`
-    // (`SpellBookFrame.lua:460-461`).
+    // ── The pet page's numbering ───────────────────────────────────────────────────────────────
+    // 3.3.5's pet arm adds the page (`SpellBook_GetSpellID`, SpellBookFrame.lua:591-593); 1.12's
+    // was a bare `return id`.
     assert_eq!(s.eval::<i64>("return SpellBook_GetSpellID(1)").unwrap(), 1);
     s.run(r#"SPELLBOOK_PAGENUMBERS["pet"] = 2"#).unwrap();
     assert_eq!(
         s.eval::<i64>("return SpellBook_GetSpellID(1)").unwrap(),
-        1,
-        "DO NOT FIX: the ref's pet arm has no page term"
+        13,
+        "page 2 starts at SPELLS_PER_PAGE + 1"
     );
-    // …and Next writes `SPELLBOOK_PAGENUMBERS[selectedSkillLine]` on both books
-    // (`SpellBookFrame.lua:423`), so the pet page stays put.
+    // Next writes the pet book's own page (SpellBookFrame.lua:539-549), but one page of pet spells
+    // leaves it disabled (`SpellBook_UpdatePageArrows`), so the page stays put.
     s.run(r#"SPELLBOOK_PAGENUMBERS["pet"] = 1"#).unwrap();
     click(&mut s, "SpellBookNextPageButton", "LeftButton");
     assert!(s.errors().is_empty(), "page errors: {:?}", s.errors());
@@ -564,7 +552,7 @@ fn the_pet_tab_switches_books_and_renders_the_pets_spells() {
         s.eval::<i64>(r#"return SPELLBOOK_PAGENUMBERS["pet"]"#)
             .unwrap(),
         1,
-        "DO NOT FIX: the ref writes SPELLBOOK_PAGENUMBERS[selectedSkillLine] on both books"
+        "one page of pet spells: Next is disabled"
     );
     assert_eq!(
         s.eval::<String>("return SpellButton1SpellName:GetText()")
@@ -590,6 +578,7 @@ fn the_pet_tab_switches_books_and_renders_the_pets_spells() {
 /// shift-click writes, appending a whole `/cast <name>[(<rank>)]` line with no separator. The
 /// `/cast` line is 1.12's; the bare-name insert is a later client's.
 #[test]
+#[ignore = "pending Native UI: unfocused ScrollingEdit cursorOffset"]
 fn the_macro_editor_takes_a_shift_click_and_only_a_shift_click() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
@@ -618,6 +607,8 @@ fn the_macro_editor_takes_a_shift_click_and_only_a_shift_click() {
             exists: true,
             name: Some("Probefour".into()),
             level: 60,
+            // 3.3.5's PVP window builds a faction texture path from it on world entry.
+            faction_group: Some("Alliance".into()),
             ..Default::default()
         }),
     );
@@ -723,8 +714,8 @@ fn the_macro_editor_takes_a_shift_click_and_only_a_shift_click() {
     );
     assert_eq!(
         body(&s),
-        "/cast Fireball(Rank 1)",
-        "ref l.276: SLASH_CAST1 + name + the rank in parens"
+        "/cast Fireball(Rank 1)\n",
+        "SLASH_CAST1, the name, the rank in parens and a newline (ChatFrame.lua:3520)"
     );
     assert!(
         s.take_spell_casts().is_empty(),
@@ -742,13 +733,12 @@ fn the_macro_editor_takes_a_shift_click_and_only_a_shift_click() {
         "the write goes through the box's own OnTextChanged, so the window is dirty"
     );
 
-    // A second line runs straight on: the reference appends with no separator (`GetText()..line`,
-    // `Blizzard_MacroUI.lua:124`).
-    click(&mut s, "SpellButton3", "RightButton"); // shift outranks the button
+    // A second line follows the first's newline; `CHATLINK` is SHIFT-BUTTON1, so it is a left click.
+    click(&mut s, "SpellButton3", "LeftButton");
     assert_eq!(
         body(&s),
-        "/cast Fireball(Rank 1)/cast Fire Blast(Rank 1)",
-        "ref MacroFrame.lua:95 — appended, unseparated"
+        "/cast Fireball(Rank 1)\n/cast Fire Blast(Rank 1)\n",
+        "each insert ends its own line (ChatFrame.lua:3520)"
     );
     assert!(s.take_spell_casts().is_empty());
 

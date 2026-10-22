@@ -20,10 +20,12 @@ pub(crate) const FEATURE_ROWS: &[&[Registered]] = &[
     crate::ui_gamma::CVARS,
     crate::ui_guild::CVARS,
     crate::ui_loot::CVARS,
+    crate::ui_paperdoll::CVARS,
     crate::ui_trade::CVARS,
     crate::ui_trainer::net::CVARS,
     crate::video::CVARS,
     crate::world_backdrop::CVARS,
+    crate::world_state_ui::CVARS,
 ];
 
 /// Every shipped row: the core table, then the features'.

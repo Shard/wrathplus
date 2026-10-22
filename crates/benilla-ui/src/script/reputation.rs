@@ -397,13 +397,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     if let Some(e) = header {
                         return faction_tuple(lua, &model, e, Some(collapsed), false);
                     }
-                    // A synthetic header ("Other", "Inactive"): no faction behind it.
+                    // A synthetic header ("Other", "Inactive"): 12340 pushes Neutral, 4 (`0x5d0ded`).
                     let name = synthetic_header(lua, grp.key);
                     let mut out = vec![
                         Value::String(lua.create_string(&name)?),
                         Value::String(lua.create_string("")?),
                     ];
-                    out.extend(std::iter::repeat_n(Value::Integer(0), 4));
+                    out.extend([4, 0, 3000, 0].map(Value::Integer));
                     out.extend([
                         Value::Nil,
                         Value::Nil,

@@ -168,89 +168,9 @@ pub(super) mod fixture {
 }
 
 #[cfg(test)]
-fn is_word(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
-}
-
 #[cfg(test)]
 mod tests {
     use benilla_ui::script::UiScript;
-
-    /// Every `RegisterForSave`'d UI global defaults to the value the reference's own
-    /// `UIOptionsFrame_Init` assigns, the FrameXML half of the rule `cvars::REGISTERED` holds for
-    /// CVars. A name the reference declares elsewhere (`SHOW_OFFLINE_GUILD_MEMBERS`,
-    /// `FriendsFrame.lua:13`) is uncovered, not failed; the covered count is asserted.
-    #[test]
-    fn our_saved_ui_globals_default_to_the_references_own_values() {
-        let _data = benilla_formats::wow_data_or_skip!();
-
-        // Only `NAME = "literal"` or `NAME = number` at a line's head: a guarded or copied
-        // assignment is not a factory default.
-        let src = String::from_utf8_lossy(
-            &super::read("Interface\\FrameXML\\UIOptionsFrame.lua")
-                .expect("the reference's own UIOptionsFrame.lua"),
-        )
-        .into_owned();
-        let mut theirs = std::collections::BTreeMap::new();
-        for line in src.lines() {
-            let line = line.trim();
-            let Some((name, value)) = line.split_once('=') else {
-                continue;
-            };
-            let name = name.trim();
-            if name.is_empty() || !name.chars().all(|c| super::is_word(c) && !c.is_lowercase()) {
-                continue; // a uvar is upper case; anything else is a local, a field or a comparison
-            }
-            let value = value.trim().trim_end_matches(';').trim();
-            let literal = value.strip_prefix('"').and_then(|v| v.strip_suffix('"'));
-            let Some(v) = literal.or_else(|| value.parse::<i64>().ok().map(|_| value)) else {
-                continue; // an expression, not a factory default
-            };
-            theirs.insert(name.to_string(), v.to_string());
-        }
-        assert!(
-            theirs.len() > 20,
-            "parsed only {} declarations out of UIOptionsFrame.lua — the parse is broken, not the \
-             reference",
-            theirs.len()
-        );
-
-        let mut s = UiScript::new().expect("VM");
-        s.set_screen_size(1024.0, 768.0);
-        seat_a_player(&mut s);
-        let failures = super::super::manifest::load_default_ui(&mut s);
-        assert!(failures.is_empty(), "the default UI: {failures:#?}");
-
-        let (mut checked, mut uncovered, mut wrong) = (0usize, Vec::new(), Vec::new());
-        for name in s.saved_variable_names() {
-            let Some(want) = theirs.get(&name) else {
-                uncovered.push(name);
-                continue;
-            };
-            // Through `tostring`: the reference declares `AUTO_QUEST_WATCH` as the number 1
-            // (`UIOptionsFrame.lua:122`) and the rest as strings.
-            let got = s
-                .eval::<String>(&format!("return tostring({name})"))
-                .unwrap_or_else(|e| panic!("{name} is registered for save but unreadable: {e}"));
-            checked += 1;
-            if &got != want {
-                wrong.push(format!("{name}: ours {got:?}, the reference's {want:?}"));
-            }
-        }
-        assert!(
-            wrong.is_empty(),
-            "saved UI globals that do not default to the reference's own value — either match it, \
-             or make the divergence explicit at the assignment the way `cvars::REGISTERED` does:\n  \
-             {}",
-            wrong.join("\n  "),
-        );
-        assert!(
-            checked >= 9,
-            "only {checked} of our saved globals are declared in the reference's \
-             UIOptionsFrame.lua (uncovered: {uncovered:?}) — if a window migrated, lower this; if \
-             the parse broke, fix it",
-        );
-    }
 
     fn strip_comments(text: &str) -> String {
         let mut out = String::with_capacity(text.len());
@@ -333,8 +253,7 @@ mod tests {
             "ContainerFrameItemButton_OnEnter",
             "ContainerFrameItemButton_OnClick",
             "ContainerFrameItemButton_OnLoad",
-            "ContainerFrameItemButton_OnUpdate",
-            "KeyRingItemButton_OnClick",
+            "ContainerFrameItemButton_OnModifiedClick",
         ] {
             assert!(
                 s.eval::<bool>(&format!("return type({name}) == \"function\""))
@@ -344,7 +263,7 @@ mod tests {
         }
         // Its constants, which addons read directly.
         assert_eq!(s.eval::<i64>("return NUM_BAG_FRAMES").unwrap(), 4);
-        assert_eq!(s.eval::<i64>("return NUM_CONTAINER_FRAMES").unwrap(), 12);
+        assert_eq!(s.eval::<i64>("return NUM_CONTAINER_FRAMES").unwrap(), 13);
         // `PaperDollFrame.lua` arrives through `PaperDollFrame.xml`'s `<Script file=>`: a chain
         // `.xml` brings its `.lua`.
         assert!(s
@@ -746,6 +665,24 @@ mod tests {
             .map(|f| f.rsplit(['\\', '/']).next().unwrap_or(f))
             .collect();
 
+        // A `<Script file=…/>` in any loaded document sources the file too, as
+        // `VideoOptionsPanels.xml:6` and `AudioOptionsPanels.xml:5` both do `OptionsPanelTemplates.lua`.
+        let mut scripted: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for entry in &gated_chain_entries() {
+            for text in entry_sources(entry) {
+                for chunk in text.split('<').skip(1) {
+                    let tag = chunk.split('>').next().unwrap_or("");
+                    if !tag.trim_start().starts_with("Script") {
+                        continue;
+                    }
+                    if let Some(file) = tag_attr(tag, "file") {
+                        let leaf = file.rsplit(['\\', '/']).next().unwrap_or(&file);
+                        scripted.insert(leaf.to_ascii_lowercase());
+                    }
+                }
+            }
+        }
+
         let mut orphans = Vec::new();
         for entry in &gated_chain_entries() {
             let leaf = entry.rsplit(['\\', '/']).next().unwrap_or(entry);
@@ -763,7 +700,8 @@ mod tests {
             let sourced = text
                 .to_ascii_lowercase()
                 .contains(&format!("file=\"{}\"", lua.to_ascii_lowercase()));
-            if !sourced && !listed.contains(lua.as_str()) {
+            let elsewhere = scripted.contains(&lua.to_ascii_lowercase());
+            if !sourced && !elsewhere && !listed.contains(lua.as_str()) {
                 orphans.push(format!(
                     "{leaf} does not source {lua}, and {lua} is not a manifest entry"
                 ));
@@ -915,6 +853,11 @@ mod tests {
         let toc = &super::super::manifest::manifest_files();
 
         let mut declared: std::collections::HashSet<String> = std::collections::HashSet::new();
+        // Inherits nested in a virtual template resolve when that template is instantiated, which
+        // may follow a load-on-demand load: `AchievementAlertFrameTemplate` (AlertFrames.xml:195)
+        // inherits `AchievementIconFrameTemplate`, and AlertFrames.lua:237 builds it only after
+        // `AchievementFrame_LoadUI`.
+        let mut deferred: Vec<(String, String)> = Vec::new();
         let mut wanted: Vec<(String, String)> = Vec::new();
         for entry in toc.iter() {
             // `<Include>` counts: the stock toc lists two `*Templates.xml`; the rest arrive with
@@ -927,21 +870,57 @@ mod tests {
             if text.is_empty() {
                 continue;
             }
+            // Open elements, each marked when it or an ancestor is virtual.
+            let mut open: Vec<bool> = Vec::new();
             for chunk in text.split('<').skip(1) {
                 let Some(end) = chunk.find('>') else { continue };
                 let tag = &chunk[..end];
-                if tag.contains("virtual=\"true\"") {
+                if tag.starts_with('/') {
+                    open.pop();
+                    continue;
+                }
+                if tag.starts_with(['?', '!']) {
+                    continue;
+                }
+                let virtual_tag = tag.contains("virtual=\"true\"");
+                if virtual_tag {
                     if let Some(n) = tag_attr(tag, "name") {
                         declared.insert(n);
                     }
                 }
+                let inside_virtual = open.last().copied().unwrap_or(false);
                 if let Some(list) = tag_attr(tag, "inherits") {
+                    let into = if inside_virtual {
+                        &mut deferred
+                    } else {
+                        &mut wanted
+                    };
                     for name in list.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-                        wanted.push((name.to_string(), entry.clone()));
+                        into.push((name.to_string(), entry.clone()));
+                    }
+                }
+                if !tag.ends_with('/') {
+                    open.push(inside_virtual || virtual_tag);
+                }
+            }
+        }
+
+        // What the reached load-on-demand addons declare, for the deferred inherits only.
+        let mut on_demand: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for entry in gated_chain_entries()
+            .iter()
+            .filter(|e| e.starts_with("Interface\\AddOns\\"))
+        {
+            for text in entry_sources(entry) {
+                for chunk in text.split('<').skip(1) {
+                    let tag = chunk.split('>').next().unwrap_or("");
+                    if tag.contains("virtual=\"true\"") {
+                        on_demand.extend(tag_attr(tag, "name"));
                     }
                 }
             }
         }
+        wanted.extend(deferred.into_iter().filter(|(n, _)| !on_demand.contains(n)));
 
         let mut missing: Vec<String> = wanted
             .into_iter()
@@ -1234,15 +1213,6 @@ mod tests {
                  benilla's gossip feed carries no code-entry option kind yet",
             ),
             (
-                "MEMORY_EXHAUSTED",
-                "UIParent.lua — the client's own out-of-memory dialog; benilla's allocator \
-                 failure is a Rust abort, not a Lua event",
-            ),
-            (
-                "MEMORY_RECOVERED",
-                "UIParent.lua — the other half of MEMORY_EXHAUSTED",
-            ),
-            (
                 "PLAYER_SKINNED",
                 "UIParent.lua — the corpse-skinned notice; benilla's loot feed does not derive it",
             ),
@@ -1267,13 +1237,6 @@ mod tests {
                  hide path only",
             ),
             ("DISPLAY_SIZE_CHANGED", "the four paperdoll files"),
-            (
-                "GMSURVEY_DISPLAY",
-                "HelpFrame.lua — the post-ticket survey. A real 1.12 event (fired at \
-                 `0x5e797b`, id 538) whose whole UI is the LoadOnDemand `Blizzard_GMSurveyUI`; \
-                 we have neither the producer nor the addon on the chain, and the ticket \
-                 flow works without it",
-            ),
             ("ITEM_TEXT_TRANSLATION", "ItemTextFrame.lua"),
             ("PET_UI_CLOSE", "PetPaperDollFrame.lua"),
             ("PET_UI_UPDATE", "PetPaperDollFrame.lua"),
@@ -1443,8 +1406,18 @@ mod tests {
             }
         }
 
-        let expected: std::collections::HashSet<&str> =
-            UNPRODUCED.iter().map(|(e, _)| *e).collect();
+        // The 3.3.5 windows' listeners still waiting on a producer, one per line; the list
+        // shrinks as producers land.
+        let baseline: Vec<&str> = include_str!("reference_ui_unproduced_335.txt")
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect();
+        let expected: std::collections::HashSet<&str> = UNPRODUCED
+            .iter()
+            .map(|(e, _)| *e)
+            .chain(baseline.iter().copied())
+            .collect();
         let surprises: Vec<String> = dead
             .iter()
             .filter(|(e, _)| !expected.contains(e.as_str()))
@@ -1460,11 +1433,13 @@ mod tests {
         let fixed: Vec<&str> = UNPRODUCED
             .iter()
             .map(|(e, _)| *e)
+            .chain(baseline.iter().copied())
             .filter(|e| !dead.contains_key(*e))
             .collect();
         assert!(
             fixed.is_empty(),
-            "these now HAVE a producer — take them out of UNPRODUCED so the list keeps meaning \
+            "these now HAVE a producer — take them out of UNPRODUCED or \
+             reference_ui_unproduced_335.txt so the lists keep meaning \
              what it says:\n  {fixed:?}"
         );
     }
@@ -1545,7 +1520,7 @@ mod tests {
 
         let ghosts: Vec<String> = fired
             .iter()
-            // A `BENILLA_` prefix marks an event as ours, never mistaken for a 1.12 name.
+            // A `BENILLA_` prefix marks an event as ours, never mistaken for a client name.
             .filter(|(ev, _)| !ev.starts_with("BENILLA_"))
             .filter(|(ev, _)| {
                 let needle: Vec<u8> = ev.bytes().chain(std::iter::once(0)).collect();

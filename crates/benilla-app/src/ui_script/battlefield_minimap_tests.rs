@@ -4,11 +4,11 @@
 
 use benilla_ui::script::{
     BattlefieldFlagView, BattlefieldPositionView, QuadContent, UiScript, UnitState,
-    WorldMapContinentView, WorldMapLandmarkView, WorldMapOverlayView, WorldMapZoneView,
-    WorldStateUiView, ARROW_MODEL,
+    WorldMapAreaView, WorldMapContinentView, WorldMapLandmarkView, WorldMapOverlayView,
+    WorldMapZoneView, WorldStateUiView, ARROW_MODEL,
 };
 
-fn quiet(s: &UiScript) {
+pub(super) fn quiet(s: &UiScript) {
     assert!(s.errors().is_empty(), "script errors: {:#?}", s.errors());
     assert!(
         s.warnings().is_empty(),
@@ -19,7 +19,9 @@ fn quiet(s: &UiScript) {
 
 /// The full interface with the addon registered but not loaded. A player exists because stock
 /// OnLoads format `UnitName("player")` into their labels.
-fn session() -> UiScript {
+/// Every test here needs Assets' PlayerMiniArrowEffectFrame (`CreateMiniWorldMapArrowFrame`,
+/// worldmap_arrow.rs): `BattlefieldMinimap_OnLoad` indexes it (Blizzard_BattlefieldMinimap.lua:52-54).
+pub(super) fn session() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     s.set_unit(
@@ -28,9 +30,13 @@ fn session() -> UiScript {
             exists: true,
             name: Some("Probefour".into()),
             level: 60,
+            // `PVPBattleground_UpdateQueueStatus` concatenates `UnitFactionGroup`.
+            faction_group: Some("Alliance".into()),
             ..Default::default()
         }),
     );
+    // The app registers its CVars before any file loads; the toggle writes `showBattlefieldMinimap`.
+    s.register_cvars(crate::shipped_cvars::pairs());
     let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     super::test_ui::seat_chain_addon(&mut s, "Blizzard_BattlefieldMinimap");
@@ -85,7 +91,7 @@ fn catalog() -> Vec<WorldMapContinentView> {
         loc_rect: (10000.0, -10000.0, 10000.0, -10000.0),
         zone_grid: Vec::new(),
         zones: vec![WorldMapZoneView {
-            wma_id: 0,
+            wma_id: WSG_AREA,
             name: "Warsong Gulch".into(),
             area_id: 3277,
             map_file: "WarsongGulch".into(),
@@ -98,11 +104,28 @@ fn catalog() -> Vec<WorldMapContinentView> {
     }]
 }
 
+/// Warsong Gulch's `WorldMapArea.dbc` id: 3.3.5's `GetMapInfo` reads the displayed zone's row.
+const WSG_AREA: u32 = 443;
+
+fn areas() -> std::collections::HashMap<u32, WorldMapAreaView> {
+    let row = WorldMapAreaView {
+        id: WSG_AREA,
+        map_id: 489,
+        area_id: 3277,
+        map_file: "WarsongGulch".into(),
+        loc_rect: (1000.0, 0.0, 1000.0, 0.0),
+        display_map: -1,
+        ..Default::default()
+    };
+    std::collections::HashMap::from([(WSG_AREA, row)])
+}
+
 /// Put the session in a battleground and press SHIFT-M. The world-state push is the gate:
 /// `BattlefieldMinimap_Toggle` shows nothing unless `MiniMapBattlefieldFrame.status == "active"`
 /// or `GetNumWorldStateUI() > 0` (`Blizzard_BattlefieldMinimap.lua:21`).
-fn open(s: &mut UiScript) {
+pub(super) fn open(s: &mut UiScript) {
     s.set_world_map_catalog(catalog());
+    s.set_world_map_areas(areas(), Vec::new());
     s.set_world_map_explored(vec![0b110; 64]);
     s.set_world_map_feed(
         Some((1, 1)),
@@ -119,7 +142,11 @@ fn open(s: &mut UiScript) {
     }]);
     s.tick(0.0);
     s.fire_event("UPDATE_WORLD_STATES", vec![]);
-    s.run("ToggleBattlefieldMinimap()").expect("SHIFT-M");
+    // 3.3.5 opens the zone map anywhere, so it may already be up.
+    let up = s.eval::<bool>("return BattlefieldMinimap ~= nil and BattlefieldMinimap:IsShown()");
+    if !up.unwrap() {
+        s.run("ToggleBattlefieldMinimap()").expect("SHIFT-M");
+    }
     assert!(
         s.eval::<bool>("return BattlefieldMinimap:IsShown()")
             .unwrap(),
@@ -129,7 +156,7 @@ fn open(s: &mut UiScript) {
 
 fn update(s: &mut UiScript, elapsed: f64) {
     s.run(&format!(
-        "this = BattlefieldMinimap BattlefieldMinimap_OnUpdate({elapsed}) this = nil"
+        "BattlefieldMinimap_OnUpdate(BattlefieldMinimap, {elapsed})"
     ))
     .unwrap();
 }
@@ -159,12 +186,12 @@ fn arrow_centre(s: &mut UiScript) -> (f32, f32) {
     ((x * eff) as f32, (y * eff) as f32)
 }
 
-fn shown(s: &UiScript, frame: &str) -> bool {
+pub(super) fn shown(s: &UiScript, frame: &str) -> bool {
     s.eval::<bool>(&format!("return {frame}:IsShown()"))
         .unwrap_or_else(|e| panic!("{frame}:IsShown() — {e}"))
 }
 
-fn num(s: &UiScript, expr: &str) -> f64 {
+pub(super) fn num(s: &UiScript, expr: &str) -> f64 {
     s.eval::<f64>(&format!("return {expr}"))
         .unwrap_or_else(|e| panic!("{expr} — {e}"))
 }
@@ -187,14 +214,16 @@ fn the_addon_loads_on_demand_through_uiparents_own_road() {
         1,
         "the demand load ran"
     );
+    // 3.3.5's toggle opens the zone map anywhere but an arena, flagging it "2" outside a
+    // battleground (`BattlefieldMinimap_Toggle`, Blizzard_BattlefieldMinimap.lua:19-36).
     assert!(
-        !shown(&s, "BattlefieldMinimap"),
-        "…and a battle map does not open outside a battle: no active queue, no world-state rows"
+        shown(&s, "BattlefieldMinimap"),
+        "…and the zone map opens outside a battle too"
     );
     assert_eq!(
-        s.eval::<String>("return SHOW_BATTLEFIELD_MINIMAP").unwrap(),
-        "0",
-        "the RegisterForSave global stays at WorldStateFrame.lua's own boot value"
+        s.eval::<String>("return GetCVar('showBattlefieldMinimap')")
+            .unwrap(),
+        "2"
     );
 
     let missing: Option<String> = s
@@ -231,15 +260,16 @@ fn the_addon_loads_on_demand_through_uiparents_own_road() {
         "Interface\\WorldMap\\WorldMapPartyIcon"
     );
 
-    // The `ADDON_LOADED` arm seeds the saved table from `BattlefieldMinimapDefaults`,
-    assert_eq!(
-        s.eval::<(f64, bool, bool)>(
+    // The `ADDON_LOADED` arm seeds the saved table from `BattlefieldMinimapDefaults` (the opacity
+    // comes back through the slider as a single-precision float),
+    let (opacity, locked, players) = s
+        .eval::<(f64, bool, bool)>(
             "return BattlefieldMinimapOptions.opacity, BattlefieldMinimapOptions.locked, \
-             BattlefieldMinimapOptions.showPlayers"
+             BattlefieldMinimapOptions.showPlayers",
         )
-        .unwrap(),
-        (0.7, true, true)
-    );
+        .unwrap();
+    assert!((opacity - 0.7).abs() < 1e-6, "opacity {opacity}");
+    assert_eq!((locked, players), (true, true));
     // seats the tab at the `-225-CONTAINER_OFFSET_X` corner when no position is saved,
     let (point, relative, rel_point, x, y) = s
         .eval::<(String, String, String, f64, f64)>(
@@ -266,10 +296,6 @@ fn the_addon_loads_on_demand_through_uiparents_own_road() {
     );
 
     open(&mut s);
-    assert_eq!(
-        s.eval::<String>("return SHOW_BATTLEFIELD_MINIMAP").unwrap(),
-        "1"
-    );
     assert!(
         shown(&s, "BattlefieldMinimapTab"),
         "the tab comes up with it"
@@ -418,7 +444,7 @@ fn the_poi_pool_grows_from_the_landmarks_and_parks_its_tail() {
 
     let landmark = |name: &str, icon: u32, uv: (f32, f32)| WorldMapLandmarkView {
         map_link: 0,
-        battle_map: false,
+        battle_map: true,
         name: name.into(),
         description: String::new(),
         texture_index: icon,
@@ -433,7 +459,8 @@ fn the_poi_pool_grows_from_the_landmarks_and_parks_its_tail() {
 
     assert_eq!(s.eval::<i64>("return NUM_BATTLEFIELDMAP_POIS").unwrap(), 2);
     assert!(shown(&s, "BattlefieldMinimapPOI1") && shown(&s, "BattlefieldMinimapPOI2"));
-    // Cell 6 is column 6, row 0; cell 9 is column 1, row 1; `coordIncrement` is 16/128 = 0.125.
+    // 3.3.5's atlas is 14 columns of 18 px on a 256-px sheet, each cell inset 1 px
+    // (`WorldMap_GetPOITextureCoords`, WorldMapFrame.lua:496-512): cells 6 and 9 are both row 0.
     let cell = |s: &UiScript, n: u32| -> (f64, f64) {
         let (l, t, ..): (f64, f64, f64, f64, f64, f64, f64, f64) = s
             .eval(&format!(
@@ -442,8 +469,8 @@ fn the_poi_pool_grows_from_the_landmarks_and_parks_its_tail() {
             .unwrap();
         (l, t)
     };
-    assert_eq!(cell(&s, 1), (0.75, 0.0));
-    assert_eq!(cell(&s, 2), (0.125, 0.125));
+    assert_eq!(cell(&s, 1), (109.0 / 256.0, 1.0 / 256.0));
+    assert_eq!(cell(&s, 2), (163.0 / 256.0, 1.0 / 256.0));
     // CENTER on the window's TOPLEFT at (x × width, -y × height): v runs down, frame y runs up.
     assert_eq!(
         s.eval::<(String, String, String, f64, f64)>(
@@ -483,7 +510,7 @@ fn the_poi_pool_grows_from_the_landmarks_and_parks_its_tail() {
     assert!(shown(&s, "BattlefieldMinimapPOI1"));
     assert_eq!(
         cell(&s, 1),
-        (0.125, 0.125),
+        (163.0 / 256.0, 1.0 / 256.0),
         "slot 1 was re-seated on the surviving landmark, not left on the stale one"
     );
     assert!(!shown(&s, "BattlefieldMinimapPOI2"), "slot 2 parked hidden");
@@ -586,8 +613,13 @@ fn the_battleground_blips_and_the_flag_follow_the_position_family() {
         Some("BattlefieldMinimapRaid1"),
         "the blip is what the cursor is over"
     );
+    // Needs Assets' `PlayerIsPVPInactive` (a group member's name, never raising).
     s.mouse_move(bx, by);
-    assert!(s.eval::<bool>("return GameTooltip:IsShown()").unwrap());
+    assert!(
+        s.eval::<bool>("return GameTooltip:IsShown()").unwrap(),
+        "the blip's OnEnter shows the tooltip: {:?}",
+        s.errors()
+    );
     assert_eq!(
         s.eval::<String>("return GameTooltipTextLeft1:GetText()")
             .unwrap(),
@@ -732,7 +764,7 @@ fn the_tab_follows_the_window_fades_in_on_hover_and_gates_its_drag_on_the_lock()
     assert_eq!(
         s.eval::<String>("return BattlefieldMinimapTabText:GetText()")
             .unwrap(),
-        "Battle Map",
+        s.eval::<String>("return BATTLEFIELD_MINIMAP").unwrap(),
         "the tab wears BATTLEFIELD_MINIMAP, resized by PanelTemplates_TabResize in the OnShow"
     );
     assert_eq!(
@@ -839,8 +871,10 @@ fn the_tab_follows_the_window_fades_in_on_hover_and_gates_its_drag_on_the_lock()
     s.run("ToggleBattlefieldMinimap()").unwrap();
     assert!(!shown(&s, "BattlefieldMinimap") && !shown(&s, "BattlefieldMinimapTab"));
     assert_eq!(
-        s.eval::<String>("return SHOW_BATTLEFIELD_MINIMAP").unwrap(),
-        "0"
+        s.eval::<String>("return GetCVar('showBattlefieldMinimap')")
+            .unwrap(),
+        "0",
+        "the toggle's close arm clears the CVar (Blizzard_BattlefieldMinimap.lua:20)"
     );
 
     s.run("ToggleBattlefieldMinimap()").unwrap();
@@ -849,116 +883,9 @@ fn the_tab_follows_the_window_fades_in_on_hover_and_gates_its_drag_on_the_lock()
     s.tick(0.0);
     s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
     assert!(
-        !shown(&s, "BattlefieldMinimap"),
-        "no world-state rows and no active queue: the window hides itself"
-    );
-    quiet(&s);
-}
-
-/// `BattlefieldMinimap_SetOpacity` reads no CVar: its input is the shared `OpacityFrameSlider`, and
-/// what persists is the `SavedVariablesPerCharacter` table and `SHOW_BATTLEFIELD_MINIMAP`. The
-/// border and the twelve tiles take `1 - value`; the overlays, close button and corner take a
-/// further 0.15 off unless the alpha is under 0.15 (`Blizzard_BattlefieldMinimap.lua:376-390`).
-#[test]
-fn the_dropdown_and_the_opacity_slider_drive_the_saved_options() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = session();
-    open(&mut s);
-
-    // A real right-click: the tab registers `RightButtonUp` (`Blizzard_BattlefieldMinimap.xml:96`).
-    s.run("BattlefieldMinimapTab:Click(\"RightButton\")")
-        .unwrap();
-    assert!(shown(&s, "DropDownList1"), "the menu opened");
-    let row = |s: &UiScript, n: u32| -> (String, bool) {
-        (
-            s.eval(&format!("return DropDownList1Button{n}:GetText()"))
-                .unwrap(),
-            s.eval(&format!("return DropDownList1Button{n}Check:IsShown()"))
-                .unwrap(),
-        )
-    };
-    // Both toggles are checked off `BattlefieldMinimapDefaults`; the opacity row is an action.
-    assert_eq!(row(&s, 1), ("Show Teammates".into(), true));
-    assert_eq!(row(&s, 2), ("Lock Battle Map".into(), true));
-    assert_eq!(row(&s, 3), ("Change Opacity".into(), false));
-
-    s.run("DropDownList1Button1:Click()").unwrap();
-    assert!(
-        !s.eval::<bool>("return BattlefieldMinimapOptions.showPlayers")
-            .unwrap(),
-        "row 1 flips Show Teammates"
-    );
-    s.run("BattlefieldMinimapTab:Click(\"RightButton\")")
-        .unwrap();
-    assert_eq!(
-        row(&s, 1),
-        ("Show Teammates".into(), false),
-        "…and the menu re-initializes off the new value"
-    );
-    s.run("DropDownList1Button2:Click()").unwrap();
-    assert!(
-        !s.eval::<bool>("return BattlefieldMinimapOptions.locked")
-            .unwrap(),
-        "row 2 flips the lock"
-    );
-
-    // Row 3 re-anchors the shared opacity frame on the battle map and points its hooks here.
-    s.run("BattlefieldMinimapTab:Click(\"RightButton\")")
-        .unwrap();
-    s.run("DropDownList1Button3:Click()").unwrap();
-    assert!(shown(&s, "OpacityFrame"));
-    assert_eq!(
-        s.eval::<(String, String, String, f64, f64)>(
-            "local p, r, rp, x, y = OpacityFrame:GetPoint(1) return p, r:GetName(), rp, x, y"
-        )
-        .unwrap(),
-        (
-            "TOPRIGHT".into(),
-            "BattlefieldMinimap".into(),
-            "TOPLEFT".into(),
-            0.0,
-            7.0
-        )
-    );
-
-    // The slider's `<OnValueChanged>` repaints through `OpacityFrame.opacityFunc`.
-    s.run("OpacityFrameSlider:SetValue(0.25)").unwrap();
-    let alpha = |s: &UiScript, f: &str| num(s, &format!("{f}:GetAlpha()"));
-    for f in [
-        "BattlefieldMinimapBackground",
-        "BattlefieldMinimap1",
-        "BattlefieldMinimap12",
-    ] {
-        assert!(
-            (alpha(&s, f) - 0.75).abs() < 1e-6,
-            "{f} takes the plain 1 - value"
-        );
-    }
-    for f in [
-        "BattlefieldMinimapOverlay1",
-        "BattlefieldMinimapCloseButton",
-        "BattlefieldMinimapCorner",
-    ] {
-        assert!(
-            (alpha(&s, f) - 0.6).abs() < 1e-6,
-            "{f} takes a further 0.15 off, got {}",
-            alpha(&s, f)
-        );
-    }
-    // At the bottom of the second tier the subtraction stops rather than going negative.
-    s.run("OpacityFrameSlider:SetValue(0.9)").unwrap();
-    assert!((alpha(&s, "BattlefieldMinimapBackground") - 0.1).abs() < 1e-6);
-    assert!(
-        (alpha(&s, "BattlefieldMinimapOverlay1") - 0.1).abs() < 1e-6,
-        "under 0.15 the overlays keep the plain alpha"
-    );
-
-    // Dismissing the frame runs `saveOpacityFunc`, which writes the saved table.
-    s.run("OpacityFrameCloseButton:Click()").unwrap();
-    assert!(!shown(&s, "OpacityFrame"));
-    assert!(
-        (num(&s, "BattlefieldMinimapOptions.opacity") - 0.9).abs() < 1e-6,
-        "the close saved the slider's value for next login"
+        shown(&s, "BattlefieldMinimap"),
+        "3.3.5's zone map outlives the battleground: the PLAYER_ENTERING_WORLD arm only repaints \
+         (Blizzard_BattlefieldMinimap.lua:86-90)"
     );
     quiet(&s);
 }

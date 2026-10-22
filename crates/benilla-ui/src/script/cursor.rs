@@ -231,12 +231,13 @@ pub(crate) fn queue_cursor_update(model: &mut Model) {
     }
 }
 
-/// Queue `ITEM_LOCK_CHANGED(bag, slot)` for a source slot that a pickup locks or a put-down frees.
+/// Queue `ITEM_LOCK_CHANGED` for a source slot that a pickup locks or a put-down frees: `(bag, slot)`
+/// for a container slot, the inventory slot alone for a worn one, which 3.3.5's
+/// `PaperDollItemSlotButton_OnEvent` matches as `not arg2` (PaperDollFrame.lua:1196-1197).
 pub(crate) fn queue_lock_changed(model: &mut Model, bag: i64, slot: u32) {
-    model.pending_events.push((
-        "ITEM_LOCK_CHANGED".to_string(),
-        vec![ScriptValue::Int(bag), ScriptValue::Int(i64::from(slot))],
-    ));
+    let slot = ScriptValue::Int(i64::from(slot));
+    let args = if bag == EQUIPMENT_BAG { vec![slot] } else { vec![ScriptValue::Int(bag), slot] };
+    model.pending_events.push(("ITEM_LOCK_CHANGED".to_string(), args));
 }
 
 /// Queue `DELETE_ITEM_CONFIRM(name, quality)` for an item dropped on the world. The payload stays

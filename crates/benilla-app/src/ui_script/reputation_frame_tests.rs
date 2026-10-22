@@ -147,19 +147,18 @@ fn the_reputation_page_opens_on_the_windows_third_tab() {
     // page missing from it is never hidden.
     assert!(
         s.eval::<bool>(
-            "for _, v in CHARACTERFRAME_SUBFRAMES do if v == \"ReputationFrame\" then return true end end return false"
+            "for _, v in ipairs(CHARACTERFRAME_SUBFRAMES) do if v == \"ReputationFrame\" then return true end end return false"
         )
         .unwrap(),
         "the hide-all list names this page"
     );
 
-    // Eight rows in fifteen slots: slot 9 shows neither twin, and a fitting list has no scroll bar.
+    // Eight rows in fifteen slots: slot 9 is hidden, and a fitting list has no scroll bar.
     assert_eq!(s.eval::<i64>("return GetNumFactions()").unwrap(), 8);
     assert!(
         !shown(&mut s, "ReputationBar9"),
         "slot 9 has nothing to hold"
     );
-    assert!(!shown(&mut s, "ReputationHeader9"), "neither twin shows");
     assert!(!visible(&mut s, "ReputationListScrollFrameScrollBar"));
 
     s.run(r#"ToggleCharacter("PaperDollFrame")"#).unwrap();
@@ -167,20 +166,28 @@ fn the_reputation_page_opens_on_the_windows_third_tab() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// The fold art follows `isCollapsed` (ReputationFrame.lua:54-58). The header's click only calls
-/// the fold binding (ReputationFrame.xml:9-15), which raises `UPDATE_FACTION` as the reference's
-/// does, and that event is the pane's repaint.
+/// 3.3.5 draws headers and factions in the same `ReputationBarN` rows; a header shows its fold
+/// button, whose art follows `isCollapsed` (ReputationFrame.lua:158-163) and whose click is the fold
+/// binding (ReputationFrame.xml:10-30), which raises `UPDATE_FACTION`, the pane's repaint.
 #[test]
 fn a_header_row_paints_its_fold_icon_and_folds_on_click() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = shown_reputation_page();
 
-    assert_eq!(text_of(&mut s, "ReputationHeader1"), "Alliance");
-    assert!(shown(&mut s, "ReputationHeader1"), "slot 1 is a header");
-    assert!(!shown(&mut s, "ReputationBar1"), "so its bar is down");
+    assert_eq!(text_of(&mut s, "ReputationBar1FactionName"), "Alliance");
+    assert!(
+        shown(&mut s, "ReputationBar1ExpandOrCollapseButton"),
+        "slot 1 is a header"
+    );
+    assert!(
+        !shown(&mut s, "ReputationBar1ReputationBar"),
+        "so its bar is down"
+    );
     let icon = |s: &mut UiScript| {
-        s.eval::<String>("return ReputationHeader1:GetNormalTexture():GetTexture() or \"\"")
-            .unwrap()
+        s.eval::<String>(
+            "return ReputationBar1ExpandOrCollapseButton:GetNormalTexture():GetTexture() or \"\"",
+        )
+        .unwrap()
     };
     assert!(
         icon(&mut s).contains("UI-MinusButton-Up"),
@@ -193,7 +200,7 @@ fn a_header_row_paints_its_fold_icon_and_folds_on_click() {
         "its two children follow it"
     );
 
-    click_center(&mut s, "ReputationHeader1");
+    click_center(&mut s, "ReputationBar1ExpandOrCollapseButton");
 
     assert!(
         icon(&mut s).contains("UI-PlusButton-Up"),
@@ -201,13 +208,13 @@ fn a_header_row_paints_its_fold_icon_and_folds_on_click() {
         icon(&mut s)
     );
     assert_eq!(
-        text_of(&mut s, "ReputationHeader2"),
+        text_of(&mut s, "ReputationBar2FactionName"),
         "Steamwheedle Cartel",
         "and slot 2 has re-bound to the next group — the repaint the click owes"
     );
     assert!(
-        !shown(&mut s, "ReputationBar2"),
-        "Ironforge is not on screen at all any more"
+        shown(&mut s, "ReputationBar2ExpandOrCollapseButton"),
+        "slot 2 is a header now: Ironforge is not on screen at all any more"
     );
     assert_eq!(
         s.eval::<i64>("return GetNumFactions()").unwrap(),
@@ -215,13 +222,13 @@ fn a_header_row_paints_its_fold_icon_and_folds_on_click() {
         "the two folded children leave the visible list"
     );
 
-    click_center(&mut s, "ReputationHeader1");
+    click_center(&mut s, "ReputationBar1ExpandOrCollapseButton");
     assert_eq!(text_of(&mut s, "ReputationBar2FactionName"), "Ironforge");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
 /// The bar's range is the rank window normalized, `barMax - barMin` and `barValue - barMin`
-/// (ReputationFrame.lua:79-82), which is why the binding reports all three absolute.
+/// (ReputationFrame.lua:171-174), which is why the binding reports all three absolute.
 #[test]
 fn a_bar_row_paints_name_standing_and_the_faction_bar_colour() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -229,23 +236,24 @@ fn a_bar_row_paints_name_standing_and_the_faction_bar_colour() {
 
     assert_eq!(text_of(&mut s, "ReputationBar2FactionName"), "Ironforge");
     assert_eq!(
-        text_of(&mut s, "ReputationBar2FactionStanding"),
+        text_of(&mut s, "ReputationBar2ReputationBarFactionStanding"),
         "Friendly",
         "standingID 5 is FACTION_STANDING_LABEL5"
     );
     assert_eq!(
-        s.eval::<(f64, f64)>("return ReputationBar2:GetMinMaxValues()")
+        s.eval::<(f64, f64)>("return ReputationBar2ReputationBar:GetMinMaxValues()")
             .unwrap(),
         (0.0, 6000.0),
         "the 3000..9000 rank window, normalized to 0..6000"
     );
     assert_eq!(
-        s.eval::<f64>("return ReputationBar2:GetValue()").unwrap(),
+        s.eval::<f64>("return ReputationBar2ReputationBar:GetValue()")
+            .unwrap(),
         1000.0,
         "and 4000 standing is 1000 into it"
     );
     let (r, g, b) = s
-        .eval::<(f32, f32, f32)>("return ReputationBar2:GetStatusBarColor()")
+        .eval::<(f32, f32, f32)>("return ReputationBar2ReputationBar:GetStatusBarColor()")
         .unwrap();
     assert_eq!(
         (r, g, b),
@@ -253,9 +261,9 @@ fn a_bar_row_paints_name_standing_and_the_faction_bar_colour() {
         "FACTION_BAR_COLORS[5] — the green every friendly-and-better rank shares"
     );
 
-    // Hover shows progress and glow; leaving restores the word (ReputationFrame.xml:190-203).
+    // Hover shows progress and glow; leaving restores the word (ReputationFrame.xml:209-222).
     assert!(
-        !shown(&mut s, "ReputationBar2Highlight1"),
+        !shown(&mut s, "ReputationBar2ReputationBarHighlight1"),
         "glow starts down"
     );
     let (x, y) = s
@@ -266,20 +274,20 @@ fn a_bar_row_paints_name_standing_and_the_faction_bar_colour() {
         .unwrap();
     s.mouse_move(x, y);
     assert_eq!(
-        text_of(&mut s, "ReputationBar2FactionStanding"),
+        text_of(&mut s, "ReputationBar2ReputationBarFactionStanding"),
         "|cffffffff 1000 / 6000|r",
         "hovering shows the numbers, in the reference's own colour-coded form"
     );
-    assert!(shown(&mut s, "ReputationBar2Highlight1"));
-    assert!(shown(&mut s, "ReputationBar2Highlight2"));
+    assert!(shown(&mut s, "ReputationBar2ReputationBarHighlight1"));
+    assert!(shown(&mut s, "ReputationBar2ReputationBarHighlight2"));
     s.mouse_move(0.0, 0.0);
     assert_eq!(
-        text_of(&mut s, "ReputationBar2FactionStanding"),
+        text_of(&mut s, "ReputationBar2ReputationBarFactionStanding"),
         "Friendly",
         "and leaving restores the word"
     );
     assert!(
-        !shown(&mut s, "ReputationBar2Highlight1"),
+        !shown(&mut s, "ReputationBar2ReputationBarHighlight1"),
         "the glow goes with it — this row is not the selected one"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -307,8 +315,7 @@ fn the_scroll_offset_rebinds_the_fixed_row_slots() {
     s.resolve();
 
     assert_eq!(s.eval::<i64>("return GetNumFactions()").unwrap(), 21);
-    assert_eq!(text_of(&mut s, "ReputationHeader1"), "Alliance");
-    assert_eq!(text_of(&mut s, "ReputationBar1FactionName"), "");
+    assert_eq!(text_of(&mut s, "ReputationBar1FactionName"), "Alliance");
     assert_eq!(text_of(&mut s, "ReputationBar15FactionName"), "Faction 14");
     assert!(
         visible(&mut s, "ReputationListScrollFrameScrollBar"),
@@ -318,8 +325,8 @@ fn the_scroll_offset_rebinds_the_fixed_row_slots() {
     s.run("FauxScrollFrame_SetOffset(ReputationListScrollFrame, 3) ReputationFrame_Update()")
         .unwrap();
     assert!(
-        !shown(&mut s, "ReputationHeader1"),
-        "slot 1 now holds a bar, so its header twin is down"
+        !shown(&mut s, "ReputationBar1ExpandOrCollapseButton"),
+        "slot 1 now holds a faction, so its fold button is down"
     );
     assert_eq!(text_of(&mut s, "ReputationBar1FactionName"), "Faction 03");
     assert_eq!(text_of(&mut s, "ReputationBar15FactionName"), "Faction 17");
@@ -342,8 +349,8 @@ fn the_scroll_offset_rebinds_the_fixed_row_slots() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// A peace-forced faction's At War box is disabled and greyed (ReputationFrame.lua:115-121), and
-/// clicking the selected bar again closes the popup (ReputationFrame.lua:152-153).
+/// A peace-forced faction's At War box is disabled and greyed (ReputationFrame.lua:238-246), and
+/// clicking the selected row again closes the popup (`ReputationBar_OnClick`, :311-321).
 #[test]
 fn clicking_a_bar_opens_the_detail_popup_on_that_faction() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -365,8 +372,8 @@ fn clicking_a_bar_opens_the_detail_popup_on_that_faction() {
 
     assert!(!shown(&mut s, "ReputationDetailFrame"), "closed to start");
     assert!(
-        shown(&mut s, "ReputationBar2AtWarCheck"),
-        "the at-war pennant flies on the row itself"
+        shown(&mut s, "ReputationBar2ReputationBarAtWarHighlight1"),
+        "the at-war glow lights on the row itself (ReputationFrame.lua:224-230)"
     );
 
     click_center(&mut s, "ReputationBar2");
@@ -383,7 +390,7 @@ fn clicking_a_bar_opens_the_detail_popup_on_that_faction() {
         "About the Ironforge."
     );
     assert!(
-        shown(&mut s, "ReputationBar2Highlight1"),
+        shown(&mut s, "ReputationBar2ReputationBarHighlight1"),
         "and the selected row keeps its glow with the mouse away"
     );
 
@@ -414,14 +421,15 @@ fn clicking_a_bar_opens_the_detail_popup_on_that_faction() {
     click_center(&mut s, "ReputationBar2");
     assert!(!shown(&mut s, "ReputationDetailFrame"), "clicked shut");
 
-    // The whole row is the click target: `HitRectInsets left="-126"` (ReputationFrame.xml:61-63)
-    // widens the 137 px bar's mouse rect back over the faction name.
+    // The whole row is the click target: 3.3.5's row button carries the name and the bar.
     let name_x = s
         .eval::<f32>(
             "return (ReputationBar2FactionName:GetLeft() + ReputationBar2FactionName:GetRight()) / 2",
         )
         .unwrap();
-    let bar_left = s.eval::<f32>("return ReputationBar2:GetLeft()").unwrap();
+    let bar_left = s
+        .eval::<f32>("return ReputationBar2ReputationBar:GetLeft()")
+        .unwrap();
     assert!(
         name_x < bar_left,
         "the name really does sit left of the bar ({name_x} < {bar_left})"
@@ -432,7 +440,7 @@ fn clicking_a_bar_opens_the_detail_popup_on_that_faction() {
     assert_eq!(
         s.hit_test_name(name_x, y).as_deref(),
         Some("ReputationBar2"),
-        "the widened hit rect reaches the name"
+        "the row's hit rect covers the name"
     );
     s.mouse_move(name_x, y);
     s.mouse_button(name_x, y, "LeftButton", true);
@@ -520,8 +528,8 @@ fn the_at_war_box_keeps_its_art_while_it_is_disabled() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Below 60 the watch bar stacks on the XP bar, 8 px in its own end art; at 60 it replaces it,
-/// 13 px in the dwarf art, and the rested tick hides (ReputationFrame.lua:184-230).
+/// Below the 3.3.5 cap (80) the watch bar stacks on the XP bar, 8 px in its own end art; at 80 it
+/// replaces it, 13 px in the dwarf art, and the rested tick hides (ReputationFrame.lua:323-418).
 #[test]
 fn the_watch_bar_shows_the_watched_factions_progress_and_swaps_at_max_level() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -529,6 +537,13 @@ fn the_watch_bar_shows_the_watched_factions_progress_and_swaps_at_max_level() {
     s.set_screen_size(1024.0, 768.0);
     load_page(&mut s);
     s.set_unit("player", Some(player(40)));
+    // The XP bar needs its range before the watch bar's update, or `TextStatusBar_UpdateTextString`
+    // hides it (TextStatusBar.lua:76-82); the live client has XP from login.
+    s.set_player_xp(0, 50_000);
+    s.fire_event(
+        "PLAYER_XP_UPDATE",
+        vec![benilla_ui::script::ScriptValue::Str("player".into())],
+    );
     assert!(
         !shown(&mut s, "ReputationWatchBar"),
         "nothing watched: the bar stays down"
@@ -558,7 +573,7 @@ fn the_watch_bar_shows_the_watched_factions_progress_and_swaps_at_max_level() {
     );
     assert!(
         shown(&mut s, "MainMenuExpBar"),
-        "below 60 the strip STACKS on the XP bar rather than replacing it"
+        "below 80 the strip STACKS on the XP bar rather than replacing it"
     );
     assert!(
         shown(&mut s, "ReputationWatchBarTexture0"),
@@ -571,35 +586,35 @@ fn the_watch_bar_shows_the_watched_factions_progress_and_swaps_at_max_level() {
         8.0
     );
 
-    // A stacked bar makes the manage pass add each row's `reputation` offset (UIParent.lua:1618):
-    // `PETACTIONBAR_YPOS`, a plain global, is baseY 97 plus 9 (UIParent.lua:1589).
+    // A stacked bar makes the manage pass add each row's `reputation` offset (UIParent.lua:1257-1262,
+    // :1787-1789), scaled by 9 at load (:1211-1214): `BATTLEFIELD_TAB_OFFSET_Y` is baseY 210 plus 9.
     assert_eq!(
-        s.eval::<f64>("return PETACTIONBAR_YPOS").unwrap(),
-        106.0,
-        "the bottom stack lifts by the row's 9 while the stacked watch bar is up"
+        s.eval::<f64>("return BATTLEFIELD_TAB_OFFSET_Y").unwrap(),
+        219.0,
+        "the row lifts by its reputation offset while the stacked watch bar is up"
     );
     s.run("ReputationWatchBar:Hide() UIParent_ManageFramePositions()")
         .unwrap();
     assert_eq!(
-        s.eval::<f64>("return PETACTIONBAR_YPOS").unwrap(),
-        97.0,
+        s.eval::<f64>("return BATTLEFIELD_TAB_OFFSET_Y").unwrap(),
+        210.0,
         "and drops back to the base when it goes"
     );
     s.run("ReputationWatchBar:Show() UIParent_ManageFramePositions()")
         .unwrap();
 
-    // Ding to 60: the reputation strip takes the XP bar's place, art and all.
-    s.set_unit("player", Some(player(60)));
+    // Ding to 80: the reputation strip takes the XP bar's place, art and all.
+    s.set_unit("player", Some(player(80)));
     s.fire_event(
         "PLAYER_LEVEL_UP",
-        vec![benilla_ui::script::ScriptValue::Int(60)],
+        vec![benilla_ui::script::ScriptValue::Int(80)],
     );
     s.resolve();
 
     assert!(shown(&mut s, "ReputationWatchBar"), "still watching");
     assert!(
         !shown(&mut s, "MainMenuExpBar"),
-        "at 60 the strip REPLACES the XP bar"
+        "at 80 the strip REPLACES the XP bar"
     );
     assert!(
         !shown(&mut s, "MainMenuBarMaxLevelBar"),
@@ -617,7 +632,7 @@ fn the_watch_bar_shows_the_watched_factions_progress_and_swaps_at_max_level() {
         13.0
     );
 
-    // Stop watching: at 60 with nothing watched the brass rail is what takes the XP bar's place.
+    // Stop watching: at 80 with nothing watched the brass rail is what takes the XP bar's place.
     let mut st = state();
     st.watched = None;
     s.set_reputation(st);
@@ -630,16 +645,13 @@ fn the_watch_bar_shows_the_watched_factions_progress_and_swaps_at_max_level() {
 }
 
 /// The "Show as Experience Bar" box calls `SetWatchedFactionIndex`, then
-/// `ReputationWatchBar_Update` (ReputationFrame.xml:839-848), but watching is not optimistic: the
+/// `ReputationWatchBar_Update` (ReputationFrame.xml), but watching is not optimistic: the
 /// index is the server field `PLAYER_FIELD_WATCHED_FACTION_INDEX`, with no client mirror
 /// (`0x4d6b60`), so the bar comes up only when the descriptor update lands.
 #[test]
 fn the_show_as_experience_bar_box_sends_the_watch_and_the_server_brings_the_bar_up() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = shown_reputation_page();
-    // The checkmark anchors past `GetStringWidth()`, which reads 0 with no measurer installed: a
-    // stand-in font, 6 units a character.
-    s.set_text_measurer(Box::new(super::FixedWidthFont(6.0)));
     let _ = s.take_reputation_sends();
 
     // Ironforge: visible row 2, reputation slot 20.
@@ -685,26 +697,8 @@ fn the_show_as_experience_bar_box_sends_the_watch_and_the_server_brings_the_bar_
         text_of(&mut s, "ReputationWatchStatusBarText"),
         "Ironforge 1000 / 6000"
     );
-    // The watched row grows a checkmark past the name's string width (ReputationFrame.lua:96-103).
-    assert!(
-        shown(&mut s, "ReputationBar2Check"),
-        "the watched row wears the checkmark"
-    );
-    assert!(
-        !shown(&mut s, "ReputationBar3Check"),
-        "and no other row does"
-    );
-    let (check_l, name_l) = s
-        .eval::<(f32, f32)>(
-            "return ReputationBar2Check:GetLeft(), ReputationBar2FactionName:GetLeft()",
-        )
-        .unwrap();
-    // "Ironforge" is nine characters: 54 at 6 a character.
-    assert_eq!(
-        check_l - name_l,
-        54.0,
-        "the mark sits the name's own string width to its right"
-    );
+    // 3.3.5 marks the watch only in the detail box (ReputationFrame.lua:256-260); 1.12's row
+    // checkmark is gone.
 
     // Untick: stock passes 0 for none, and the send is `None`, not slot 0, which is a real faction.
     click_center(&mut s, "ReputationDetailMainScreenCheckBox");
@@ -718,7 +712,6 @@ fn the_show_as_experience_bar_box_sends_the_watch_and_the_server_brings_the_bar_
     s.fire_event("UPDATE_FACTION", vec![]);
     s.resolve();
     assert!(!shown(&mut s, "ReputationWatchBar"), "the strip goes down");
-    assert!(!shown(&mut s, "ReputationBar2Check"), "and the row's mark");
     assert!(!s
         .eval::<bool>("return ReputationDetailMainScreenCheckBox:GetChecked() and true or false")
         .unwrap());

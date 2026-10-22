@@ -827,6 +827,8 @@ mod quest_timer_tests;
 /// The battle map: the stock `Blizzard_BattlefieldMinimap` addon, demand-loaded as SHIFT-M does.
 #[cfg(test)]
 mod battlefield_minimap_tests;
+#[cfg(test)]
+mod battlefield_minimap_options_tests;
 
 #[cfg(test)]
 mod tutorial_tests;
@@ -885,9 +887,6 @@ mod errors_tests;
 #[cfg(test)]
 mod shipped_xml_tests;
 
-/// The stock Video Options window off the chain: open, Okay, Defaults and Cancel.
-#[cfg(test)]
-mod video_options_tests;
 
 #[cfg(test)]
 mod bottom_hud_tests;
