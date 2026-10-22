@@ -84,6 +84,17 @@ pub(crate) fn columns(
         "GroundEffectTexture" => (7, 11, |m| {
             m.same(0, 5).run(5, 9, 2);
         }),
+        // Build-12340 WoWDBDefs: `PhaseShift` follows `AreaID`, locale blocks widen, and 1.12's
+        // unread column after the tooltip is gone.
+        "WorldStateUI" => (39, 63, |m| {
+            m.same(0, 3)
+                .run(3, 4, 1)
+                .loc(4, 5)
+                .loc(13, 22)
+                .run(23, 39, 3)
+                .loc(26, 42)
+                .run(35, 59, 4);
+        }),
         _ => return None,
     };
     if schema_len != vanilla || file_fields != wrath {
