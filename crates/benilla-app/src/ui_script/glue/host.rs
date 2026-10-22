@@ -22,6 +22,10 @@ fn open_status(script: &mut UiScript, which: &str, text: &str) {
 
 /// The stock glue screens' calls and the session's progress into them, while the stock glue hosts
 /// the screen: login and its status dialog, the realm list, and character select.
+///
+/// A one-shot VM consumer by design: its VM is the glue VM `enter_stock_login`/`enter_stock_select`
+/// install at OnEnter(Login)/OnEnter(CharSelect), before any Update, and it runs only while that
+/// VM hosts the screen (`stock_glue_up`); the in-game interface is never up here.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn stock_glue(
     script: Option<NonSendMut<UiScript>>,

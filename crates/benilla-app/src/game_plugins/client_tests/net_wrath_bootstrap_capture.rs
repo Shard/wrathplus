@@ -27,7 +27,9 @@ fn one_owner_keeps_the_bootstrap_published_after_connected() {
     };
     crate::net::handlers::dispatch(app.world_mut(), vec![connected()]);
     let mut adapter = WrathEventAdapter::new();
-    for (opcode, body) in [(0x02ef, 0u32.to_le_bytes()), (0x04ab, 3u32.to_le_bytes())] {
+    // AzerothCore's reply to the stock auth session: 23 standard-CRC records, no banned addon.
+    let addon_info = [[2, 1, 0, 0, 0, 0, 0, 0].repeat(23), vec![0; 4]].concat();
+    for (opcode, body) in [(0x02ef, addon_info), (0x04ab, 3u32.to_le_bytes().to_vec())] {
         let WrathDispatch::Handled { session_events, .. } =
             adapter.dispatch(opcode, &body, 0).unwrap()
         else {
@@ -38,7 +40,19 @@ fn one_owner_keeps_the_bootstrap_published_after_connected() {
     assert_eq!(
         app.world().resource::<NativeBootstrapPackets>().0,
         VecDeque::from([
-            Packet::AddonInfo { banned: vec![] },
+            Packet::AddonInfo {
+                addons: benilla_protocol::types::STOCK_SECURE_ADDONS
+                    .iter()
+                    .map(|a| benilla_protocol::wrath_bootstrap::AddonVerdict {
+                        name: a.name,
+                        state: 2,
+                        public_key: None,
+                        key_stamp: Some(0),
+                        url: None,
+                    })
+                    .collect(),
+                banned: vec![],
+            },
             Packet::ClientCacheVersion { version: 3 },
         ])
     );

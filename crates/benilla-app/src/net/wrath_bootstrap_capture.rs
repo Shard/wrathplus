@@ -1,6 +1,6 @@
 //! Build 12340's auth bootstrap packets, kept in arrival order: `SMSG_ADDON_INFO`'s banned list
 //! (whose MD5 match against the loaded addons is not built) and `SMSG_CLIENTCACHE_VERSION` (no
-//! persistent `WDB` cache here to invalidate). Whether the addon reply arrived already reaches
+//! persistent `WDB` cache here to invalidate). Which addons the reply marked secure already reaches
 //! `SessionEvent::Connected`'s `addon_info`.
 use super::NetHandlerApp;
 use benilla_protocol::{wrath_bootstrap::Packet, SessionEvent, SessionEventKind};
