@@ -730,17 +730,33 @@ What only separate crates report, as the dry run counted it:
 | `include_dir!`/`CARGO_MANIFEST_DIR` assets | `assets/ui` | `move-layers.sh` moves it with `ui_script` and points `run_mode::dev_source_dir` there |
 | `embedded://` shader paths | 5 | fixed ahead (71212f59: served from `CARGO_CRATE_NAME`) |
 | Whole-tree source scans | 7 unit tests | fixed ahead (71212f59: `app_core::source_tree`) |
+| Tests that name a crate or its folder | the dry run's 7 failures | fixed ahead (Wire B's last pre-move unit, below) |
 
-**Still to fix before the move** (the seven failures; all crate-agnostic rewrites that pass today):
-`the_movement_kinds_other_handlers_are_pinned` and `the_cvar_hooks_register_in_plugin_order`
-compare `type_name` strings, which gain the crate prefix (compare with it stripped);
-`ui_session`'s portrait test anchors on `pub(crate) fn feed_interact_npc` (anchor on
-`fn feed_interact_npc(`); `tests/cover_input_wall.rs`, `message_keys.rs`, `ui_script_wall.rs` and
-`world_api_wall.rs` read `crates/benilla-app/src` (read every `crates/benilla-app*/src`).
+**Fixed ahead, the seven failures**: `the_movement_kinds_other_handlers_are_pinned` and
+`the_cvar_hooks_register_in_plugin_order` compare `type_name` strings by module path, with the
+crate prefix dropped; `ui_session`'s portrait test anchors on `fn feed_interact_npc(`, which the
+widening to `pub` keeps; `tests/cover_input_wall.rs`, `message_keys.rs`, `ui_script_wall.rs` and
+`world_api_wall.rs` read every app crate's `src/` through `tests/app_sources`, which finds the
+root and its `<root>-<layer>` siblings under any prefix.
+
+**The rename goes first.** `scripts/rename-wrathplus.sh` renames a fixed crate list, guarded with
+`(?![\w-])` and `(?!\w)`, so after the move it would miss `benilla-app-<layer>` and every
+`benilla_app_<layer>` token. The split scripts take the prefix from the root that exists
+(`crates/wrathplus-app`, else `crates/benilla-app`), so the moved crates are born
+`wrathplus-app-<layer>`. The tests above name no prefix either.
 
 **The move, one commit per layer during a worker pause** (`scripts/split/`):
 
-1. Merge wrath-hud; gates green; `git status` clean.
+1. Merge wrath-hud; gates green; `git status` clean. `move-layers.sh` refuses to start with
+   uncommitted or untracked changes or a `MERGE_HEAD`: a half-moved layer's crate directory would
+   count as already moved on a re-run. After a failed layer, back to the last good commit (the
+   previous layer's, or the pre-move head) and run that layer again; committed layers stay:
+
+   ```sh
+   git reset --hard <last good commit>
+   git clean -fd crates/
+   scripts/split/move-layers.sh --layers <the failed layer> --test-support
+   ```
 2. `scripts/split/move-layers.sh --layers core --test-support` (later commits: `net`, `world`,
    `ui`, `tools`; a layer already moved counts as lower, and the root gains only the new crate).
    It runs `canonical-paths.py --apply`, `git mv`s the modules with their `#[path]` siblings,

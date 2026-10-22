@@ -11,6 +11,8 @@
 
 use std::path::{Path, PathBuf};
 
+mod app_sources;
+
 /// What kind of file names the VM.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Family {
@@ -53,10 +55,10 @@ const SLACK: usize = 4;
 
 #[test]
 fn the_vm_is_named_by_no_more_files_than_the_ceiling_says() {
-    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut files: Vec<(Family, String)> = rs_files(&src)
+    let mut files: Vec<(Family, String)> = app_sources::src_dirs()
         .into_iter()
-        .filter_map(|p| {
+        .flat_map(|src| rs_files(&src).into_iter().map(move |p| (src.clone(), p)))
+        .filter_map(|(src, p)| {
             let rel = p
                 .strip_prefix(&src)
                 .unwrap_or(&p)

@@ -9,6 +9,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+mod app_sources;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Verdict {
     /// The cover empties this channel.
@@ -105,8 +107,9 @@ const VERDICTS: &[(&str, Verdict)] = &[
     ("WindowResolution", Plumbing),
 ];
 
-/// The gate's source, which every `Swallowed` row must name.
-const GATE: &str = "crates/benilla-app/src/loading_screen/input.rs";
+/// The gate's source, which every `Swallowed` row must name, under whichever app crate's `src/`
+/// holds `loading_screen`.
+const GATE: &str = "loading_screen/input.rs";
 
 /// Prelude re-exports, scanned for by bare identifier since no `bevy::input::` path names them.
 const PRELUDE_INPUT_NAMES: &[&str] = &[
@@ -160,7 +163,10 @@ fn every_input_channel_the_client_reads_has_a_verdict_under_the_cover() {
     );
 
     // A `Swallowed` row must be named by the gate; the gate may name channels nothing reads yet.
-    let gate = std::fs::read_to_string(root.join(GATE)).expect("the gate's source");
+    let gate = app_sources::src_dirs()
+        .iter()
+        .find_map(|src| std::fs::read_to_string(src.join(GATE)).ok())
+        .expect("the gate's source");
     let unbacked: Vec<&str> = VERDICTS
         .iter()
         .filter(|(name, v)| *v == Swallowed && !gate.contains(name))

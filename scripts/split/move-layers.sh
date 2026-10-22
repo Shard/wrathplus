@@ -24,11 +24,18 @@
 #
 # It never commits and never builds. Run it on a throwaway worktree for a dry run, or on the move
 # commit's tree, then `cargo check` bottom-up: `-p benilla-app-core`, `-net`, `-world`, `-ui`,
-# `-tools`, then `-p benilla-app`, each `--lib --tests`.
+# `-tools`, then `-p benilla-app`, each `--lib --tests`. The crates take the root's prefix:
+# `wrathplus-app-<layer>` once scripts/rename-wrathplus.sh has run, which goes first.
+#
+# It starts only from a committed tree with no merge in progress: a half-moved layer's crate would
+# count as moved on a re-run. After a failed layer, `git reset --hard` to the last good commit and
+# `git clean -fd crates/`, then run that layer again.
 set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
-app=crates/benilla-app
+P=benilla
+[ -d crates/wrathplus-app ] && P=wrathplus
+app=crates/$P-app
 src=$app/src
 layers="core net world ui tools"
 drop=0
@@ -43,6 +50,10 @@ while [ $# -gt 0 ]; do
         *) echo "usage: $0 [--layers \"core net …\"] [--drop-reexports] [--widen] [--test-support]" >&2; exit 2 ;;
     esac
 done
+if [ -n "$(git status --porcelain)" ] || [ -e "$(git rev-parse --git-path MERGE_HEAD)" ]; then
+    echo "move-layers: uncommitted or untracked changes, or a merge in progress; commit or restore first" >&2
+    exit 1
+fi
 
 mods_of() { grep "^$1:" scripts/split/layers.txt | sed "s/^$1: //"; }
 all_mods="$(grep -E '^(pub(\(crate\))? )?mod [a-z_0-9]+;' $src/lib.rs | sed -E 's/.*mod ([a-z_0-9]+);/\1/')"
@@ -69,29 +80,29 @@ lower=""
 new=""   # the layers this run moves
 for l in core net world ui tools; do
     [[ " $layers " == *" $l "* ]] && continue
-    [ -f crates/benilla-app-$l/Cargo.toml ] && lower+=" $l"
+    [ -f crates/$P-app-$l/Cargo.toml ] && lower+=" $l"
 done
 for l in $layers; do
-    crate=benilla-app-$l
+    crate=$P-app-$l
     dst=crates/$crate
     mkdir -p "$dst/src"
     # Cargo.toml: benilla-app's, renamed, with the lower crates as dependencies.
     deps=""; devdeps=""; devf=""; tsf=""
     for b in $lower; do
-        deps+="benilla-app-$b = { path = \"../benilla-app-$b\", default-features = false }"$'\n'
-        devdeps+="benilla-app-$b = { path = \"../benilla-app-$b\", default-features = false, features = [\"test-support\"] }"$'\n'
-        devf+=", \"benilla-app-$b/dev\""
-        tsf+="\"benilla-app-$b/test-support\", "
+        deps+="$P-app-$b = { path = \"../$P-app-$b\", default-features = false }"$'\n'
+        devdeps+="$P-app-$b = { path = \"../$P-app-$b\", default-features = false, features = [\"test-support\"] }"$'\n'
+        devf+=", \"$P-app-$b/dev\""
+        tsf+="\"$P-app-$b/test-support\", "
     done
-    CRATE="$crate" DEVF="$devf" TSF="${tsf%, }" DEPS="$deps" DEVDEPS="$devdeps" perl -0pe '
-        s/^name = "benilla-app"/name = "$ENV{CRATE}"/m;
+    ROOTPKG="$P-app" CRATE="$crate" DEVF="$devf" TSF="${tsf%, }" DEPS="$deps" DEVDEPS="$devdeps" perl -0pe '
+        s/^name = "\Q$ENV{ROOTPKG}\E"/name = "$ENV{CRATE}"/m;
         s/^description = [^\n]*\n//m;
         s/^(dev = \[[^\]]*)\]/$1$ENV{DEVF}]/m;
         s/^test-support = \[\]/test-support = [$ENV{TSF}]/m;
         s/^\[dependencies\]\n/[dependencies]\n$ENV{DEPS}/m;
         s/^\[dev-dependencies\]\n/[dev-dependencies]\n$ENV{DEVDEPS}/m' $app/Cargo.toml > "$dst/Cargo.toml"
     {
-        echo "//! The $l layer of benilla-app: see docs/APP-CRATE-SPLIT-PLAN.md."
+        echo "//! The $l layer of $P-app: see docs/APP-CRATE-SPLIT-PLAN.md."
         echo '#![cfg_attr(not(feature = "dev"), allow(dead_code))]'
         echo
     } > "$dst/src/lib.rs"
@@ -118,7 +129,7 @@ for l in $layers; do
         for p in $sibs; do git mv "$src/$p" "$dst/src/$p"; done
         [ -f $src/$m.rs ] && git mv $src/$m.rs "$dst/src/$m.rs"
         [ -d $src/$m ] && git mv $src/$m "$dst/src/$m"
-        perl -0pi -e "s/^(?:pub(?:\(crate\))? )?mod $m;\n/pub use benilla_app_$l::$m;\n/m" $src/lib.rs
+        perl -0pi -e "s/^(?:pub(?:\(crate\))? )?mod $m;\n/pub use ${P}_app_$l::$m;\n/m" $src/lib.rs
     done
     if [ -n "$lower" ]; then
         { echo; echo "// Every lower layer's modules at this crate's root, so \`crate::<module>::…\` resolves."; } >> "$dst/src/lib.rs"
@@ -127,7 +138,7 @@ for l in $layers; do
                 c="$(git show HEAD:$src/lib.rs | grep -B1 -E "^(pub(\(crate\))? )?mod $m;" | head -1 | grep '^#\[cfg' || true)"
                 [ -n "$c" ] && echo "$c" >> "$dst/src/lib.rs"
                 echo "#[allow(unused_imports)]" >> "$dst/src/lib.rs"
-                echo "pub(crate) use benilla_app_${b}::$m;" >> "$dst/src/lib.rs"
+                echo "pub(crate) use ${P}_app_${b}::$m;" >> "$dst/src/lib.rs"
             done
         done
     fi
@@ -140,10 +151,10 @@ done
 # crate's test helpers through a dev-dependency with `test-support`, as the layer crates do.
 deps=""; devdeps=""; devf=""; tsf=""
 for b in $new; do
-    deps+="benilla-app-$b = { path = \"../benilla-app-$b\", default-features = false }"$'\n'
-    devdeps+="benilla-app-$b = { path = \"../benilla-app-$b\", default-features = false, features = [\"test-support\"] }"$'\n'
-    devf+=", \"benilla-app-$b/dev\""
-    tsf+="\"benilla-app-$b/test-support\", "
+    deps+="$P-app-$b = { path = \"../$P-app-$b\", default-features = false }"$'\n'
+    devdeps+="$P-app-$b = { path = \"../$P-app-$b\", default-features = false, features = [\"test-support\"] }"$'\n'
+    devf+=", \"$P-app-$b/dev\""
+    tsf+="\"$P-app-$b/test-support\", "
 done
 DEVF="$devf" TSF="${tsf%, }" DEPS="$deps" DEVDEPS="$devdeps" perl -0pi -e '
     s/^(dev = \[[^\]]*)\]/$1$ENV{DEVF}]/m;
@@ -156,22 +167,22 @@ DEVF="$devf" TSF="${tsf%, }" DEPS="$deps" DEVDEPS="$devdeps" perl -0pi -e '
 case " $lower " in
     *" ui "*)
         if [ -d $app/assets ]; then
-            git mv $app/assets crates/benilla-app-ui/assets
-            perl -0pi -e 's/Some\(std::path::Path::new\(env!\("CARGO_MANIFEST_DIR"\)\)\)/Some(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "\/..\/benilla-app-ui")))/' \
-                crates/benilla-app-core/src/run_mode.rs
+            git mv $app/assets crates/$P-app-ui/assets
+            UI="$P-app-ui" perl -0pi -e 's/Some\(std::path::Path::new\(env!\("CARGO_MANIFEST_DIR"\)\)\)/Some(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "\/..\/$ENV{UI}")))/' \
+                crates/$P-app-core/src/run_mode.rs
         fi
         ;;
 esac
 
 if [ $widen = 1 ]; then
     for b in $lower; do
-        find crates/benilla-app-$b/src -name '*.rs' -exec perl -pi -e 's/\bpub\(crate\)/pub/g' {} +
+        find crates/$P-app-$b/src -name '*.rs' -exec perl -pi -e 's/\bpub\(crate\)/pub/g' {} +
     done
 fi
 if [ $test_support = 1 ]; then
     n=0
     for b in $lower; do
-        for f in $(grep -rlF '#[cfg(test)]' crates/benilla-app-$b/src); do
+        for f in $(grep -rlF '#[cfg(test)]' crates/$P-app-$b/src); do
             c=$(perl -0 -ne '$n = () = /#\[cfg\(test\)\]\n(?!(?:\s*#\[[^\n]*\n)*\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w*tests?\b)/g; print $n' "$f")
             [ "$c" -gt 0 ] || continue
             perl -0pi -e 's/#\[cfg\(test\)\]\n(?!(?:\s*#\[[^\n]*\n)*\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w*tests?\b)/#[cfg(any(test, feature = "test-support"))]\n/g' "$f"
@@ -182,11 +193,11 @@ if [ $test_support = 1 ]; then
     # helper too: open it the same way.
     o=0
     for b in $lower; do
-        for f in $(grep -rlE '^\s*#\[cfg\(test\)\]' crates/benilla-app-$b/src); do
+        for f in $(grep -rlE '^\s*#\[cfg\(test\)\]' crates/$P-app-$b/src); do
             for name in $(perl -0 -ne 'while (/#\[cfg\(test\)\]\n(?:\s*#\[[^\n]*\n)*\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w*tests?)\b/g) { print "$1\n" }' "$f" | sort -u); do
                 # The declaring file's module path: `ui_pet/mod.rs` -> `ui_pet`, `a/b.rs` -> `a::b`.
-                mp="${f#crates/benilla-app-$b/src/}"; mp="${mp%.rs}"; mp="${mp%/mod}"; mp="${mp//\//::}"
-                users=$(grep -rlE "crate::$mp::$name(::|\b)" crates/benilla-app*/src --include=*.rs | grep -v "^crates/benilla-app-$b/" || true)
+                mp="${f#crates/$P-app-$b/src/}"; mp="${mp%.rs}"; mp="${mp%/mod}"; mp="${mp//\//::}"
+                users=$(grep -rlE "crate::$mp::$name(::|\b)" crates/$P-app*/src --include=*.rs | grep -v "^crates/$P-app-$b/" || true)
                 [ -n "$users" ] || continue
                 NAME="$name" perl -0pi -e 's/#\[cfg\(test\)\]\n((?:\s*#\[[^\n]*\n)*\s*)(?:pub(?:\([^)]*\))?\s+)?mod\s+$ENV{NAME}\b/#[cfg(any(test, feature = "test-support"))]\n$1pub mod $ENV{NAME}/g' "$f"
                 o=$((o + 1))
@@ -197,7 +208,7 @@ if [ $test_support = 1 ]; then
     # A `test_support` module is the shared helpers' home; its items are for other crates' tests.
     t=0
     for b in $lower; do
-        for f in $(find crates/benilla-app-$b/src -path '*test_support*' -name '*.rs'); do
+        for f in $(find crates/$P-app-$b/src -path '*test_support*' -name '*.rs'); do
             c=$(grep -c 'pub(crate)' "$f" || true)
             perl -pi -e 's/\bpub\(crate\)/pub/g' "$f"
             t=$((t + c))

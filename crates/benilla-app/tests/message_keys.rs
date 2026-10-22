@@ -5,6 +5,8 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+mod app_sources;
+
 /// Fixtures for the unknown-key fallback (`ui_petition::lines` and `benilla_ui::messages`'
 /// `kind_of`), which need a key the client does not have, and the 1.12 rows
 /// `benilla_ui::messages` asserts build 12340 dropped.
@@ -47,7 +49,9 @@ fn err_keys(src: &str) -> impl Iterator<Item = String> + '_ {
 #[test]
 fn every_error_key_in_the_source_is_a_catalog_row() {
     let mut sources = Vec::new();
-    walk(Path::new("src"), &mut sources);
+    for src in app_sources::src_dirs() {
+        walk(&src, &mut sources);
+    }
     walk(Path::new("../benilla-ui/src"), &mut sources);
     assert!(sources.len() > 100, "the walk found almost nothing to read");
 
@@ -96,7 +100,9 @@ fn every_error_key_in_the_source_resolves_to_real_text() {
     vm.run(&String::from_utf8_lossy(&src)).expect("runs clean");
 
     let mut sources = Vec::new();
-    walk(Path::new("src"), &mut sources);
+    for src in app_sources::src_dirs() {
+        walk(&src, &mut sources);
+    }
     walk(Path::new("../benilla-ui/src"), &mut sources);
     let keys: BTreeSet<String> = sources.iter().flat_map(|s| err_keys(s)).collect();
 
@@ -147,7 +153,9 @@ fn every_voiced_key_the_source_raises_has_audio_for_every_playable_race() {
     let kits = benilla_formats::load_sound_kit_catalog(&mut chain).expect("SoundEntries.dbc");
 
     let mut sources = Vec::new();
-    walk(Path::new("src"), &mut sources);
+    for src in app_sources::src_dirs() {
+        walk(&src, &mut sources);
+    }
     walk(Path::new("../benilla-ui/src"), &mut sources);
     let keys: BTreeSet<String> = sources.iter().flat_map(|s| err_keys(s)).collect();
 
