@@ -50,6 +50,8 @@ pub(super) enum UnitField {
     BaseMana,
     BaseHealth,
     RangedTime,
+    /// `UNIT_MOD_CAST_SPEED`, the cast cell's haste.
+    CastSpeed,
 }
 
 impl UnitField {
@@ -59,6 +61,7 @@ impl UnitField {
             UnitField::BaseMana => 1 << 1,
             UnitField::BaseHealth => 1 << 2,
             UnitField::RangedTime => 1 << 3,
+            UnitField::CastSpeed => 1 << 4,
         }
     }
 }
@@ -71,6 +74,7 @@ struct UnitFields {
     base_mana: u32,
     base_health: u32,
     ranged_time: u32,
+    cast_speed: u32,
 }
 
 impl UnitFields {
@@ -83,6 +87,7 @@ impl UnitFields {
             base_mana: p.unit_base_mana().unwrap_or(0),
             base_health: p.unit_base_health().unwrap_or(0),
             ranged_time: p.unit_ranged_attack_time().unwrap_or(0),
+            cast_speed: super::cast_cells::cast_speed(p).to_bits(),
         }
     }
 
@@ -99,6 +104,7 @@ impl UnitFields {
             | moved(UnitField::BaseMana, self.base_mana, prev.base_mana)
             | moved(UnitField::BaseHealth, self.base_health, prev.base_health)
             | moved(UnitField::RangedTime, self.ranged_time, prev.ranged_time)
+            | moved(UnitField::CastSpeed, self.cast_speed, prev.cast_speed)
     }
 }
 

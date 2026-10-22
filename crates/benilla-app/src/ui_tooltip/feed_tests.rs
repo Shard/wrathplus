@@ -281,11 +281,11 @@ fn a_modifier_change_rebuilds_only_the_matching_familys_views() {
     );
 }
 
-/// The melee range cell reads the two units' motion (`0x6e3648`-`0x6e36a2`): the caster and its
-/// auto-attack target both running at run speed, or ceasing to, rebuilds the views on the melee
-/// row and no other, and a change that leaves the bonus where it was rebuilds nothing.
+/// 12340's melee row is `MELEE_RANGE` unless a range modifier reaches it, so with none the two
+/// units' motion reaches no view: the caster and its auto-attack target running, strafing or
+/// walking rebuild nothing.
 #[test]
-fn a_units_run_rebuilds_only_the_melee_range_views() {
+fn a_units_run_rebuilds_no_view_without_a_range_modifier() {
     use crate::creature_anim::{move_flags, Engaged};
     use crate::net::Embodied;
 
@@ -334,7 +334,6 @@ fn a_units_run_rebuilds_only_the_melee_range_views() {
     flags(&mut feed, 0);
     assert_eq!(feed.generations(), [1, 1, 1]);
 
-    // The bonus needs both units running: the caster alone changes nothing a view shows.
     feed.catalog(2);
     flags(&mut feed, move_flags::FORWARD);
     assert_eq!(feed.generations(), [1, 1, 1], "the caster starts to run");
@@ -342,131 +341,11 @@ fn a_units_run_rebuilds_only_the_melee_range_views() {
     feed.catalog(3);
     feed.app.world_mut().entity_mut(mob).insert(on_spline(8.0));
     feed.app.update();
-    assert_eq!(
-        feed.generations(),
-        [3, 1, 1],
-        "its target starts to run: the moving bonus"
-    );
-
-    // Still running, by another flag: each unit's answer is where it was.
+    assert_eq!(feed.generations(), [1, 1, 1], "its target starts to run");
     feed.catalog(4);
     flags(&mut feed, move_flags::FORWARD | move_flags::STRAFE_LEFT);
-    assert_eq!(feed.generations(), [3, 1, 1], "nothing was rebuilt");
-
-    // A walk is no run.
+    assert_eq!(feed.generations(), [1, 1, 1], "it strafes");
     feed.catalog(5);
     flags(&mut feed, move_flags::FORWARD | move_flags::WALK_MODE);
-    assert_eq!(feed.generations(), [5, 1, 1], "the caster walks");
-}
-
-/// The pet's melee views read the pet's and its own auto-attack target's motion: a pet chasing a
-/// running mob reads the moving bonus in its range cell, and stops when either halts.
-#[test]
-fn a_pet_view_reads_the_pets_and_its_targets_run() {
-    use crate::creature_anim::Engaged;
-    use benilla_ui::script::{PetBookState, SpellSlotView};
-
-    const ME: u64 = 0x10;
-    const IMP: u64 = 0xF140_0000_0000_0077;
-    const MOB: u64 = 0xF130_0000_0000_0009;
-    let claw = benilla_formats::SpellDisplay {
-        id: 1082,
-        name: "Claw".into(),
-        range_index: 2,
-        ..Default::default()
-    };
-    let (tx, _rx) = crossbeam_channel::unbounded();
-    let mut app = App::new();
-    app.insert_resource(Spells {
-        catalog: benilla_formats::SpellCatalog::from_displays([(1082, claw)].into()),
-        ranges: melee_and_authored_rows(),
-        ..Spells::empty_for_tests()
-    })
-    .insert_resource(NetCommands(tx))
-    .init_resource::<Items>()
-    .init_resource::<crate::net::GuidIndex>()
-    .init_resource::<crate::spell::SpellModifiers>()
-    .add_systems(Update, feed_spell_tooltips);
-    let speeds = walking_and_running_speeds();
-    let store = |pairs: &[(u16, u32)]| ObjectStore(ObjectFields::from_pairs(pairs));
-    let me = app
-        .world_mut()
-        .spawn((
-            SelfPlayer,
-            store(&[
-                (8, IMP as u32),
-                (9, (IMP >> 32) as u32),
-                (at(Field::UnitLevel), 60),
-            ]),
-        ))
-        .id();
-    let imp = app
-        .world_mut()
-        .spawn((speeds, Engaged(MOB), store(&[(at(Field::UnitLevel), 14)])))
-        .id();
-    let mob = app
-        .world_mut()
-        .spawn((speeds, store(&[(at(Field::UnitHealth), 100)])))
-        .id();
-    let mut index = app.world_mut().resource_mut::<crate::net::GuidIndex>();
-    index.0.insert(ME, me);
-    index.0.insert(IMP, imp);
-    index.0.insert(MOB, mob);
-
-    let mut script = UiScript::new().unwrap();
-    script.set_pet_book(PetBookState {
-        token: Some("CAT".into()),
-        slots: vec![SpellSlotView {
-            spell_id: 1082,
-            name: "Claw".into(),
-            ..Default::default()
-        }],
-    });
-    script
-        .run(
-            r#"
-            SPELL_RANGE = "%s yd range"
-            local a = CreateFrame("Button", "B"); a:SetPoint("CENTER", 0, 0)
-            a:SetWidth(10); a:SetHeight(10)
-            CreateFrame("GameTooltip", "TT")
-            function RANGE()
-                TT:SetOwner(B, "ANCHOR_RIGHT"); TT:SetSpell(1, "pet")
-                for k = 1, TT:NumLines() do
-                    for _, side in ipairs({"TTTextLeft", "TTTextRight"}) do
-                        local t = getglobal(side .. k):GetText()
-                        if t and string.find(t, "yd range") then return t end
-                    end
-                end
-            end
-            "#,
-        )
-        .unwrap();
-    app.insert_non_send_resource(script);
-    let range = |app: &mut App| {
-        app.update();
-        let script = app.world().non_send_resource::<UiScript>();
-        script.eval::<Option<String>>("return RANGE()").unwrap()
-    };
-    let _ = range(&mut app);
-    assert_eq!(range(&mut app).as_deref(), Some("5 yd range"), "both stand");
-    app.world_mut().entity_mut(imp).insert(on_spline(8.0));
-    assert_eq!(
-        range(&mut app).as_deref(),
-        Some("5 yd range"),
-        "the pet runs, its target stands"
-    );
-    app.world_mut().entity_mut(mob).insert(on_spline(8.0));
-    assert_eq!(
-        range(&mut app).as_deref(),
-        Some("8 yd range"),
-        "both run: 5.0 + 2.6667"
-    );
-    app.world_mut()
-        .entity_mut(mob)
-        .remove::<crate::motion::Spline>();
-    assert_eq!(
-        range(&mut app).as_deref(),
-        Some("5 yd range"),
-        "the target halts"
-    );
+    assert_eq!(feed.generations(), [1, 1, 1], "the caster walks");
 }
