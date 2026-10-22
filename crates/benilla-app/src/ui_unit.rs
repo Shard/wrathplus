@@ -1566,7 +1566,8 @@ fn feed_units(
     }
 
     // The combo count and its banked target, pushed as a pair since `GetComboPoints` reads both;
-    // only the count fires `PLAYER_COMBO_POINTS` (`0x5ddff0`).
+    // only the count fires 3.3.5's `UNIT_COMBO_POINTS` for `"player"`, which stock
+    // `ComboFrame_OnEvent` matches against `PlayerFrame.unit`. Labelled: the vehicle unit arm.
     if self_q.iter().next().is_some() {
         let banked = crate::net::wrath_combo_points::banked(
             &stores.combo.as_deref().copied().unwrap_or_default(),
@@ -1576,13 +1577,14 @@ fn feed_units(
             memo.last_combo = Some(banked);
             script.set_combo_points(banked.0, banked.1);
             if fire {
-                script.fire_event("PLAYER_COMBO_POINTS", vec![]);
+                let unit = benilla_ui::script::ScriptValue::Str("player".into());
+                script.fire_event("UNIT_COMBO_POINTS", vec![unit]);
             }
         }
     }
 }
 
-/// The combo feed's edge: `None` when nothing moved, else whether `PLAYER_COMBO_POINTS` fires.
+/// The combo feed's edge: `None` when nothing moved, else whether `UNIT_COMBO_POINTS` fires.
 /// Event 202 is a one-byte watch on the count (`+0x1029`, registered at `0x5dd9d9`) with no value
 /// test, so the drop to zero fires; the target has no watch, so a same-count re-bank is silent.
 fn combo_edge(last: Option<(u8, u64)>, now: (u8, u64)) -> Option<bool> {

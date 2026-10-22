@@ -40,8 +40,9 @@ fn harness() -> UiScript {
                     <ScrollFrame name="TestScroll" inherits="FauxScrollFrameTemplate">
                         <Size><AbsDimension x="290" y="80"/></Size>
                         <Anchors><Anchor point="TOPLEFT"/></Anchors>
+                        <!-- 3.3.5's handler takes the frame and offset first (UIPanelTemplates.lua:236-243). -->
                         <Scripts>
-                            <OnVerticalScroll>FauxScrollFrame_OnVerticalScroll(16, TestUpdate)</OnVerticalScroll>
+                            <OnVerticalScroll>FauxScrollFrame_OnVerticalScroll(self, offset, 16, TestUpdate)</OnVerticalScroll>
                         </Scripts>
                     </ScrollFrame>
                 </Frames>
@@ -314,7 +315,7 @@ fn the_reference_on_vertical_scroll_path_runs_once_a_scroll_child_exists() {
                 <Size><AbsDimension x="290" y="80"/></Size>
                 <Anchors><Anchor point="TOPLEFT"/></Anchors>
                 <Scripts>
-                    <OnVerticalScroll>FauxScrollFrame_OnVerticalScroll(16, AddonScroll_Update)</OnVerticalScroll>
+                    <OnVerticalScroll>FauxScrollFrame_OnVerticalScroll(self, offset, 16, AddonScroll_Update)</OnVerticalScroll>
                 </Scripts>
             </ScrollFrame>
             <Frame name="AddonScrollChildFrame">
@@ -359,10 +360,12 @@ fn the_reference_on_vertical_scroll_path_runs_once_a_scroll_child_exists() {
     );
 }
 
-/// With no argument, stock `ScrollingEdit_OnTextChanged` falls back to `this:GetParent()`
-/// (`UIPanelTemplates.lua:307-310`), which addons that wire it bare rely on.
+/// 3.3.5's `ScrollingEdit_OnTextChanged(self, scrollFrame)` falls back to `self:GetParent()` for the
+/// scroll frame, and its `ScrollingEdit_OnUpdate` reads the `cursorOffset` that
+/// `ScrollingEdit_OnCursorChanged` stores (UIPanelTemplates.lua:339-365), which the edit box
+/// fires first.
 #[test]
-fn scrolling_edit_helpers_answer_bare_calls_from_a_handler() {
+fn scrolling_edit_helpers_take_the_edit_box_first_and_default_its_parent() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
@@ -383,9 +386,11 @@ fn scrolling_edit_helpers_answer_bare_calls_from_a_handler() {
         </Ui>"#,
     );
 
-    // A bare call with `this` set, as a handler makes it.
+    // The handlers' order: the cursor first, then the text, with no scroll frame given. The edit box
+    // reports y as a negative offset from its top; a positive one would pin `ScrollingEdit_OnUpdate`'s
+    // first loop at scroll 0 forever (UIPanelTemplates.lua:372-378).
     s.run(
-        "ScrollingEdit_OnTextChanged(SeEdit); ScrollingEdit_OnCursorChanged(SeEdit, 0, 42, 0, 14)",
+        "ScrollingEdit_OnCursorChanged(SeEdit, 0, -42, 0, 14); ScrollingEdit_OnTextChanged(SeEdit)",
     )
     .unwrap();
     assert!(
@@ -394,9 +399,10 @@ fn scrolling_edit_helpers_answer_bare_calls_from_a_handler() {
         s.errors()
     );
 
-    assert_eq!(s.eval::<f32>("return SeEdit.cursorOffset").unwrap(), 42.0);
+    assert_eq!(s.eval::<f32>("return SeEdit.cursorOffset").unwrap(), -42.0);
     assert_eq!(s.eval::<f32>("return SeEdit.cursorHeight").unwrap(), 14.0);
 
-    s.run("ScrollingEdit_OnTextChanged(SeScroll)").unwrap();
+    s.run("ScrollingEdit_OnTextChanged(SeEdit, SeScroll)")
+        .unwrap();
     assert!(s.errors().is_empty(), "explicit form: {:?}", s.errors());
 }
