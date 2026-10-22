@@ -17,7 +17,7 @@ use mlua::{Lua, Table, Value};
 
 use super::object::{frame_handle_of, frame_wrapper};
 use super::tooltip::{append_line, clear_content, fire_cleared, tip_mut};
-use super::{CraftTooltip, Model, TrainerTooltip};
+use super::{Model, TrainerTooltip};
 use crate::widget::FrameHandle;
 
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
@@ -132,8 +132,8 @@ impl super::UiScript {
     }
 
     /// The spells whose player view a hover reads from the VM's own state rather than the
-    /// player's book: the open quest's and each log entry's reward spell, the open craft's spell
-    /// subjects, the player's and every other unit's auras, and the tracking spell. The app pushes
+    /// player's book: the open quest's and each log entry's reward spell, the player's and every
+    /// other unit's auras, and the tracking spell. The app pushes
     /// their views ahead of a hover.
     pub fn spell_tooltip_subjects(&self) -> Vec<u32> {
         let model = self.model_ref();
@@ -149,14 +149,6 @@ impl super::UiScript {
                     .filter_map(|e| e.detail.as_ref()?.reward_spell.as_ref()),
             )
             .map(|s| s.spell_id);
-        let craft = model
-            .craft
-            .iter()
-            .flat_map(|c| &c.recipes)
-            .filter_map(|r| match r.tooltip {
-                CraftTooltip::Spell(id) => Some(id),
-                CraftTooltip::Item(_) => None,
-            });
         let auras = model
             .player_auras
             .iter()
@@ -164,7 +156,6 @@ impl super::UiScript {
             .map(|a| a.spell_id);
         let tracking = model.tracking.iter().map(|t| t.spell_id);
         rewards
-            .chain(craft)
             .chain(auras)
             .chain(tracking)
             .filter(|&id| id != 0)
@@ -859,33 +850,6 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                     },
                     None,
                 ),
-            }
-        })?,
-    )?;
-    // GameTooltip:SetCraftSpell(craftIndex): the craft detail icon's hover
-    // (`Blizzard_CraftUI.xml:566`). `SetCraftSpell 0x533e90` hands a shared builder the subject the
-    // app resolved from the recipe's own effects (`CraftRecipe::tooltip`). `craftIndex` is a plain
-    // recipe position: the craft list has no headers.
-    m.set(
-        "SetCraftSpell",
-        lua.create_function(|lua, (this, craft_index): (Table, usize)| {
-            let subject = {
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                let Some(c) = &model.craft else {
-                    return Ok(());
-                };
-                match craft_index.checked_sub(1).and_then(|i| c.recipes.get(i)) {
-                    Some(r) => r.tooltip.clone(),
-                    None => return Ok(()),
-                }
-            };
-            match subject {
-                CraftTooltip::Item(item_id) => {
-                    super::tooltip_item::render_by_id(lua, &this, item_id, None, None)
-                }
-                CraftTooltip::Spell(spell_id) => {
-                    set_spell_by_id(lua, &this, spell_id, None, SpellRenderOpts::default(), None)
-                }
             }
         })?,
     )?;

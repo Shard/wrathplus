@@ -8,9 +8,12 @@ use super::test_ui::load_ui as load_xml;
 /// The drawn lines, top row first, each with its colour and alpha and its band's bottom.
 fn toast_lines(s: &mut UiScript) -> Vec<(String, [f32; 4], f32)> {
     s.resolve();
-    let mut v: Vec<(String, [f32; 4], f32)> = s
-        .extract()
+    // The frame's own lines: the whole 3.3.5 session draws other text too.
+    let quads = s.extract();
+    let own = quads
         .iter()
+        .filter(|q| s.quad_owner_name(q.target).as_deref() == Some("UIErrorsFrame"));
+    let mut v: Vec<(String, [f32; 4], f32)> = own
         .filter_map(|q| match (&q.content, q.rect) {
             (
                 QuadContent::Text {
@@ -139,9 +142,27 @@ fn an_error_toast_draws_over_an_open_panel_window() {
     );
     // Only other frames count: the frame's own declared `<FontString>` sorts above its message
     // lines but carries no text.
+    let toast_rect = quads
+        .iter()
+        .find_map(|q| match &q.content {
+            QuadContent::Text { text: Some(t), .. } if t == "Out of range." => q.rect,
+            _ => None,
+        })
+        .expect("the toast has a rect");
+    // Over it means drawn later and on top of it: the session's other frames elsewhere on the
+    // screen, the bag bar's buttons say, do not cover it.
+    let covers = |q: &&ExtractedQuad| {
+        q.rect.is_some_and(|r| {
+            r.left < toast_rect.right
+                && r.right > toast_rect.left
+                && r.bottom < toast_rect.top
+                && r.top > toast_rect.bottom
+        })
+    };
     let above: Vec<&ExtractedQuad> = quads
         .iter()
         .filter(|q| q.z > toast)
+        .filter(covers)
         // `RaidWarningFrame` is HIGH and toplevel too (`RaidWarning.xml:4`) but sits below this
         // frame on screen, and its `<FontString>` carries no text.
         .filter(|q| {

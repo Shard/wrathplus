@@ -5,7 +5,7 @@ use crate::widget::{FrameHandle, HandleMap, RegionHandle, WidgetArena};
 
 use super::{
     auction, backdrop, bank, bind_confirm, camera_view, char_stats, chat_window, colorselect,
-    container, craft, cursor, death, duel, follow, gossip, guild, inspect, item_text, loot,
+    container, cursor, death, duel, follow, gossip, guild, inspect, item_text, loot,
     loot_roll, macros, mail, merchant, party, petition, pvp, quest, quest_log,
     reputation, session, simplehtml, skills, slider, social, spellbook, stable, taxi, trade,
     tradeskill, trainer, weapon_enchant, ActionSlot, AuraState, FontObject, ItemTemplateView,
@@ -260,7 +260,10 @@ pub(crate) struct Model {
     pub(crate) cancel_aura_requests: Vec<u32>,
     /// The player's active tracking aura, behind `GetTrackingTexture`.
     pub(crate) tracking: Option<super::aura::TrackingState>,
+    /// The selected row of the tracking type table, `[0xbeba64]` (`aura::tracking`).
     pub(crate) wrath_tracking_selection: Option<usize>,
+    /// The spellbook's tracking spells, the menu's first entries (`[0xbe8dec]`).
+    pub(crate) tracking_spells: Vec<u32>,
     /// The calls that touch the selection, the cast or the targeting cursor, in call order.
     pub(crate) script_calls: Vec<super::calls::ScriptCall>,
     /// The binding functions' queue, gate depth and mouselook state.
@@ -520,11 +523,7 @@ pub(crate) struct Model {
     pub(crate) talent_wipe_confirms: u32,
     /// `CheckTalentMasterDist()`: the respec question is live and in range; false hides its dialog.
     pub(crate) talent_master_pending: bool,
-    // ── The dialog engine's verbs (`0x48dca0` is the first below) ──
-    /// `ConfirmPetUnlearn()` calls; the app holds the trainer and the money gate.
-    pub(crate) pet_unlearn_confirms: u32,
-    /// `CheckPetUntrainerDist()`: the pet trainer's question is pending and in reach.
-    pub(crate) pet_untrainer_pending: bool,
+    // ── The dialog engine's verbs ──
     /// `GetInstanceBootTimeRemaining()` in whole seconds, from the `SMSG_RAID_GROUP_ONLY` deadline.
     pub(crate) instance_boot_secs: u32,
     /// A cached area spirit healer (`[0xb4e330/334]`) and seconds to its wave (`[0xb4e338]`).
@@ -547,11 +546,6 @@ pub(crate) struct Model {
     pub(crate) battlefield_flag: Option<super::battlefield_positions::BattlefieldFlagView>,
     pub(crate) battlefield_icon_scale: f32,
     pub(crate) battlefield_position_requests: u32,
-    /// `CancelMeetingStoneRequest()` calls; the app gates on leadership.
-    pub(crate) meeting_stone_cancels: u32,
-    /// The meeting stone's queued area (`[0xb72038]`) and status text (`[0xb7203c]`), as pushed.
-    pub(crate) meeting_stone_area: u32,
-    pub(crate) meeting_stone_status_text: Option<String>,
     /// Acknowledged tutorials, `None` before `SMSG_TUTORIAL_FLAGS`; all `TutorialsEnabled()` reads.
     pub(crate) tutorial_bank: Option<Vec<u8>>,
     /// `FlagTutorial(n)` calls, 0-based and in range.
@@ -726,14 +720,6 @@ pub(crate) struct Model {
     pub(crate) trade_link_clicks: Vec<String>,
     pub(crate) trade_skill_filter_touched: bool,
     pub(crate) trade_skill_stop_repeat: bool,
-
-    /// The open craft window's recipes.
-    pub(crate) craft: Option<craft::CraftState>,
-    /// `DoCraft` spell ids; no count, as the 1.12 CraftFrame has no Create All.
-    pub(crate) craft_dos: Vec<u32>,
-    /// The 1-based selection, 0 for none, carried across a re-push by the recipe's spell id.
-    pub(crate) craft_selection: u32,
-    pub(crate) craft_close: bool,
 
     /// `EquipPendingItem`/`CancelPendingEquip` answers in order, and `ConfirmBindOnUse()` calls.
     pub(crate) pending_equip_answers: Vec<bind_confirm::PendingEquipAnswer>,
@@ -1212,6 +1198,7 @@ impl Model {
             cancel_aura_requests: Vec::new(),
             tracking: None,
             wrath_tracking_selection: None,
+            tracking_spells: Vec::new(),
             script_calls: Vec::new(),
             input: Default::default(),
             drop_item_on_unit: Vec::new(),
@@ -1338,8 +1325,6 @@ impl Model {
             talent_learns: Vec::new(),
             talent_wipe_confirms: 0,
             talent_master_pending: false,
-            pet_unlearn_confirms: 0,
-            pet_untrainer_pending: false,
             instance_boot_secs: 0,
             area_spirit_healer_cached: false,
             area_spirit_secs: 0,
@@ -1353,9 +1338,6 @@ impl Model {
             battlefield_flag: None,
             battlefield_icon_scale: 1.0,
             battlefield_position_requests: 0,
-            meeting_stone_cancels: 0,
-            meeting_stone_area: 0,
-            meeting_stone_status_text: None,
             tutorial_bank: None,
             tutorial_flag_requests: Vec::new(),
             tutorial_clears: 0,
@@ -1440,10 +1422,6 @@ impl Model {
             trade_link_clicks: Vec::new(),
             trade_skill_filter_touched: false,
             trade_skill_stop_repeat: false,
-            craft: None,
-            craft_dos: Vec::new(),
-            craft_selection: 0,
-            craft_close: false,
             loot: None,
             pending_equip_answers: Vec::new(),
             bind_on_use_confirms: 0,

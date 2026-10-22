@@ -129,7 +129,9 @@ impl<K: Copy + Eq + Hash, V> QueryCache<K, V> {
         self.answered.len()
     }
 
-    #[cfg(test)]
+    // Clippy's `len_without_is_empty` asks for it once the type is `pub` (the crate split); only
+    // tests call it.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn is_empty(&self) -> bool {
         self.answered.is_empty()
     }

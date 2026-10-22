@@ -116,15 +116,6 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
                     if not left then return end
                     return left, bottom, self:GetWidth(), self:GetHeight()
                 end
-                function t.IsMouseOver(self, top, bottom, left, right)
-                    local l, b, w, h = t.GetRect(self)
-                    if not l then return nil end
-                    local x, y = GetCursorPosition()
-                    local scale = self:GetEffectiveScale()
-                    x, y = x / scale, y / scale
-                    return (x >= l - (left or 0) and x <= l + w + (right or 0)
-                        and y >= b - (bottom or 0) and y <= b + h + (top or 0)) and 1 or nil
-                end
             end
             for _, t in ipairs({ fontstrings, buttons, editboxes }) do
                 function t.SetFormattedText(self, fmt, ...) self:SetText(format(fmt, ...)) end
@@ -240,7 +231,8 @@ fn install_trusted_secure_environment(lua: &Lua) -> mlua::Result<()> {
 
 fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
     // UIParent.lua:1927 positions the stock arena frames; no opponents outside an arena.
-    lua.globals().set("GetNumArenaOpponents", lua.create_function(|_, ()| Ok(0))?)?;
+    lua.globals()
+        .set("GetNumArenaOpponents", lua.create_function(|_, ()| Ok(0))?)?;
     let globals = lua.globals();
 
     // `IsMouseButtonDown([button])`: a named button ("LeftButton", or 1-5), else any button.
@@ -259,7 +251,10 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
                 _ => None,
             };
             let held = match name {
-                Some(name) => model.buttons_down.iter().any(|b| b.eq_ignore_ascii_case(&name)),
+                Some(name) => model
+                    .buttons_down
+                    .iter()
+                    .any(|b| b.eq_ignore_ascii_case(&name)),
                 None => !model.buttons_down.is_empty(),
             };
             Ok(held.then_some(1))
@@ -284,9 +279,16 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
                         .iter()
                         .position(|v| v.spell_id == a.action)
                         .map_or(Value::Nil, |i| Value::Integer(i as i64 + 1));
-                    vec![s("spell")?, index, s("spell")?, Value::Integer(a.action.into())]
+                    vec![
+                        s("spell")?,
+                        index,
+                        s("spell")?,
+                        Value::Integer(a.action.into()),
+                    ]
                 }
-                super::action::ACTION_KIND_ITEM => vec![s("item")?, Value::Integer(a.action.into())],
+                super::action::ACTION_KIND_ITEM => {
+                    vec![s("item")?, Value::Integer(a.action.into())]
+                }
                 // The macro's index now, from the slot's id.
                 super::action::ACTION_KIND_MACRO => {
                     let id = super::macro_action_id(a.kind, a.action).unwrap_or(0);

@@ -1,9 +1,10 @@
 //! `FollowUnit` and `FollowByName`; each call queues a [`FollowRequest`] the app drains.
-//! `FollowUnit("target")` is a bare `/follow` and the `FOLLOWTARGET` binding. `FollowByName`
-//! (`0x489ec0`) calls the by-name resolver `0x493aa0` for players (`0x10`) who `CanAssist` and are
-//! alive, with its second argument as the exact-only flag: `UnitPopup.lua:623` passes 1, so the
-//! menu never prefix-matches someone else, while `/follow rag` may. benilla parses `/follow` in
-//! Rust, so these globals serve the stock UI and addons.
+//! `FollowUnit("target")` is a bare `/follow` and the `FOLLOWTARGET` binding. 12340's `FollowUnit`
+//! (`0x5224c0`) also takes a player's name with an exact-only flag, which the stock menu passes
+//! (`UnitPopup.lua:1324-1325`, `FollowUnit(fullname, 1)`), so it never prefix-matches someone
+//! else, while `/follow rag` may. Labelled: `FollowByName` keeps 1.12's reading (`0x489ec0`); its
+//! 12340 binding is untraced. benilla parses `/follow` in Rust, so these globals serve the stock
+//! UI and addons.
 
 use mlua::Lua;
 

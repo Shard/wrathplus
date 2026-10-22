@@ -761,13 +761,8 @@ fn the_two_region_leaves_answer_their_own_maps() {
         assert!(has(&s, "Tex", m), "a Texture answers {m}");
         assert!(!has(&s, "Str", m), "a FontString must NOT answer {m}");
     }
-    // `SetRotation` is 1.12's PlayerModel verb (`0x84f1fc`/`0x505f00`), in neither leaf map.
-    for leaf in ["Tex", "Str"] {
-        assert!(
-            !has(&s, leaf, "SetRotation"),
-            "SetRotation is not a region method"
-        );
-    }
+    // 12340's Texture table has `SetRotation` (`0x48c860`); FontString's has none.
+    assert!(has(&s, "Tex", "SetRotation") && !has(&s, "Str", "SetRotation"));
     // FontString-only.
     for m in [
         "SetText",

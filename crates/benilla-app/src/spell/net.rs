@@ -16,9 +16,9 @@ use super::{
     QueuedMeleeSpell,
 };
 use crate::creature_anim::{CastEvent, CastEventKind, Casting, SpellGoTargets};
+use crate::spell::cast_bar::{CastBarEdge, CastBarFeed};
 use crate::ui_action::{CastErrors, PlayerActions, Spells, UiError, UiErrorKeys};
 use crate::ui_aura::AuraDurations;
-use crate::spell::cast_bar::{CastBarEdge, CastBarFeed};
 use crate::ui_spellbook::LearnedInTab;
 
 use benilla_protocol::{SessionEvent, SessionEventKind};
@@ -218,7 +218,7 @@ fn on_cast_result(
             &mut ladder.auto_repeat,
             ladder.spells.as_deref(),
             &ladder.commands,
-            r.play_seq.next(),
+            r.play_seq.advance(),
         );
         if let Some(next) = chained {
             let ctx = targeting.context();
@@ -260,7 +260,7 @@ fn on_spell_start(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Scene) {
             &mut l.cast_bar,
             &mut l.pending,
             l.spells.as_deref(),
-            l.play_seq.next(),
+            l.play_seq.advance(),
         );
     }
 }
@@ -324,7 +324,7 @@ fn on_spell_go(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Scene) {
                 &l.spell_mods,
             ),
             (&mut l.auto_repeat, &mut sc.sheaths, engaged),
-            l.play_seq.next(),
+            l.play_seq.advance(),
         );
     }
 }
@@ -368,7 +368,7 @@ fn on_spell_failed_other(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Sce
             &mut l.cast_bar,
             &mut l.pending,
             &mut l.queued_melee,
-            l.play_seq.next(),
+            l.play_seq.advance(),
         );
     }
 }

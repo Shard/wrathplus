@@ -989,12 +989,10 @@ fn the_mouseover_token_clears_when_no_unit_is_hovered() {
     }
 }
 
-/// The pet bar, Beast Training and target-of-target hovers are whole on the first hover.
+/// The pet bar and target-of-target hovers are whole on the first hover.
 #[test]
 fn the_feed_pushes_the_spells_the_vm_holds_before_a_hover() {
-    use benilla_ui::script::{
-        AuraState, CraftRecipe, CraftState, CraftTooltip, PetActionView, TradeSkillDifficulty,
-    };
+    use benilla_ui::script::{AuraState, PetActionView};
     let spell = |name: &str, description: &str| benilla_formats::SpellDisplay {
         name: name.into(),
         description: Some(description.into()),
@@ -1002,7 +1000,6 @@ fn the_feed_pushes_the_spells_the_vm_holds_before_a_hover() {
     };
     let catalog = std::collections::HashMap::from([
         (3110, spell("Firebolt", "Deals Fire damage.")),
-        (17253, spell("Bite", "Bite the enemy.")),
         (589, spell("Shadow Word: Pain", "Shadow damage over time.")),
     ]);
     let (tx, _rx) = crossbeam_channel::unbounded();
@@ -1028,26 +1025,6 @@ fn the_feed_pushes_the_spells_the_vm_holds_before_a_hover() {
             ..Default::default()
         }],
     );
-    script.set_craft(Some(CraftState {
-        name: "Beast Training".into(),
-        rank: 0,
-        max_rank: 0,
-        craft_type: 1,
-        recipes: vec![CraftRecipe {
-            spell_id: 24599,
-            tooltip: CraftTooltip::Spell(17253),
-            name: "Bite".into(),
-            sub_name: String::new(),
-            difficulty: TradeSkillDifficulty::Optimal,
-            num_available: 1,
-            icon: None,
-            description: None,
-            needs_item_target: false,
-            reagents: vec![],
-            tools: vec![],
-            spell_level: 0,
-        }],
-    }));
     // We target a mob that targets party1, whose list the VM holds by guid.
     const ME: u64 = 0x10;
     const MOB: u64 = 0xF130_0000_0000_0001;
@@ -1082,7 +1059,6 @@ fn the_feed_pushes_the_spells_the_vm_holds_before_a_hover() {
                 return table.concat(t, " | ")
             end
             TT:SetOwner(B, "ANCHOR_RIGHT"); TT:SetPetAction(1); PET = lines()
-            TT:SetOwner(B, "ANCHOR_RIGHT"); TT:SetCraftSpell(1); CRAFT = lines()
             TT:SetOwner(B, "ANCHOR_RIGHT"); TT:SetUnitDebuff("targettarget", 1); TOT = lines()
             "#,
         )
@@ -1090,10 +1066,6 @@ fn the_feed_pushes_the_spells_the_vm_holds_before_a_hover() {
     assert_eq!(
         script.eval::<String>("return PET").unwrap(),
         "Firebolt | Deals Fire damage."
-    );
-    assert_eq!(
-        script.eval::<String>("return CRAFT").unwrap(),
-        "Bite | Bite the enemy."
     );
     assert_eq!(
         script.eval::<String>("return TOT").unwrap(),

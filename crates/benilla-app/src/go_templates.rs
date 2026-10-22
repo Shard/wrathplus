@@ -44,16 +44,11 @@ pub(crate) struct GoTemplate {
     pub(crate) quest_material: Option<u32>,
 }
 
-/// A MEETINGSTONE template's slots, read through `0x621b00` keys `0x33` to `0x35` (vmangos
-/// `GameObjectInfo::meetingstone`). The area feeds the type's highlightable slot `0x5f6990`, the
-/// levels the use refusal `ERR_MEETING_STONE_INVALID_LEVEL`.
+/// A MEETINGSTONE template's area slot, `data[2]`, which 1.12's highlight term compares with the
+/// queued area. A type-23 summoning stone also carries its levels in `data[0]`/`data[1]`, unread.
 #[derive(Clone, Copy)]
 pub(crate) struct MeetingStoneTemplate {
-    /// `data[0]`.
-    pub(crate) min_level: u32,
-    /// `data[1]`.
-    pub(crate) max_level: u32,
-    /// `data[2]`, the `AreaTable` id the stone queues for.
+    /// `data[2]`, the `AreaTable` id.
     pub(crate) area: u32,
 }
 
@@ -121,8 +116,6 @@ impl GameObjectTemplates {
         // Adjacent to the highlight column but a different question: placement.
         let floating_tooltip = type_id == 5 && data[0] != 0;
         let meeting_stone = (type_id == 23).then(|| MeetingStoneTemplate {
-            min_level: data[0].max(0) as u32,
-            max_level: data[1].max(0) as u32,
             area: data[2].max(0) as u32,
         });
         // vmangos `GameObjectInfo::moTransport`.

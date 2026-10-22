@@ -35,21 +35,21 @@ mod button;
 mod calls;
 mod camera_view;
 mod channel;
-mod wrath_channel_roster;
-mod wrath_channel_display;
-mod wrath_channel_bindings;
-mod wrath_chat_window;
-mod wrath_unit_casts;
-mod wrath_combat_log;
-mod wrath_chat_verbs;
-mod wrath_static_popup;
 pub mod glue;
 pub mod glue_create;
+mod wrath_channel_bindings;
+mod wrath_channel_display;
+mod wrath_channel_roster;
+mod wrath_chat_verbs;
+mod wrath_chat_window;
+mod wrath_combat_log;
 mod wrath_friends_frame;
 mod wrath_guild_bank;
 mod wrath_macro_icons;
 mod wrath_override_bindings;
 mod wrath_session;
+mod wrath_static_popup;
+mod wrath_unit_casts;
 mod wrath_unit_popup;
 pub use wrath_calendar::{
     WrathCalendarDate, WrathCalendarEntry, WrathCalendarEvent, WrathCalendarFields,
@@ -57,30 +57,30 @@ pub use wrath_calendar::{
     WrathCalendarRequest, WrathCalendarTexture, WrathCalendarView,
 };
 pub use wrath_gm_survey::{WrathGmSurvey, WrathGmSurveyQuestion, WrathGmSurveySubmit};
-pub use wrath_state_queries::{WrathInstanceInfo, WrathMirrorTimer};
 pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
-mod wrath_titles;
-mod wrath_tooltip;
+pub use wrath_state_queries::{WrathInstanceInfo, WrathMirrorTimer};
 mod movie;
+mod wrath_barber;
+mod wrath_item_gems;
 mod wrath_petition_vendor;
 mod wrath_quest_poi;
-mod wrath_barber;
 mod wrath_region_attrs;
-mod wrath_item_gems;
+mod wrath_titles;
+mod wrath_tooltip;
 pub use wrath_barber::{WrathBarberRequest, WrathBarberShop, WrathBarberStyle};
-pub use wrath_petition_vendor::{WrathPetitionItem, WrathPetitionVendorRequest};
-pub use wrath_quest_poi::{WrathQuestPoi, WrathQuestPoiBlob};
-pub use wrath_titles::WrathCharTitle;
-pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
+pub use wrath_chat_verbs::WrathChatVerbRequest;
+pub use wrath_combat_log::{WrathCombatLogEntry, WrathCombatLogUnit, WRATH_COMBAT_LOG_EVENTS};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
     WrathGuildEvent,
 };
+pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
+pub use wrath_petition_vendor::{WrathPetitionItem, WrathPetitionVendorRequest};
+pub use wrath_quest_poi::{WrathQuestPoi, WrathQuestPoiBlob};
 pub use wrath_static_popup::{WrathInstanceLock, WrathPopupRequest, WrathPopupState};
-pub use wrath_unit_popup::{WrathChatLine, WrathUnitPopupRequest, WrathUnitPopupState};
-pub use wrath_chat_verbs::WrathChatVerbRequest;
-pub use wrath_combat_log::{WrathCombatLogEntry, WrathCombatLogUnit, WRATH_COMBAT_LOG_EVENTS};
+pub use wrath_titles::WrathCharTitle;
 pub use wrath_unit_casts::WrathUnitCast;
+pub use wrath_unit_popup::{WrathChatLine, WrathUnitPopupRequest, WrathUnitPopupState};
 mod char_stats;
 mod chat_misc;
 mod chat_send;
@@ -89,7 +89,6 @@ mod chat_window;
 mod clip;
 mod colorselect;
 mod container;
-mod craft;
 mod cursor;
 mod death;
 pub mod diagnostics;
@@ -121,7 +120,6 @@ pub use handler_prof::HandlerRow;
 mod surface;
 pub use surface::widget_method_census;
 mod input_verbs;
-mod wrath_input_verbs;
 mod inspect;
 mod inventory_verbs;
 mod item_stats;
@@ -139,6 +137,7 @@ mod merchant;
 mod messageframe;
 mod minimap;
 pub mod nameplate;
+mod wrath_input_verbs;
 pub use nameplate::{PlateCast, PlateGeometry, PlateState};
 mod model;
 mod modelframe;
@@ -167,11 +166,11 @@ mod slider;
 mod social;
 mod sound;
 mod spell_info;
-mod storage_slots;
 mod spellbook;
 mod stable;
 mod statusbar;
 mod stdlib;
+mod storage_slots;
 mod summon;
 mod talent;
 mod taxi;
@@ -194,85 +193,86 @@ mod video_pairs;
 mod weapon_enchant;
 mod who_sort;
 mod worldmap;
-mod wrath_worldmap;
 mod worldstate;
 mod worn_display;
+mod wrath_achievements;
 mod wrath_currency;
 mod wrath_equipment;
 mod wrath_modifiers;
-mod wrath_achievements;
+mod wrath_worldmap;
+pub use tooltip_links::{GlyphLinkCatalog, QuestLinkView, TalentLinkView};
 pub use wrath_achievements::{
     WrathAchievement, WrathAchievementCategory, WrathAchievementCriterion, WrathAchievementMetadata,
 };
-pub use tooltip_links::{GlyphLinkCatalog, QuestLinkView, TalentLinkView};
-mod wrath_tutorial;
-mod wrath_ready_check;
 mod wrath_calendar;
-mod wrath_gm_survey;
-mod wrath_state_queries;
-mod wrath_modified_click;
-mod wrath_macro_options;
 mod wrath_engine_constants;
+mod wrath_gm_survey;
+mod wrath_inspect_talents;
+mod wrath_macro_options;
+mod wrath_modified_click;
 mod wrath_quest_queries;
-mod wrath_saved_instances;
 mod wrath_quests_completed;
-mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
-mod wrath_talent_preview;
+mod wrath_ready_check;
+mod wrath_saved_instances;
+mod wrath_state_queries;
+mod wrath_tutorial;
+pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
 mod wrath_server_time;
-pub use wrath_tutorial::WrathTutorialRequest;
+mod wrath_talent_preview;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
+pub use wrath_tutorial::WrathTutorialRequest;
+mod wrath_achievement_progress;
+mod wrath_item_services;
 mod wrath_item_spell;
 mod wrath_items;
-mod wrath_item_services;
 mod wrath_sockets;
-mod wrath_achievement_progress;
 pub use wrath_achievement_progress::{WrathAchievementProgress, WrathAchievementRequest};
-pub use wrath_sockets::{SocketGemView, SocketRequest, SocketSessionView, SocketSlotView};
 pub use wrath_equipment::{
-    EQUIPMENT_SET_IGNORED_SLOT, EQUIPMENT_SET_SLOTS, EquipmentSetRequest, EquipmentSetView,
+    EquipmentSetRequest, EquipmentSetView, EQUIPMENT_SET_IGNORED_SLOT, EQUIPMENT_SET_SLOTS,
 };
 pub use wrath_item_services::{ItemRefundCost, ItemRefundView, ItemServiceRequest};
+pub use wrath_sockets::{SocketGemView, SocketRequest, SocketSessionView, SocketSlotView};
+mod wrath_arena;
 mod wrath_bag_portrait;
-mod wrath_paperdoll;
 mod wrath_character;
 mod wrath_companions;
-mod wrath_arena;
-mod wrath_pet_stable;
-mod wrath_vehicle;
-mod wrath_help_request;
-mod wrath_runes;
-mod wrath_totems;
 mod wrath_glyphs;
-mod wrath_raid_units;
-mod wrath_merchant;
-mod wrath_spellbook;
-mod wrath_skills;
+mod wrath_help_request;
 mod wrath_kb;
+mod wrath_merchant;
 mod wrath_options;
+mod wrath_paperdoll;
+mod wrath_pet_stable;
+mod wrath_raid_units;
+mod wrath_runes;
 mod wrath_secure;
-pub use wrath_merchant::{CostItemView, ExtendedCostView};
+mod wrath_skills;
+mod wrath_spellbook;
+mod wrath_totems;
+mod wrath_vehicle;
 pub use wrath_arena::{
     ArenaMemberView, ArenaTeamInfoView, ArenaTeamStatsView, ArenaTeamView, InspectArenaTeamView,
 };
-pub use wrath_runes::{RuneView, WrathRunes};
-pub use wrath_vehicle::{
-    BattlefieldVehicleView, PossessView, UnitVehicleView, VehicleAimView, VehicleCall, VehicleIndicatorView, VehicleSeatView,
-    WrathVehicles,
-};
-pub use wrath_totems::{TotemState, TotemView};
-pub use wrath_glyphs::{GlyphSocketView, GlyphView};
 pub use wrath_companions::{CompanionView, WrathCompanions, COMPANION_TYPES};
-mod wrath_surface;
+pub use wrath_glyphs::{GlyphSocketView, GlyphView};
+pub use wrath_merchant::{CostItemView, ExtendedCostView};
+pub use wrath_runes::{RuneView, WrathRunes};
+pub use wrath_totems::{TotemState, TotemView};
+pub use wrath_vehicle::{
+    BattlefieldVehicleView, PossessView, UnitVehicleView, VehicleAimView, VehicleCall,
+    VehicleIndicatorView, VehicleSeatView, WrathVehicles,
+};
 mod wrath_lfg;
+mod wrath_surface;
 pub use wrath_lfg::{
-    set_wrath_lfg_request_clock, WrathLfgItemRequest, WrathLfgLockRequest,
-    WrathLfgCatalog, WrathLfgDungeon, WrathLfgGroup, WrathLfgLock, WrathLfgLockSnapshot,
-    WrathLfgMemberLocks, WrathLfgPlayerLocks, WrathLfgPresentation, WrathLfgPreview,
-    WrathLfgRewardItem, WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem,
-    WrathLfgEncounter, WrathLfgProposal, WrathLfgProposalRow, WrathLfgQueueRequest,
-    WrathLfgQueueSnapshot, WrathLfgQueueStatus, WrathLfgRoleCheck, WrathLfgRoleCheckMember,
-    WrathLfgUpdate, WrathRaidBrowserGroup, WrathRaidBrowserMember, WrathRaidBrowserRequest,
-    WrathRaidBrowserStats, WrathRaidBrowserView,
+    set_wrath_lfg_request_clock, WrathLfgBoot, WrathLfgCatalog, WrathLfgCompletion,
+    WrathLfgCompletionItem, WrathLfgDungeon, WrathLfgEncounter, WrathLfgGroup, WrathLfgItemRequest,
+    WrathLfgLock, WrathLfgLockRequest, WrathLfgLockSnapshot, WrathLfgMemberLocks,
+    WrathLfgPlayerLocks, WrathLfgPresentation, WrathLfgPreview, WrathLfgProposal,
+    WrathLfgProposalRow, WrathLfgQueueRequest, WrathLfgQueueSnapshot, WrathLfgQueueStatus,
+    WrathLfgRewardItem, WrathLfgRoleCheck, WrathLfgRoleCheckMember, WrathLfgUpdate,
+    WrathRaidBrowserGroup, WrathRaidBrowserMember, WrathRaidBrowserRequest, WrathRaidBrowserStats,
+    WrathRaidBrowserView,
 };
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
 mod zone_text;
@@ -300,10 +300,6 @@ pub use battlefield_score::{
 pub use bind_confirm::PendingEquipAnswer;
 pub use calls::{NearestMode, ScriptCall};
 pub use camera_view::{CameraViewRequest, CAMERA_VIEW_COUNT};
-pub use wrath_channel_display::WrathDisplayChannel;
-pub use wrath_channel_roster::{
-    WrathChannelRosterDelta, WrathChannelRosterMember, WrathChannelRosterRequest,
-};
 pub use channel::{ChannelCommand, ZoneChannelRow};
 pub use char_stats::{
     weapon_subclass_skill, BankBagSlots, InvSlotView, InventorySlots, UnitCombatStats,
@@ -319,13 +315,11 @@ pub use container::{
     BagAutoStore, ContainerMove, ContainerSlot, ContainerState, EnchantView, PendingWrap,
     PetitionSlotView, RandomPropertyView, UiCursorMode,
 };
-pub use craft::{CraftReagent, CraftRecipe, CraftState, CraftTooltip};
 pub use cursor::money::coin_icon;
 pub use cursor::{
     CursorAction, CursorEquipmentSet, CursorGuildBankItem, CursorItem, CursorItemId, CursorMacro,
-    CursorMerchantItem, CursorMoney,
-    CursorPayload,
-    CursorPetAction, CursorSpell, CursorStablePet, EnchantConfirm, WorldPick, EQUIPMENT_BAG,
+    CursorMerchantItem, CursorMoney, CursorPayload, CursorPetAction, CursorSpell, CursorStablePet,
+    EnchantConfirm, WorldPick, EQUIPMENT_BAG,
 };
 pub use cvars::{small_cull_text, sstr_to_int};
 pub use cvars::{
@@ -355,6 +349,10 @@ pub use tabard::{
 };
 pub use video_pairs::VIDEO_PAIR_CVARS;
 pub use worldmap_arrow::ARROW_MODEL;
+pub use wrath_channel_display::WrathDisplayChannel;
+pub use wrath_channel_roster::{
+    WrathChannelRosterDelta, WrathChannelRosterMember, WrathChannelRosterRequest,
+};
 
 pub(crate) use button::{set_label_font_justify_h_lua, LabelFont};
 pub use inspect::{InspectView, UnitReach};
@@ -362,8 +360,11 @@ pub use item_stats::{item_usable, ItemSetView, ItemTemplateView, PlayerReqState}
 pub use item_text::ItemTextState;
 pub use layout_cache::{FrameLayout, LayoutPoint};
 pub use loot::{LootRow, LootState, LOOT_PORTRAIT_UNIT};
+pub use loot_roll::wrath::{
+    native_reasons as wrath_loot_roll_reasons, Entry as WrathLootRollEntry,
+    State as WrathLootRollsState,
+};
 pub use loot_roll::{LootRollEntry, LootRollsState};
-pub use loot_roll::wrath::{native_reasons as wrath_loot_roll_reasons, Entry as WrathLootRollEntry, State as WrathLootRollsState};
 pub use macros::{
     macro_action_id, macro_action_word, MacroBinding, MacroState, MacroView, CHARACTER_MACRO_BASE,
     MAX_ACCOUNT_MACROS, MAX_CHARACTER_MACROS, MAX_MACRO_BODY, MAX_MACRO_NAME,
@@ -475,10 +476,9 @@ pub(crate) const REGION_LEAF_SHARED: [&str; 9] = [
     "IsShown",
 ];
 
-/// Texture-only, each in the client's Texture map (`0x87c128`): `GetVertexColor` though
-/// `SetVertexColor` is shared, and `SetGradientAlpha`, not FontString's `SetAlphaGradient`. 1.12
-/// has no Texture `SetSize` or `SetRotation` (PlayerModel's, `0x84f1fc`/`0x505f00`).
-pub(crate) const TEXTURE_ONLY_METHODS: [&str; 12] = [
+/// Texture-only: `GetVertexColor` though `SetVertexColor` is shared, `SetGradientAlpha`, not
+/// FontString's `SetAlphaGradient`, and `SetRotation` (`0x48c860`).
+pub(crate) const TEXTURE_ONLY_METHODS: [&str; 13] = [
     "SetGradient",
     "SetGradientAlpha",
     "GetTexture",
@@ -491,6 +491,7 @@ pub(crate) const TEXTURE_ONLY_METHODS: [&str; 12] = [
     "GetTexCoordModifiesRect",
     "SetDesaturated",
     "GetVertexColor",
+    "SetRotation",
 ];
 
 /// FontString-only: the font, text, justify and shadow block and the string metrics.
@@ -574,7 +575,8 @@ const BASE_SCRIPT_KINDS: [&str; 20] = [
 ];
 
 /// The hyperlink trio (`0x978610`): SimpleHTML and both message frames.
-const HYPERLINK_SCRIPT_KINDS: [&str; 3] = ["OnHyperlinkEnter", "OnHyperlinkLeave", "OnHyperlinkClick"];
+const HYPERLINK_SCRIPT_KINDS: [&str; 3] =
+    ["OnHyperlinkEnter", "OnHyperlinkLeave", "OnHyperlinkClick"];
 
 /// Each frame type's own script names, which build 12340's lookup for that type tests before
 /// falling back to [`BASE_SCRIPT_KINDS`] (Button `0x96f200`, EditBox `0x9628f0`, GameTooltip
@@ -626,15 +628,24 @@ fn own_script_kinds(kind: FrameKind) -> (&'static [&'static str], &'static [&'st
             NONE,
         ),
         FrameKind::MovieFrame => (
-            &["OnMovieFinished", "OnMovieShowSubtitle", "OnMovieHideSubtitle"],
+            &[
+                "OnMovieFinished",
+                "OnMovieShowSubtitle",
+                "OnMovieHideSubtitle",
+            ],
             NONE,
         ),
-        FrameKind::Model | FrameKind::PlayerModel | FrameKind::DressUpModel | FrameKind::TabardModel => {
-            (&["OnUpdateModel", "OnAnimFinished"], NONE)
-        }
+        FrameKind::Model
+        | FrameKind::PlayerModel
+        | FrameKind::DressUpModel
+        | FrameKind::TabardModel => (&["OnUpdateModel", "OnAnimFinished"], NONE),
         FrameKind::StatusBar | FrameKind::Slider => (&["OnValueChanged", "OnMinMaxChanged"], NONE),
         FrameKind::ScrollFrame => (
-            &["OnHorizontalScroll", "OnVerticalScroll", "OnScrollRangeChanged"],
+            &[
+                "OnHorizontalScroll",
+                "OnVerticalScroll",
+                "OnScrollRangeChanged",
+            ],
             NONE,
         ),
         FrameKind::ColorSelect => (&["OnColorSelect"], NONE),
@@ -835,7 +846,6 @@ impl UiScript {
         dressup::install(&lua)?;
         tabard::install(&lua)?;
         tradeskill::install(&lua)?;
-        craft::install(&lua)?;
         reputation::install(&lua)?;
         skills::install(&lua)?;
         item_stats::install(&lua)?;

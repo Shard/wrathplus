@@ -23,8 +23,10 @@ fn the_three_bindings_have_the_reference_shapes() {
         (1, Some(1.0), "party"),
         (2, Some(1.0), "raid"),
         (3, Some(1.0), "pvp"),
-        // Type 4 and up fall past the reference's `cmp esi,4; jae` guard.
-        (4, Some(1.0), "none"),
+        // 3.3.5's 4 is the arena, which stock code tests for (Blizzard_BattlefieldMinimap.lua:24-33);
+        // 5 and up are none.
+        (4, Some(1.0), "arena"),
+        (5, Some(1.0), "none"),
     ] {
         s.set_instance_type(Some(ty));
         assert_eq!(

@@ -508,6 +508,11 @@ fn write_on_still_fades_when_instant_text_is_off() {
     load_xml(&mut s, "Interface\\FrameXML\\QuestFrame.xml");
     load_xml(&mut s, "Interface\\FrameXML\\QuestLogFrame.xml");
     s.eval::<()>(r#"QUEST_FADING_DISABLE = "0""#).unwrap();
+    // Let the tracking icon's load-time shine finish first: the stock walk skips the fade that
+    // slides into a finished one's slot (`UIParent.lua:2456-2491`).
+    for _ in 0..3 {
+        s.tick(1.0);
+    }
     s.set_quest(Some(QuestState {
         panel: QuestPanel::Detail,
         title: "A Threat Within".into(),

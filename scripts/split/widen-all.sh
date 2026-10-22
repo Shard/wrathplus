@@ -33,13 +33,27 @@ done
 echo "globs: widened $g module files other crates glob-import"
 for pass in $(seq 1 "$max"); do
     total=0
+    stuck=""
+    left=""
     for p in $P-app-core $P-app-net $P-app-world $P-app-ui $P-app-tools $P-app; do
         [ -f "crates/$p/Cargo.toml" ] || continue
-        n="$(uv run scripts/split/widen.py -p "$p" --apply 2>/dev/null | sed -nE 's/^[^:]+: widened ([0-9]+) declarations.*/\1/p')"
+        out="$(uv run scripts/split/widen.py -p "$p" --apply 2>/dev/null)"
+        n="$(sed -nE 's/^[^:]+: widened ([0-9]+) declarations.*/\1/p' <<< "$out")"
         echo "pass $pass: $p widened ${n:-0}"
         total=$((total + ${n:-0}))
+        # Errors left after a pass that widened nothing anywhere: no widening fixes them, and they
+        # stop the crate's build short of its own privacy errors (a crate that widens 0 is not done).
+        if ! grep -qE "^[^:]+: other errors \{\}$" <<< "$out" || ! grep -qE "privacy errors left 0$" <<< "$out"; then
+            stuck+="$p "
+            left+="$(awk '/^  / && n++ < 20' <<< "$out")"$'\n'
+        fi
     done
-    [ "$total" = 0 ] && { echo "fixpoint after $pass pass(es)"; exit 0; }
+    if [ "$total" = 0 ]; then
+        [ -z "$stuck" ] && { echo "fixpoint after $pass pass(es)"; exit 0; }
+        echo "stuck after $pass pass(es): errors left in $stuck"
+        echo "$left"
+        exit 1
+    fi
 done
 echo "no fixpoint after $max passes"
 exit 1

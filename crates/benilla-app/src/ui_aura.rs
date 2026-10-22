@@ -280,17 +280,31 @@ fn shown_in_aura_ui(catalog: Option<&SpellCatalog>, spell_id: u32) -> bool {
         .is_none_or(|d| !d.hidden_from_aura_bar() && !d.tracking_aura())
 }
 
-/// The player's tracking aura, the reference's global `0xbc6378`: the rebuild's ascending walk
-/// overwrites it per tracking aura, so the last wins (`0x4e4302`), after the attribute test; a
-/// catalog miss cannot be told apart and goes to the bar. Read by `GetTrackingTexture`,
-/// `CancelTrackingBuff` and `GameTooltip:SetTrackingSpell` ([`UiScript::set_tracking`]).
+/// The player's tracking aura, 12340's `[0xbeba68]`: an aura of a tracking spell becomes it as it
+/// lands (`0x727760` → `0x57ea30`), with no attribute test, which matters because every 3.3.5
+/// tracking spell carries the hidden-aura attributes. The last one wins; a catalog miss cannot be
+/// told apart. Read by `GetTrackingTexture`, `CancelTrackingBuff` and
+/// `GameTooltip:SetTrackingSpell` ([`UiScript::set_tracking`]).
+/// The tracking menu's spells (12340 `[0xbe8dec]`), in book order: the book's spells whose effect
+/// is a tracking aura. Labelled: the reference's own admission test is untraced.
+pub(crate) fn tracking_spells(
+    book: &benilla_ui::script::SpellBookState,
+    catalog: &SpellCatalog,
+) -> Vec<u32> {
+    book.slots
+        .iter()
+        .filter(|s| catalog.get(s.spell_id).is_some_and(|d| d.tracking_aura()))
+        .map(|s| s.spell_id)
+        .collect()
+}
+
 fn tracking_state_of(
     catalog: Option<&SpellCatalog>,
     occupied: &[UnitAuraSlot],
 ) -> Option<TrackingState> {
     occupied.iter().rev().find_map(|a| {
         let d = catalog.and_then(|c| c.get(a.spell_id))?;
-        (!d.hidden_from_aura_bar() && d.tracking_aura()).then(|| TrackingState {
+        d.tracking_aura().then(|| TrackingState {
             spell_id: a.spell_id,
             name: Some(d.name.clone()),
             icon: d.icon.clone(),
@@ -452,7 +466,7 @@ fn feed_auras(
     let tracking = if let Some(auras) = packet_player {
         auras.iter().rev().find_map(|s| {
             let d = catalog.and_then(|c| c.get(s.aura.spell_id))?;
-            (!d.hidden_from_aura_bar() && d.tracking_aura()).then(|| TrackingState {
+            d.tracking_aura().then(|| TrackingState {
                 spell_id: s.aura.spell_id,
                 name: Some(d.name.clone()),
                 icon: d.icon.clone(),
@@ -756,12 +770,11 @@ mod tests {
         assert!(shown_in_aura_ui(Some(&catalog), 0xffff_fffe));
     }
 
-    /// Against the real `Spell.dbc` (`0x4e42d6`-`0x4e4308`); skips without client data. On 12340
-    /// data the bar still drops both tracking auras, but neither names the 1.12 tracking state:
-    /// 3.3.5 tracks through the minimap's tracking system, not an aura. Labelled: which of the
-    /// divert's two tests stops it, and `GetTrackingTexture`'s 12340 source, are unresolved here.
+    /// Against the real `Spell.dbc`; skips without client data. The bar drops both tracking auras,
+    /// which carry the hidden-aura attributes, and the last one names the tracking state, as
+    /// 12340's aura apply sets it with no attribute test (`0x727760` → `0x57ea30`).
     #[test]
-    fn real_tracking_auras_are_hidden_from_the_bar_and_name_no_tracking_state() {
+    fn real_tracking_auras_are_hidden_from_the_bar_and_the_last_names_the_tracking_state() {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let catalog = benilla_formats::load_spell_catalog(&mut chain).expect("Spell.dbc");
@@ -779,7 +792,11 @@ mod tests {
             "both tracking auras are diverted, the shout stays"
         );
 
-        assert!(tracking_state_of(Some(&catalog), &slots).is_none());
+        assert_eq!(
+            tracking_state_of(Some(&catalog), &slots).map(|t| t.spell_id),
+            Some(1494),
+            "Track Beasts, the last tracking aura"
+        );
     }
 
     #[test]

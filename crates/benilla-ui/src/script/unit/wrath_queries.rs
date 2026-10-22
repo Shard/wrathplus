@@ -13,7 +13,8 @@
 //! - `UnitIsRaidOfficer` (`0x60c8a0`): the raid member's rank above 0.
 //! - `UnitInBattleground` (`0x60caa0`): the raid slot, in a battleground.
 //! - `UnitIsSameServer` (`0x612670`): 1 unless the two units' realms differ.
-//! - `PlayerIsPVPInactive` (`0x612e20`): the unit carries aura 43681, a boolean.
+//! - `PlayerIsPVPInactive` (`0x612e20`): the unit, a token or a group member's name (`0x60abf0`),
+//!   carries aura 43681, a boolean.
 //! - `GetAvailableRoles` (`0x5548f0`): the class's role byte (`0xa394af`, by class id), as
 //!   booleans for tank `0x2`, healer `0x4` and damage `0x8`.
 //! - `GetNumLanguages` (`0x500760`): the known languages.
@@ -66,7 +67,7 @@ fn linked<'m>(model: &'m Model, t: Option<&str>) -> Option<&'m super::UnitState>
 }
 
 /// The class id of a `class_file` token.
-fn class_id(file: &str) -> usize {
+pub(crate) fn class_id(file: &str) -> usize {
     match file {
         "WARRIOR" => 1,
         "PALADIN" => 2,
@@ -375,11 +376,19 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, token: Value| {
             let token = unit_arg(lua, token, "Usage: PlayerIsPVPInactive(\"unit\")")?;
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let auras = token
+            // A token through the guid table, else a group member's name (`0x60abf0`): the stock
+            // battle maps pass a teammate's name. Nobody answers false, never a raise.
+            let guid = token
                 .as_deref()
-                .map(|t| crate::script::aura::auras_of(&model, t))
-                .transpose()?
-                .flatten();
+                .map_or(0, |t| match model.unit_guids.guid_of(t) {
+                    Ok(g) => g.unwrap_or(0),
+                    Err(_) => crate::script::wrath_unit_popup::guid_of(&model, t),
+                });
+            let auras = match guid {
+                0 => None,
+                g if g == model.unit_guids.player => Some(model.player_auras.as_slice()),
+                g => model.unit_auras.get(&g).map(Vec::as_slice),
+            };
             Ok(auras.is_some_and(|a| a.iter().any(|x| x.spell_id == AURA_INACTIVE)))
         })?,
     )?;

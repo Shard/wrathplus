@@ -166,3 +166,39 @@ fn the_link_queries_take_a_friends_name() {
         )
         .unwrap());
 }
+
+/// `PlayerIsPVPInactive` (`0x612e20`) resolves a token or a raid member's name (`0x60abf0`), as the
+/// stock battle maps pass a teammate's name (`Blizzard_BattlefieldMinimap.lua:579`), and answers
+/// false for nobody rather than raising.
+#[test]
+fn pvp_inactive_takes_a_token_or_a_raid_members_name() {
+    use crate::script::AuraState;
+    let mut s = UiScript::new().unwrap();
+    s.set_party(PartyState {
+        raid: vec![RaidMemberInfo {
+            name: "Idler".into(),
+            guid: 7,
+            ..Default::default()
+        }],
+        ..Default::default()
+    });
+    s.set_unit_auras(
+        7,
+        Some(vec![AuraState {
+            spell_id: 43681,
+            ..Default::default()
+        }]),
+    );
+    let inactive = |s: &UiScript, who: &str| -> bool {
+        s.eval(&format!("return PlayerIsPVPInactive({who:?})"))
+            .unwrap()
+    };
+    assert!(inactive(&s, "Idler"), "a raid member by name");
+    assert!(inactive(&s, "idler"), "case-insensitively");
+    assert!(!inactive(&s, "Stranger"), "nobody is false, not a raise");
+    assert!(!inactive(&s, "target"), "an empty token too");
+    assert!(
+        s.run("PlayerIsPVPInactive()").is_err(),
+        "the usage gate stays"
+    );
+}

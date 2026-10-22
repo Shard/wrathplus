@@ -131,12 +131,12 @@ fn create(lua: &Lua, which: Arrow, parent: Value) -> mlua::Result<()> {
         lua,
         ("Model".to_string(), None, Some(Value::Table(t)), None),
     )?;
-    if matches!(which, Arrow::World) {
-        // CWorldMap::CreatePlayerArrowFrame also exposes its effect child to Wrath
-        // WorldMapFrame_OnLoad (WorldMapFrame.lua:108) before alpha/level are set.
-        create_frame(lua, ("Frame".to_string(), Some(Value::String(lua.create_string("PlayerArrowEffectFrame")?)),
-            Some(Value::Table(wrapper.clone())), None))?;
-    }
+    // Each arrow names its effect child, read next by the stock OnLoads: CWorldMap::Create{,Mini}
+    // PlayerArrowFrame (WorldMapFrame.lua:108, Blizzard_BattlefieldMinimap.lua:52-54).
+    let mini = ["", "Mini"][usize::from(matches!(which, Arrow::Mini))];
+    let name = Value::String(lua.create_string(format!("Player{mini}ArrowEffectFrame"))?);
+    let effect = ("Frame".to_string(), Some(name), Some(Value::Table(wrapper.clone())), None);
+    create_frame(lua, effect)?;
     let id = decode_id(&wrapper)?;
     let scale = {
         let model = lua.app_data_ref::<Model>().expect("model app_data");

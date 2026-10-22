@@ -7,10 +7,10 @@ use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 
+use super::cast_bar::{CastBarEdge, CastBarFeed};
 use crate::creature_anim::{CastEvent, CastEventKind, Casting, PlaySeq};
 use crate::net::{ClientCommand, GuidIndex, NetCommands, SelfGuid};
 use crate::ui_action::Spells;
-use super::cast_bar::{CastBarEdge, CastBarFeed};
 
 /// The in-flight window from send until `SMSG_SPELL_START` names the cast time; the server
 /// answers every `CMSG_CAST_SPELL`, so a packet always clears it first.
@@ -359,7 +359,7 @@ impl SelfCancel<'_, '_> {
                                 entity: e,
                                 spell_id,
                                 kind: CastEventKind::Fail,
-                                seq: play_seq.next(),
+                                seq: play_seq.advance(),
                             });
                         }
                     }

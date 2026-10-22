@@ -6,9 +6,8 @@ use benilla_ui::script::{AuraState, UiScript, UnitState};
 
 use super::test_ui::load_ui as load_xml;
 
-/// A 1024x768 screen with fonts, `UIParent` and `GameTooltip`, plus `extra`. The kit seeds
-/// `CONTAINER_OFFSET_X/Y` with the stock 0 and 70 (`ContainerFrame.lua:11-12`), so with no bar
-/// raised the default corner is x = 1024 - 13 = 1011, y = 70.
+/// A 1024x768 screen with fonts, `UIParent` and `GameTooltip`, plus `extra`. `CONTAINER_OFFSET_X/Y`
+/// are `UIParent_ManageFramePositions`' (`UIParent.lua:1199`), so the corner is read off them.
 fn harness(extra: &[&str]) -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
@@ -64,9 +63,8 @@ fn uiparent_is_a_real_full_screen_frame() {
     assert!(s.errors().is_empty(), "errors: {:?}", s.errors());
 }
 
-/// A world hover seats the plate at the default corner: the engine fires
-/// `OnTooltipSetDefaultAnchor` (`GameTooltipTemplate.xml:617-619`), which anchors BOTTOMRIGHT to
-/// `UIParent` at (-13, 70).
+/// A world hover seats the plate at the default corner, BOTTOMRIGHT to `UIParent` at
+/// `(-CONTAINER_OFFSET_X - 13, CONTAINER_OFFSET_Y)` (`GameTooltip_SetDefaultAnchor`).
 #[test]
 fn world_hover_seats_the_default_corner() {
     benilla_formats::wow_data_or_skip!();
@@ -78,7 +76,8 @@ fn world_hover_seats_the_default_corner() {
     let ok: bool = s
         .eval(
             "return GameTooltip:IsVisible() \
-               and GameTooltip:GetRight() == 1011 and GameTooltip:GetBottom() == 70",
+               and GameTooltip:GetRight() == 1024 - CONTAINER_OFFSET_X - 13 \
+               and GameTooltip:GetBottom() == CONTAINER_OFFSET_Y",
         )
         .unwrap();
     assert!(ok, "world tooltip sits at the screen's bottom-right corner");
@@ -109,15 +108,15 @@ fn unit_frame_hover_takes_the_default_corner_and_drops_on_leave() {
         "Interface\\FrameXML\\PetFrame.xml",
     ]);
     s.set_unit("target", Some(wolf()));
-    // `UnitFrame_OnEnter` takes no arguments and reads `this` (`UnitFrame.lua:47`), as the stock
-    // `<OnEnter>` calls it (`TargetFrame.xml:505`).
+    // `UnitFrame_OnEnter (self)` (`UnitFrame.lua:120`), as the stock `<OnEnter>` passes it.
     s.run("UnitFrame_OnEnter(TargetFrame)").unwrap();
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
     s.resolve();
     let ok: bool = s
         .eval(
             "return GameTooltip:IsVisible() \
-               and GameTooltip:GetRight() == 1011 and GameTooltip:GetBottom() == 70 \
+               and GameTooltip:GetRight() == 1024 - CONTAINER_OFFSET_X - 13 \
+               and GameTooltip:GetBottom() == CONTAINER_OFFSET_Y \
                and GameTooltip:IsOwned(TargetFrame)",
         )
         .unwrap();
@@ -270,7 +269,7 @@ fn action_button_hover_takes_the_default_corner() {
         .eval(
             "local p, rel, rp, x, y = GameTooltip:GetPoint() \
              return p == \"BOTTOMRIGHT\" and rel ~= nil and rel:GetName() == \"UIParent\" \
-               and rp == \"BOTTOMRIGHT\" and x == -13 and y == 70",
+               and rp == \"BOTTOMRIGHT\" and x == -CONTAINER_OFFSET_X - 13 and y == CONTAINER_OFFSET_Y",
         )
         .unwrap();
     assert!(
@@ -403,7 +402,7 @@ fn ubertooltips_off_seats_stance_plates_beside_the_button() {
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
 }
 
-/// Buff hovers hang below the button: `ANCHOR_BOTTOMLEFT` (`BuffFrame.xml:37`) seats the plate's
+/// Buff hovers hang below the button: `ANCHOR_BOTTOMLEFT` (`BuffFrame.lua:479`) seats the plate's
 /// TOPRIGHT on the button's BOTTOMLEFT.
 #[test]
 fn buff_hover_hangs_below_left_of_the_button() {
@@ -434,18 +433,25 @@ fn buff_hover_hangs_below_left_of_the_button() {
         until_cancelled: false,
         channeled: false,
     }]);
-    // The event the stock buff buttons register (`BuffFrame.lua:113`).
-    s.fire_event("PLAYER_AURAS_CHANGED", vec![]);
+    // The update the player's `UNIT_AURA` runs (`BuffFrame.lua:41-45`, `:143`); its unit is
+    // `PlayerFrame.unit` (`:124`), and this kit loads no `PlayerFrame`, so a stand-in carries it.
+    // `UnitAura("player", …)` resolves the token through the unit guids the aura feed pushes.
+    s.set_unit_guids(&benilla_ui::script::UnitGuids {
+        player: 1,
+        held: std::collections::HashMap::from([(1, 0)]),
+        ..Default::default()
+    });
+    s.run("PlayerFrame = PlayerFrame or { unit = 'player' } BuffFrame_Update()")
+        .unwrap();
     s.resolve();
-    // The template's inline `<OnEnter>`, called directly: the engine sets `this` only when it
-    // fires a handler (`0x704d50`), so it is set by hand.
-    s.run("BuffButton0:GetScript(\"OnEnter\")(BuffButton0)")
+    // The template's `<OnEnter>`, called directly with its button.
+    s.run("BuffButton1:GetScript(\"OnEnter\")(BuffButton1)")
         .unwrap();
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
     let ok: bool = s
         .eval(
             "local p, rel, rp = GameTooltip:GetPoint() \
-             return p == \"TOPRIGHT\" and rel ~= nil and rel:GetName() == \"BuffButton0\" \
+             return p == \"TOPRIGHT\" and rel ~= nil and rel:GetName() == \"BuffButton1\" \
                and rp == \"BOTTOMLEFT\"",
         )
         .unwrap();

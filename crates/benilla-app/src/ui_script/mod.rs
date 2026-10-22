@@ -258,7 +258,10 @@ impl Plugin for UiScriptPlugin {
             .init_resource::<PointerOverUiPanel>()
             .add_systems(
                 Update,
-                (extract::tick_script, input::feed_ui_input.run_if(glue::ui_input_live))
+                (
+                    extract::tick_script,
+                    input::feed_ui_input.run_if(glue::ui_input_live),
+                )
                     .chain()
                     .in_set(UiInput)
                     // So a key a focused box consumed never also fires a binding.
@@ -335,13 +338,13 @@ fn arbitrate_pointer_over_ui(
 mod lifecycle;
 pub(crate) use crate::app_core::ui_state::{ingame_ui_up, seam_scale};
 pub(crate) use lifecycle::{
-    end_ui_session, run_pending_reload, setup_script, AddOnIdentity,
-    LeavingWorldArmed, PendingEntryUiLoad, ReloadUiPending,
+    end_ui_session, run_pending_reload, setup_script, AddOnIdentity, LeavingWorldArmed,
+    PendingEntryUiLoad, ReloadUiPending,
 };
 // Test-only: other modules' tests consume these, and a plain re-export would warn unused.
+use lifecycle::shutdown_on_exit;
 #[cfg(test)]
 pub(crate) use lifecycle::{finish_ui_load, load_ingame_ui_on_world_entry};
-use lifecycle::shutdown_on_exit;
 
 /// `GetFramerate()`'s host half: FPS on `Time<Real>`, smoothed by a one-second pole; how the
 /// reference averages it is untraced.
@@ -626,6 +629,8 @@ pub(crate) fn load_ui_for_test(script: &mut benilla_ui::script::UiScript, entry:
     test_ui::load_ui(script, entry)
 }
 
+#[cfg(test)]
+mod achievement_alert_tests;
 #[cfg(test)]
 mod cinematic_tests;
 

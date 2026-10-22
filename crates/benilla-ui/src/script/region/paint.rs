@@ -8,8 +8,12 @@ use crate::script::{BlendMode, Model, TexCoords};
 
 use super::region_handle_of;
 
+#[path = "rotation.rs"]
+mod rotation;
+
 /// Install the paint methods into `m`.
 pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
+    rotation::install(lua, m)?;
     // SetAlpha/GetAlpha: the region's own alpha, not the owner frame's; stock
     // `CastingBarFrame.lua:133` reads it back to ramp its flash. `RegionData::alpha` has the draw.
     m.set(
@@ -394,9 +398,6 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
             Ok(draw_layer_name(dl))
         })?,
     )?;
-
-    // No Texture `SetRotation`: 1.12 registers it only on PlayerModel (`0x505f00`, table
-    // `0x84f1fc`), in neither region map (`0x87c128`, `0xcf5400`).
 
     // SetTexCoord(left, right, top, bottom), XML `<TexCoords>`: a UV sub-rect in 0..1, origin top
     // left. SetTexCoord(ULx, ULy, LLx, LLy, URx, URy, LRx, LRy): any UV quad, as stock

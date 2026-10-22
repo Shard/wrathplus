@@ -62,8 +62,15 @@ fn a_built_client_registers_exactly_the_shipped_cvar_rows() {
 /// The `on_cvar` observers, in the order their plugins registered them: each feature attaches
 /// its own, and a registration-order change would reorder the hooks a change fires. Compared by
 /// module path: the crate prefix names whichever layer crate the hook lives in.
+///
+/// Dev builds only: Bevy keeps system and observer names only with its `debug` feature, which only
+/// the `dev` build turns on (through `benilla-world/dev` and `bevy_egui`); a player build reads
+/// empty names, so there is nothing to compare and the test returns at once.
 #[test]
 fn the_cvar_hooks_register_in_plugin_order() {
+    if !crate::run_mode::dev_affordances() {
+        return;
+    }
     let mut app = crate::game_plugins::schedule_tests::headless_client();
     let world = app.world_mut();
     let mut hooks: Vec<(u32, String)> = world

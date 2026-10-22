@@ -18,9 +18,11 @@
 # `--drop-reexports` then deletes each module's re-exports (a glob `use super::*` that relied on
 # one breaks; the dry run counts them). `--widen` turns every `pub(crate)` in the layer crates
 # into `pub`, the blanket widening; without it the compiler names each item a crate boundary hides.
-# `--test-support` turns each `#[cfg(test)]` in the layer crates that gates anything but a test
-# module into `#[cfg(any(test, feature = "test-support"))]`: a test helper (a constructor, a probe
-# method, `local_state::test_env`) is invisible to a dependent crate's tests otherwise.
+# `--test-support` makes each `test_support` module's items `pub`: they are the shared test
+# helpers' home. Any other `#[cfg(test)]` helper a dependent crate's tests reach (a constructor, a
+# probe method, `local_state::test_env`) is opened by `widen.py`, from the compiler's
+# "configured out" note, to `#[cfg(any(test, feature = "test-support"))]`; the rest stay
+# `cfg(test)`, so the lib build has no test-only dead code.
 #
 # It never commits and never builds. Run it on a throwaway worktree for a dry run, or on the move
 # commit's tree, then `cargo check` bottom-up: `-p benilla-app-core`, `-net`, `-world`, `-ui`,
@@ -68,6 +70,8 @@ of() { mods_of "$1"; [ "$1" = ui ] && echo "$extra_ui"; true; }
 cfg_of() { grep -B1 -E "^(pub(\(crate\))? )?mod $1;" $src/lib.rs | head -1 | grep '^#\[cfg' || true; }
 
 uv run scripts/split/canonical-paths.py --apply
+# A merge may have brought an import that crosses layers.txt upward: stop before moving anything.
+uv run scripts/split/layer-edges.py || { echo "move-layers: upward edges (above); fix layers.txt or the import, then restore the tree" >&2; exit 1; }
 if [ $drop = 1 ]; then
     for m in $all_mods; do
         uv run scripts/split/canonical-paths.py --via "$m" --drop-reexports --apply 2>/dev/null || true
@@ -106,7 +110,7 @@ for l in $layers; do
         s/^\[dev-dependencies\]\n/[dev-dependencies]\n$ENV{DEVDEPS}/m' $app/Cargo.toml > "$dst/Cargo.toml"
     {
         echo "//! The $l layer of $P-app: see docs/APP-CRATE-SPLIT-PLAN.md."
-        echo '#![cfg_attr(not(feature = "dev"), allow(dead_code))]'
+        echo '#![cfg_attr(not(feature = "dev"), allow(dead_code, unused_imports))]'
         echo
     } > "$dst/src/lib.rs"
     for m in $(of $l); do
@@ -183,31 +187,6 @@ if [ $widen = 1 ]; then
     done
 fi
 if [ $test_support = 1 ]; then
-    n=0
-    for b in $lower; do
-        for f in $(grep -rlF '#[cfg(test)]' crates/$P-app-$b/src); do
-            c=$(perl -0 -ne '$n = () = /#\[cfg\(test\)\]\n(?!(?:\s*#\[[^\n]*\n)*\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w*tests?\b)/g; print $n' "$f")
-            [ "$c" -gt 0 ] || continue
-            perl -0pi -e 's/#\[cfg\(test\)\]\n(?!(?:\s*#\[[^\n]*\n)*\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w*tests?\b)/#[cfg(any(test, feature = "test-support"))]\n/g' "$f"
-            n=$((n + c))
-        done
-    done
-    # A test module another crate's tests name (`use crate::ui_pet::press_tests::…`) is a shared
-    # helper too: open it the same way.
-    o=0
-    for b in $lower; do
-        for f in $(grep -rlE '^\s*#\[cfg\(test\)\]' crates/$P-app-$b/src); do
-            for name in $(perl -0 -ne 'while (/#\[cfg\(test\)\]\n(?:\s*#\[[^\n]*\n)*\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w*tests?)\b/g) { print "$1\n" }' "$f" | sort -u); do
-                # The declaring file's module path: `ui_pet/mod.rs` -> `ui_pet`, `a/b.rs` -> `a::b`.
-                mp="${f#crates/$P-app-$b/src/}"; mp="${mp%.rs}"; mp="${mp%/mod}"; mp="${mp//\//::}"
-                users=$(grep -rlE "crate::$mp::$name(::|\b)" crates/$P-app*/src --include=*.rs | grep -v "^crates/$P-app-$b/" || true)
-                [ -n "$users" ] || continue
-                NAME="$name" perl -0pi -e 's/#\[cfg\(test\)\]\n((?:\s*#\[[^\n]*\n)*\s*)(?:pub(?:\([^)]*\))?\s+)?mod\s+$ENV{NAME}\b/#[cfg(any(test, feature = "test-support"))]\n$1pub mod $ENV{NAME}/g' "$f"
-                o=$((o + 1))
-            done
-        done
-    done
-    echo "test-support: $o test modules other crates' tests name, opened"
     # A `test_support` module is the shared helpers' home; its items are for other crates' tests.
     t=0
     for b in $lower; do
@@ -217,6 +196,6 @@ if [ $test_support = 1 ]; then
             t=$((t + c))
         done
     done
-    echo "test-support: $n test-only items opened to dependent crates' tests; $t test_support items made pub"
+    echo "test-support: $t test_support items made pub"
 fi
 echo "moved: $(for b in $lower; do echo -n "$b=$(echo $(of $b) | wc -w | tr -d ' ') "; done)"
