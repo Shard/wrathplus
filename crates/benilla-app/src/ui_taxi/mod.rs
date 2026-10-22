@@ -373,10 +373,8 @@ mod tests {
             .insert_non_send_resource(UiScript::new().unwrap());
         app.world_mut().spawn((
             SelfPlayer,
-            ObjectStore(ObjectFields::from_fields(&[(
-                benilla_protocol::types::Field::UnitBytes0,
-                crate::target::HUMAN_WARRIOR,
-            )])),
+            // Player-typed, player-controlled and templated, as the native reaction reads a player.
+            ObjectStore(crate::target::human_warrior_player(&[])),
         ));
         let master = app
             .world_mut()
