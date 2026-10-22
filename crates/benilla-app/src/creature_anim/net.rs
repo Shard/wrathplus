@@ -138,7 +138,7 @@ fn on_attacker_state(
             &mut sheaths,
             &mut edges,
             &stores,
-            play_seq.next(),
+            play_seq.advance(),
         );
     }
 }
@@ -184,7 +184,7 @@ fn on_wrath_attacker_state(
         &mut sheaths,
         &mut edges,
         &stores,
-        play_seq.next(),
+        play_seq.advance(),
     );
 }
 
@@ -429,7 +429,7 @@ fn play_spell_visual(
         out.write(KitPush {
             entity: e,
             kit_id,
-            seq: play_seq.next(),
+            seq: play_seq.advance(),
         });
     }
 }
@@ -473,7 +473,7 @@ fn environmental_damage_visual(
             out.write(KitPush {
                 entity: ent,
                 kit_id,
-                seq: play_seq.next(),
+                seq: play_seq.advance(),
             });
         }
     }

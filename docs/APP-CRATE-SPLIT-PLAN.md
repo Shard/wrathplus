@@ -724,7 +724,8 @@ What only separate crates report, as the dry run counted it:
 |---|---|---|
 | Visibility widenings | about 2,530 declarations (core 6, net 101, world 434, ui 1,268, tools 336, root 385) | `widen-all.sh`: only what the compiler names; 3 passes to a fixpoint |
 | Glob imports from another crate | 38 module files | `widen-all.sh` widens each module another crate glob-imports (no error names those) |
-| `#[cfg(test)]` helpers other crates' tests use | 210 items, 8 test modules, 27 `test_support` items | `move-layers.sh --test-support` |
+| `#[cfg(test)]` helpers other crates' tests use | 210 items, 8 test modules, 27 `test_support` items (blanket count) | `widen.py` opens only the gates another crate reaches; `--test-support` makes `test_support` items `pub` |
+| Warnings the move leaves (lib, test, `test-support` builds) | 290 with the blanket opening; 0 now | `quiet.py` (below) |
 | Inherent impls on another crate's type (E0116) | 0 | (step 0 moved them all) |
 | Orphan impls (E0117) | 3 | fixed ahead (ace77059: `Default` for `UiClock`/`UiScaleCvar`, `AskOnce` for `MailOpen`) |
 | `include_dir!`/`CARGO_MANIFEST_DIR` assets | `assets/ui` | `move-layers.sh` moves it with `ui_script` and points `run_mode::dev_source_dir` there |
@@ -745,52 +746,61 @@ root and its `<root>-<layer>` siblings under any prefix.
 (`crates/wrathplus-app`, else `crates/benilla-app`), so the moved crates are born
 `wrathplus-app-<layer>`. The tests above name no prefix either.
 
-**The move, one commit per layer during a worker pause** (`scripts/split/`):
+**The move: one run of every layer, one commit, during a worker pause** (`scripts/split/`):
 
 1. Merge wrath-hud; gates green; `git status` clean. `move-layers.sh` refuses to start with
-   uncommitted or untracked changes or a `MERGE_HEAD`: a half-moved layer's crate directory would
-   count as already moved on a re-run. After a failed layer, back to the last good commit (the
-   previous layer's, or the pre-move head) and run that layer again; committed layers stay:
+   uncommitted or untracked changes or a `MERGE_HEAD`: a half-moved crate directory would count as
+   already moved on a re-run. After a failed run, back to the pre-move head and run again:
 
    ```sh
-   git reset --hard <last good commit>
+   git reset --hard <pre-move head>
    git clean -fd crates/
-   scripts/split/move-layers.sh --layers <the failed layer> --test-support
+   scripts/split/move-layers.sh --layers "core net world ui tools" --test-support
    ```
-2. `scripts/split/move-layers.sh --layers core --test-support` (later commits: `net`, `world`,
-   `ui`, `tools`; a layer already moved counts as lower, and the root gains only the new crate).
-   It runs `canonical-paths.py --apply`, `git mv`s the modules with their `#[path]` siblings,
-   writes the crate's `Cargo.toml` (benilla-app's dependencies, the lower crates, `dev` and
-   `test-support` forwarded, a `test-support` dev-dependency on each lower crate) and its
-   `lib.rs` (`pub mod` per module, every lower module re-exported at its root, so `crate::m::…`
-   keeps resolving), and moves `assets/ui` with the ui layer.
-3. `scripts/split/widen-all.sh`, then `cargo check -p <each crate> --lib --tests` and
-   `cargo check --workspace --tests`: clean, as in the dry run.
-4. Gates for every crate (`--lib --tests --no-fail-fast`), clippy per crate, the census, the
+2. `scripts/split/move-layers.sh --layers "core net world ui tools" --test-support`. It runs
+   `canonical-paths.py --apply`, then `layer-edges.py`, which stops the move on any import that
+   crosses `layers.txt` upward (merges bring new ones: 795d62c3's `wrath_vehicle_seats` was the
+   last, placed in core). It `git mv`s the modules with their `#[path]` siblings, writes each
+   crate's `Cargo.toml` (the root's dependencies, the lower crates, `dev` and `test-support`
+   forwarded, a `test-support` dev-dependency on each lower crate) and `lib.rs` (`pub mod` per
+   module, every lower module re-exported at its root, so `crate::m::…` keeps resolving), moves
+   `assets/ui` with the ui layer, and makes each `test_support` module's items `pub`.
+3. `scripts/split/widen-all.sh 6`: compiler-named widenings to a fixpoint. Each `#[cfg(test)]`
+   item another crate reaches is opened to `#[cfg(any(test, feature = "test-support"))]` (rustc's
+   "configured out … gated here" note, or for a method, a same-scope name or a test-only
+   re-export, the gated declaration of that name); the rest stay `cfg(test)`. It fails, listing the
+   errors, if a pass widens nothing while a crate still has errors.
+4. `uv run scripts/split/quiet.py --apply`: per crate, the lib, test and `test-support` lib
+   builds. It removes imports the test build also calls unused, moves imports only tests use to a
+   `#[cfg(test)]` import (the "Test-only" re-export pattern), gives `#[cfg(test)]` to helpers in an
+   opened block that only their own crate's tests use (with a struct's `impl`s), and widens a
+   `private_interfaces` type. It deletes nothing; anything else it lists.
+5. Gates for every crate (`--lib --tests --no-fail-fast`), clippy per crate, the census, the
    replay (sha256 `16bc666b…`; a move changes no state).
-5. Commit: renames, one `Cargo.toml` and `lib.rs` per crate, the widenings.
-6. After the last layer: regenerate `scripts/quality/loc-baseline.json` once against the new
-   paths (strict again from then on), and update the gate crate lists (`scripts/gates.sh`,
-   `check.sh`, CI, worker gate commands: `-p benilla-app` becomes the six crates).
+6. Commit: renames, one `Cargo.toml` and `lib.rs` per crate, the widenings and gates.
+7. Then regenerate `scripts/quality/loc-baseline.json` once against the new paths (strict again
+   from then on), and update the gate crate lists (`scripts/gates.sh`, `check.sh`, CI, worker
+   gate commands: `-p benilla-app` becomes the six crates).
 
-**Timed per-layer run** (505548ff, throwaway worktree, warm target, heavy slot; 2026-10-22):
+**Final dry run** (0b43ae3d, wrath-hud 4f89242b plus the pre-move lint fixes; throwaway worktree,
+warm target, heavy slot; 2026-10-23):
 
-| Layer | Move | `widen-all.sh` | `cargo check` of the moved crates and the root |
-|---|---|---|---|
-| core | 9 s | 59 min (root 924 + 37 declarations, 3 passes) | 12.5 min, clean |
-| net, world, ui | 27 s, 55 s, 126 s | not reached: the manifests repeated each lower dependency (fixed after 505548ff) | |
+| Step | Time | Result |
+|---|---|---|
+| `move-layers.sh`, every layer | 33 s | core 16, net 8, world 51, ui 102, tools 9 modules; 0 upward edges |
+| `widen-all.sh 6` | 55 min | 38 glob modules; 2,659 widenings and opened test gates, 89 of them gates (core 6, net 105, world 453, ui 1,320, tools 339, root 436); fixpoint in 3 passes |
+| `quiet.py --apply` | 11.5 min | 0 warnings left in any crate's lib, test or `test-support` build; nothing deleted; 67 `#[cfg(test)]` lines added (test-only imports and own-crate helpers) |
+| clippy per crate (`run.sh clippy -p`) | 22 min | all six `clippy-report passed` |
+| six crates' tests (`--lib --tests --no-fail-fast`) | 14.5 min | lib 4,631 passed, 19 ignored (root 177, core 62, net 197, world 1,642, ui 2,439, tools 114), as on the unmoved tree; all 15 integration binaries pass |
 
-The all-layer run on ace77059 took about 1 min to move, 37 min for `widen-all.sh` (3 passes) and
-21 min for the six crates' tests. One layer at a time costs more because every layer widens and
-checks the root again: about 70 min for core alone. So the move is one run of every layer, then
-one widening, one check and one commit. A per-layer commit would not build on its own anyway.
-Budget about 1 h to move and widen, then the gates.
+One layer at a time costs more, because every layer widens and checks the root again: core alone
+took 9 s to move, 59 min to widen and 12.5 min to check (505548ff). So the move is a single run.
+Budget about 1 h 10 min for steps 2 to 4, then the gates.
 
-**Warnings after the move** (all-layer run): world 141, ui 134 (lib), plus 3 to 11 elsewhere:
-109 functions, 57 constants and 15 methods never used, 87 unused imports, and 8 "more private
-than" warnings. Errors are clean, but the warnings ratchet is not. An unused-import pass and a
-dead-code pass (widen what another crate uses, delete what nothing uses) are still to write before
-the move.
+**Fixed ahead of the move** (0b43ae3d): the five clippy API lints the widening raises, which
+`quiet.py` does not touch: `is_empty` beside `len` on `QueryCache` and `NameCache`,
+`PlaySeq::next` renamed `advance` (`should_implement_trait`), and `Default` for the `TestDeps` and
+`TestObjects` fixtures.
 
 Not covered by the dry run: `cargo machete` pruning of each crate's dependency list (they start
 as benilla-app's), and the player build (`--no-default-features`), which forwards `dev` the same

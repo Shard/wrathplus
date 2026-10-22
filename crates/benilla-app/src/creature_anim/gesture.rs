@@ -121,7 +121,7 @@ pub(super) fn drive_gestures(
         out.write(EmoteAnim {
             entity,
             anim_id: anim_id as u16,
-            seq: play_seq.next(),
+            seq: play_seq.advance(),
             via_player: true,
         });
     }
