@@ -231,7 +231,8 @@ fn install_trusted_secure_environment(lua: &Lua) -> mlua::Result<()> {
 
 fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
     // UIParent.lua:1927 positions the stock arena frames; no opponents outside an arena.
-    lua.globals().set("GetNumArenaOpponents", lua.create_function(|_, ()| Ok(0))?)?;
+    lua.globals()
+        .set("GetNumArenaOpponents", lua.create_function(|_, ()| Ok(0))?)?;
     let globals = lua.globals();
 
     // `IsMouseButtonDown([button])`: a named button ("LeftButton", or 1-5), else any button.
@@ -250,7 +251,10 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
                 _ => None,
             };
             let held = match name {
-                Some(name) => model.buttons_down.iter().any(|b| b.eq_ignore_ascii_case(&name)),
+                Some(name) => model
+                    .buttons_down
+                    .iter()
+                    .any(|b| b.eq_ignore_ascii_case(&name)),
                 None => !model.buttons_down.is_empty(),
             };
             Ok(held.then_some(1))
@@ -275,9 +279,16 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
                         .iter()
                         .position(|v| v.spell_id == a.action)
                         .map_or(Value::Nil, |i| Value::Integer(i as i64 + 1));
-                    vec![s("spell")?, index, s("spell")?, Value::Integer(a.action.into())]
+                    vec![
+                        s("spell")?,
+                        index,
+                        s("spell")?,
+                        Value::Integer(a.action.into()),
+                    ]
                 }
-                super::action::ACTION_KIND_ITEM => vec![s("item")?, Value::Integer(a.action.into())],
+                super::action::ACTION_KIND_ITEM => {
+                    vec![s("item")?, Value::Integer(a.action.into())]
+                }
                 super::action::ACTION_KIND_MACRO => {
                     vec![s("macro")?, Value::Integer(a.action.into())]
                 }

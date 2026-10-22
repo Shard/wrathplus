@@ -4,7 +4,7 @@ use mlua::{Lua, Table, Value};
 
 use crate::script::{Model, TexCoords};
 
-use super::region_handle_of;
+use super::super::region_handle_of;
 
 /// Install `SetRotation` into the Texture map `m`.
 pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {

@@ -12,6 +12,9 @@
 
 use mlua::{Lua, Value, Variadic};
 
+#[path = "stdlib_time.rs"]
+mod time;
+
 /// Put native protected operations behind a sticky host check. Lua 5.1 can catch a hook error, and
 /// `coroutine.resume` reports one as a false result. Once the shared budget trips, these wrappers
 /// raise a fresh Rust callback error after the protected operation returns, so nesting protected
@@ -180,7 +183,7 @@ pub(super) fn sandbox(lua: &Lua) -> mlua::Result<()> {
 /// Install the stdlib layer: the bare globals, `time`/`date` and the positional `format`.
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     install_error_handler(lua)?;
-    super::stdlib_time::install_time(lua)?;
+    time::install_time(lua)?;
     // Before the Lua layer, whose `debugprofile*` pair keeps its own `GetTime`.
     super::clock::install(lua)?;
     super::zone_text::install(lua)?;

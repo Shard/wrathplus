@@ -186,7 +186,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 mod layout;
 mod paint;
-mod rotation;
 mod text;
 
 fn install_region_methods(lua: &Lua) -> mlua::Result<()> {
@@ -362,7 +361,6 @@ fn install_region_methods(lua: &Lua) -> mlua::Result<()> {
 
     // In any order: each only adds to the same method table.
     paint::install(lua, &m)?;
-    rotation::install(lua, &m)?;
     text::install(lua, &m)?;
     layout::install(lua, &m)?;
     super::animation::install(lua, &m)?;

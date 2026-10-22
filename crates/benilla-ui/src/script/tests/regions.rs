@@ -761,9 +761,8 @@ fn the_two_region_leaves_answer_their_own_maps() {
         assert!(has(&s, "Tex", m), "a Texture answers {m}");
         assert!(!has(&s, "Str", m), "a FontString must NOT answer {m}");
     }
-    // `SetRotation` is in 12340's Texture table (`0x48c860`), not FontString's.
-    assert!(has(&s, "Tex", "SetRotation"), "a Texture answers SetRotation");
-    assert!(!has(&s, "Str", "SetRotation"), "a FontString must NOT answer SetRotation");
+    // 12340's Texture table has `SetRotation` (`0x48c860`); FontString's has none.
+    assert!(has(&s, "Tex", "SetRotation") && !has(&s, "Str", "SetRotation"));
     // FontString-only.
     for m in [
         "SetText",

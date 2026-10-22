@@ -8,8 +8,12 @@ use crate::script::{BlendMode, Model, TexCoords};
 
 use super::region_handle_of;
 
+#[path = "rotation.rs"]
+mod rotation;
+
 /// Install the paint methods into `m`.
 pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
+    rotation::install(lua, m)?;
     // SetAlpha/GetAlpha: the region's own alpha, not the owner frame's; stock
     // `CastingBarFrame.lua:133` reads it back to ramp its flash. `RegionData::alpha` has the draw.
     m.set(

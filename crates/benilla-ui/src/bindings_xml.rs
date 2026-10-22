@@ -2,9 +2,8 @@
 //! it: the core's `Interface\FrameXML\Bindings.xml` off the player's chain, which `UI_Init`
 //! (`0x48fbf0`) loads at `0x490018` after the `FrameXML.toc` walk (`0x48ffed`), and each addon's,
 //! which `AddOn_Load` (`0x51f240`) loads at `0x51f443` after the addon's `.toc` files and before
-//! its saved variables. The stock file has 219 commands (94 `runOnUp`, 13 `header`, 3 `hidden`, 5
-//! `platform`) once its nine `debug` rows are skipped; the six `MOVEVIEW*` ones sit in an XML
-//! comment.
+//! its saved variables. The stock 3.3.5 file has 262 commands (101 `runOnUp`, 19 `header`, 2
+//! `hidden`, 9 `platform`) once its eleven `debug` rows are skipped.
 //!
 //! A body is one Lua chunk; with `runOnUp="true"` it runs on press and again on release, the
 //! global `keystate` set to `"down"` or `"up"`. `header="X"` opens the section
@@ -61,7 +60,7 @@ impl std::error::Error for Error {
 /// nested `<Binding>` is never read; a child that is not a `<Binding>` (the tag matched
 /// case-insensitively, `0x64a4c0`) is skipped (`0x4b704c`). A row with no `name`
 /// (`0x4b7084`-`0x4b708d`), an empty body (`0x4b7093`-`0x4b709e`) or `debug="true"`
-/// (`0x4b70a4`-`0x4b70bd`) is skipped too, so the stock file's nine debug rows are not commands.
+/// (`0x4b70a4`-`0x4b70bd`) is skipped too, so the stock file's eleven debug rows are not commands.
 pub fn parse(text: &str) -> Result<Vec<Binding>, Error> {
     // The reference's expat has no namespace processing, so an undeclared prefix is bound and the
     // text re-read rather than costing the file, as in `framexml::parse`.
@@ -258,7 +257,7 @@ mod tests {
     /// The loader's three skips beyond a missing name: a `<Binding>` below the root's children is
     /// never walked (`0x4b701f`, the sibling link `0x4b745b`), an empty body is refused
     /// (`0x4b7093`-`0x4b709e`), and a truthy `debug` skips the row (`0x4b70a4`-`0x4b70bd`), as
-    /// the stock file's nine debug rows are skipped. A whitespace body is not empty.
+    /// the stock file's eleven debug rows are skipped. A whitespace body is not empty.
     #[test]
     fn nested_empty_and_debug_rows_are_not_bindings() {
         let binds = parse(

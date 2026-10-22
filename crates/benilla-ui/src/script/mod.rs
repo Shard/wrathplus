@@ -121,7 +121,6 @@ pub use handler_prof::HandlerRow;
 mod surface;
 pub use surface::widget_method_census;
 mod input_verbs;
-mod wrath_input_verbs;
 mod inspect;
 mod inventory_verbs;
 mod item_stats;
@@ -139,6 +138,7 @@ mod merchant;
 mod messageframe;
 mod minimap;
 pub mod nameplate;
+mod wrath_input_verbs;
 pub use nameplate::{PlateCast, PlateGeometry, PlateState};
 mod model;
 mod modelframe;
@@ -171,7 +171,6 @@ mod spellbook;
 mod stable;
 mod statusbar;
 mod stdlib;
-mod stdlib_time;
 mod storage_slots;
 mod summon;
 mod talent;
@@ -476,9 +475,8 @@ pub(crate) const REGION_LEAF_SHARED: [&str; 9] = [
     "IsShown",
 ];
 
-/// Texture-only, each in the client's Texture map (`0x87c128`): `GetVertexColor` though
-/// `SetVertexColor` is shared, and `SetGradientAlpha`, not FontString's `SetAlphaGradient`, and
-/// 12340's `SetRotation` (`0x48c860`).
+/// Texture-only: `GetVertexColor` though `SetVertexColor` is shared, `SetGradientAlpha`, not
+/// FontString's `SetAlphaGradient`, and `SetRotation` (`0x48c860`).
 pub(crate) const TEXTURE_ONLY_METHODS: [&str; 13] = [
     "SetGradient",
     "SetGradientAlpha",
