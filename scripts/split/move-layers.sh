@@ -110,7 +110,7 @@ for l in $layers; do
         s/^\[dev-dependencies\]\n/[dev-dependencies]\n$ENV{DEVDEPS}/m' $app/Cargo.toml > "$dst/Cargo.toml"
     {
         echo "//! The $l layer of $P-app: see docs/APP-CRATE-SPLIT-PLAN.md."
-        echo '#![cfg_attr(not(feature = "dev"), allow(dead_code))]'
+        echo '#![cfg_attr(not(feature = "dev"), allow(dead_code, unused_imports))]'
         echo
     } > "$dst/src/lib.rs"
     for m in $(of $l); do

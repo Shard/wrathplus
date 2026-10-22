@@ -15,7 +15,10 @@ test build, then
 - widen the type a `private_interfaces` warning names ("more private than the item"), never
   narrowing the item;
 - list everything else (dead code above all) as `file:line lint message`, for a reviewed
-  deletion: nothing is deleted here.
+  deletion: nothing is deleted here;
+- last, check the player build (`--no-default-features --lib --tests`, what `cargo play`'s
+  players run without the instruments) and list its warnings too: it fixes none, and any makes
+  the exit status 1.
 
   uv run scripts/split/quiet.py              # dry run: what it would do
   uv run scripts/split/quiet.py --apply      # until a pass changes nothing
@@ -37,14 +40,17 @@ import widen  # noqa: E402  (widen_line, app_prefix)
 LAYERS = ["core", "net", "world", "ui", "tools"]
 
 
-def warnings(crate, test, features=None):
+def warnings(crate, test, features=None, player=False):
     """`(file, line, lint, message)` -> the compiler message, for the warnings in `crate`'s own
-    files from its lib build (`test=False`), with `features` if given, or its test build."""
+    files from its lib build (`test=False`), with `features` if given, or its test build; `player`
+    checks the lib and tests without default features (no `dev`)."""
     cmd = ["cargo", "check", "-p", crate, "--lib", "--message-format", "json"]
     if test:
         cmd += ["--profile", "test"]
     if features:
         cmd += ["--features", features]
+    if player:
+        cmd += ["--tests", "--no-default-features"]
     out = subprocess.run(cmd, capture_output=True, text=True).stdout
     own = f"crates/{crate}/"
     found = {}
@@ -211,9 +217,17 @@ def main():
                 left[key] = crate
         if not args.apply or changed == 0:
             break
+    player = {}
+    for crate in crates:
+        found = warnings(crate, False, player=True)
+        print(f"player build: {crate}: {len(found)} warnings", file=sys.stderr)
+        player.update(found)
     for (f, line, lint, message), crate in sorted(left.items()):
         print(f"{f}:{line} {lint} {message}")
-    print(f"quiet: {len(left)} warnings left", file=sys.stderr)
+    for f, line, lint, message in sorted(player):
+        print(f"{f}:{line} {lint} (player build) {message}")
+    print(f"quiet: {len(left)} warnings left, {len(player)} in the player build", file=sys.stderr)
+    sys.exit(1 if player else 0)
 
 
 if __name__ == "__main__":
