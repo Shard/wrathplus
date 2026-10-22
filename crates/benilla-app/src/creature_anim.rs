@@ -436,7 +436,7 @@ fn flourish_to_anim(
         out.write(EmoteAnim {
             entity: child.0,
             anim_id: select::MOUNT_SPECIAL,
-            seq: play_seq.next(),
+            seq: play_seq.advance(),
             via_player: false,
         });
     }
