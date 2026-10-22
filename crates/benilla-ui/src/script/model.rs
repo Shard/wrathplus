@@ -496,10 +496,10 @@ pub(crate) struct Model {
     pub(crate) macros_dirty: bool,
     /// Bumped by every seed and change, for readers that must not drain `macros_dirty`.
     pub(crate) macros_generation: u64,
-    /// Each macro's cached cast by 1-based index, from the app; an absent macro reads unbound.
+    /// Each macro's cached cast by macro id, from the app; an absent macro reads unbound.
     pub(crate) macro_bindings: HashMap<u32, macros::MacroBinding>,
-    /// The macro icon paths from `SpellIcon.dbc`, behind `GetMacroIconInfo`.
-    pub(crate) macro_icons: Vec<String>,
+    /// The account and character id counters (`0xbeaf58`), each its scope's highest id so far.
+    pub(crate) macro_counters: [u32; 2],
     /// `ToggleSpellAutocast` ids for `CMSG_PET_SPELL_AUTOCAST` (`0x2F3`), which names a spell.
     pub(crate) pet_spell_autocasts: Vec<u32>,
     /// An auto-repeat or cast that `SpellStopCasting()` can stop, not a channel (`0x6e6e80`). Its
@@ -1329,7 +1329,7 @@ impl Model {
             macros_dirty: false,
             macros_generation: 0,
             macro_bindings: HashMap::new(),
-            macro_icons: Vec::new(),
+            macro_counters: [0, macros::CHARACTER_MACRO_BASE],
             pet_spell_autocasts: Vec::new(),
             casting: false,
             spell_targeting: false,

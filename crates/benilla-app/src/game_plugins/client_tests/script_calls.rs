@@ -597,10 +597,12 @@ fn a_macros_calls_land_inside_the_use_action_that_ran_it() {
                 r#"local f = CreateFrame("Frame")
                 f:RegisterEvent("EXECUTE_CHAT_LINE")
                 f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) RunScript(arg1) end)
-                MACRO_INDEX = CreateMacro("heal", 1, 'CastSpellByName("Heal")', 1, nil)"#,
+                MACRO_INDEX = CreateMacro("heal", 1, 'CastSpellByName("Heal")')"#,
             )
             .expect("the macro is made");
         let index: u32 = script.eval("return MACRO_INDEX").expect("an index");
+        // The bar holds the macro's id, not its index.
+        let id = script.macros().get(index as usize).expect("made").id;
         world
             .resource_mut::<crate::ui_action::PlayerActions>()
             .buttons
@@ -608,7 +610,7 @@ fn a_macros_calls_land_inside_the_use_action_that_ran_it() {
                 0,
                 ActionButton {
                     slot: 0,
-                    action: index,
+                    action: id,
                     kind: ACTION_KIND_MACRO,
                 },
             );

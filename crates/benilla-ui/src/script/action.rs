@@ -176,16 +176,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 .ok()
                 .filter(|s| (1..=120).contains(s))
                 .and_then(|s| model.actions.get(&s))
-                .and_then(|a| match a.kind & 0xf0 {
-                    ACTION_KIND_MACRO => model.macros.get(a.action as usize).map(|_| {
-                        let b = model
-                            .macro_bindings
-                            .get(&a.action)
-                            .copied()
-                            .unwrap_or_default();
+                .and_then(|a| match super::macro_action_id(a.kind, a.action) {
+                    Some(id) => model.macros.by_id(id).map(|_| {
+                        let b = model.macro_bindings.get(&id).copied().unwrap_or_default();
                         (b.spell as u32, b.pet_book)
                     }),
-                    _ => Some((a.action, false)),
+                    None => Some((a.action, false)),
                 })
                 .unwrap_or((0, true));
             let autocast = match resolved {
@@ -234,8 +230,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 u32::try_from(slot)
                     .ok()
                     .and_then(|s| model.actions.get(&s))
-                    .filter(|s| s.kind & 0xf0 == ACTION_KIND_MACRO)
-                    .and_then(|s| model.macros.get(s.action as usize))
+                    .and_then(|s| super::macro_action_id(s.kind, s.action))
+                    .and_then(|id| model.macros.by_id(id))
                     .map(|m| m.name.clone())
             };
             match name {
@@ -407,11 +403,13 @@ mod tests {
         s.set_macros(MacroState {
             account: vec![
                 MacroView {
+                    id: 1,
                     name: "claw".into(),
                     body: "/cast Claw".into(),
                     ..Default::default()
                 },
                 MacroView {
+                    id: 2,
                     name: "fb".into(),
                     body: "/cast Fireball".into(),
                     ..Default::default()
@@ -578,10 +576,12 @@ mod tests {
         s.set_macros(MacroState {
             account: vec![
                 MacroView {
+                    id: 1,
                     name: "Pull".into(),
                     ..Default::default()
                 },
                 MacroView {
+                    id: 2,
                     name: String::new(),
                     ..Default::default()
                 },

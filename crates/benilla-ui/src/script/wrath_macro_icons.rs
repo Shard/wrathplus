@@ -16,6 +16,13 @@ impl super::UiScript {
     }
 }
 
+/// The spell-icon list's name at a 1-based index; `None` out of range or for an empty name.
+pub(super) fn spell_icon(lua: &Lua, index: i64) -> Option<String> {
+    let i = usize::try_from(index.checked_sub(1)?).ok()?;
+    let icons = lua.app_data_ref::<MacroSpellIcons>()?;
+    icons.0.get(i).filter(|n| !n.is_empty()).cloned()
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     lua.set_app_data(MacroSpellIcons::default());
     lua.globals().set(

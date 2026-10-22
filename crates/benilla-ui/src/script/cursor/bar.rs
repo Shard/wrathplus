@@ -5,7 +5,7 @@
 
 use mlua::Lua;
 
-use crate::script::action::{ACTION_KIND_ITEM, ACTION_KIND_MACRO, ACTION_KIND_SPELL};
+use crate::script::action::{ACTION_KIND_ITEM, ACTION_KIND_SPELL};
 use crate::script::{ActionSlot, Model};
 
 use super::{queue_cursor_update, CursorAction, CursorPayload};
@@ -68,7 +68,10 @@ pub(crate) fn place_action(model: &mut Model, id: u32) -> bool {
         // `PlaceAction` accepts modes 1, 3, 7 and 8 (`0x4e62e0`): a macro, mode 8, packs its id
         // under the macro tag. Pet actions (4), coins (2), stabled pets (10) and vendor rows (5)
         // are refused and stay held.
-        CursorPayload::Macro(m) => Some((ACTION_KIND_MACRO, m.index, m.texture.clone())),
+        CursorPayload::Macro(m) => {
+            let (kind, action) = crate::script::macro_action_word(m.id);
+            Some((kind, action, m.texture.clone()))
+        }
         CursorPayload::PetAction(_) => None,
         CursorPayload::StablePet(_) => None,
         CursorPayload::Money(_) => None,

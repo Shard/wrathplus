@@ -581,7 +581,7 @@ fn action_hover_on_a_macro_slot_shows_its_name_in_white() {
             name: "spawn".into(),
             texture: Some("Interface\\Icons\\Ability_Racial_Cannibalize".into()),
             body: ".spawn 16032".into(),
-            local_only: false,
+            id: 1,
         }],
         character: Vec::new(),
     });
@@ -589,7 +589,7 @@ fn action_hover_on_a_macro_slot_shows_its_name_in_white() {
         24,
         Some(ActionSlot {
             kind: 0x40, // MACRO
-            action: 1,  // macro index 1
+            action: 1,  // macro id 1
             ..Default::default()
         }),
     );

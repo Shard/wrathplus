@@ -523,17 +523,14 @@ fn the_shipped_manifest_opens_the_macro_icon_picker() {
     // One saved macro, so "Change Name/Icon" has something selected.
     s.set_macros(benilla_ui::script::MacroState {
         account: vec![benilla_ui::script::MacroView {
+            id: 1,
             name: "die".into(),
             texture: Some(r"Interface\Icons\Ability_Ambush".into()),
             body: ".die".into(),
-            ..Default::default()
         }],
         character: Vec::new(),
     });
-    s.set_macro_icons(vec![
-        r"Interface\Icons\Ability_Ambush".into(),
-        r"Interface\Icons\Ability_Backstab".into(),
-    ]);
+    s.set_macro_spell_icons(vec!["Ability_Ambush".into(), "Ability_Backstab".into()]);
     let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.resolve();
