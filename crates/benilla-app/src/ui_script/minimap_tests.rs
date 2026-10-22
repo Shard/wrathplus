@@ -312,9 +312,8 @@ fn get_ping_position_answers_two_numbers_and_a_ping_seats_the_frame() {
 }
 
 /// `MinimapPing_OnUpdate` holds the ping `MINIMAPPING_TIMER` (5.5 s), fading the last 0.5
-/// (Minimap.lua:100-125); it turns the spinner with `Texture:SetRotation`, which the engine lacks.
+/// (Minimap.lua:100-125), turning the spinner with `Texture:SetRotation`.
 #[test]
-#[ignore = "pending Texture:SetRotation (Native UI): MinimapPing_OnUpdate raises before its fade"]
 fn the_ping_holds_then_fades_on_its_timer() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();

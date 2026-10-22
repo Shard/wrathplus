@@ -395,9 +395,6 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
         })?,
     )?;
 
-    // No Texture `SetRotation`: 1.12 registers it only on PlayerModel (`0x505f00`, table
-    // `0x84f1fc`), in neither region map (`0x87c128`, `0xcf5400`).
-
     // SetTexCoord(left, right, top, bottom), XML `<TexCoords>`: a UV sub-rect in 0..1, origin top
     // left. SetTexCoord(ULx, ULy, LLx, LLy, URx, URy, LRx, LRy): any UV quad, as stock
     // `TaxiFrame.lua:223` draws route lines, stored per corner in screen winding.

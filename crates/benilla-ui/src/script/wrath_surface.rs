@@ -116,15 +116,6 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
                     if not left then return end
                     return left, bottom, self:GetWidth(), self:GetHeight()
                 end
-                function t.IsMouseOver(self, top, bottom, left, right)
-                    local l, b, w, h = t.GetRect(self)
-                    if not l then return nil end
-                    local x, y = GetCursorPosition()
-                    local scale = self:GetEffectiveScale()
-                    x, y = x / scale, y / scale
-                    return (x >= l - (left or 0) and x <= l + w + (right or 0)
-                        and y >= b - (bottom or 0) and y <= b + h + (top or 0)) and 1 or nil
-                end
             end
             for _, t in ipairs({ fontstrings, buttons, editboxes }) do
                 function t.SetFormattedText(self, fmt, ...) self:SetText(format(fmt, ...)) end
