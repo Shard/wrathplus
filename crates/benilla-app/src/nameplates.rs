@@ -29,7 +29,7 @@ use benilla_ui::script::{JustifyH, JustifyV, Outline};
 use crate::entities::{overhead_anchor, BoneAttach, OverheadFallback};
 use crate::names::NameCache;
 use crate::net::{Guid, NetCommands, NetEntity, ObjectStore, Reputations, SelfPlayer};
-use crate::target::{ring_reaction, ring_variant, CombatFlash, Factions, RingVariant, Selection};
+use crate::target::{ring_variant, CombatFlash, Factions, RingVariant, Selection};
 use crate::ui_text::{layout_text_quads, FontSpec, Justify, TextSeat, UiFontAtlas};
 use benilla_world::view::WorldCamera;
 
@@ -549,12 +549,7 @@ pub(crate) fn drive_nameplates(
             _ => None,
         };
         // The colour: the ring's reaction rank and the shared selector.
-        let rank = ring_reaction(
-            factions.as_deref(),
-            &reputations,
-            store,
-            self_store.single().ok(),
-        );
+        let rank = relations.ring_reaction(store, self_store.single().ok());
         let is_dead = store.is_some_and(|s| s.0.unit_is_dead());
         // The ring's player inputs, for this unit: its own PvP state (Wrath `UNIT_FIELD_BYTES_2`
         // byte 1 `0x01`, Vanilla `UNIT_FIELD_FLAGS` 0x1000) and party. A controlled unit reads

@@ -23,7 +23,7 @@ use crate::net::{Guid, GuidIndex, NetEntity, ObjectStore, Reputations, SelfPlaye
 use benilla_assets::{LockRecover, WorldAssets};
 
 use super::relations::{can_assist, can_attack};
-use super::ring::reaction_from_player;
+use super::ring::reaction_from_player_in;
 use super::{Factions, Selection};
 
 // == The Classic-priority dials ==
@@ -699,10 +699,9 @@ impl AttackPick<'_, '_> {
     }
 
     /// `0x6130a3`'s keep test: the actor's reaction to the held unit alone (`0x61309b`), not the
-    /// final gate's `CanAttack`, so a neutral mob is kept. A guid that does not resolve
-    /// (`0x613099`) is kept as well, for the second resolve to refuse. Actor → target is
-    /// [`reaction_from_player`] (the at-war bit), never `ring_reaction`. The reference's actor is
-    /// the caller, a pet on the pet arm (`0x4bd40d`), which vmangos gives its owner's faction
+    /// final gate's `CanAttack`, so a neutral mob is kept, and an unresolved guid (`0x613099`) too.
+    /// Actor → target is [`reaction_from_player_in`] (the at-war bit), never `ring_reaction`. The
+    /// reference's actor is the caller, a pet on the pet arm (`0x4bd40d`), given its owner's faction
     /// (`Pet.cpp:248`). The reaction to oneself is 4 before any faction rung (`0x606200`), so a
     /// passed caster is never kept, FFA flag or not.
     fn keeps(&self, guid: u64) -> bool {
@@ -710,11 +709,12 @@ impl AttackPick<'_, '_> {
             return false;
         }
         self.scan.store_of(guid).is_none_or(|store| {
-            reaction_from_player(
+            reaction_from_player_in(
                 self.scan.factions.as_deref(),
                 &self.scan.reputations,
                 Some(store),
                 self.scan.self_store(),
+                self.scan.relations(),
             ) < 4
         })
     }
