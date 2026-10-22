@@ -179,7 +179,7 @@ fn init_pipeline(
     commands.insert_resource(UiGammaPipeline {
         layout,
         sampler,
-        shader: asset_server.load("embedded://benilla_app/shaders/ui_gamma.wgsl"),
+        shader: asset_server.load(crate::shaders::UI_GAMMA),
         fullscreen: fullscreen_shader.clone(),
         ramp,
     });
@@ -260,8 +260,8 @@ fn use_gamma_ui_shaders(
     mut node: ResMut<UiPipeline>,
     mut slice: ResMut<UiTextureSlicePipeline>,
 ) {
-    node.shader = asset_server.load("embedded://benilla_app/shaders/ui_node_gamma.wgsl");
-    slice.shader = asset_server.load("embedded://benilla_app/shaders/ui_slice_gamma.wgsl");
+    node.shader = asset_server.load(crate::shaders::UI_NODE_GAMMA);
+    slice.shader = asset_server.load(crate::shaders::UI_SLICE_GAMMA);
 }
 
 pub(crate) struct UiGammaPlugin;

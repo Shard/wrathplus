@@ -59,12 +59,6 @@ fn package_view(row: &benilla_formats::PackageRow) -> benilla_ui::script::Packag
     }
 }
 
-impl crate::query_cache::AskOnce for MailOpen {
-    fn clear_pending(&mut self) {
-        self.bodies.clear_pending();
-    }
-}
-
 /// The range guard ([`crate::ui_session`]) closes the window, the `CloseMail` clear, past the
 /// client's own interaction gate (`0x493230`, 5.5556 yd); the server's `CheckMailBox`
 /// (`MailHandler.cpp:69`) checks 5 yd on each mailbox `CMSG`.

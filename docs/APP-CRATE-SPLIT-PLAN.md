@@ -710,6 +710,57 @@ Things to update in the same commit:
   commands (`-p benilla-app` becomes a list).
 - Each worker's `CARGO_TARGET_DIR` is unaffected; crate names in their gate commands change.
 
+### Separate-crate dry run and the move script (Wire B, 2026-10-22)
+
+The real move, every layer a crate, run end to end on a throwaway worktree of ace77059 with the
+scripts below. Result: `cargo check --workspace --tests` is clean, and the six app crates' tests
+run to 4,621 passed and 7 failed (core 62, net 196, world 1,633, ui 2,446/1, tools 114, root
+174/2, plus the root's integration tests with 4 failures), all seven a test that reads where a
+file lives or what its crate is called (below).
+
+What only separate crates report, as the dry run counted it:
+
+| Kind | Count | How the move handles it |
+|---|---|---|
+| Visibility widenings | about 2,530 declarations (core 6, net 101, world 434, ui 1,268, tools 336, root 385) | `widen-all.sh`: only what the compiler names; 3 passes to a fixpoint |
+| Glob imports from another crate | 38 module files | `widen-all.sh` widens each module another crate glob-imports (no error names those) |
+| `#[cfg(test)]` helpers other crates' tests use | 210 items, 8 test modules, 27 `test_support` items | `move-layers.sh --test-support` |
+| Inherent impls on another crate's type (E0116) | 0 | (step 0 moved them all) |
+| Orphan impls (E0117) | 3 | fixed ahead (ace77059: `Default` for `UiClock`/`UiScaleCvar`, `AskOnce` for `MailOpen`) |
+| `include_dir!`/`CARGO_MANIFEST_DIR` assets | `assets/ui` | `move-layers.sh` moves it with `ui_script` and points `run_mode::dev_source_dir` there |
+| `embedded://` shader paths | 5 | fixed ahead (71212f59: served from `CARGO_CRATE_NAME`) |
+| Whole-tree source scans | 7 unit tests | fixed ahead (71212f59: `app_core::source_tree`) |
+
+**Still to fix before the move** (the seven failures; all crate-agnostic rewrites that pass today):
+`the_movement_kinds_other_handlers_are_pinned` and `the_cvar_hooks_register_in_plugin_order`
+compare `type_name` strings, which gain the crate prefix (compare with it stripped);
+`ui_session`'s portrait test anchors on `pub(crate) fn feed_interact_npc` (anchor on
+`fn feed_interact_npc(`); `tests/cover_input_wall.rs`, `message_keys.rs`, `ui_script_wall.rs` and
+`world_api_wall.rs` read `crates/benilla-app/src` (read every `crates/benilla-app*/src`).
+
+**The move, one commit per layer during a worker pause** (`scripts/split/`):
+
+1. Merge wrath-hud; gates green; `git status` clean.
+2. `scripts/split/move-layers.sh --layers core --test-support` (later commits: `net`, `world`,
+   `ui`, `tools`; a layer already moved counts as lower, and the root gains only the new crate).
+   It runs `canonical-paths.py --apply`, `git mv`s the modules with their `#[path]` siblings,
+   writes the crate's `Cargo.toml` (benilla-app's dependencies, the lower crates, `dev` and
+   `test-support` forwarded, a `test-support` dev-dependency on each lower crate) and its
+   `lib.rs` (`pub mod` per module, every lower module re-exported at its root, so `crate::m::…`
+   keeps resolving), and moves `assets/ui` with the ui layer.
+3. `scripts/split/widen-all.sh`, then `cargo check -p <each crate> --lib --tests` and
+   `cargo check --workspace --tests`: clean, as in the dry run.
+4. Gates for every crate (`--lib --tests --no-fail-fast`), clippy per crate, the census, the
+   replay (sha256 `16bc666b…`; a move changes no state).
+5. Commit: renames, one `Cargo.toml` and `lib.rs` per crate, the widenings.
+6. After the last layer: regenerate `scripts/quality/loc-baseline.json` once against the new
+   paths (strict again from then on), and update the gate crate lists (`scripts/gates.sh`,
+   `check.sh`, CI, worker gate commands: `-p benilla-app` becomes the six crates).
+
+Not covered by the dry run: `cargo machete` pruning of each crate's dependency list (they start
+as benilla-app's), and the player build (`--no-default-features`), which forwards `dev` the same
+way and should be checked once on the move tree.
+
 ## Coordination with in-flight work
 
 Measured on each worker branch's own commits over the last three days (files touched in
