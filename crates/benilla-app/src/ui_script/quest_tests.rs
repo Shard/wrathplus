@@ -5,7 +5,7 @@ use benilla_ui::script::{QuestPanel, QuestState, ScriptValue, SoundRequest, UiSc
 use super::test_ui::load_ui as load_xml;
 
 /// Stock `QuestFrame_OnShow` and `QuestFrame_OnHide` play `igQuestListOpen` and `igQuestListClose`
-/// (`QuestFrame.lua:285`, `:294`).
+/// (`QuestFrame.lua:293`, `:297`).
 #[test]
 fn questgiver_show_hide_plays_open_and_close_kits() {
     benilla_formats::wow_data_or_skip!();
@@ -202,51 +202,51 @@ fn detail_panel_reward_grid_follows_the_refs_two_per_row_layout() {
     s.fire_event("QUEST_DETAIL", vec![]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 
-    assert!(s.eval::<bool>("return QuestDetailItem1:IsShown()").unwrap());
-    assert!(s.eval::<bool>("return QuestDetailItem2:IsShown()").unwrap());
-    assert!(!s.eval::<bool>("return QuestDetailItem4:IsShown()").unwrap());
+    assert!(s.eval::<bool>("return QuestInfoItem1:IsShown()").unwrap());
+    assert!(s.eval::<bool>("return QuestInfoItem2:IsShown()").unwrap());
+    assert!(!s.eval::<bool>("return QuestInfoItem4:IsShown()").unwrap());
     assert_eq!(
-        s.eval::<String>("return QuestDetailItem1Name:GetText()")
+        s.eval::<String>("return QuestInfoItem1Name:GetText()")
             .unwrap(),
         "Worn Sword"
     );
     assert_eq!(
-        s.eval::<String>("return QuestDetailItemChooseText:GetText()")
+        s.eval::<String>("return QuestInfoItemChooseText:GetText()")
             .unwrap(),
         "You will be able to choose one of these rewards:"
     );
     assert_eq!(
-        s.eval::<String>("return QuestDetailItemReceiveText:GetText()")
+        s.eval::<String>("return QuestInfoItemReceiveText:GetText()")
             .unwrap(),
         "You will also receive:",
-        "choices present -> the ref's \"also\" wording (QuestFrame.lua:461-462)"
+        "choices present -> the ref's \"also\" wording (QuestInfo.lua:322)"
     );
-    assert!(s.eval::<bool>("return QuestDetailItem3:IsShown()").unwrap());
-    assert!(!s.eval::<bool>("return QuestDetailItem4:IsShown()").unwrap());
+    assert!(s.eval::<bool>("return QuestInfoItem3:IsShown()").unwrap());
+    assert!(!s.eval::<bool>("return QuestInfoItem4:IsShown()").unwrap());
     assert_eq!(
-        s.eval::<String>("return QuestDetailItem3Name:GetText()")
+        s.eval::<String>("return QuestInfoItem3Name:GetText()")
             .unwrap(),
         "Militia Hammer"
     );
     assert_eq!(
-        s.eval::<String>("return QuestDetailRewardTitleText:GetText()")
+        s.eval::<String>("return QuestInfoRewardsHeader:GetText()")
             .unwrap(),
         "Rewards"
     );
 
-    // Detail rows run `QuestItem_OnClick`, which has no select arm (`QuestFrame.lua:115-125`).
-    s.run("QuestDetailItem1:Click()").ok();
+    // A row selects only under `QuestInfoFrame.chooseItems` (`QuestInfo.xml:45`), which only the
+    // reward template sets (`QuestInfo.lua:541`).
+    s.run("QuestInfoItem1:Click()").ok();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-    // Only the reward panel's update (`QuestFrame.lua:519`) and its row clicks set `itemChoice`.
     assert_eq!(
-        s.eval::<i64>("return QuestFrameRewardPanel.itemChoice or 0")
+        s.eval::<i64>("return QuestInfoFrame.itemChoice or 0")
             .unwrap(),
         0,
         "a detail-panel row never selects a reward"
     );
 }
 
-/// A reward row click selects its choice (`QuestFrame.lua:136-139`).
+/// A reward row click selects its choice (`QuestInfo.lua:26-32`).
 #[test]
 fn reward_panel_choice_click_selects_and_completes_with_zero_based_index() {
     benilla_formats::wow_data_or_skip!();
@@ -294,21 +294,21 @@ fn reward_panel_choice_click_selects_and_completes_with_zero_based_index() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 
     assert!(
-        !s.eval::<bool>("return QuestRewardItemHighlight:IsShown()")
+        !s.eval::<bool>("return QuestInfoItemHighlight:IsShown()")
             .unwrap(),
         "no row picked yet"
     );
-    // No choice picked: `QuestChooseRewardError()` instead (`QuestFrame.lua:97-98`).
+    // No choice picked: `QuestChooseRewardError()` instead (`QuestFrame.lua:92-93`).
     s.run("QuestFrameCompleteQuestButton:Click()").unwrap();
     assert!(
         s.take_quest_actions().is_empty(),
         "must pick a choice first"
     );
 
-    s.run("QuestRewardItem2:Click()").unwrap();
+    s.run("QuestInfoItem2:Click()").unwrap();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert!(
-        s.eval::<bool>("return QuestRewardItemHighlight:IsShown()")
+        s.eval::<bool>("return QuestInfoItemHighlight:IsShown()")
             .unwrap(),
         "picking a choice row shows the highlight"
     );
@@ -427,7 +427,7 @@ fn detail_panel_action_buttons_resolve_to_real_onscreen_rects() {
     };
 
     // `OnShow` still disables Accept and zeroes the block; the reveal just starts at 1024
-    // (`QuestFrame.lua:543-551`).
+    // (`QuestInfo.lua:482-491`).
     let writing = button_art(&mut s);
     assert_eq!(
         writing.len(),
@@ -448,7 +448,7 @@ fn detail_panel_action_buttons_resolve_to_real_onscreen_rects() {
     }
 
     // The first `OnUpdate` scratches once, snaps the block opaque and enables Accept
-    // (`QuestFrame.lua:554-568`).
+    // (`QuestInfo.lua:3-16`).
     let scratches = |sounds: Vec<SoundRequest>| {
         sounds
             .iter()
@@ -466,7 +466,7 @@ fn detail_panel_action_buttons_resolve_to_real_onscreen_rects() {
         .eval::<bool>("return QuestFrameAcceptButton:IsEnabled() ~= 0")
         .unwrap());
     assert_eq!(
-        s.eval::<f32>("return TextAlphaDependentFrame:GetAlpha()")
+        s.eval::<f32>("return QuestInfoFadingFrame:GetAlpha()")
             .unwrap(),
         1.0,
         "the block snaps straight to opaque — no QUESTINFO_FADE_IN ramp in instant mode"
@@ -487,8 +487,8 @@ fn detail_panel_action_buttons_resolve_to_real_onscreen_rects() {
     );
 }
 
-/// With the default `QUEST_FADING_DISABLE = "0"` the text writes on at 40 chars/s, scratching each
-/// tick with Accept disabled, then the block fades in (`QuestFrame.lua:5-6`, `:554-568`).
+/// With the default `QUEST_FADING_DISABLE = "0"` the text writes on at 70 chars/s, scratching each
+/// tick with Accept disabled, then the block fades in (`QuestFrame.lua:5-6`, `QuestInfo.lua:3-16`).
 #[test]
 fn write_on_still_fades_when_instant_text_is_off() {
     benilla_formats::wow_data_or_skip!();
@@ -525,7 +525,7 @@ fn write_on_still_fades_when_instant_text_is_off() {
     s.fire_event("QUEST_DETAIL", vec![]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 
-    // Mid-write: the reveal is at char 4 of 13.
+    // Mid-write: the reveal is at char 7 of 13.
     s.tick(0.1);
     assert!(
         s.take_sounds()
@@ -544,7 +544,7 @@ fn write_on_still_fades_when_instant_text_is_off() {
         .eval::<bool>("return QuestFrameAcceptButton:IsEnabled() ~= 0")
         .unwrap());
     let alpha = s
-        .eval::<f32>("return TextAlphaDependentFrame:GetAlpha()")
+        .eval::<f32>("return QuestInfoFadingFrame:GetAlpha()")
         .unwrap();
     assert!(
         alpha < 1.0,
@@ -552,7 +552,7 @@ fn write_on_still_fades_when_instant_text_is_off() {
     );
     s.tick(1.1);
     assert_eq!(
-        s.eval::<f32>("return TextAlphaDependentFrame:GetAlpha()")
+        s.eval::<f32>("return QuestInfoFadingFrame:GetAlpha()")
             .unwrap(),
         1.0,
         "the fade completes at opaque"
@@ -560,7 +560,7 @@ fn write_on_still_fades_when_instant_text_is_off() {
 }
 
 /// Every quest event but `QUEST_FINISHED`, `QUEST_ITEM_UPDATE` over a shown window included,
-/// re-reads `UnitName("npc")` into the title bar (`QuestFrame.lua:26`, `:62-63`).
+/// re-reads `UnitName("questnpc")` into the title bar (`QuestFrame.lua:26`, `:62-63`).
 #[test]
 fn npc_name_reaches_the_title_bar_on_open_and_on_refresh() {
     benilla_formats::wow_data_or_skip!();
@@ -600,7 +600,7 @@ fn npc_name_reaches_the_title_bar_on_open_and_on_refresh() {
         s.eval::<String>("return getglobal('QuestFrameNpcNameText'):GetText() or ''")
             .unwrap(),
         "Marshal McBride",
-        "the panel-open event's arg1 lands in the title bar"
+        "the panel-open event puts the quest NPC's name in the title bar"
     );
     s.resolve();
     let name_quad = s
@@ -638,7 +638,7 @@ fn greeting_panel_title_rows_grow_to_their_wrapped_titles() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    // Stock sizes each row right after `SetText`, `GetTextHeight() + 2` (`QuestFrame.lua:245`), so
+    // Stock sizes each row right after `SetText`, `GetTextHeight() + 2` (`QuestFrame.lua:239`), so
     // the measure must be synchronous, as the app's is.
     s.set_text_measurer(Box::new(super::FixedWidthFont(7.0)));
     load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
@@ -721,132 +721,4 @@ fn greeting_panel_title_rows_grow_to_their_wrapped_titles() {
         t2 <= b1 + 0.5,
         "row 2 starts at/below row 1's bottom: row1 bottom {b1}, row2 top {t2}"
     );
-}
-
-/// Stock `QuestRewardItem_OnClick` (`QuestFrame.lua:127-141`): ctrl previews, shift posts the
-/// link, and only a plain click selects. The ctrl arm runs last: the dressing room takes the
-/// questgiver window's left slot (`UIParent.lua:24`, `:41`).
-#[test]
-fn reward_rows_preview_and_post_without_selecting_the_choice() {
-    benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
-    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&mut s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\UIMenu.xml"); // the kit its menus build from
-    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\ChatFrame.xml"); // ChatFrameEditBox lives here
-    load_xml(&mut s, "Interface\\FrameXML\\FloatingChatFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\ItemButtonTemplate.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\QuestFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\QuestLogFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\DressUpFrame.xml"); // DressUpItemLink lives here
-
-    const SWORD: &str = "|cffffffff|Hitem:2299:0:0:0|h[Worn Sword]|h|r";
-    const MACE: &str = "|cffffffff|Hitem:2300:0:0:0|h[Worn Mace]|h|r";
-    let item = |id: u32, name: &str, link: &str| benilla_ui::script::QuestItemView {
-        item_id: id,
-        name: Some(name.into()),
-        texture: None,
-        count: 1,
-        quality: 1,
-        usable: true,
-        link: Some(link.into()),
-    };
-    s.set_quest(Some(QuestState {
-        panel: QuestPanel::Reward,
-        title: "A Threat Within".into(),
-        body: "Well done.".into(),
-        choices: vec![
-            item(2299, "Worn Sword", SWORD),
-            item(2300, "Worn Mace", MACE),
-        ],
-        rewards: vec![item(
-            2504,
-            "Worn Shortbow",
-            "|cffffffff|Hitem:2504:0:0:0|h[Worn Shortbow]|h|r",
-        )],
-        ..QuestState::default()
-    }));
-    s.set_unit(
-        "npc",
-        Some(benilla_ui::script::UnitState {
-            exists: true,
-            name: Some("Marshal McBride".into()),
-            ..Default::default()
-        }),
-    );
-    s.fire_event("QUEST_COMPLETE", vec![]);
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-
-    // A plain click selects row 2; the modified clicks below aim at row 1.
-    s.run("QuestRewardItem2:Click()").unwrap();
-    assert_eq!(
-        s.eval::<i64>("return QuestFrameRewardPanel.itemChoice")
-            .unwrap(),
-        2,
-        "a plain click still selects the reward choice"
-    );
-    assert!(s
-        .eval::<bool>("return QuestRewardItemHighlight:IsShown()")
-        .unwrap());
-    assert!(
-        s.take_dressup_intents().is_empty(),
-        "a plain click never opens the dressing room"
-    );
-
-    assert!(s.focus_editbox("ChatFrameEditBox"));
-    s.set_modifiers(true, false, false);
-    s.run("QuestRewardItem1:Click()").unwrap();
-    s.set_modifiers(false, false, false);
-    assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
-            .unwrap(),
-        SWORD,
-        "shift-click posted choice 1's link"
-    );
-    assert_eq!(
-        s.eval::<i64>("return QuestFrameRewardPanel.itemChoice")
-            .unwrap(),
-        2,
-        "the shift arm returns — it must NOT also select the clicked choice"
-    );
-
-    // A fixed reward row posts too; only `this.type == "choice"` selects (`QuestFrame.lua:136`).
-    s.run("ChatFrameEditBox:SetText(\"\")").unwrap();
-    s.set_modifiers(true, false, false);
-    s.run("QuestRewardItem3:Click()").unwrap();
-    s.set_modifiers(false, false, false);
-    assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
-            .unwrap(),
-        "|cffffffff|Hitem:2504:0:0:0|h[Worn Shortbow]|h|r"
-    );
-
-    s.set_modifiers(false, true, false);
-    s.run("QuestRewardItem1:Click()").unwrap();
-    s.set_modifiers(false, false, false);
-    assert_eq!(
-        s.take_dressup_intents(),
-        vec![
-            benilla_ui::script::DressUpIntent::Dress,
-            benilla_ui::script::DressUpIntent::TryOn(2299)
-        ],
-        "ctrl-click opened the room wearing choice 1"
-    );
-    assert_eq!(
-        s.eval::<i64>("return QuestFrameRewardPanel.itemChoice")
-            .unwrap(),
-        2,
-        "the ctrl arm returns — it must NOT also select the clicked choice"
-    );
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }

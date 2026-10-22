@@ -279,7 +279,10 @@ fn walk(app: &mut App, route: &[[f32; 3]]) -> Result<(), String> {
 #[test]
 #[ignore = "a probe: WOW_ROUTE_PROBE and an installed Wrath client"]
 fn probe_floors() {
-    let spec = std::env::var("WOW_ROUTE_PROBE").expect("WOW_ROUTE_PROBE");
+    let Ok(spec) = std::env::var("WOW_ROUTE_PROBE") else {
+        eprintln!("skipped: WOW_ROUTE_PROBE is not set");
+        return;
+    };
     let parts: Vec<&str> = spec.split_whitespace().collect();
     let map = parts[0];
     let n: Vec<f32> = parts[1..].iter().map(|s| s.parse().unwrap()).collect();
@@ -395,7 +398,10 @@ fn the_checklist_collision_spots_walk_clean() {
 #[test]
 #[ignore = "a probe: WOW_ROUTE_WALK and an installed Wrath client"]
 fn probe_walks() {
-    let spec = std::env::var("WOW_ROUTE_WALK").expect("WOW_ROUTE_WALK");
+    let Ok(spec) = std::env::var("WOW_ROUTE_WALK") else {
+        eprintln!("skipped: WOW_ROUTE_WALK is not set");
+        return;
+    };
     let mut parts = spec.split('|');
     let map = parts.next().expect("map");
     let routes: Vec<Vec<[f32; 3]>> = parts
@@ -422,7 +428,10 @@ fn probe_walks() {
 #[test]
 #[ignore = "a probe: WOW_ROUTE_HIT and an installed Wrath client"]
 fn probe_hits() {
-    let spec = std::env::var("WOW_ROUTE_HIT").expect("WOW_ROUTE_HIT");
+    let Ok(spec) = std::env::var("WOW_ROUTE_HIT") else {
+        eprintln!("skipped: WOW_ROUTE_HIT is not set");
+        return;
+    };
     let (map, rest) = spec.split_once('|').expect("map|casts");
     let casts: Vec<[f32; 5]> = rest
         .split(';')

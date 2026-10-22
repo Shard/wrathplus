@@ -184,11 +184,11 @@ fn feed_gm_ticket(
 
 /// `UPDATE_TICKET`'s arguments: category, text, the three day figures, assigned, opened. The wire
 /// has the text first and the reference's handler reorders as it fires, so the decoder keeps wire
-/// order. No ticket is a single `0`: `HelpFrameOpenTicket_OnEvent` tests `arg1 and arg1 ~= 0`
-/// (`HelpFrame.lua:403`), and its else branch resets the form (`:468-475`).
+/// order. No ticket is no arguments: 3.3.5's `HelpFrame_OnEvent` and `TicketStatusFrame_OnEvent`
+/// test `category` for truth (`HelpFrame.lua:98-99`, `:375-376`), and a Lua 0 is true.
 fn update_ticket_args(ticket: Option<&benilla_protocol::types::GmTicket>) -> Vec<ScriptValue> {
     let Some(t) = ticket else {
-        return vec![ScriptValue::Int(0)];
+        return Vec::new();
     };
     vec![
         ScriptValue::Int(i64::from(t.category)),
@@ -501,10 +501,10 @@ mod tests {
         assert_eq!(args[6], ScriptValue::Int(1), "arg7 openedByGM");
     }
 
-    /// The window's form reset hangs on `arg1 and arg1 ~= 0`.
+    /// The window's reset branch hangs on a nil `category`.
     #[test]
-    fn the_no_ticket_answer_is_a_single_zero() {
-        assert_eq!(update_ticket_args(None), vec![ScriptValue::Int(0)]);
+    fn the_no_ticket_answer_has_no_arguments() {
+        assert!(update_ticket_args(None).is_empty());
     }
 
     /// The window's `arg4 < 0 or arg5 < 0` test shows "unavailable".

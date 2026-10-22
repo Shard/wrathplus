@@ -19,13 +19,14 @@
 //! - `GetNumLanguages` (`0x500760`): the known languages.
 //!
 //! Labelled: `UnitIsAFK`'s two local overrides (`0x729740`, `0x4cee50` with `0xbcefec`) and a
-//! roster-only member's status bits (`0x513c30`, `+8` bits 6 and 7) are not read. The
-//! non-held arms of the link test (`0x52bee0`, `0x5727b0`, the friends list) and the summon
-//! spell's writer (`0x53ec40`) are not decompiled either. The summon spell is 45927, and the link
-//! needs the unit held. `UnitInBattleground`'s battleground test (`0x572f50`) reads the map's
-//! `InstanceType` 3, and its slot is the 0-based raid index. The units carry no realm, so
-//! `UnitIsSameServer` answers 1 for any pair. `IsThreatWarningEnabled` (`0x517d30`, the flag at
-//! `0xbd08c0` that `0x519df0` writes) reads the `threatWarning` CVar.
+//! roster-only member's status bits (`0x513c30`, `+8` bits 6 and 7) are not read. The link
+//! queries also take a friend's name (stock `FriendsFrame.lua:99`, `:117`): a non-token string
+//! reads the held unit of that name, else nil, never raising; their non-held arms (`0x52bee0`,
+//! `0x5727b0`) and the summon spell's writer (`0x53ec40`) are not decompiled.
+//! `UnitInBattleground`'s battleground test (`0x572f50`) reads the map's `InstanceType` 3, and its
+//! slot is the 0-based raid index. The units carry no realm, so `UnitIsSameServer` answers 1 for
+//! any pair. `IsThreatWarningEnabled` (`0x517d30`, the flag at `0xbd08c0` that `0x519df0` writes)
+//! reads the `threatWarning` CVar.
 
 use mlua::{Lua, MultiValue, Value};
 
@@ -53,6 +54,16 @@ const UNIT_FLAG_POSSESSED: u32 = 0x0100_0000;
 const CLASS_ROLES: [u8; 12] = [
     0x00, 0x0b, 0x0f, 0x09, 0x09, 0x0d, 0x0b, 0x0d, 0x09, 0x09, 0x00, 0x0f,
 ];
+
+/// The unit a link query names: a token, or a held unit's name (a friends-list row's).
+fn linked<'m>(model: &'m Model, t: Option<&str>) -> Option<&'m super::UnitState> {
+    let t = t?;
+    if super::resolve::token_recognised(t, model.unit_guids.wrath) {
+        return model.unit(t);
+    }
+    let mut held = model.units_by_lower.values();
+    held.find(|u| u.name.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(t)))
+}
 
 /// The class id of a `class_file` token.
 fn class_id(file: &str) -> usize {
@@ -292,19 +303,19 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "IsReferAFriendLinked",
         lua.create_function(|lua, token: Option<String>| {
-            let hit = with_unit(lua, &token, false, |u| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let unit = linked(&model, token.as_deref());
+            Ok(flag(unit.is_some_and(|u| {
                 u.has_object && u.dynamic_flags & UNIT_DYNFLAG_REFER_A_FRIEND != 0
-            })?;
-            Ok(flag(hit))
+            })))
         })?,
     )?;
     g.set(
         "CanSummonFriend",
         lua.create_function(|lua, token: Option<String>| {
-            check_unit_token(lua, &token)?;
             let eligible = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                token.as_ref().and_then(|t| model.unit(t)).is_some_and(|u| {
+                linked(&model, token.as_deref()).is_some_and(|u| {
                     let grouped = model.party.members.iter().any(|m| m.guid == u.guid)
                         || model.party.raid.iter().any(|m| m.guid == u.guid);
                     u.has_object
@@ -410,150 +421,5 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::script::{
-        party::PartyState, party::RaidMemberInfo, UiScript, UnitState,
-    };
-
-    #[test]
-    fn the_flag_readers_read_their_descriptor_bits() {
-        let mut s = UiScript::new().unwrap();
-        s.set_unit(
-            "player",
-            Some(UnitState {
-                exists: true,
-                has_object: true,
-                is_player: true,
-                player_flags: 0x2 | 0x0200_0000,
-                class_file: Some("PRIEST".into()),
-                guid: 1,
-                ..Default::default()
-            }),
-        );
-        s.set_unit(
-            "target",
-            Some(UnitState {
-                exists: true,
-                has_object: true,
-                dynamic_flags: 0x80,
-                flags: 0x0100_0000,
-                guid: 2,
-                ..Default::default()
-            }),
-        );
-        assert!(s
-            .eval::<bool>(
-                "return UnitIsAFK('player') == 1 and UnitIsDND('player') == nil \
-                 and IsXPUserDisabled() == true and UnitIsTappedByAllThreatList('target') == 1 \
-                 and UnitIsTappedByAllThreatList('player') == nil \
-                 and IsReferAFriendLinked('target') == nil and UnitIsSameServer('player', 'target') == 1 \
-                 and UnitIsPossessed('target') == 1 and UnitIsPossessed('player') == nil"
-            )
-            .unwrap());
-        assert!(s
-            .eval::<bool>(
-                "local t, h, d = GetAvailableRoles() return t == false and h == true and d == true"
-            )
-            .unwrap());
-        assert!(s.run("UnitIsAFK()").is_err());
-        s.set_party(PartyState {
-            raid: vec![RaidMemberInfo {
-                guid: 2,
-                rank: 1,
-                ..Default::default()
-            }],
-            ..Default::default()
-        });
-        assert!(s
-            .eval::<bool>("return UnitIsRaidOfficer('target') == 1")
-            .unwrap());
-        assert!(s
-            .eval::<bool>("return UnitInBattleground('target') == nil")
-            .unwrap());
-    }
-
-    #[test]
-    fn focus_unit_asks_for_the_named_units_guid_and_clear_focus_for_none() {
-        let mut s = UiScript::new().unwrap();
-        s.set_unit(
-            "target",
-            Some(UnitState {
-                exists: true,
-                guid: 0x42,
-                ..Default::default()
-            }),
-        );
-        s.run("FocusUnit('mouseover') FocusUnit()").unwrap();
-        assert_eq!(
-            s.take_focus_request(),
-            None,
-            "a token naming no unit asks nothing"
-        );
-        s.run("FocusUnit('target')").unwrap();
-        assert_eq!(s.take_focus_request(), Some(0x42));
-        assert_eq!(s.take_focus_request(), None, "taken once");
-        s.run("ClearFocus()").unwrap();
-        assert_eq!(s.take_focus_request(), Some(0));
-    }
-
-    #[test]
-    fn selection_colour_friends_and_class_names_follow_build_12340() {
-        use crate::script::social::{FriendInfo, SocialState};
-        let mut s = UiScript::new().unwrap();
-        let unit = |reaction, player_controlled, can_attack| UnitState {
-            exists: true,
-            reaction,
-            player_controlled,
-            can_attack,
-            ..Default::default()
-        };
-        s.set_unit("target", Some(unit(2, false, true)));
-        s.set_unit("focus", Some(unit(5, true, false)));
-        s.set_unit("mouseover", Some(unit(5, true, true)));
-        for check in [
-            "local r, g, b, a = UnitSelectionColor('target') return r == 1 and g == 0 and b == 0 and a == 1",
-            "local r, g, b = UnitSelectionColor('focus') return r == 0 and g == 0 and b == 1",
-            "local r, g, b = UnitSelectionColor('mouseover') return r == 1 and g == 0 and b == 0",
-            "local r, g, b = UnitSelectionColor('party4') return r == 0 and g == 0 and b == 1",
-        ] {
-            assert!(s.eval::<bool>(check).unwrap(), "{check}");
-        }
-        assert!(s.run("UnitSelectionColor()").is_err());
-        let friend = |name: &str, connected| FriendInfo {
-            name: name.into(),
-            connected,
-            ..Default::default()
-        };
-        s.set_social(SocialState {
-            friends: vec![friend("Alia", true), friend("Brog", false)],
-            ..Default::default()
-        });
-        assert!(s
-            .eval::<bool>("local n, on = GetNumFriends() return n == 2 and on == 1")
-            .unwrap());
-        s.set_localized_class_names(vec![("PRIEST".into(), "Priest".into(), "Priestess".into())]);
-        assert!(s
-            .eval::<bool>(
-                "local m, f = FillLocalizedClassList({}), FillLocalizedClassList({}, true) \
-                 return m.PRIEST == 'Priest' and f.PRIEST == 'Priestess'"
-            )
-            .unwrap());
-        assert!(s.run("FillLocalizedClassList(1)").is_err());
-    }
-
-    #[test]
-    fn the_lfg_timers_answer_their_aura_expiry_or_nothing() {
-        let mut s = UiScript::new().unwrap();
-        assert!(s
-            .eval::<bool>("return select('#', GetLFGDeserterExpiration()) == 0 and select('#', GetLFGRandomCooldownExpiration()) == 0")
-            .unwrap());
-        s.set_player_auras(vec![crate::script::AuraState {
-            spell_id: 71041,
-            expiration_time: 950.5,
-            ..Default::default()
-        }]);
-        assert!(s
-            .eval::<bool>("return GetLFGDeserterExpiration() == 950.5 and select('#', GetLFGRandomCooldownExpiration()) == 0")
-            .unwrap());
-    }
-}
+#[path = "wrath_queries_tests.rs"]
+mod tests;

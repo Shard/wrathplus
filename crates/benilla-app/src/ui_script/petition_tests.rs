@@ -1,6 +1,7 @@
 //! The stock guild registrar and charter windows over a Lua stand-in for the engine's petition API,
-//! so only the windows are under test. The stand-in keeps the API's shapes: booleans are `1`/`nil`,
-//! and `GetPetitionInfo`'s fourth return is the wire's signature requirement.
+//! so only the windows are under test. The stand-in keeps build 12340's shapes: booleans are
+//! `1`/`nil`, and `GetPetitionInfo` answers seven values, the fourth the cap that disables Request
+//! and the seventh the rows `PetitionFrame_Update` shows.
 
 use benilla_ui::script::UiScript;
 
@@ -10,12 +11,14 @@ use super::test_ui::load_ui_strict as load_xml;
 /// `BenillaPetitionFixture`'s fields, never the table, which the closures hold as an upvalue.
 const PETITION_FIXTURE: &str = r#"
 BenillaPetitionFixture = {
-    petitionType = "charter",
+    petitionType = "guild",
     title = "Legacy of Steel",
     bodyText = "",
     -- The WIRE's requirement, deliberately not 9, so a test can tell it apart from
     -- MAX_PETITION_SIGNATURES.
     maxSignatures = 4,
+    -- The rows the window shows, AzerothCore's guild charter requirement.
+    minSignatures = 9,
     originator = "Tigole",
     isOriginator = nil,
     canSign = 1,
@@ -37,7 +40,8 @@ local function record(call)
 end
 
 function GetPetitionInfo()
-    return F.petitionType, F.title, F.bodyText, F.maxSignatures, F.originator, F.isOriginator
+    return F.petitionType, F.title, F.bodyText, F.maxSignatures, F.originator, F.isOriginator,
+        F.minSignatures
 end
 
 function GetNumPetitionNames() return table.getn(F.signers) end
@@ -189,8 +193,8 @@ fn the_owners_charter_swaps_sign_for_request_and_rename() {
     );
 }
 
-/// Request disables at the wire's requirement, 4 here, not at the nine rows
-/// (`PetitionFrame.lua:38`).
+/// Request disables at `maxSignatures`, 4 here, not at the nine `minSignatures` rows
+/// (`PetitionFrame.lua:69`).
 #[test]
 fn request_signature_disables_at_the_wires_requirement_not_at_nine() {
     let _data = benilla_formats::wow_data_or_skip!();
