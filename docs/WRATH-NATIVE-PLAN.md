@@ -71,6 +71,11 @@ Crates `benilla-app`, `benilla-world`.
   non-descriptor constants (animation ids, attachment points, opcodes, SpellTargetFlags words,
   retry counts, render markers) and misses names with digits, so it is not the gate. Both
   dialects' tests green; a live Wrath session behaves as before.
+- Status (2026-10-22): closed on `scripts/quality/run.sh ws2` (`gate.py`; in `scripts/gates.sh` and
+  CI), which reads every `Field` off `layout_generated.rs` and fails on a production `const` named
+  for a descriptor field with a literal value, a `FIELD_*` name, or a literal `from_pairs` key, in
+  both crates. It passes on the tree. Test fixtures are not gated; the direct literal ones are
+  converted, and raw pairs passed to `from_pairs` through a variable are found by review.
 
 ### WS3: native 3.3.5 Lua API (parallel with WS1/WS2)
 Crate `benilla-ui` (`script/*`), reading data the app pushes into the `Model`.

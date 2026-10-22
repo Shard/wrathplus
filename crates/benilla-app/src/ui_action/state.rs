@@ -798,7 +798,7 @@ mod tests {
         // One ON_USE block casting 433 "Food", whose shipped `Attributes` are `0x18000100`.
         const FOOD_ITEM: u32 = 1487;
         const FOOD_SPELL: u32 = 433;
-        // Raw indices: `ITEM_FIELD_STACK_COUNT`, and `PLAYER_FIELD_PACK_SLOT_1`, backpack slot 1.
+        // `ITEM_FIELD_STACK_COUNT`, and `PLAYER_FIELD_PACK_SLOT_1`, backpack slot 1.
         const STACK: u16 = Field::ItemStackCount.index();
         const PACK_SLOT_1: u16 = Field::PlayerPackSlot1.index();
 
@@ -861,7 +861,7 @@ mod tests {
             crate::items::test_spawn_item(
                 app.world_mut(),
                 0xF0,
-                ObjectFields::from_pairs(&[(3, FOOD_ITEM), (STACK, 10)]),
+                ObjectFields::from_pairs(&[(Field::ObjectEntry.index(), FOOD_ITEM), (STACK, 10)]),
                 false,
             );
             // The player: alive, with the ten muffins in backpack slot 1.
