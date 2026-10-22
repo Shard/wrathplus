@@ -74,7 +74,7 @@ fn bankframe_opened_shows_and_sets_the_title() {
         "the reference's bank leaves your bags alone (opening them is the vendor's, not the bank's)"
     );
     assert!(
-        s.eval::<bool>("return GetLeftFrame() == BankFrame")
+        s.eval::<bool>("return GetUIPanel('left') == BankFrame")
             .unwrap(),
         "ShowUIPanel landed the bank at the left slot"
     );
@@ -120,7 +120,7 @@ fn bankframe_closed_queues_close_closes_open_popouts_and_plays_the_close_kit() {
         "OnHide queued CloseBankFrame() — the client-side close intent (no wire opcode)"
     );
     assert!(
-        s.eval::<bool>("return GetLeftFrame() == nil").unwrap(),
+        s.eval::<bool>("return GetUIPanel('left') == nil").unwrap(),
         "HideUIPanel vacated the left slot"
     );
     let sounds = s.take_sounds();
@@ -160,7 +160,7 @@ fn item_slot_paints_from_container_minus_one_and_repaints_on_playerbankslots_cha
             slots,
         }),
     );
-    s.fire_event("PLAYERBANKSLOTS_CHANGED", vec![]);
+    s.fire_event("PLAYERBANKSLOTS_CHANGED", vec![ScriptValue::Int(3)]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     s.resolve();
     assert!(
@@ -186,7 +186,7 @@ fn item_slot_paints_from_container_minus_one_and_repaints_on_playerbankslots_cha
             slots: slots2,
         }),
     );
-    s.fire_event("PLAYERBANKSLOTS_CHANGED", vec![]);
+    s.fire_event("PLAYERBANKSLOTS_CHANGED", vec![ScriptValue::Int(3)]);
     s.resolve();
     let quads = s.extract();
     assert!(
@@ -366,9 +366,9 @@ fn purchase_flow_shows_popup_queues_the_intent_and_the_row_hides_when_full() {
     );
 }
 
-/// The bag buttons register both mouse buttons (`BankFrameBaseButton_OnLoad`, BankFrame.lua:12),
-/// and `BankFrameItemButtonBag_OnClick` reads no button. It opens the bag before it plays
-/// `BAGMENUBUTTONPRESS` (BankFrame.lua:193-194), so `igBackPackOpen` leads.
+/// The bag buttons register both mouse buttons (`BankFrameBaseButton_OnLoad`, BankFrame.lua:7),
+/// and `BankFrameItemButtonBag_OnClick` reads no button: it opens the bag and plays no kit of its
+/// own (BankFrame.lua:255-264).
 #[test]
 fn a_bank_bag_button_answers_the_right_button_too() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -391,12 +391,8 @@ fn a_bank_bag_button_answers_the_right_button_too() {
     assert!(consumed, "the right-click lands on the button");
     assert_eq!(
         s.take_sounds(),
-        vec![
-            SoundRequest::KitName("igBackPackOpen".into()),
-            SoundRequest::KitName("BAGMENUBUTTONPRESS".into()),
-        ],
-        "a right-click runs the same OnClick a left-click does — the window ToggleBag opened, \
-         then the button's own press kit"
+        vec![SoundRequest::KitName("igBackPackOpen".into())],
+        "a right-click runs the same OnClick a left-click does: the window ToggleBag opened"
     );
     assert!(bag_open(&s, 5), "the right-click opened the bank bag");
     assert!(
@@ -523,8 +519,8 @@ fn a_bank_bag_button_paints_the_drop_and_lets_go_of_the_lock() {
     let mut bags: benilla_ui::script::BankBagSlots = Default::default();
     bags[0] = Some(a_bag(true));
     s.set_bank_bag_slots(bags.clone());
-    // The event carries no arguments (`0x703e50`): every bank button repaints its own slot.
-    s.fire_event("PLAYERBANKSLOTS_CHANGED", vec![]);
+    // The bank slot, 29 for the first bag button (`BankFrame.lua:166-171`).
+    s.fire_event("PLAYERBANKSLOTS_CHANGED", vec![ScriptValue::Int(29)]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert!(
         is_greyed(&s.extract(), "INV_Misc_Bag_08"),
@@ -542,7 +538,10 @@ fn a_bank_bag_button_paints_the_drop_and_lets_go_of_the_lock() {
     // `ui_items::feed::resolve_item_locks` corrects the snapshot ahead of both feeds.
     bags[0] = Some(a_bag(false));
     s.set_bank_bag_slots(bags.clone());
-    s.fire_event("ITEM_LOCK_CHANGED", vec![]);
+    s.fire_event(
+        "ITEM_LOCK_CHANGED",
+        vec![ScriptValue::Int(-1), ScriptValue::Int(29)],
+    );
     assert!(
         !is_greyed(&s.extract(), "INV_Misc_Bag_08"),
         "the stuck grey: unlocked, the button must come back to full colour"
@@ -552,8 +551,8 @@ fn a_bank_bag_button_paints_the_drop_and_lets_go_of_the_lock() {
     bags[0] = None;
     bags[1] = Some(a_bag(false));
     s.set_bank_bag_slots(bags);
-    s.fire_event("PLAYERBANKSLOTS_CHANGED", vec![]);
-    s.fire_event("PLAYERBANKSLOTS_CHANGED", vec![]);
+    s.fire_event("PLAYERBANKSLOTS_CHANGED", vec![ScriptValue::Int(29)]);
+    s.fire_event("PLAYERBANKSLOTS_CHANGED", vec![ScriptValue::Int(30)]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     let quads = s.extract();
     let bag = icon_quad(&quads, "INV_Misc_Bag_08").expect("the bag is still drawn, once");

@@ -125,7 +125,7 @@ fn real_container_feed_includes_last_storage_slots_and_bag_lifecycle() {
     let seen = script.eval::<Vec<String>>("return SEEN").unwrap();
     assert!(seen.contains(&format!("BAG_OPEN {last_bag}")), "{seen:?}");
     assert!(
-        seen.contains(&"PLAYERBANKSLOTS_CHANGED nil".to_string()),
+        seen.contains(&"PLAYERBANKSLOTS_CHANGED 28".to_string()),
         "{seen:?}"
     );
     // Remove the final bag and bank item: the same persistent feed memo must close
@@ -150,7 +150,7 @@ fn real_container_feed_includes_last_storage_slots_and_bag_lifecycle() {
     let seen = script.eval::<Vec<String>>("return SEEN").unwrap();
     assert!(seen.contains(&format!("BAG_CLOSED {last_bag}")), "{seen:?}");
     assert!(
-        seen.contains(&"PLAYERBANKSLOTS_CHANGED nil".to_string()),
+        seen.contains(&"PLAYERBANKSLOTS_CHANGED 28".to_string()),
         "{seen:?}"
     );
     assert!(

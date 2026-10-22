@@ -434,7 +434,7 @@ impl ScriptItemUse<'_, '_> {
                 .map(|store| slot_guid_count(Some(store), bag, slot, &ladder.objects))
                 .unwrap_or((0, 0));
             pending_items.add([(bag, slot, guid, count)]);
-            script.fire_event("ITEM_LOCK_CHANGED", Vec::new());
+            script.fire_event("ITEM_LOCK_CHANGED", super::lock_args(bag, slot));
             let _ = ladder.commands.0.send(ClientCommand::OpenItem {
                 bag_index,
                 slot: wire_slot,
@@ -710,9 +710,9 @@ pub(crate) fn send_container_move(
             (mv.src_bag, mv.src_slot, src_guid, src_count),
             (mv.dst_bag, mv.dst_slot, dst_guid, dst_count),
         ]);
-        // One argless event per locked end, as the reference fires per slot.
-        for _ in 0..2 {
-            script.fire_event("ITEM_LOCK_CHANGED", Vec::new());
+        // One event per locked end, `(bag, slot)` as stock `ContainerFrame.lua:39-43` reads it.
+        for (bag, slot) in [(mv.src_bag, mv.src_slot), (mv.dst_bag, mv.dst_slot)] {
+            script.fire_event("ITEM_LOCK_CHANGED", super::lock_args(bag, slot));
         }
     }
     true
@@ -745,7 +745,7 @@ pub(super) fn drain_container_destroys(
         });
         let (guid, stack) = slot_guid_count(store, bag, slot, &objects);
         pending.add([(bag, slot, guid, stack)]);
-        script.fire_event("ITEM_LOCK_CHANGED", Vec::new());
+        script.fire_event("ITEM_LOCK_CHANGED", super::lock_args(bag, slot));
     }
 }
 

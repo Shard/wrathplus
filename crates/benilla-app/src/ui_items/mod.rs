@@ -25,8 +25,8 @@ pub(crate) use crate::inventory::{
 pub(crate) mod currency;
 mod drain;
 mod equip_error;
-mod heirloom;
 pub(crate) mod feed;
+mod heirloom;
 pub(crate) mod net;
 mod owned;
 pub(crate) use owned::{owned_category_count, owned_entry_count};
@@ -110,6 +110,17 @@ pub(crate) fn wire_pos_for(bag: i64, slot1: u32) -> Option<(u8, u8)> {
             Some((BAG_PLAYER_INVENTORY, slot0))
         }
         _ => None,
+    }
+}
+
+/// `ITEM_LOCK_CHANGED`'s arguments: `bag, slot` for a container slot, which 3.3.5's container and
+/// bank frames repaint (`ContainerFrame.lua:39-43`, `BankFrame.lua:157-165`); the inventory slot
+/// alone for an equipped one, which the paper doll matches (`PaperDollFrame.lua:1196-1198`).
+pub(super) fn lock_args(bag: i64, slot: u32) -> Vec<benilla_ui::script::ScriptValue> {
+    use benilla_ui::script::ScriptValue::Int;
+    match bag {
+        crate::inventory::EQUIPMENT_BAG => vec![Int(i64::from(slot))],
+        _ => vec![Int(bag), Int(i64::from(slot))],
     }
 }
 
