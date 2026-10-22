@@ -195,10 +195,7 @@ fn the_movement_kinds_other_handlers_are_pinned() {
         .census();
     use SessionEventKind as K;
     for (kind, others) in [
-        (
-            K::ObjectCreate,
-            vec!["benilla_app::net::wrath_auras::on_auras"],
-        ),
+        (K::ObjectCreate, vec!["net::wrath_auras::on_auras"]),
         (K::ObjectMove, vec![]),
         (K::MoveTimeSkipped, vec![]),
         (K::UnitMove, vec![]),
@@ -214,9 +211,11 @@ fn the_movement_kinds_other_handlers_are_pinned() {
                 .is_some_and(|n| n.contains("::net::objects::") || n.contains("::motion::")),
             "{kind:?}: {names:?}"
         );
+        // By module path: the crate prefix names whichever layer crate the handler lives in.
         let rest: Vec<&str> = names
             .into_iter()
             .filter(|n| !n.contains("::net::objects::") && !n.contains("::motion::"))
+            .map(|n| n.split_once("::").map_or(n, |(_, path)| path))
             .collect();
         assert_eq!(rest, others, "{kind:?}");
     }
