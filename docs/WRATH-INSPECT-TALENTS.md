@@ -4,7 +4,7 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `MiscHan
 (`HandleInspectOpcode`), `Player.cpp` (`BuildPlayerTalentsInfoData`, `BuildEnchantmentsInfoData`,
 `SendTalentWipeConfirm`), `SkillHandler.cpp` (`HandleLearnTalentOpcode`, `HandleLearnPreviewTalents`,
 `HandleTalentWipeConfirmOpcode`). No client-only behaviour is inferred; no Ghidra round. Codec:
-`crates/benilla-protocol/src/wrath_inspect.rs`. The player's own talents (`SMSG_TALENTS_INFO`)
+`crates/wrathplus-protocol/src/wrath_inspect.rs`. The player's own talents (`SMSG_TALENTS_INFO`)
 keep `wrath_progress`.
 
 **Shared (handled)**: 02AA talent-wipe confirm (trainer, cost; AC's zero pair is "no talents").
@@ -19,7 +19,7 @@ slot mask with entry, per-slot enchant ids, random property, packed creator and 
 `ClientCommand::NativeInspect`: 04C1 learn preview talents. Not actionable: 0213 unlearn talents
 (AC `Handle_NULL`).
 
-## App consumer (`crates/benilla-app/src/ui_inspect_wrath.rs`)
+## App consumer (`crates/wrathplus-app/src/ui_inspect_wrath.rs`)
 
 `feed_inspect` drains `NativeInspectPackets` and holds the newest reply; it is dropped on
 `ClearInspectPlayer()` and world exit and applies to its own guid alone. For that guid:

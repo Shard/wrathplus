@@ -32,7 +32,7 @@ probe_server_or_skip summon-live || exit 0
 
 # Build first so both clients start together: the probe timings count from process start.
 echo "summon-live: building…"
-cargo build -q -p benilla || { echo "summon-live: the client did not build"; exit 1; }
+cargo build -q -p wrathplus || { echo "summon-live: the client did not build"; exit 1; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/benilla-summon.XXXXXX")"
 trap '[ -n "${SUMMON_LIVE_KEEP:-}" ] || rm -rf "$work"' EXIT
@@ -69,7 +69,7 @@ WOW_UNATTENDED=1 WOW_NOSOUND=1 WOW_USER="$rx_user" WOW_PASS="$rx_pass" WOW_CHAR=
     WOW_PROBE_LUA="$chunk" WOW_PROBE_LUA_AT=34 \
     WOW_PROBE_EXIT_AT=62 \
     WOW_MOVE_TRACE="$work/rx.trace" WOW_MOVE_TRACE_TAGS=summon \
-    timeout 150 cargo run -q -p benilla >"$work/rx.log" 2>&1 &
+    timeout 150 cargo run -q -p wrathplus >"$work/rx.log" 2>&1 &
 rx=$!
 
 # WOW_ALLOW_ACCOUNT=1 lifts the account guard for the shell-named summoner. `.group summon`, not
@@ -78,7 +78,7 @@ WOW_UNATTENDED=1 WOW_NOSOUND=1 WOW_USER="$tx_user" WOW_PASS="$tx_pass" WOW_CHAR=
     WOW_PROBE_CHAT="/invite $rx_char;.group summon" \
     WOW_PROBE_CHAT_AT=18 WOW_PROBE_CHAT_EVERY=10 \
     WOW_PROBE_EXIT_AT=62 \
-    timeout 150 cargo run -q -p benilla >"$work/tx.log" 2>&1 &
+    timeout 150 cargo run -q -p wrathplus >"$work/tx.log" 2>&1 &
 tx=$!
 
 wait $rx; rx_code=$?

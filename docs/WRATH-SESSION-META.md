@@ -6,7 +6,7 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `WorldSe
 `HandleZoneUpdateOpcode`, `HandleSetActionBarToggles`), `CharacterHandler.cpp` (tutorial handlers),
 `CharacterPackets.cpp` (`PlayedTime`), `MiscPackets.cpp` (`LevelUpInfo`, `Weather`), `Player.cpp`
 (`SendCinematicStart`). No client-only behaviour is inferred; no Ghidra round. Codec:
-`crates/benilla-protocol/src/wrath_session_meta.rs`.
+`crates/wrathplus-protocol/src/wrath_session_meta.rs`.
 
 **Shared (handled)**: 00FD tutorial flags (32 bytes; the login bootstrap's queued copy now reaches
 the tutorial system), 00FA cinematic, 01CD played time (the echoed trigger byte dropped), 01D4

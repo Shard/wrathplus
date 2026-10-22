@@ -32,7 +32,7 @@ def load(name):
 # Generated sources, exempt from the line limit by name (their generator is the thing to keep
 # small). A move of one of these needs this list updated in the same commit.
 GENERATED = {
-    'crates/benilla-protocol/src/messages/update_object/fields/layout_generated.rs',
+    'crates/wrathplus-protocol/src/messages/update_object/fields/layout_generated.rs',
 }
 
 
@@ -52,8 +52,8 @@ def loc(paths):
 
 # WS2's gate (docs/WRATH-NATIVE-PLAN.md): production code in these crates names descriptor fields
 # through `Field`, never a raw index. The descriptor names come off the generated layout.
-WS2_ROOTS = ('crates/benilla-app/src/', 'crates/benilla-world/src/')
-WS2_LAYOUT = 'crates/benilla-protocol/src/types/update_object/fields/layout_generated.rs'
+WS2_ROOTS = ('crates/wrathplus-app/src/', 'crates/wrathplus-world/src/')
+WS2_LAYOUT = 'crates/wrathplus-protocol/src/types/update_object/fields/layout_generated.rs'
 WS2_TYPES = ('CONTAINER', 'CORPSE', 'DYNAMICOBJECT', 'GAMEOBJECT', 'ITEM', 'OBJECT', 'PLAYER', 'UNIT')
 
 

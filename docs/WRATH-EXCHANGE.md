@@ -4,7 +4,7 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `TradeHa
 (`SendUpdateTrade`), `SharedDefines.h` (`TradeStatus`), `MailHandler.cpp`, `Player::SendMailResult`,
 `AuctionHouseHandler.cpp`, `AuctionHouseSearcher.cpp` (`BuildAuctionInfo`), `Group.cpp`
 (`MasterLoot`), `LootHandler.cpp`, `GroupHandler.cpp`. No client-only behaviour is inferred; no
-Ghidra round. Adapter: `crates/benilla-protocol/src/wrath_exchange.rs`.
+Ghidra round. Adapter: `crates/wrathplus-protocol/src/wrath_exchange.rs`.
 
 These replies mean what their 1.12 counterparts mean, so they translate at the wire into the shared
 events the existing feeds own (**handled**): 0120/0121 trade status and window (the existing

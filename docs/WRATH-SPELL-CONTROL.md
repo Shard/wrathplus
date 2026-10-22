@@ -9,7 +9,7 @@ Wire reference: AzerothCore (`../azerothcore-playerbots/core/src/server/game`):
 (PetHandler.cpp), `TotemCreated` (TotemPackets.cpp), and for requests the `WorldSession::Handle*`
 readers in PetHandler.cpp, SpellHandler.cpp and MiscHandler.cpp plus PetPackets.cpp/TotemPackets.cpp.
 No client-only behaviour is inferred; no Ghidra round. Adapter:
-`crates/benilla-protocol/src/wrath_spell_control.rs`.
+`crates/wrathplus-protocol/src/wrath_spell_control.rs`.
 
 Strict framing throughout: a short body or a trailing byte is `Unhandled`, never a fallback.
 

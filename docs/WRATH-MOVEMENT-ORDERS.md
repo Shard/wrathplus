@@ -6,7 +6,7 @@ Wire reference: AzerothCore (`../azerothcore-playerbots/core/src/server/game`):
 `Player::SendTeleportAckPacket` (Player.cpp); readers `HandleForceSpeedChangeAck`,
 `HandleMoveKnockBackAck`, `HandleMoveTeleportAck` (MovementHandler.cpp) and
 `HandleMoveFlagChangeOpcode` (MiscHandler.cpp); `MovementFlags` (UnitDefines.h). No client-only
-behaviour is inferred; no Ghidra round. Codecs: `crates/benilla-protocol/src/wrath_authority.rs`.
+behaviour is inferred; no Ghidra round. Codecs: `crates/wrathplus-protocol/src/wrath_authority.rs`.
 
 **Before this unit** every one of these self orders was fatal in the Wrath reader
 (`mandatory_movement_order` revoked authority and ended the session): any forced speed change

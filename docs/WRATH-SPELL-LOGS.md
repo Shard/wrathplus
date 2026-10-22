@@ -7,11 +7,11 @@ Wire reference: AzerothCore (`../azerothcore-playerbots/core/src/server/game`): 
 `ExecuteLogEffect*` writers (Spell.cpp), `EffectInstaKill`, `EffectDispel`, `EffectStealBeneficialBuff`
 (SpellEffects.cpp), and the two script callers (`spell_mage_burnout_trigger`,
 `spell_item_draenic_pale_ale`). No client-only behaviour is inferred; no Ghidra round.
-Adapter: `crates/benilla-protocol/src/wrath_logs.rs`.
+Adapter: `crates/wrathplus-protocol/src/wrath_logs.rs`.
 
 Every packet is framed strictly: a short body, an over-long count or a trailing byte is
 `Unhandled`, never a fallback decode. The packets translate into the shared events the combat log
-(`crates/benilla-app/src/combat_log`) already owns (**handled**):
+(`crates/wrathplus-app/src/combat_log`) already owns (**handled**):
 
 - 0150 heal: `overheal` and `absorb` now ride `SpellHealLog` beside `critical`.
 - 0151 energize: decoded natively (packed GUIDs), no longer through the 1.12 parser.

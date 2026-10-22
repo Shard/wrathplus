@@ -1,0 +1,18 @@
+[package]
+name = "wrathplus-mpq"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Read-only MPQ archive reader for WoW 3.3.5 (build 12340)"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Bounds-checked byte readers and the allocation cap on the header, block table and sectors.
+wrathplus-bytes = { path = "../wrathplus-bytes" }
+# Inflate for the ZLIB (0x02) sector codec, on its pure-Rust miniz_oxide backend.
+flate2 = "1.1"
+
+# Wrath MPQ codec mask 0x10; the default backend is pure-Rust libbz2-rs.
+bzip2 = "0.6"

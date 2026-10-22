@@ -45,7 +45,7 @@ validate build/version, and reject truncated headers/bodies.
 
 Two halves, both offline and safe for any worker to run on a capture the manager recorded:
 
-- `cargo run -p benilla-protocol --example replay_capture -- <capture.azbwrpk>` reads the capture
+- `cargo run -p wrathplus-protocol --example replay_capture -- <capture.azbwrpk>` reads the capture
   strictly (`wrath_capture::read`; a cut-off final record is reported, never invented), replays it
   through the live reader's routing (`wrath_capture::census`: `SMSG_MULTIPLE_MOVES` split in place,
   the session loop's own opcodes through their decoders, movement relays, then
@@ -54,7 +54,7 @@ Two halves, both offline and safe for any worker to run on a capture the manager
   adapter reports a malformed body for a known family as unhandled), decode failures, unhandled
   opcodes the table already lists as missing, a per-opcode table (route, seen, handled, unhandled,
   failed, events) and the session-event kinds produced. It exits 1 when there is a finding.
-- `WOW_REPLAY_CAPTURE=<capture.azbwrpk> cargo test -p benilla-app --lib capture_replay -- --ignored
+- `WOW_REPLAY_CAPTURE=<capture.azbwrpk> cargo test -p wrathplus-app --lib capture_replay -- --ignored
   --nocapture --test-threads 1` pushes the same events, one at a time, through the real app handler
   drain on the headless client, and reports each handler panic with its event kind and the event
   kinds no handler owns (dropped silently live). The headless client runs no schedule, so

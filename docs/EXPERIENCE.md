@@ -117,7 +117,7 @@ restart after changing pack configuration.
 
 ### Real-asset pack (installed test and demo pack)
 
-`benilla-assets` `override_real_data` builds a pack from installed Wrath files into a temporary
+`wrathplus-assets` `override_real_data` builds a pack from installed Wrath files into a temporary
 folder: Elwynn's `Lamppost.m2` (with its SKIN/ANIM siblings) becomes `Ballista.m2`, and the first
 `Tileset\Elwynn\*grass*.blp` becomes the first `Tileset\Durotar\` texture. Through the
 production `register_mpq_source_overrides` and Wrath loaders, the lamp loads with the ballista's
@@ -128,7 +128,7 @@ live session (local only, never committed):
 ```sh
 WOW_CLIENT_PROFILE=wrath WOW_LOCALE=enUS WOW_DATA=/Users/shannon/Games/Client/Data \
   AZB_DEMO_PACK_OUT="$BENILLA_HOME/mods/azb-demo" \
-  cargo test -p benilla-assets --lib write_demo_pack -- --ignored --nocapture
+  cargo test -p wrathplus-assets --lib write_demo_pack -- --ignored --nocapture
 ```
 
 then `[experience] profile = "plus"`, `packs = ["azb-demo"]` (or Classic with
@@ -177,7 +177,7 @@ row 12.xyz and all other existing field offsets remain unchanged. Booth buffers 
 Terrain and exterior model receivers attenuate sunlight, not ambient, point lights, emission or
 interior probes. Classic retains its original lighting expressions in the zero-gate branch.
 
-`benilla-assets/src/materials.rs` dispatches PREPASS_PIPELINE before forward specialization and
+`wrathplus-assets/src/materials.rs` dispatches PREPASS_PIPELINE before forward specialization and
 uses `shaders/wow_shadow.wgsl`, with the child helper `shadow_material.rs`. Forward attribute and
 blend/depth logic must never run on this shadow path. The caster duplicates the complete
 WowLight/ModelParams ABI: future two-stage material fields must be mirrored there. Palette skinning,
@@ -281,7 +281,7 @@ Manager-only launch example (workers never run the client):
 
 ```sh
 WOW_EXPERIENCE=plus WOW_SHOWCASE_PATH=/tmp/path.toml WOW_SHOWCASE_OUT=/tmp/plus-clip \
-  cargo run -p benilla
+  cargo run -p wrathplus
 ffmpeg -framerate 60 -start_number 0 -i /tmp/plus-clip/frame%06d.png \
   -c:v libx264 -crf 18 -pix_fmt yuv420p -movflags +faststart /tmp/plus-clip.mp4
 ```
@@ -409,7 +409,7 @@ network, archives or world plugins. Ordinary test runs leave it ignored, so GPU-
 Run explicitly (under the shared heavy-build lock and usual worker build limits):
 
 ```sh
-cargo test -p benilla-world --lib retained_gx_gpu_smoke -- --ignored --nocapture --test-threads 1
+cargo test -p wrathplus-world --lib retained_gx_gpu_smoke -- --ignored --nocapture --test-threads 1
 ```
 
 The explicit run requires a working graphics adapter and fails rather than silently skipping when
@@ -426,7 +426,7 @@ embedded shader libraries and production fullscreen vertex shader, not an inferr
 ```sh
 CARGO_TARGET_DIR=/tmp/azb-target-experience CARGO_BUILD_JOBS=4 CARGO_INCREMENTAL=0 \
   lockf -k /tmp/azb-heavy.lock env -u WOW_CLIENT_PROFILE -u WOW_LOCALE WOW_DATA= \
-  nice -n 15 cargo test -p benilla-world --lib ffx_plus_gpu_smoke -- \
+  nice -n 15 cargo test -p wrathplus-world --lib ffx_plus_gpu_smoke -- \
   --ignored --nocapture --test-threads 1
 ```
 
@@ -452,7 +452,7 @@ that lock. Both stages must have a hard process timeout (for example `timeout --
 300`); never hold the shared lock for an unbounded on-demand GPU run. Preserve the usual worker
 build environment (`CARGO_TARGET_DIR`, `CARGO_BUILD_JOBS=4`, `CARGO_INCREMENTAL=0`, `nice -n 15`),
 and unset `WOW_CLIENT_PROFILE`/`WOW_LOCALE` with `WOW_DATA=`. For example, obtain the executable
-from the `compiler-artifact` JSON emitted by `cargo test -p benilla-world --lib --no-run
+from the `compiler-artifact` JSON emitted by `cargo test -p wrathplus-world --lib --no-run
 --message-format=json`, then execute:
 
 ```sh

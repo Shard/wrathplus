@@ -3,7 +3,7 @@
 Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `CalendarHandler.cpp`
 (`HandleCalendarGetCalendar`, every handler's read order, `SendCalendarRaidLockout*`),
 `CalendarMgr.cpp` (`SendCalendar*`), `CalendarPackets.cpp`, `Guild.cpp` and `ArenaTeam.cpp`
-(`MassInviteToEvent`). Codec: `crates/benilla-protocol/src/wrath_calendar.rs`.
+(`MassInviteToEvent`). Codec: `crates/wrathplus-protocol/src/wrath_calendar.rs`.
 
 Every receive row is decoded into the `NativeCalendarPackets` FIFO (cleared on Connected and
 Disconnected, duplicates kept), which `ui_calendar` reduces (below): 0436 calendar (invites, events, server and zone time,
@@ -26,9 +26,9 @@ Not decoded: 0442 status alert and 0460/0461 invite notes (AC never sends them),
 
 ## App reducer and the Lua calendar
 
-App (`crates/benilla-app/src/ui_calendar.rs`) is the sole reducer of `NativeCalendarPackets` and
+App (`crates/wrathplus-app/src/ui_calendar.rs`) is the sole reducer of `NativeCalendarPackets` and
 the sender of the `NativeCalendar` writers; Native UI's VM side
-(`crates/benilla-ui/src/script/wrath_calendar/`) holds the 96 build-12340 globals (every
+(`crates/wrathplus-ui/src/script/wrath_calendar/`) holds the 96 build-12340 globals (every
 `Calendar*` the executable names, `OpenCalendar`, `CanEditGuildEvent`). Evidence: one headless
 Ghidra round over the bindings (`/tmp/azb-app-mig/ghidra/cal1.log`), AzerothCore for the wire's
 meaning, the stock `Blizzard_Calendar` for the shapes. App publishes one `WrathCalendarView`

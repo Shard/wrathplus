@@ -1,7 +1,7 @@
 # App crate split after the wrathplus rename
 
 Status: proposal, not an extraction authorization. This is a docs-only inventory of the current
-`benilla-app` seams. Execute only after the native cutover is accepted, WS1–WS6 are merged, and
+`wrathplus-app` seams. Execute only after the native cutover is accepted, WS1–WS6 are merged, and
 the single mechanical `benilla-*` → `wrathplus-*` rename is green. Keep `WOW_*` variables unchanged.
 The parent requirements are in [WRATH-NATIVE-PLAN.md](WRATH-NATIVE-PLAN.md), “After the native
 refactor”. Existing protocol, UI engine, assets, formats and world crates remain separate.

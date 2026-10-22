@@ -1,0 +1,138 @@
+//! `WorldStateUI.dbc`, the rows behind the always-up PvP readout and the battleground scoreboard's
+//! columns (`GetNumWorldStateUI`, `GetWorldStateUIInfo` `0x4c5a70`). It is client-only: vmangos
+//! sends only world-state values, and which are shown, where and with what label is this table's.
+//!
+//! The schema is 1.12's 39 fields (each localized string nine dwords; field 22 loaded and never
+//! read); [`crate::wrath_layouts`] maps it onto the 3.3.5 file's 63 columns, with their
+//! `PhaseShift` (not carried: the phase mask is not modelled) and 17-dword locale blocks.
+
+use anyhow::{Context, Result};
+use wrathplus_dbc::{FieldType, Schema, SchemaField};
+
+use crate::dbc::{parse, str_at, u32_at};
+use crate::Chain;
+
+const WORLD_STATE_UI: &str = "DBFilesClient\\WorldStateUI.dbc";
+
+/// One `WorldStateUI.dbc` row.
+#[derive(Clone, Debug)]
+pub struct WorldStateUiRow {
+    /// The row's `Map.dbc` id: a continent for world PvP, else a battleground map.
+    pub map_id: u32,
+    /// The `AreaTable.dbc` id narrowing the row within its map (world PvP only), `0` for all of it.
+    pub area_id: u32,
+    /// The static icon's texture path (`Interface\WorldStateFrame\AllianceTower`), or empty.
+    pub icon: String,
+    /// The label: a `%<id>w` world-state format (`"Towers Controlled: %2327w"`), or plain text on
+    /// a scoreboard column. The only string the client expands; the rest reach Lua verbatim.
+    pub text: String,
+    /// The tooltip line (`"Alliance Towers Controlled"`).
+    pub tooltip: String,
+    /// `StateVariable` (`+0x5c`), the world-state id whose value the client returns as the row's
+    /// `uiState`; `0` is no state, which the binding answers as `1.0`.
+    pub state_variable: u32,
+    /// `Type` (`+0x60`), which list the row joins: `0` always up; `1` always up only while the
+    /// player is in a zone-dependent defense channel (`ZONE_DEP | DEFENSE`, LocalDefense alone),
+    /// the world-PvP rows; `2` a scoreboard column, built by another handler.
+    pub ui_type: u32,
+    /// The icon shown instead while [`Self::state_variable`] is live: the enemy flag, on the two
+    /// Warsong Gulch rows that have one.
+    pub dynamic_icon: String,
+    /// The tooltip that goes with [`Self::dynamic_icon`] (`"Horde flag has been picked up"`).
+    pub dynamic_tooltip: String,
+    /// A token naming an extra widget the row drives: `"CAPTUREPOINT"`, on the Eastern
+    /// Plaguelands progress row alone.
+    pub extended_ui: String,
+    /// The world-state ids that widget reads; the binding answers their values.
+    pub extended_ui_state: [u32; 3],
+}
+
+/// `WorldStateUI.dbc` rows in file order, with their ids.
+pub struct WorldStateUiCatalog {
+    rows: Vec<(u32, WorldStateUiRow)>,
+}
+
+impl WorldStateUiCatalog {
+    /// A catalog over rows given directly, for tests that need a table of known shape.
+    pub fn from_rows(rows: Vec<(u32, WorldStateUiRow)>) -> Self {
+        Self { rows }
+    }
+
+    /// Every row in file order, the order a UI list built from the table is indexed by.
+    pub fn rows(&self) -> impl Iterator<Item = (u32, &WorldStateUiRow)> {
+        self.rows.iter().map(|(id, row)| (*id, row))
+    }
+
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
+    }
+}
+
+fn schema() -> Schema {
+    let mut s = Schema::new("WorldStateUI");
+    for name in ["ID", "MapID", "AreaID"] {
+        s.add_field(SchemaField::new(name, FieldType::UInt32));
+    }
+    s.add_field(SchemaField::new("Icon", FieldType::String));
+    let loc = |s: &mut Schema, name: &str| {
+        s.add_field(SchemaField::new(name, FieldType::String)); // enUS (locale 0)
+        s.add_field(SchemaField::new_array(
+            format!("{name}OtherLocales"),
+            FieldType::String,
+            7,
+        ));
+        s.add_field(SchemaField::new(format!("{name}Flags"), FieldType::UInt32));
+    };
+    loc(&mut s, "Text");
+    loc(&mut s, "Tooltip");
+    // +0x58: loaded, never read.
+    for name in ["UnreadCol22", "StateVariable", "Type"] {
+        s.add_field(SchemaField::new(name, FieldType::UInt32));
+    }
+    s.add_field(SchemaField::new("DynamicIcon", FieldType::String));
+    loc(&mut s, "DynamicTooltip");
+    s.add_field(SchemaField::new("ExtendedUI", FieldType::String));
+    s.add_field(SchemaField::new_array(
+        "ExtendedUIStateVariable",
+        FieldType::UInt32,
+        3,
+    ));
+    s
+}
+
+/// Read `WorldStateUI.dbc` off the patch chain.
+pub fn load_world_state_ui_catalog(chain: &mut Chain) -> Result<WorldStateUiCatalog> {
+    let bytes = chain
+        .read_file(WORLD_STATE_UI)
+        .context("reading WorldStateUI.dbc")?;
+    let rs = parse(&bytes, schema(), "WorldStateUI")?;
+    let mut rows = Vec::with_capacity(rs.records().len());
+    for r in rs.records() {
+        let Some(id) = u32_at(r, 0) else { continue };
+        rows.push((
+            id,
+            WorldStateUiRow {
+                map_id: u32_at(r, 1).unwrap_or(0),
+                area_id: u32_at(r, 2).unwrap_or(0),
+                icon: str_at(&rs, r, 3).unwrap_or_default(),
+                text: str_at(&rs, r, 4).unwrap_or_default(),
+                tooltip: str_at(&rs, r, 13).unwrap_or_default(),
+                state_variable: u32_at(r, 23).unwrap_or(0),
+                ui_type: u32_at(r, 24).unwrap_or(0),
+                dynamic_icon: str_at(&rs, r, 25).unwrap_or_default(),
+                dynamic_tooltip: str_at(&rs, r, 26).unwrap_or_default(),
+                extended_ui: str_at(&rs, r, 35).unwrap_or_default(),
+                extended_ui_state: [
+                    u32_at(r, 36).unwrap_or(0),
+                    u32_at(r, 37).unwrap_or(0),
+                    u32_at(r, 38).unwrap_or(0),
+                ],
+            },
+        ));
+    }
+    Ok(WorldStateUiCatalog { rows })
+}

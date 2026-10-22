@@ -4,7 +4,7 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`.
 `Server/Packets/{ItemPackets,BankPackets}.{h,cpp}`, `Handlers/{ItemHandler,SpellHandler,
 BankHandler,QueryHandler,CharacterHandler}.cpp`, `Entities/Item/Item.cpp`, `Entities/Player/
 {Player,PlayerStorage}.cpp` establish every layout. No client-only behavior is inferred; no
-Ghidra round required. Codec: `crates/benilla-protocol/src/wrath_inventory.rs`.
+Ghidra round required. Codec: `crates/wrathplus-protocol/src/wrath_inventory.rs`.
 
 Receive opcodes decoded into existing shared events (**handled**): 005B page text,
 00B0 item cooldown, 01B8 show bank, 01BA buy-bank-slot result, 01EA item time,
@@ -42,7 +42,7 @@ Consumers take their receipts out of that FIFO and leave the rest in order:
   cache instead of the FIFO. Labelled: AC's "no text" answer carries no GUID, so it answers
   nothing and the reader waits.
 - **Sockets** (`A/net/wrath_sockets.rs`, Lua in `U/script/wrath_sockets.rs`, gem tables in
-  `benilla-formats` `gems.rs`): `SocketContainerItem`/`SocketInventoryItem` open a session on a
+  `wrathplus-formats` `gems.rs`): `SocketContainerItem`/`SocketInventoryItem` open a session on a
   carried item. Its sockets are the template's socket blocks (now kept by the item-query codec as
   `SocketMetadata`, delivered as `WrathItemSocketMetadata`), plus a colourless one while enchant
   slot 6 is set. Existing gems are enchant slots 2..4, named back to the gem item by

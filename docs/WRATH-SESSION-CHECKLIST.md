@@ -9,7 +9,7 @@ human, and what only play can judge. A failed item becomes a row in `WRATH-BUG-B
 
 | Code | What | Who runs it |
 |---|---|---|
-| **H** | Headless, no client: `cargo test` suites, installed-data tests (`WOW_CLIENT_PROFILE=wrath WOW_LOCALE=enUS WOW_DATA=…`), the asset route (`benilla-formats --test wrath_asset_route`), and offline replay of a recorded capture through `WrathEventAdapter::dispatch` | any worker |
+| **H** | Headless, no client: `cargo test` suites, installed-data tests (`WOW_CLIENT_PROFILE=wrath WOW_LOCALE=enUS WOW_DATA=…`), the asset route (`wrathplus-formats --test wrath_asset_route`), and offline replay of a recorded capture through `WrathEventAdapter::dispatch` | any worker |
 | **P** | Scripted live probe against the local dev realm: `target/azb-live/probe.sh` with `WOW_PROBE*` variables (`WOW_PROBE=list` prints them; `WOW_PROBE_CHAT` parks the character with `.go xyz`, `WOW_PROBE_LUA` presses buttons through the live UI VM, `WOW_PROBE_KEY` synthesizes keys, `WOW_LIVE_SHOT` screenshots) | the manager only; it opens a window |
 | **R** | Packet record and replay: `WOW_WRATH_PACKET_RECORD=<new file>` on a P or S run (`WRATH-PACKET-RECORDING.md`; inbound, decrypted, never committed), then an H replay that counts unhandled opcodes and decode failures per leg. The replay harness does not exist yet (the recorder has no playback); building it is the first follow-up | manager records, any worker replays |
 | **S** | Shannon plays with `target/azb-live/launch.sh`: feel, visuals, timing, sound, anything a probe cannot judge | Shannon |

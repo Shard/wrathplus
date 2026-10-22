@@ -4,7 +4,7 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `Charact
 (`HandleCharRenameOpcode`, `HandleCharCustomize`, `HandleCharFactionOrRaceChange`,
 `HandleSetPlayerDeclinedNames` and their `Send*` replies) and `MiscHandler.cpp`
 (`HandleRealmSplitOpcode`). No client-only behaviour is inferred; no Ghidra round. Codec and session
-method: `crates/benilla-protocol/src/wrath_char_services.rs`.
+method: `crates/wrathplus-protocol/src/wrath_char_services.rs`.
 
 These run on the pre-world session at character select, like create and delete:
 `CharRequest::Service(Command)` → `WrathWorldSession::char_service_result`, which sends the request

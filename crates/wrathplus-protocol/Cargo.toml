@@ -1,0 +1,18 @@
+[package]
+name = "wrathplus-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WoW 3.3.5a (build 12340) auth (SRP6) and world wire protocol"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+wrathplus-srp = { path = "../wrathplus-srp" }
+flate2 = "1.0"
+sha1.workspace = true
+# Derives `SessionEventKind`, `SessionEvent`'s fieldless twin that the handler table keys on.
+strum = { version = "0.26", features = ["derive"] }
+

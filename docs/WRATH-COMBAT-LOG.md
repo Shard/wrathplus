@@ -80,7 +80,7 @@ rows, resisted and absorbed are the rows' sums, blocked the packet's, and the hi
 - Markers: target `0x10000`, focus `0x20000`; a player in the group, main tank `0x40000` or main
   assist `0x80000`; in a group, raid icon `n` (0-7) sets `0x100000 << n`.
 
-## App producers (`crates/benilla-app/src/combat_log/native.rs`)
+## App producers (`crates/wrathplus-app/src/combat_log/native.rs`)
 
 The combat-log handlers record each packet; `feed` flags (`native_flags.rs`, `0x74dcb0`) and names
 the units and pushes into Native UI's store. Every spell entry needs a named spell not hidden from

@@ -52,7 +52,7 @@ You need:
   Windows the MSVC build tools that the Rust installer sets up.
 
 ```sh
-WOW_DATA=/path/to/WoW/Data cargo run --release -p benilla
+WOW_DATA=/path/to/WoW/Data cargo run --release -p wrathplus
 ```
 
 `WOW_DATA` names the install's `Data` folder; a link to the install named `WoW` at the repo root
@@ -62,7 +62,7 @@ one session with `--server <host[:port]>` (`WOW_HOST`). Credentials go in at the
 Flags skip steps, each only its own: `--account <name>` with `--password-env <VAR>` or
 `--password-stdin` logs in (the password is never an argument), `--realm <name>`,
 `--character <name>` and `--enter-world`; `WOW_USER`, `WOW_PASS`, `WOW_REALM` and `WOW_CHAR`
-(pick and enter) map onto the same steps. See `crates/benilla-app/src/launch_plan.rs`.
+(pick and enter) map onto the same steps. See `crates/wrathplus-app/src/launch_plan.rs`.
 
 Settings, screenshots and addons live in `benilla-config/` at the repo root; addons go in
 `benilla-config/AddOns/`. [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) has the rest, from the
@@ -77,7 +77,7 @@ community, and [warcraft-rs](https://github.com/wowemulation-dev/warcraft-rs) in
 This is an independent fan project, not affiliated with or endorsed by Blizzard Entertainment. It
 ships **no Blizzard content**: no art, models, sounds, maps, MPQ contents or FrameXML. You provide
 your own legally obtained 3.3.5a client, and the stock interface runs off its FrameXML at runtime.
-The few files under `crates/benilla-app/assets/ui/` are our own, not copies of it: adapters over
+The few files under `crates/wrathplus-app/assets/ui/` are our own, not copies of it: adapters over
 stock files, and the settings windows and script error log the client draws itself.
 
 World of Warcraft is a trademark of Blizzard Entertainment, Inc. Our own code is licensed under

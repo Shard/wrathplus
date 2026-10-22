@@ -27,7 +27,7 @@ ORDER = ["core", "net", "world", "ui", "tools", "root"]
 def main():
     root = subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
     crates = os.path.join(root, "crates")
-    app = "wrathplus-app" if os.path.isdir(os.path.join(crates, "wrathplus-app")) else "benilla-app"
+    app = "wrathplus-app" if os.path.isdir(os.path.join(crates, "wrathplus-app")) else "wrathplus-app"
     src = os.path.join(crates, app, "src")
     layer = {}
     for line in open(os.path.join(root, "scripts", "split", "layers.txt")):

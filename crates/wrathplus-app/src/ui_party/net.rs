@@ -1,0 +1,1114 @@
+//! The group packet handlers. [`GroupState`] names the messages each packet implies and these
+//! queue them by key, as the reference's `DisplayError` (`0x496720`) takes a message id: the
+//! catalog row gives the text, the surface and the sound. [`member_deactivated`] is the
+//! object layer's hook on a roster member's stream-out, fed by `net`'s [`MemberDeactivated`].
+
+use wrathplus_protocol::types::{GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo};
+use bevy::prelude::*;
+
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
+
+use super::{GroupState, GROUPTYPE_RAID};
+use crate::names::NameCache;
+use crate::net::{
+    ClientCommand, GuidIndex, MemberDeactivated, NetCommands, NetHandlerApp, ObjectStore, SelfGuid,
+};
+use crate::sound::MessageSounds;
+use crate::ui_action::{UiError, UiErrorKeys};
+use crate::ui_quest::QuestGiver;
+
+/// The join chime, played by name (`0x840404` through `0x458030`).
+const INVITE_ACCEPT_SOUND: &str = "igPlayerInviteAccept";
+
+/// One handler per group kind, plus the session-end listener and the stream-out drain.
+pub(super) fn register(app: &mut App) {
+    use SessionEventKind as K;
+    app.net_handler(K::WrathGroup, on_wrath_group)
+        .net_handler(K::GroupInvite, on_invite)
+        .net_handler(K::GroupDecline, on_decline)
+        .net_handler(K::GroupUninvited, on_uninvited)
+        .net_handler(K::GroupLeaderChanged, on_leader_changed)
+        .net_handler(K::GroupDestroyed, on_destroyed)
+        .net_handler(K::GroupList, on_list)
+        .net_handler(K::PartyCommandResult, on_command_result)
+        .net_handler(K::PartyMemberStats, on_member_stats)
+        .net_handler(K::RaidTargetSet, on_raid_target)
+        .net_handler(K::RaidTargetList, on_raid_target)
+        .net_handler(K::ReadyCheckRequest, on_ready_check_request)
+        .net_handler(K::ReadyCheckAnswer, on_ready_check_answer)
+        .net_handler(K::WrathRaidInstanceInfo, on_wrath_raid_instance_info)
+        .net_handler(K::RaidInstanceInfo, drop_raid_instance_info)
+        .net_handler(K::ObjectDestroyed, on_member_deactivated)
+        .net_handler(K::ObjectsRemoved, on_member_deactivated)
+        .net_handler(K::Worldport, on_member_deactivated)
+        .net_handler(K::Disconnected, on_session_end);
+}
+
+fn on_wrath_group(
+    In(ev): In<SessionEvent>,
+    mut group: ResMut<GroupState>,
+    mut errors: ResMut<UiErrorKeys>,
+    commands: Res<NetCommands>,
+    index: Res<GuidIndex>,
+    self_guid: Res<SelfGuid>,
+    names: Res<NameCache>,
+    mut sounds: ResMut<MessageSounds>,
+    mut quest: ResMut<QuestGiver>,
+) {
+    use wrathplus_protocol::wrath_group::Packet;
+    let SessionEvent::WrathGroup { packet } = ev else {
+        return;
+    };
+    match *packet {
+        Packet::Invite {
+            invited: true,
+            inviter,
+            ..
+        } => invited(&mut group, &mut errors, &inviter),
+        Packet::Invite {
+            invited: false,
+            inviter,
+            ..
+        } => push_group_lines(&mut errors, group.apply_invited_while_grouped(&inviter)),
+        Packet::Decline { name } => declined(&mut group, &mut errors, &name),
+        Packet::Uninvite => {
+            uninvited(&mut group, &mut errors);
+            group.leave_group();
+        }
+        Packet::List(roster) => {
+            let fresh = roster
+                .members
+                .iter()
+                .filter(|m| !group.wrath_stats.contains_key(&m.guid))
+                .map(|m| m.guid)
+                .collect::<Vec<_>>();
+            for m in &roster.members {
+                names.resolve(m.guid, &commands);
+            }
+            let lines = group.apply_wrath_list(roster, self_guid.0);
+            if lines.invite_accept {
+                sounds.push_cue(INVITE_ACCEPT_SOUND);
+            }
+            quest.bump_reask();
+            push_group_lines(&mut errors, lines.lines);
+            for member in &group.members {
+                if fresh.contains(&member.guid) && !index.0.contains_key(&member.guid) {
+                    let _ = commands
+                        .0
+                        .send(ClientCommand::RequestPartyMemberStats { guid: member.guid });
+                }
+            }
+        }
+        Packet::Stats(stats) => group.apply_wrath_stats(stats),
+        Packet::Raid(packet) => apply_wrath_raid(&mut group, &mut errors, &self_guid, packet),
+    }
+}
+
+fn apply_wrath_raid(
+    group: &mut GroupState,
+    errors: &mut UiErrorKeys,
+    me: &SelfGuid,
+    packet: wrathplus_protocol::wrath_group::raid::Packet,
+) {
+    use wrathplus_protocol::wrath_group::raid::Packet;
+    if matches!(
+        &packet,
+        Packet::ReadyStart { .. } | Packet::ReadyConfirm { .. } | Packet::ReadyFinished
+    ) {
+        group.wrath_raid.ready_events.push(packet.clone());
+    }
+    match packet {
+        Packet::CommandResult {
+            operation,
+            member,
+            result,
+            value,
+        } => {
+            command_result(group, errors, operation, &member, result);
+            group.wrath_raid.command_result = Some((operation, member, result, value));
+        }
+        Packet::TargetSet {
+            setter,
+            icon,
+            target,
+        } => {
+            group.wrath_raid.target_setter = Some(setter);
+            group.apply_raid_target(icon, target);
+        }
+        Packet::TargetList { entries } => group.apply_raid_target_list(&entries),
+        Packet::ReadyStart { initiator } => {
+            group.wrath_raid.ready_initiator = Some(initiator);
+            group.wrath_raid.ready_answers.clear();
+            // Wrath carries the actual initiator: an assistant may start the check.
+            push_group_lines(
+                errors,
+                group.apply_ready_check_request(me.0 == Some(initiator)),
+            );
+        }
+        Packet::ReadyConfirm { guid, state } => {
+            group.wrath_raid.ready_answers.push((guid, state));
+            group.apply_ready_check_answer(guid, state != 0);
+        }
+        Packet::ReadyFinished => {
+            group.wrath_raid.ready_finished = group.wrath_raid.ready_finished.wrapping_add(1);
+        }
+    }
+}
+
+fn on_invite(
+    In(ev): In<SessionEvent>,
+    mut group: ResMut<GroupState>,
+    mut errors: ResMut<UiErrorKeys>,
+) {
+    if let SessionEvent::GroupInvite { inviter } = ev {
+        invited(&mut group, &mut errors, &inviter);
+    }
+}
+
+fn on_decline(
+    In(ev): In<SessionEvent>,
+    mut group: ResMut<GroupState>,
+    mut errors: ResMut<UiErrorKeys>,
+) {
+    if let SessionEvent::GroupDecline { name } = ev {
+        declined(&mut group, &mut errors, &name);
+    }
+}
+
+fn on_uninvited(
+    In(ev): In<SessionEvent>,
+    mut group: ResMut<GroupState>,
+    mut errors: ResMut<UiErrorKeys>,
+) {
+    if let SessionEvent::GroupUninvited = ev {
+        uninvited(&mut group, &mut errors);
+    }
+}
+
+fn on_leader_changed(
+    In(ev): In<SessionEvent>,
+    mut group: ResMut<GroupState>,
+    mut errors: ResMut<UiErrorKeys>,
+    self_guid: Res<SelfGuid>,
+    names: Res<NameCache>,
+    commands: Res<NetCommands>,
+) {
+    if let SessionEvent::GroupLeaderChanged { name } = ev {
+        leader_changed(
+            &mut group,
+            &mut errors,
+            &name,
+            &self_guid,
+            &names,
+            &commands,
+        );
+    }
+}
+
+fn on_destroyed(
+    In(ev): In<SessionEvent>,
+    mut group: ResMut<GroupState>,
+    mut errors: ResMut<UiErrorKeys>,
+) {
+    if let SessionEvent::GroupDestroyed = ev {
+        destroyed(&mut group, &mut errors);
+    }
+}
+
+fn on_list(
+    In(ev): In<SessionEvent>,
+    mut group: ResMut<GroupState>,
+    mut errors: ResMut<UiErrorKeys>,
+    mut sounds: ResMut<MessageSounds>,
+    mut quest: ResMut<QuestGiver>,
+    self_guid: Res<SelfGuid>,
+    names: Res<NameCache>,
+    index: Res<GuidIndex>,
+    commands: Res<NetCommands>,
+) {
+    if let SessionEvent::GroupList {
+        group_type,
+        own_flags,
+        members,
+        leader,
+        loot,
+    } = ev
+    {
+        list(
+            &mut group,
+            &mut errors,
+            &mut sounds,
+            &mut quest,
+            group_type,
+            own_flags,
+            members,
+            leader,
+            loot,
+            &self_guid,
+            &names,
+            &index,
+            &commands,
+        );
+    }
+}
+
+fn on_command_result(
+    In(ev): In<SessionEvent>,
+    mut group: ResMut<GroupState>,
+    mut errors: ResMut<UiErrorKeys>,
+) {
+    if let SessionEvent::PartyCommandResult {
+        operation,
+        member,
+        result,
+    } = ev
+    {
+        command_result(&mut group, &mut errors, operation, &member, result);
+    }
+}
+
+fn on_member_stats(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>) {
+    if let SessionEvent::PartyMemberStats { guid, full, info } = ev {
+        group.apply_stats(guid, full, *info);
+    }
+}
+
+fn on_raid_target(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>) {
+    match ev {
+        SessionEvent::RaidTargetSet { icon, guid } => group.apply_raid_target(icon, guid),
+        SessionEvent::RaidTargetList { entries } => group.apply_raid_target_list(&entries),
+        _ => {}
+    }
+}
+
+fn on_ready_check_request(
+    In(ev): In<SessionEvent>,
+    mut group: ResMut<GroupState>,
+    mut errors: ResMut<UiErrorKeys>,
+    self_guid: Res<SelfGuid>,
+) {
+    if let SessionEvent::ReadyCheckRequest = ev {
+        ready_check_request(&mut group, &mut errors, &self_guid);
+    }
+}
+
+fn on_ready_check_answer(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>) {
+    if let SessionEvent::ReadyCheckAnswer { guid, ready } = ev {
+        group.apply_ready_check_answer(guid, ready != 0);
+    }
+}
+
+/// A 1.12 session's list: build 12340 sends `SMSG_RAID_INSTANCE_INFO` as
+/// `WrathRaidInstanceInfo`, so this decode has no consumer (3.3.5 only).
+fn drop_raid_instance_info(In(ev): In<SessionEvent>) {
+    if let SessionEvent::RaidInstanceInfo { entries } = ev {
+        debug!(
+            "a 1.12 saved-instance list ({} rows) has no 3.3.5 consumer",
+            entries.len()
+        );
+    }
+}
+
+fn on_wrath_raid_instance_info(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>) {
+    if let SessionEvent::WrathRaidInstanceInfo { info } = ev {
+        group.wrath_saved_instances.receive(info);
+    }
+}
+
+/// The group state dies with the socket, after the bridge's own teardown.
+fn on_session_end(In(_): In<SessionEvent>, mut group: ResMut<GroupState>) {
+    group.clear_session();
+}
+
+/// Queue the messages an `apply_*` named; `ui_action::feed_actions` resolves and shows them.
+fn push_group_lines(errors: &mut UiErrorKeys, lines: Vec<UiError>) {
+    errors.0.extend(lines);
+}
+
+/// We lead when our guid is the leader's, the reference's test at `0x4ba3a0`.
+fn ready_check_request(group: &mut GroupState, errors: &mut UiErrorKeys, self_guid: &SelfGuid) {
+    let we_lead = self_guid.0 == Some(group.leader);
+    push_group_lines(errors, group.apply_ready_check_request(we_lead));
+}
+
+fn invited(group: &mut GroupState, errors: &mut UiErrorKeys, inviter: &str) {
+    push_group_lines(errors, group.apply_invited(inviter));
+}
+
+fn declined(group: &mut GroupState, errors: &mut UiErrorKeys, name: &str) {
+    push_group_lines(errors, group.apply_declined(name));
+}
+
+fn uninvited(group: &mut GroupState, errors: &mut UiErrorKeys) {
+    push_group_lines(errors, group.apply_uninvited());
+}
+
+fn destroyed(group: &mut GroupState, errors: &mut UiErrorKeys) {
+    push_group_lines(errors, group.apply_destroyed());
+}
+
+/// Our own name, cached from login (`session::connected`), picks the line; this never queries.
+fn leader_changed(
+    group: &mut GroupState,
+    errors: &mut UiErrorKeys,
+    name: &str,
+    self_guid: &SelfGuid,
+    names: &NameCache,
+    net_commands: &NetCommands,
+) {
+    let own = self_guid
+        .0
+        .and_then(|g| names.resolve(g, net_commands).map(str::to_string));
+    push_group_lines(errors, group.apply_leader_changed(name, own.as_deref()));
+}
+
+/// `SMSG_GROUP_LIST`: apply the roster, seat new members' records and re-ask the questgiver sweep
+/// (shared-quest availability follows the roster). Every member is name-queried once: the
+/// answer's race, class and gender are the only source of them for a member we never see streamed.
+/// A raid's rebuild counts the rows whose name is still to come (`0x4ba9b6`-`0x4ba9d0`), ours
+/// among them once others are listed (`0x5e6e73`), and signals `RAID_ROSTER_UPDATE` only with none
+/// (`0x4babdf`-`0x4babef`).
+fn list(
+    group: &mut GroupState,
+    errors: &mut UiErrorKeys,
+    sounds: &mut MessageSounds,
+    quest: &mut QuestGiver,
+    group_type: u8,
+    own_flags: u8,
+    members: Vec<GroupMemberEntry>,
+    leader: u64,
+    loot: Option<GroupLootInfo>,
+    self_guid: &SelfGuid,
+    names: &NameCache,
+    index: &GuidIndex,
+    net_commands: &NetCommands,
+) {
+    let mut names_pending = false;
+    for m in &members {
+        names_pending |= names.resolve(m.guid, net_commands).is_none();
+    }
+    if group_type == GROUPTYPE_RAID && !members.is_empty() {
+        if let Some(own) = self_guid.0 {
+            names_pending |= names.resolve(own, net_commands).is_none();
+        }
+    }
+    // Taken before `apply_list` consumes the list; `seat_new_records` then treats a member with
+    // no record as new, the reference's `srcRec == 0`.
+    let seats: Vec<(u64, bool)> = members
+        .iter()
+        .map(|m| (m.guid, m.listed_online()))
+        .collect();
+    let shown = group.apply_list_awaiting(
+        group_type,
+        own_flags,
+        members,
+        leader,
+        loot,
+        self_guid.0,
+        names_pending,
+    );
+    push_group_lines(errors, shown.lines);
+    if shown.invite_accept {
+        sounds.push_cue(INVITE_ACCEPT_SOUND);
+    }
+    seat_new_records(group, &seats, index, net_commands);
+    quest.bump_reask();
+}
+
+/// `SMSG_GROUP_LIST`'s record leg (`0x4e82d0`, raid twin `0x4ba5f0`): a known member's record
+/// carries over, its online bit rewritten by [`GroupState::apply_list`], and nothing is sent; a new
+/// member gets the 1/1 placeholder and, when we hold no object for them, a stats request
+/// (`0x4e83f1`, raid `0x4bab6e`). A listed member therefore owns a record, so an unseen one shows
+/// full bars, not 0/0, until their stats land.
+fn seat_new_records(
+    group: &mut GroupState,
+    seats: &[(u64, bool)],
+    index: &GuidIndex,
+    net_commands: &NetCommands,
+) {
+    for (guid, online) in seats {
+        // `apply_list` kept only the staying members' records, so a missing one means new.
+        if group.stats.contains_key(guid) {
+            continue;
+        }
+        group
+            .stats
+            .insert(*guid, PartyMemberStatsInfo::placeholder(*online));
+        if !index.0.contains_key(guid) {
+            let command = ClientCommand::RequestPartyMemberStats { guid: *guid };
+            if net_commands.supports(&command) {
+                let _ = net_commands.0.send(command);
+            }
+        }
+    }
+}
+
+/// Drains `net`'s [`MemberDeactivated`] on the despawn and transfer kinds, behind `net`'s own
+/// handlers ([`super::UiPartyPlugin`] follows [`crate::net::NetPlugin`]), so the snapshot and the stats
+/// request keep the packet's place in the dispatch.
+fn on_member_deactivated(
+    In(ev): In<SessionEvent>,
+    mut deactivated: MessageReader<MemberDeactivated>,
+    mut group: ResMut<GroupState>,
+    names: Res<NameCache>,
+    net_commands: Res<NetCommands>,
+) {
+    if !matches!(
+        ev,
+        SessionEvent::ObjectDestroyed(_)
+            | SessionEvent::ObjectsRemoved(_)
+            | SessionEvent::Worldport { .. }
+    ) {
+        return;
+    }
+    for d in deactivated.read() {
+        let pet = d.pet.as_ref();
+        member_deactivated(
+            d.guid,
+            &mut group,
+            Some(&d.member),
+            |g| pet.filter(|(guid, _)| *guid == g).map(|(_, store)| store),
+            &names,
+            &net_commands,
+        );
+    }
+}
+
+/// The despawn hook, the reference's deactivate virtual `0x5e9aa0` (object destroyed or out of
+/// range): for a roster member, snapshot the live descriptor into their record (`0x5f0880`), their
+/// pet's too while `held` finds it, with the name `names` holds for it, then request their stats
+/// (`0x4e8646`). Nothing happens off the roster or without an object, since the hook is a virtual
+/// on the object.
+fn member_deactivated<'a>(
+    guid: u64,
+    group: &mut GroupState,
+    store: Option<&'a ObjectStore>,
+    held: impl Fn(u64) -> Option<&'a ObjectStore>,
+    names: &NameCache,
+    net_commands: &NetCommands,
+) {
+    let Some(store) = store else {
+        return;
+    };
+    if !group.members.iter().any(|m| m.guid == guid) {
+        return;
+    }
+    let pet_guid = store.0.unit_pet_guid();
+    let pet = pet_guid.and_then(held);
+    let pet_name = pet_guid
+        .zip(pet)
+        .and_then(|(g, p)| names.peek_unit(g, Some(p)));
+    group
+        .stats
+        .entry(guid)
+        .or_default()
+        .snapshot_descriptor(&store.0, pet.map(|p| &p.0), pet_name);
+    let command = ClientCommand::RequestPartyMemberStats { guid };
+    if net_commands.supports(&command) {
+        let _ = net_commands.0.send(command);
+    }
+}
+
+fn command_result(
+    group: &mut GroupState,
+    errors: &mut crate::ui_action::UiErrorKeys,
+    operation: u32,
+    member: &str,
+    result: u32,
+) {
+    // By key, so the catalog row picks the surface; `None` is the reference's silence.
+    errors
+        .0
+        .extend(group.apply_command_result(operation, member, result));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::net::ClientCommand;
+    use wrathplus_protocol::guid;
+    use wrathplus_protocol::types::member_status;
+    use wrathplus_protocol::types::Field;
+
+    fn member(g: u64, name: &str) -> GroupMemberEntry {
+        GroupMemberEntry {
+            name: name.into(),
+            guid: g,
+            status: 1, // ONLINE
+            flags: 0,
+        }
+    }
+
+    #[test]
+    fn the_roster_warms_every_member_into_the_name_cache_once() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        let (mut group, mut errors, mut quest) = (
+            GroupState::default(),
+            UiErrorKeys::default(),
+            QuestGiver::default(),
+        );
+        let mut names = NameCache::default();
+        // A player guid, `counter | (high << 48)`, the shape `NameCache::resolve` routes on.
+        let player_guid = |counter: u64| counter | (u64::from(guid::HIGH_PLAYER) << 48);
+        let (leader, far) = (player_guid(7), player_guid(8));
+
+        list(
+            &mut group,
+            &mut errors,
+            &mut MessageSounds::default(),
+            &mut quest,
+            0,
+            0,
+            vec![member(leader, "Aldwyn"), member(far, "Brisca")],
+            leader,
+            None,
+            &SelfGuid::default(),
+            &names,
+            &GuidIndex::default(),
+            &net,
+        );
+
+        let asked: Vec<u64> = rx
+            .try_iter()
+            .filter_map(|c| match c {
+                ClientCommand::NameQuery { guid } => Some(guid),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            asked,
+            vec![leader, far],
+            "both members asked, in roster order"
+        );
+
+        // The answer lands for one of them; the re-sent roster asks for neither.
+        names.insert_player(leader, "Aldwyn".into(), Some((1, 4, 1)));
+        list(
+            &mut group,
+            &mut errors,
+            &mut MessageSounds::default(),
+            &mut quest,
+            0,
+            0,
+            vec![member(leader, "Aldwyn"), member(far, "Brisca")],
+            leader,
+            None,
+            &SelfGuid::default(),
+            &names,
+            &GuidIndex::default(),
+            &net,
+        );
+        assert!(
+            rx.try_iter()
+                .all(|c| !matches!(c, ClientCommand::NameQuery { .. })),
+            "a re-sent roster re-asks nothing"
+        );
+        assert_eq!(names.player_traits(leader), Some((1, 4, 1)));
+    }
+
+    /// The rebuild counts the rows whose name has not landed (`0x4ba9b6`-`0x4ba9d0`), ours among
+    /// them once others are listed (`0x5e6e73`), and the roster event waits for none (`0x4babdf`).
+    #[test]
+    fn a_raid_list_signals_the_roster_only_once_every_name_is_held() {
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        let (mut group, mut errors, mut quest) = (
+            GroupState::default(),
+            UiErrorKeys::default(),
+            QuestGiver::default(),
+        );
+        let mut names = NameCache::default();
+        let player_guid = |counter: u64| counter | (u64::from(guid::HIGH_PLAYER) << 48);
+        let (me, a, b) = (player_guid(1), player_guid(7), player_guid(8));
+        let mut raid = |group: &mut GroupState, names: &NameCache, group_type: u8| {
+            list(
+                group,
+                &mut errors,
+                &mut MessageSounds::default(),
+                &mut quest,
+                group_type,
+                0,
+                vec![member(a, "Aldwyn"), member(b, "Brisca")],
+                a,
+                None,
+                &SelfGuid(Some(me)),
+                names,
+                &GuidIndex::default(),
+                &net,
+            );
+            group.roster_updates
+        };
+
+        assert_eq!(raid(&mut group, &names, 1), 0, "no name held");
+        names.insert_player(a, "Aldwyn".into(), Some((1, 4, 1)));
+        assert_eq!(
+            raid(&mut group, &names, 1),
+            0,
+            "one member's name still to come"
+        );
+        names.insert_player(b, "Brisca".into(), Some((1, 5, 0)));
+        assert_eq!(
+            raid(&mut group, &names, 1),
+            0,
+            "our own row's name still to come"
+        );
+        names.insert_player(me, "Me".into(), None);
+        assert_eq!(raid(&mut group, &names, 1), 1, "every name held");
+        assert_eq!(raid(&mut group, &names, 1), 2, "and the same list again");
+
+        // A party's list runs no roster writer; it names nothing, and drops the raid it finds.
+        assert_eq!(
+            raid(&mut group, &NameCache::default(), 0),
+            3,
+            "the raid dropped"
+        );
+        assert_eq!(
+            raid(&mut group, &NameCache::default(), 0),
+            3,
+            "a party's list"
+        );
+    }
+
+    #[test]
+    fn a_join_queues_the_invite_accept_chime_and_a_resync_does_not() {
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        let (mut group, mut errors, mut sounds, mut quest) = (
+            GroupState::default(),
+            UiErrorKeys::default(),
+            MessageSounds::default(),
+            QuestGiver::default(),
+        );
+        let names = NameCache::default();
+        let mut send = |sounds: &mut MessageSounds, members: Vec<GroupMemberEntry>| {
+            list(
+                &mut group,
+                &mut errors,
+                sounds,
+                &mut quest,
+                0,
+                0,
+                members,
+                7,
+                None,
+                &SelfGuid(Some(9)),
+                &names,
+                &GuidIndex::default(),
+                &net,
+            );
+        };
+
+        send(&mut sounds, vec![member(7, "Aldwyn")]);
+        assert_eq!(
+            sounds.queued_cues(),
+            ["igPlayerInviteAccept"],
+            "our first party"
+        );
+        send(&mut sounds, vec![member(7, "Aldwyn")]);
+        assert_eq!(sounds.queued_cues().len(), 1, "a resync is silent");
+        send(&mut sounds, vec![member(7, "Aldwyn"), member(8, "Brisca")]);
+        assert_eq!(sounds.queued_cues().len(), 2, "a member joining our party");
+        assert_eq!(
+            wrathplus_ui::messages::by_key("ERR_JOINED_GROUP_S").and_then(|r| r.sound),
+            None,
+            "the join line's own row carries no sound, so the chime is the only one"
+        );
+    }
+
+    // ── The out-of-range record ──────────────────────────────────────────────
+
+    /// Unit descriptor field indices, build 5875.
+    const HEALTH: u16 = Field::UnitHealth.index();
+    const MAXHEALTH: u16 = Field::UnitMaxHealth.index();
+    /// `UNIT_FIELD_POWER2`/`MAXPOWER2`, the rage slot (`POWER1 + POWER_RAGE`).
+    const POWER2: u16 = Field::UnitPower.index() + 1;
+    const MAXPOWER2: u16 = Field::UnitMaxPower.index() + 1;
+    const LEVEL: u16 = Field::UnitLevel.index();
+    const BYTES_0: u16 = Field::UnitBytes0.index();
+
+    fn asked(rx: &crossbeam_channel::Receiver<ClientCommand>) -> Vec<u64> {
+        rx.try_iter()
+            .filter_map(|c| match c {
+                ClientCommand::RequestPartyMemberStats { guid } => Some(guid),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn grouped(members: &[GroupMemberEntry]) -> GroupState {
+        let mut group = GroupState::default();
+        group.apply_list(0, 0, members.to_vec(), members[0].guid, None, None);
+        group
+    }
+
+    #[test]
+    fn wrath_automatic_party_stats_requests_are_supported_without_losing_records() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        let guid = 0x1234;
+        let mut group = GroupState::default();
+
+        seat_new_records(&mut group, &[(guid, true)], &GuidIndex::default(), &net);
+        assert!(
+            group.stats.contains_key(&guid),
+            "the UI record is still seated"
+        );
+        assert!(
+            asked(&rx) == [guid],
+            "native stats requests are now supported"
+        );
+
+        group.members = vec![member(guid, "Brisca")];
+        let store = ObjectStore(wrathplus_protocol::types::ObjectFields::from_pairs(&[(
+            HEALTH, 40,
+        )]));
+        member_deactivated(
+            guid,
+            &mut group,
+            Some(&store),
+            |_| None,
+            &NameCache::default(),
+            &net,
+        );
+        assert_eq!(
+            group.stats[&guid].cur_hp,
+            Some(40),
+            "the purge snapshot still applies"
+        );
+        assert!(
+            asked(&rx) == [guid],
+            "the purge requests a fresh native stats packet"
+        );
+    }
+
+    #[test]
+    fn a_members_despawn_snapshots_their_descriptor_and_asks_for_their_stats() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        let guid = 0x1234;
+        let mut group = grouped(&[member(guid, "Brisca"), member(0x99, "Aldwyn")]);
+        let _ = asked(&rx); // start from an empty queue
+
+        // A warrior: rage is stored raw, ten times the shown value, as in the descriptor.
+        let store = ObjectStore(wrathplus_protocol::types::ObjectFields::from_pairs(&[
+            (HEALTH, 2400),
+            (MAXHEALTH, 3000),
+            (POWER2, 570),
+            (MAXPOWER2, 1000),
+            (LEVEL, 41),
+            (BYTES_0, 1 << 24), // POWER_RAGE in BYTES_0 byte 3
+        ]));
+        member_deactivated(
+            guid,
+            &mut group,
+            Some(&store),
+            |_| None,
+            &NameCache::default(),
+            &net,
+        );
+
+        let rec = group.stats.get(&guid).expect("the member has a record");
+        assert_eq!(
+            (rec.cur_hp, rec.max_hp, rec.level),
+            (Some(2400), Some(3000), Some(41)),
+            "the bars keep the numbers they were showing at the edge"
+        );
+        assert_eq!(
+            (rec.power_type, rec.cur_power, rec.max_power),
+            (Some(1), Some(570), Some(1000)),
+            "RAW power, like the reference's record — the ÷10 happens at the read"
+        );
+        assert_eq!((rec.shown_power(), rec.shown_max_power()), (57, 100));
+        assert_eq!(
+            rec.status,
+            Some(member_status::ONLINE),
+            "an object you can see belongs to an online, living, unflagged player"
+        );
+        assert_eq!(asked(&rx), vec![guid], "and the server is asked, once");
+    }
+
+    /// The pet block comes off the pet's own object (`0x5f0a1f`-`0x5f0b72`); 12340 descriptors
+    /// carry no aura slots, so both aura blocks are empty.
+    #[test]
+    fn a_members_despawn_snapshots_their_auras_and_their_pets() {
+        const SUMMON: u16 = Field::UnitSummon.index();
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        let guid = 0x1234;
+        let pet_guid = 0xF140_0000_0000_0077;
+        let mut group = grouped(&[member(guid, "Brisca")]);
+
+        let store = ObjectStore(wrathplus_protocol::types::ObjectFields::from_pairs(&[
+            (SUMMON, pet_guid as u32),
+            (SUMMON + 1, (pet_guid >> 32) as u32),
+        ]));
+        // `UNIT_FIELD_PETNUMBER`, the key the pet-name cache files a pet's name under.
+        const PETNUMBER: u16 = Field::UnitPetnumber.index();
+        let pet = ObjectStore(wrathplus_protocol::types::ObjectFields::from_pairs(&[
+            (HEALTH, 900),
+            (PETNUMBER, 4),
+        ]));
+        let held = |g: u64| (g == pet_guid).then_some(&pet);
+        let mut names = NameCache::default();
+        names.insert_pet(4, "Whelp".into());
+        member_deactivated(guid, &mut group, Some(&store), held, &names, &net);
+
+        let rec = group.stats.get(&guid).expect("the member has a record");
+        assert_eq!(rec.auras, Some(vec![]));
+        assert_eq!(rec.auras_negative, Some(vec![]));
+        assert_eq!(rec.pet_guid, Some(pet_guid));
+        assert_eq!(
+            rec.pet_name.as_deref(),
+            Some("Whelp"),
+            "the pet's cached name rides into the record, as `0x5f0a63`-`0x5f0a70` copy it (`+0x88`)"
+        );
+        assert_eq!(rec.pet_cur_hp, Some(900));
+        assert_eq!(rec.pet_auras, Some(vec![]));
+        assert_eq!(rec.pet_auras_negative, Some(vec![]));
+
+        // The pet not held: its block is emptied, not left as it was.
+        member_deactivated(guid, &mut group, Some(&store), |_| None, &names, &net);
+        let rec = group.stats.get(&guid).unwrap();
+        assert_eq!((rec.pet_guid, rec.pet_auras_negative.clone()), (None, None));
+        assert_eq!(rec.pet_name, None, "and its name with it (`0x5f0a0f`)");
+        assert_eq!(rec.auras, Some(vec![]));
+    }
+
+    #[test]
+    fn a_despawn_that_is_not_a_party_member_asks_nothing() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        let mut group = grouped(&[member(0x1234, "Brisca")]);
+        let _ = asked(&rx);
+        // A live object, so only the roster gate can stop it.
+        let store = ObjectStore(wrathplus_protocol::types::ObjectFields::from_pairs(&[(
+            HEALTH, 40,
+        )]));
+        member_deactivated(
+            0xdead,
+            &mut group,
+            Some(&store),
+            |_| None,
+            &NameCache::default(),
+            &net,
+        );
+        assert!(asked(&rx).is_empty());
+        assert!(!group.stats.contains_key(&0xdead));
+
+        // The object gate alone: a roster member we hold no object for asks nothing.
+        member_deactivated(
+            0x1234,
+            &mut group,
+            None,
+            |_| None,
+            &NameCache::default(),
+            &net,
+        );
+        assert!(asked(&rx).is_empty());
+    }
+
+    #[test]
+    fn a_roster_new_member_is_seated_at_one_one_and_asked_for_only_when_unseen() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        let (mut group, mut errors, mut quest) = (
+            GroupState::default(),
+            UiErrorKeys::default(),
+            QuestGiver::default(),
+        );
+        let names = NameCache::default();
+        let (near, far) = (0x11u64, 0x22u64);
+
+        // `near` is streamed, `far` is not.
+        let mut index = GuidIndex::default();
+        let mut world = bevy::ecs::world::World::new();
+        index.0.insert(near, world.spawn_empty().id());
+
+        let roster = vec![member(near, "Aldwyn"), member(far, "Brisca")];
+        let mut send = |group: &mut GroupState, members: Vec<GroupMemberEntry>| {
+            list(
+                group,
+                &mut errors,
+                &mut MessageSounds::default(),
+                &mut quest,
+                0,
+                0,
+                members,
+                near,
+                None,
+                &SelfGuid::default(),
+                &names,
+                &index,
+                &net,
+            );
+        };
+
+        send(&mut group, roster.clone());
+        assert_eq!(
+            asked(&rx),
+            vec![far],
+            "only the member whose object we do not hold"
+        );
+        for guid in [near, far] {
+            let rec = group.stats.get(&guid).expect("every member owns a record");
+            assert_eq!(
+                (rec.cur_hp, rec.max_hp, rec.cur_power, rec.max_power),
+                (Some(1), Some(1), Some(1), Some(1)),
+                "a full bar, not an empty one, until the stats land"
+            );
+        }
+
+        // The wire answers for `far`, then the roster is re-sent: nothing is asked again.
+        group.apply_stats(
+            far,
+            true,
+            PartyMemberStatsInfo {
+                cur_hp: Some(900),
+                max_hp: Some(1100),
+                ..PartyMemberStatsInfo::default()
+            },
+        );
+        send(&mut group, roster);
+        assert!(
+            asked(&rx).is_empty(),
+            "a resync of a known roster asks nothing"
+        );
+        assert_eq!(
+            group.stats.get(&far).map(|r| (r.cur_hp, r.max_hp)),
+            Some((Some(900), Some(1100))),
+            "and the record it already had survives the resync"
+        );
+    }
+
+    /// A re-sent list that moves only a member's status rewrites the online bit of the record the
+    /// member already owns (`0x4e82d0`), asks nothing, and leaves the rest of the record.
+    #[test]
+    fn a_resent_list_moves_a_known_members_online_bit_and_keeps_its_record() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        let (mut group, mut errors, mut quest) = (
+            GroupState::default(),
+            UiErrorKeys::default(),
+            QuestGiver::default(),
+        );
+        let names = NameCache::default();
+        let far = 0x22u64;
+        let mut send = |group: &mut GroupState, status: u8| {
+            let row = GroupMemberEntry {
+                status,
+                ..member(far, "Brisca")
+            };
+            list(
+                group,
+                &mut errors,
+                &mut MessageSounds::default(),
+                &mut quest,
+                0,
+                0,
+                vec![row],
+                far,
+                None,
+                &SelfGuid::default(),
+                &names,
+                &GuidIndex::default(),
+                &net,
+            );
+        };
+
+        send(&mut group, member_status::ONLINE);
+        group.apply_stats(
+            far,
+            false,
+            PartyMemberStatsInfo {
+                cur_hp: Some(900),
+                pet_guid: Some(0xF140_0000_0000_0077),
+                ..PartyMemberStatsInfo::default()
+            },
+        );
+        assert!(group.stats[&far].is_online(), "seated from the row");
+        let _ = asked(&rx);
+
+        send(&mut group, member_status::OFFLINE);
+        let rec = &group.stats[&far];
+        assert!(!rec.is_online(), "the row's byte moved the record's bit");
+        assert_eq!(
+            (rec.cur_hp, rec.pet_guid),
+            (Some(900), Some(0xF140_0000_0000_0077)),
+            "and nothing else"
+        );
+        assert!(asked(&rx).is_empty(), "no stats request for a known member");
+
+        send(&mut group, member_status::ONLINE);
+        assert!(group.stats[&far].is_online());
+    }
+}
+
+#[cfg(test)]
+mod wrath_raid_tests {
+    use super::*;
+    use wrathplus_protocol::wrath_group::raid::{decode, Packet};
+
+    #[test]
+    fn native_raid_responses_retain_fields_and_apply_shared_presentation() {
+        let mut group = GroupState::default();
+        let mut errors = UiErrorKeys::default();
+        let me = SelfGuid(Some(7));
+        group.leader = 99; // An assistant, rather than the leader, starts this check.
+        apply_wrath_raid(
+            &mut group,
+            &mut errors,
+            &me,
+            decode(0x322, &[7, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+        );
+        assert_eq!(group.wrath_raid.ready_initiator, Some(7));
+        assert_eq!((group.ready_check_requests, group.ready_check), (1, 0));
+        apply_wrath_raid(
+            &mut group,
+            &mut errors,
+            &me,
+            decode(0x3ae, &[8, 0, 0, 0, 0, 0, 0, 0, 255]).unwrap(),
+        );
+        assert_eq!(group.wrath_raid.ready_answers, [(8, 255)]);
+        assert_eq!(group.ready_check_answers, [(8, true)]);
+        apply_wrath_raid(&mut group, &mut errors, &me, decode(0x3c6, &[]).unwrap());
+        assert_eq!(group.wrath_raid.ready_finished, 1);
+        apply_wrath_raid(
+            &mut group,
+            &mut errors,
+            &me,
+            Packet::TargetSet {
+                setter: u64::MAX,
+                icon: 7,
+                target: 8,
+            },
+        );
+        assert_eq!(group.wrath_raid.target_setter, Some(u64::MAX));
+        assert_eq!(group.raid_targets[7], 8);
+        apply_wrath_raid(
+            &mut group,
+            &mut errors,
+            &me,
+            Packet::TargetList { entries: vec![] },
+        );
+        assert_eq!(group.raid_targets, [0; 8]);
+        apply_wrath_raid(
+            &mut group,
+            &mut errors,
+            &me,
+            Packet::CommandResult {
+                operation: u32::MAX,
+                member: "Ally".into(),
+                result: u32::MAX,
+                value: u32::MAX,
+            },
+        );
+        assert_eq!(
+            group.wrath_raid.command_result,
+            Some((u32::MAX, "Ally".into(), u32::MAX, u32::MAX))
+        );
+        group.clear_session();
+        assert!(group.wrath_raid.ready_initiator.is_none());
+        assert!(group.wrath_raid.command_result.is_none());
+    }
+}

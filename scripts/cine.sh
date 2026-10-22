@@ -59,7 +59,7 @@ env BENILLA_HOME="$cfg" WOW_UNATTENDED=1 \
     ${key:+WOW_PROBE_KEY="$key@$key_at:3"} \
     WOW_MOVE_TRACE="$trace" WOW_MOVE_TRACE_TAGS="move,snd" \
     WOW_PROBE_EXIT_AT="$exit_at" \
-    cargo run -q -p benilla > "$log" 2>&1 || true
+    cargo run -q -p wrathplus > "$log" 2>&1 || true
 
 strip() { sed -E 's/\x1b\[[0-9;]*m//g'; }
 

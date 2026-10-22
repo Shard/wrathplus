@@ -1,0 +1,113 @@
+//! The pet frame's right-click menu. `UnitPopup.lua:402-416` shows the paper doll and Abandon when
+//! `PetCanBeAbandoned()`, Rename when `PetCanBeRenamed()` too, and Dismiss otherwise. `PetAbandon`
+//! (`0x4be4c0`, `0x4bd740`) sends `CMSG_PET_ABANDON`; `PetDismiss` (`0x4be4d0`) sends no packet
+//! itself but hands the Dismiss command word to the bar's dispatcher (`0x4bd1d0`), so it leaves as
+//! `CMSG_PET_ACTION`, and only past the dispatcher's usability predicate (`0x4bd1f2`). vmangos
+//! unsummons a summon on either, so sending the wrong one goes unseen.
+
+use bevy::prelude::*;
+
+use wrathplus_protocol::types::{PET_ACT_COMMAND, PET_COMMAND_DISMISS};
+use wrathplus_ui::script::UiScript;
+
+use crate::net::{ClientCommand, NetCommands};
+use crate::ui_action::{UiError, UiErrorKeys};
+
+use super::{PetBar, PetUnit};
+
+/// The rename sender's silent truncation, `0x64a7f0(dst, 0x50, "%s", name)` at `0x4bd840`: 79
+/// plus the NUL. The popup's 12-letter cap is FrameXML's, a layer above.
+const PET_NAME_MAX: usize = 79;
+
+/// `(PetCanBeAbandoned, PetCanBeRenamed)` for the active pet owned by this player.
+/// Permission storage differs by dialect; ownership remains SUMMONEDBY alone.
+/// A missing, zero-guid or charmed-only pet has neither menu permission.
+pub(super) fn menu_predicates(
+    pet_guid: u64,
+    pet: Option<&wrathplus_protocol::ObjectFields>,
+    self_guid: Option<u64>,
+) -> (bool, bool) {
+    pet.filter(|fields| pet_guid != 0 && fields.unit_summoned_by() == self_guid)
+        .map_or((false, false), |fields| {
+            (
+                fields.unit_pet_can_be_abandoned(),
+                fields.unit_pet_can_be_renamed(),
+            )
+        })
+}
+
+/// Push the menu predicates each frame so native packed permission updates take effect.
+pub(super) fn feed_pet_menu(script: Option<NonSendMut<UiScript>>, bar: Res<PetBar>, pet: PetUnit) {
+    let Some(mut script) = script else {
+        return;
+    };
+    let (can_be_abandoned, can_be_renamed) = menu_predicates(
+        bar.guid(),
+        pet.store(bar.guid()).map(|store| &store.0),
+        pet.self_guid.0,
+    );
+    script.set_pet_menu(can_be_abandoned, can_be_renamed);
+}
+
+/// Send the menu's verbs under [`PetBar`]'s pet guid. Nothing is applied locally: the server
+/// answers by removing the pet or moving its name timestamp.
+pub(crate) fn drain_pet_menu(
+    script: Option<NonSendMut<UiScript>>,
+    bar: Res<PetBar>,
+    commands: Res<NetCommands>,
+    mut ui_errors: ResMut<UiErrorKeys>,
+    pet: PetUnit,
+) {
+    let Some(mut script) = script else {
+        return;
+    };
+    let (abandons, dismisses) = script.take_pet_gives_up();
+    let renames = script.take_pet_renames();
+    if abandons == 0 && dismisses == 0 && renames.is_empty() {
+        return;
+    }
+    let pet_guid = bar.guid();
+    if pet_guid == 0 {
+        debug!("ui_pet: dropping a queued menu verb — there is no pet");
+        return;
+    }
+
+    // Counted, not deduped: the reference sends one per press.
+    for _ in 0..abandons {
+        debug!("ui_pet: abandoning pet {pet_guid:#x}");
+        let _ = commands.0.send(ClientCommand::PetAbandon { pet_guid });
+    }
+    // `0x4bd6e0` stages `0x07000003` at target 0 and enters the dispatcher, whose first act is the
+    // usability predicate (`0x4bd1f2`): a pet that fails it is not sent the word.
+    let dismiss_word = PET_COMMAND_DISMISS | (u32::from(PET_ACT_COMMAND) << 24);
+    for _ in 0..dismisses {
+        if !pet.actions_usable(&bar) {
+            debug!("ui_pet: dismiss refused, the pet's actions are not usable — no packet");
+            continue;
+        }
+        debug!("ui_pet: dismissing pet {pet_guid:#x} ({dismiss_word:#010x})");
+        let _ = commands.0.send(ClientCommand::PetAction {
+            pet_guid,
+            packed: dismiss_word,
+            target_guid: 0,
+        });
+    }
+    for name in renames {
+        // An empty name raises an error and sends nothing; the rest is truncated (1.12 `0x4bd840`).
+        // Build 12340's table has no `ERR_NULL_PETNAME` row, so its empty-name row (`0x257`, the
+        // name check's code 2) stands in. Unresolved: the 12340 `PetRename` binding's own check.
+        if name.is_empty() {
+            ui_errors.0.push(UiError::key("ERR_NAME_NO_NAME"));
+            continue;
+        }
+        let name = clamp_pet_name(&name);
+        debug!("ui_pet: renaming pet {pet_guid:#x} to {name:?}");
+        let _ = commands.0.send(ClientCommand::PetRename { pet_guid, name });
+    }
+}
+
+/// [`PET_NAME_MAX`]'s truncation. Deviation: it counts characters where the reference counts
+/// bytes, because a byte cut can split a UTF-8 character.
+fn clamp_pet_name(name: &str) -> String {
+    name.chars().take(PET_NAME_MAX).collect()
+}

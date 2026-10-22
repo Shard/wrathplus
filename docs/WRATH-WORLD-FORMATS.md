@@ -17,7 +17,7 @@ establish only the stated observations; a filename accessor is not schema proof.
 
 | Rank | Area | Current implementation | Gap / next evidence |
 | --- | --- | --- | --- |
-| 1 | ADT MH2O water/lava | Rendered, queried and collided per LiquidType lane (`benilla-world` `liquid::wrath_surface`; see [MH2O rendering](#mh2o-rendering-experience)) | Frame clock, native origin rounding and per-type ambient sound remain labelled approximations; live appearance needs manager captures. |
+| 1 | ADT MH2O water/lava | Rendered, queried and collided per LiquidType lane (`wrathplus-world` `liquid::wrath_surface`; see [MH2O rendering](#mh2o-rendering-experience)) | Frame clock, native origin rounding and per-type ambient sound remain labelled approximations; live appearance needs manager captures. |
 | 1 dependency | LiquidType / LiquidMaterial DBC | No dedicated supplied-chain catalog found | Establish native disk/runtime mapping, joins and render-class dispatch; retain raw unknown fields rather than guess policy. |
 | 2 | MCCV terrain vertex colours | No MCCV field in `McnkChunk` or terrain `ChunkMesh` | Authored colour is not propagated. Verify disk order, channel interpretation and native lighting equation before shader changes. |
 | 2 | WMO v17 flags/liquids | Shared root/group parsing, MOCV, MLIQ geometry and legacy liquid-nibble conversion exist | Version number alone cannot distinguish 1.12/3.3.5 semantics. Audit root/group flags and DBC-based liquid routing; do not interpret a Wrath liquid ID as a legacy nibble. |
@@ -33,20 +33,20 @@ Plus lighting limitations remain as documented in `EXPERIENCE.md` and
 
 ## Current loader path
 
-- `benilla-adt/src/lib.rs`: `parse_adt` reads tile-level MH2O; MCNK fields
+- `wrathplus-adt/src/lib.rs`: `parse_adt` reads tile-level MH2O; MCNK fields
   currently retain heights, normals, layers, alpha, shadow and legacy MCLQ.
   Subchunk locations use header offsets, not a sequential scan (MCNR padding and
   noncontiguous chunks make a generic sequential walk unreliable).
-- `benilla-formats/src/terrain.rs`: `adt_to_tile_mesh_with_options` retains
+- `wrathplus-formats/src/terrain.rs`: `adt_to_tile_mesh_with_options` retains
   MH2O on `TileMesh`, separately from legacy `ChunkMesh::liquids`.
-- `benilla-assets/src/adt.rs`: `WrathAdtLoader` reads the matching WDT, derives
+- `wrathplus-assets/src/adt.rs`: `WrathAdtLoader` reads the matching WDT, derives
   alpha options and calls the shared mesh builder. `AdtTile` explicitly retains
   MH2O, which the terrain streamer renders (see below).
-- `benilla-assets/src/wdt.rs`: raw MPHD flags and MAIN tile existence are
+- `wrathplus-assets/src/wdt.rs`: raw MPHD flags and MAIN tile existence are
   exposed. The parser's `WowVersion::Classic` name is not itself evidence that
   matching terrain uses the Vanilla MCAL path: the Wrath ADT loader supplies
   explicit options separately.
-- `benilla-formats/src/models/wmo/group.rs`: MLIQ mesh conversion uses the
+- `wrathplus-formats/src/models/wmo/group.rs`: MLIQ mesh conversion uses the
   existing group override/legacy nibble contract. Wrath flags and DBC IDs need
   separate evidence before reusing that conversion for new liquid types.
 
@@ -117,7 +117,7 @@ analogy.
    remains evidence-gated, not an assumed feature.
 
 Every reported unit runs its touched crates' full library suites and
-`cargo test -p benilla-app --lib` under the shared heavy-build lock, with counts
+`cargo test -p wrathplus-app --lib` under the shared heavy-build lock, with counts
 recorded at handoff. Installed regressions use Wrath/enUS explicitly; ordinary
 library tests clear client-profile/locale and WOW_DATA. No live certification is
 claimed here. Northrend and Dalaran water/lava checks are manager-owned live
@@ -129,7 +129,7 @@ disabled-path bytes; do not change model/terrain lighting while adding parsing.
 
 ## Liquid metadata catalog evidence (build 12340)
 
-`benilla_formats::wrath_liquid::load_liquid_catalogs(&mut Chain)` reads the
+`wrathplus_formats::wrath_liquid::load_liquid_catalogs(&mut Chain)` reads the
 required tables through the caller's resolved Wrath chain. It preserves all
 45/3 serialized words, source row order and duplicate rows. ID lookup follows
 native last-duplicate-wins behavior; absent IDs/joins remain `None`. This is
@@ -232,7 +232,7 @@ recover parent grouping without relying on filtered terrain chunks.
 
 ## MH2O rendering (Experience)
 
-`benilla-world` `liquid::wrath_surface` draws MH2O natively; layers never become MCLQ
+`wrathplus-world` `liquid::wrath_surface` draws MH2O natively; layers never become MCLQ
 `LiquidMesh`es or legacy nibbles. Under the Wrath profile, `setup_liquid` reads the catalogs from
 the world's own boot chain and builds one lane per LiquidType row; the terrain streamer spawns a
 tile's `AdtTile.wrath_liquids` with the tile and despawns them with it. A tile with MH2O ignores

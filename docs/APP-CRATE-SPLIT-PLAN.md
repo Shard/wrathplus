@@ -1,11 +1,11 @@
-# Splitting benilla-app
+# Splitting wrathplus-app
 
 Analysis and plan only; no code moves yet. The manager schedules execution after the Vanilla
 removal. Measured on wrath-hud 3e913bc1 (2026-10-20).
 
 ## Why
 
-`benilla-app` is one crate: 180 top-level modules, about 443k lines (with tests), about 4.8k lib
+`wrathplus-app` is one crate: 180 top-level modules, about 443k lines (with tests), about 4.8k lib
 tests and 16 integration test files. Any edit recompiles all of it and relinks its test binary,
 which is the slowest step in every worker's gate. Splitting it lets an edit in, say, a `ui_*`
 feed rebuild only the UI layer and the thin root, and lets the lib tests of each layer build and
@@ -51,17 +51,17 @@ The cycles come from three patterns, not from tangled features:
 | `benilla-app-world` | world, rendering, gameplay | `entities`, `creature_anim`, `player`, `target`, `spell`, `motion`, `swing_refusal`, `sound`, `portrait`, `minimap`, `transport`, `video`, `cursor`, `death`, `nameplates`, `vplates`, `quest_markers`, `world_state`, `loading_screen`, the effect modules (`aura_visual`, `weapon_trail`, `bowstring`, `fishing_line`, `footprints`, …), the 2-D primitives (`overlay`: the quad types and model tiles; `ui_text`, the text engine), the guild session `guild`, and `game_tip` (the loading screen's tip) | ~136k | ~1.4k |
 | `benilla-app-ui` | FrameXML host and feeds, glue screens | `ui_script`, every `ui_*` but `ui_text`, `bindings`, `console`, `combat_log`, `char_select`, `char_create`, `realm_select`, `login`, `glue`, `textinput`, `tutorial`, `script_calls`, `experience_ui`, `world_state_ui`, `shipped_cvars` (every row source sits at or below ui) | ~234k | ~2.8k |
 | `benilla-app-tools` | capture, harness, dev | `capture`, `addon_harness`, `perf`, `debug_panel`, `dev`, `hover_log`, `showcase_capture`, `preflight`, `probe_shield` | ~35k | ~100 |
-| `benilla-app` (root) | assembly | `lib.rs` (`run`, `run_with`), `game_plugins`, the bins, `tests/` | ~1.4k | few |
+| `wrathplus-app` (root) | assembly | `lib.rs` (`run`, `run_with`), `game_plugins`, the bins, `tests/` | ~1.4k | few |
 
-Dependencies point down only: root → tools → ui → world → net → core. `benilla-ui` (the Lua VM)
+Dependencies point down only: root → tools → ui → world → net → core. `wrathplus-ui` (the Lua VM)
 is a separate crate below all of them: core depends on it (decision of 2026-10-21, below), so
 every layer builds mlua once and a world feed taking `UiScript` is not a layer break.
 
-**Decision (2026-10-21): core depends on `benilla-ui`.** `app_core::vm_memo::VmMemo` holds
+**Decision (2026-10-21): core depends on `wrathplus-ui`.** `app_core::vm_memo::VmMemo` holds
 `UiScript`, `app_core::errors` carries `MsgKind` and `app_core::interaction` a `WhoSortChain`, and
 the world feeds (area, cinematic, cursor, minimap, sound::ui, spell::unit_cast,
-spell::targeting::item, video, vplates) take `UiScript`. `benilla-ui` is already its own crate
-below `benilla-app`, so these are downward edges; nothing moves up to avoid them.
+spell::targeting::item, video, vplates) take `UiScript`. `wrathplus-ui` is already its own crate
+below `wrathplus-app`, so these are downward edges; nothing moves up to avoid them.
 
 Against this layering there are, today, about 1,100 references in about 250 module pairs that
 point the wrong way (world → ui 613, net → world 153, core → world 92, core → ui 73, net → ui 72,
@@ -69,7 +69,7 @@ net → root 41, core → net 31, ui → root 26). Step 0 removes them.
 
 ## Step 0: break the cycles inside the one crate
 
-Every sub-step is an ordinary refactor inside `benilla-app`, gated and merged like any unit, so
+Every sub-step is an ordinary refactor inside `wrathplus-app`, gated and merged like any unit, so
 the later moves are pure file moves. Each item names the symbols that point the wrong way.
 
 1. **Schedule sets to `core::schedule`.** `UiFeed`, `UiInput`, `UnitFeed`, `PointerOverUi`,
@@ -109,7 +109,7 @@ the later moves are pure file moves. Each item names the symbols that point the 
    `SocketSession` (inventory capture), `RaidBrowser` (social lists). The feeds register from
    `ui_native::NativeFeedsPlugin`, after `UiNetPlugin`, and re-export the moved types under their
    old paths. Left: `QuestPois::view` and `queries` stay an inherent impl in the feed (an
-   extension trait at the split); `ThreatStore` wraps `benilla_ui::script::ThreatTable`.
+   extension trait at the split); `ThreatStore` wraps `wrathplus_ui::script::ThreatTable`.
 6. **Tests that build the whole client.** `game_plugins::schedule_tests::headless_client` was
    named from 61 lower-module files (the first count, 44, missed the fixtures that call it, such
    as `ui_pet`'s `rig`). Done: every test that reaches it, directly or through a fixture, lives in
@@ -347,7 +347,7 @@ trait (`cvars::RegisterCvars`), all from its own plugin:
    (`video::VideoConfig`, `realmlist::Realmlist`, `world_backdrop::RenderScale`,
    `ui_script::UiScaleCvar`, …). Each becomes a `SessionLever { env, rows, read: fn(&World) ->
    Vec<(&str, Option<String>)> }` that the feature registers with `register_session_lever`, and
-   `cvars` iterates the pending list in registration order. Benilla-world and benilla-assets
+   `cvars` iterates the pending list in registration order. Benilla-world and wrathplus-assets
    levers (farclip, clutter, MSAA, texture filter) stay in `cvars`, since those crates sit below
    it.
 
@@ -393,7 +393,7 @@ Done (Experience):
 event, a message the higher layer drains, or the caller moving up:
 
 - `ui_script::VmMemo` (17): it holds the Lua VM; it is `app_core::vm_memo` now, core depending on
-  `benilla-ui` (the 2026-10-21 decision under Proposed crates), so its world users (area,
+  `wrathplus-ui` (the 2026-10-21 decision under Proposed crates), so its world users (area,
   cinematic, cursor, death, minimap, sound, spell, video, vplates) are downward edges.
 - UI helpers world code calls: `ui_items::{find_item, carried_counts, slot_guid,
   collect_inventory, send_item_use}`, `ui_session::feed_interact_npc`,
@@ -467,7 +467,7 @@ Each lands as a behaviour-neutral unit with the usual gates, in this order.
 | Drawing helpers | `ui_pass::{project_overlay, tile_quad_mesh, overlay_z, ui_render_layers}`, `ui_models::spawn_warm_tile_cam` | **Move down.** The four `ui_pass` helpers are a new world-layer `overlay` module (`ui_pass` re-exports `ui_render_layers`, which it still uses); `spawn_warm_tile_cam` goes to `portrait` beside its twin `spawn_warm_booth`, with the tile atlas's first edge and camera order. chat_bubble, combat_text, minimap::composite, pipe_warm and vplates name the new paths. | in review |
 | Cast-bar feedback | `ui_cast::feed_cast_bar` from world | **Drained message.** The queue world already writes, `CastBarEdge`/`CastBarFeed`, moves to `spell::cast_bar`; `ui_cast` keeps the drain in its slot (`UnitFeed`, after `spell::LocalCancel`), the same frame, pinned by `a_queued_edge_reaches_the_vm_the_same_frame`. The four Esc tests that ran `feed_cast_bar` from `spell::inflight` move to `ui_cast_esc_tests.rs` over a shared `spell::cast_test_support` harness. | in review |
 | Other action requests | `ui_session::feed_interact_npc`, `ui_pet::pet_stop_on_old_target_clear`, `ui_world_map::world_enter_selection`, `script_calls::{apply_script_calls, in_call_order}` | Narrower than the dry run by now. `InteractNpc` is already `app_core::state`: world code (target::click, creature_anim, motion::facing, portrait, capture) names that path, and `target::click`'s re-click test, which runs `feed_interact_npc`, moves to `ui_session`'s tests. `pet_stop_on_old_target_clear` is ordered against by `spell::targeting::feed_targeting_to_vm`, itself a `VmMemo` user: it moves up with the `VmMemo` row. `world_enter_selection` and the `script_calls` links in target and spell docs are prose. `apply_script_calls` in the target chain was App Migration's split unit 1. | done (`pet_stop_on_old_target_clear` with `VmMemo`: its one world reader moved up) |
-| `VmMemo` (17) | `ui_script::VmMemo` users in area, cinematic, cursor, death, minimap, sound, spell, video, vplates | `VmMemo` is `app_core::vm_memo` now, so a `ui_script::VmMemo` path is a re-export path that `scripts/split/canonical-paths.py` rewrites at move time, and `ui_party::GroupState` likewise. Done: `spell::targeting::feed_targeting_to_vm` moved up to `ui_cast::spell_targeting` (its plugin keeps the `UnitFeed`, old-target-clear and aura-feed order), and its four VM tests went with it onto `spell::targeting::test_support`. `UnitTokens` moved down to `target::unit_tokens` (world state only), and `raid_row_guid(s)` to `app_core::group`. Not inversions: `bindings` and `tutorial` are UI-layer, so the bindings loaders and `TaxiState` (read by `tutorial`, `ui_session`, `capture`) stay. The other world feeds that take `UiScript` (area, cinematic, cursor, minimap, sound::ui, spell::unit_cast, spell::targeting::item, video, vplates) hold `benilla-ui` in world; they stay: core depends on `benilla-ui` (the 2026-10-21 decision under Proposed crates). The death row is App's. | done |
+| `VmMemo` (17) | `ui_script::VmMemo` users in area, cinematic, cursor, death, minimap, sound, spell, video, vplates | `VmMemo` is `app_core::vm_memo` now, so a `ui_script::VmMemo` path is a re-export path that `scripts/split/canonical-paths.py` rewrites at move time, and `ui_party::GroupState` likewise. Done: `spell::targeting::feed_targeting_to_vm` moved up to `ui_cast::spell_targeting` (its plugin keeps the `UnitFeed`, old-target-clear and aura-feed order), and its four VM tests went with it onto `spell::targeting::test_support`. `UnitTokens` moved down to `target::unit_tokens` (world state only), and `raid_row_guid(s)` to `app_core::group`. Not inversions: `bindings` and `tutorial` are UI-layer, so the bindings loaders and `TaxiState` (read by `tutorial`, `ui_session`, `capture`) stay. The other world feeds that take `UiScript` (area, cinematic, cursor, minimap, sound::ui, spell::unit_cast, spell::targeting::item, video, vplates) hold `wrathplus-ui` in world; they stay: core depends on `wrathplus-ui` (the 2026-10-21 decision under Proposed crates). The death row is App's. | done |
 
 When the pure moves and the in-flight items land, the move phase can start with `core` and `net`;
 `world` and `ui` wait for the design items above.
@@ -491,7 +491,7 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
 | Fixed since the dry-run base | 6 (and part of 2 more) | `net::{ObjectStore, SelfPlayer, NetOffline, EnteredWorldMessage, DisconnectedMessage}`, now in `app_core::session` | Done, 563f0119 |
 | core → net command API | 13 (4 in `names`' tests, 1 follow-on) | `names`, `items`, `go_templates` and `area_trigger` send through `ClientCommand`/`NetCommands`, key on `Guid`/`GuidIndex`/`Objects`, and register with `NetHandlerApp`; `names` reads `net::wrath_pet_name_capture`; `preflight` and `probe_shield` read `SelfGuid` and `ServerSaidMessage` | Proposed below |
 | core → world/ui lookups | 6 | `ui_unit::{snapshot, race_names, class_names}` (`creature_type`, `preflight`), `ui_macro::identity` (`name_persist`), `creature_anim::disarmed_hand` (`items`, 2) | The "lookups" and "core up, pure" rows above; unowned |
-| core → root | 1 | `crate::BuildId` (`crash`) | Done (Assets, pure moves 2): `crash` names `benilla_world::build_id::BuildId`, where it is defined; the root keeps its re-export for the launcher API |
+| core → root | 1 | `crate::BuildId` (`crash`) | Done (Assets, pure moves 2): `crash` names `wrathplus_world::build_id::BuildId`, where it is defined; the root keeps its re-export for the launcher API |
 | Pure-move rows not done yet | 1 | `login::LoginIntent` (`probe_shield`) | Done (Assets, pure moves 2): `app_core::ui_flags` |
 | `cfg(test)` helper across layers | 1 | `app_core::vm_memo` tests use `crate::test_support` | See the test-helper item below |
 
@@ -534,7 +534,7 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
 - *`cfg(test)` helpers across the boundary*: upper-layer tests use 7 core or net `tests::` helpers from
   9 files (`net::…::tests::dispatch` and similar, from `game_plugins::client_tests`), and one core test
   uses `test_support`. `#[cfg(test)]` items are invisible to another crate, so these need a
-  `test-support` cargo feature on the lower crate, or the helper moving to the root's `client_tests`. Done (Wire B): `benilla-app` has a `test-support` feature; `net::test_support` (the per-family
+  `test-support` cargo feature on the lower crate, or the helper moving to the root's `client_tests`. Done (Wire B): `wrathplus-app` has a `test-support` feature; `net::test_support` (the per-family
   `dispatch`/`captured` helpers and the vehicle fixture guid) and the root `test_support` compile under
   `cfg(any(test, feature = "test-support"))`, and every cross-layer user imports from there.
 - `env!("CARGO_MANIFEST_DIR")`, `include_str!` and `include_dir!` in moved files resolve against the new
@@ -628,7 +628,7 @@ Modules the table above does not list, as the pass placed them. World: `asset_ch
 |---|---|---|---|
 | `shipped_cvars` | 11 | `ui_script` reads the root's aggregate (`addons`, `manifest`, `wrath_addons`, five test files) | **Design:** the cvar-registry note above: the root passes the static table in |
 | Root module alias | 2 | `ui_social` reaches `wrath_who_capture` through the root's `use net::{wrath_who_capture as ui_native_who}` | Mechanical |
-| `include_dir!` path | 1 | `ui_script::content` embeds `$CARGO_MANIFEST_DIR/assets/ui` | Mechanical: the assets move with `ui_script`, or the path names `benilla-app` |
+| `include_dir!` path | 1 | `ui_script::content` embeds `$CARGO_MANIFEST_DIR/assets/ui` | Mechanical: the assets move with `ui_script`, or the path names `wrathplus-app` |
 | `cfg(test)` helper | 1 | `ui_session` tests use the root's `test_support` | Mechanical: the test moves to the root, or the helper down |
 
 So of the 76 sites, 27 are mechanical (the fixture 7, the pure moves 15 of which 10 are in flight,
@@ -664,8 +664,8 @@ through `NetCommands`.
 `player_token_guid` to `target::unit_tokens` and `wow_font` to `ui_text`), canonical-paths
 applied (2740 paths): **world pass 0** (core + net + world build, lib and tests); **ui pass 1**,
 `ui_script::content`'s `include_dir!("$CARGO_MANIFEST_DIR/assets/ui")`. That one is the move
-step's: the asset tree moves with the ui crate, or the path names `benilla-app`'s, as does
-`overlay`'s `embedded://benilla_app/shaders/ui_quad.wgsl`. Every layer below tools now resolves
+step's: the asset tree moves with the ui crate, or the path names `wrathplus-app`'s, as does
+`overlay`'s `embedded://wrathplus_app/shaders/ui_quad.wgsl`. Every layer below tools now resolves
 downward. Not yet measured: the tools pass, and what only separate crates report (the
 visibility widening and inherent impls on a type from another crate).
 
@@ -676,13 +676,13 @@ on it). Each step is one commit, done while the workers are paused (see "Coordin
 
 Mechanics for moving layer `X` with modules `m1 … mn`:
 
-1. `cargo new --lib crates/benilla-app-X`; copy the dependency list of `benilla-app` and prune
+1. `cargo new --lib crates/benilla-app-X`; copy the dependency list of `wrathplus-app` and prune
    it later with `cargo machete`; add it to the workspace.
-2. `git mv crates/benilla-app/src/m1.rs crates/benilla-app/src/m1/ … crates/benilla-app-X/src/`
+2. `git mv crates/wrathplus-app/src/m1.rs crates/wrathplus-app/src/m1/ … crates/benilla-app-X/src/`
    for each module (`git mv` keeps blame).
 3. In `benilla-app-X/src/lib.rs`: `pub mod m1; … pub mod mn;`.
-4. In `benilla-app/src/lib.rs`: replace `mod m1;` with `pub use benilla_app_X::m1;` for each.
-   `crate::m1::Foo` paths in the modules still in `benilla-app` keep resolving through the
+4. In `wrathplus-app/src/lib.rs`: replace `mod m1;` with `pub use benilla_app_X::m1;` for each.
+   `crate::m1::Foo` paths in the modules still in `wrathplus-app` keep resolving through the
    re-export, so nothing above the moved layer is edited.
 5. First run `uv run scripts/split/canonical-paths.py --via <each upper module> --apply`, so no moved file
    names an item through an upper layer's re-export. Then, inside the moved files, rewrite
@@ -704,10 +704,10 @@ rewrite and a few dozen visibility edits.
 
 Things to update in the same commit:
 
-- `tests/ui_script_wall.rs` and `tests/world_api_wall.rs` scan `crates/benilla-app/src` paths:
+- `tests/ui_script_wall.rs` and `tests/world_api_wall.rs` scan `crates/wrathplus-app/src` paths:
   point them at the new crate directories.
 - `scripts/quality` and `gates.sh` crate lists, CI matrix, and `docs/WRATH-NATIVE-PLAN.md` gate
-  commands (`-p benilla-app` becomes a list).
+  commands (`-p wrathplus-app` becomes a list).
 - Each worker's `CARGO_TARGET_DIR` is unaffected; crate names in their gate commands change.
 
 ### Separate-crate dry run and the move script (Wire B, 2026-10-22)
@@ -743,7 +743,7 @@ root and its `<root>-<layer>` siblings under any prefix.
 **The rename goes first.** `scripts/rename-wrathplus.sh` renames a fixed crate list, guarded with
 `(?![\w-])` and `(?!\w)`, so after the move it would miss `benilla-app-<layer>` and every
 `benilla_app_<layer>` token. The split scripts take the prefix from the root that exists
-(`crates/wrathplus-app`, else `crates/benilla-app`), so the moved crates are born
+(`crates/wrathplus-app`, else `crates/wrathplus-app`), so the moved crates are born
 `wrathplus-app-<layer>`. The tests above name no prefix either.
 
 **The move: one run of every layer, one commit, during a worker pause** (`scripts/split/`):
@@ -780,7 +780,7 @@ root and its `<root>-<layer>` siblings under any prefix.
 6. Commit: renames, one `Cargo.toml` and `lib.rs` per crate, the widenings and gates.
 7. Then regenerate `scripts/quality/loc-baseline.json` once against the new paths (strict again
    from then on), and update the gate crate lists (`scripts/gates.sh`, `check.sh`, CI, worker
-   gate commands: `-p benilla-app` becomes the six crates).
+   gate commands: `-p wrathplus-app` becomes the six crates).
 
 **Final dry run** (0b43ae3d, wrath-hud 4f89242b plus the pre-move lint fixes; throwaway worktree,
 warm target, heavy slot; 2026-10-23):
@@ -804,13 +804,13 @@ Budget about 1 h 10 min for steps 2 to 4, then the gates.
 
 **The play binary and the player build on the moved tree** (same dry run):
 
-- `cargo build --profile play -p benilla` (what `cargo play` builds; the installed binary carries
+- `cargo build --profile play -p wrathplus` (what `cargo play` builds; the installed binary carries
   the `dev` instruments, so default features): 22 min, no rustc warning; `ld` repeats its
   `__eh_frame section too large` note, as the unmoved build does. Headless smoke, no window:
   `benilla --help` prints the usage and exits 1, `WOW_CAPTURE=list benilla` lists the four
   captures (tools crate) and exits 0, both before any setup.
 - Player tests (`--no-default-features --lib --no-fail-fast`, the gate's `player-tests` rung on
-  the six crates and `benilla-formats`): core 62, net 197, world 1,642/7 ignored, ui 2,439/9,
+  the six crates and `wrathplus-formats`): core 62, net 197, world 1,642/7 ignored, ui 2,439/9,
   tools 47, formats 441 pass; the root 175 pass and 2 fail,
   `the_movement_chain_keeps_its_order` and `the_cvar_hooks_register_in_plugin_order`, which fail
   the same way on the unmoved tree (24ec10d8): without `dev` they read no system or observer names.
@@ -831,14 +831,14 @@ in each crate's `dev` feature, so removing it edits that feature too):
 ## Coordination with in-flight work
 
 Measured on each worker branch's own commits over the last three days (files touched in
-`benilla-app`, `benilla-ui`, `benilla-protocol`):
+`wrathplus-app`, `wrathplus-ui`, `wrathplus-protocol`):
 
 | Worker | Areas in flight | Layer |
 |---|---|---|
 | Wire A | `net` (wire families), `ui_chat`, `spell` | net, world, ui |
-| Wire B | `ui_script`, `ui_loot`, `ui_social`, `ui_calendar`, `ui_guild`, `ui_quest`, `ui_world_map`, `benilla-protocol` | ui |
+| Wire B | `ui_script`, `ui_loot`, `ui_social`, `ui_calendar`, `ui_guild`, `ui_quest`, `ui_world_map`, `wrathplus-protocol` | ui |
 | App Migration | `ui_script`, `ui_macro`, `ui_guild_bank`, `game_plugins`, `spell` | ui, root |
-| Native UI | `ui_script`, `ui_quest`, `ui_items`, `benilla-ui` | ui |
+| Native UI | `ui_script`, `ui_quest`, `ui_items`, `wrathplus-ui` | ui |
 | Experience | `spell`, `game_plugins`, formats/assets models | world, root |
 | Assets | formats, assets, world crates | outside the app |
 
@@ -853,7 +853,7 @@ Measured on each worker branch's own commits over the last three days (files tou
 
 ## Re-running the analysis
 
-The numbers above come from a short script over `crates/benilla-app/src`: list the `mod` lines
+The numbers above come from a short script over `crates/wrathplus-app/src`: list the `mod` lines
 of `lib.rs`, walk each module's files, count `crate::<module>` references between top-level
 modules, then Tarjan's SCC over that graph and a back-edge count against the layer table. It
 takes seconds and needs no build. Keep it next to this plan when execution starts so each step's
@@ -870,5 +870,5 @@ takes seconds and needs no build. Keep it next to this plan when execution start
   defaults and `on_cvar` calls, and pin it with the existing cvar tests.
 - The root crate keeps `game_plugins`, so a whole-client test still rebuilds everything; the
   savings are for edits and tests inside one layer.
-- `app_core::errors::UiErrorTexts` carries `benilla_ui::messages::MsgKind` (found in step 0
-  unit 2a). Settled by the 2026-10-21 decision: `benilla-app-core` depends on `benilla-ui`.
+- `app_core::errors::UiErrorTexts` carries `wrathplus_ui::messages::MsgKind` (found in step 0
+  unit 2a). Settled by the 2026-10-21 decision: `benilla-app-core` depends on `wrathplus-ui`.

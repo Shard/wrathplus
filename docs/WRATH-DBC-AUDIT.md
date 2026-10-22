@@ -1,7 +1,7 @@
 # Mapped Wrath DBC audit inventory
 
 Snapshot: `native/assets-dbc-audit`, including the world-map known-row audit (2026-10-15).
-Scope is the 29 table entries in `src/wrath_layouts.rs` in `benilla-formats`,
+Scope is the 29 table entries in `src/wrath_layouts.rs` in `wrathplus-formats`,
 not every table accepted by the generic DBC parser. This is a coverage inventory,
 **not certification of every column or native runtime behavior**.
 
@@ -14,7 +14,7 @@ and locale and set `WOW_DATA=`. A passing skipped installed test is not evidence
 
 ## Explicit installed Wrath known-row assertions
 
-Paths below are relative to `crates/benilla-formats`.
+Paths below are relative to `crates/wrathplus-formats`.
 
 | Mapped tables | Evidence | Boundary |
 | --- | --- | --- |

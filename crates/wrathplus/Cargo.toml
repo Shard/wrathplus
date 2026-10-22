@@ -1,0 +1,30 @@
+[package]
+name = "wrathplus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The launcher: build.rs stamps the git build id and main() hands it to wrathplus-app, so a new commit rebuilds this package and not the app crate"
+
+[lints]
+workspace = true
+
+[features]
+# The dev/player seam: `cargo build -p wrathplus --no-default-features` is the player build.
+default = ["dev"]
+dev = ["wrathplus-app/dev"]
+# Profiling switches, forwarded so `cargo run -p wrathplus --features tracy` works.
+tracy = ["wrathplus-app/tracy"]
+trace_chrome = ["wrathplus-app/trace_chrome"]
+
+[dependencies]
+# `default-features = false`, or `--no-default-features` here still builds wrathplus-app with `dev`.
+wrathplus-app = { path = "../wrathplus-app", default-features = false }
+
+[build-dependencies]
+wrathplus-buildstamp = { path = "../wrathplus-buildstamp" }
+
+[[bin]]
+name = "wrathplus"
+path = "src/main.rs"
+# No tests here, and test-building this bin would relink the whole app on every commit.
+test = false

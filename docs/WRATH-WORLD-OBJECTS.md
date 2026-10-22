@@ -6,7 +6,7 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `GameObj
 `spell_generic.cpp` (spirit healer confirm), `Map.cpp` (zone light override), `CharacterHandler.cpp`
 (dance moves at login), `Player.cpp` (`SendMovieStart`), `MiscHandler.cpp` (`SendSetPhaseShift`),
 `SpellHandler.cpp` (`HandleGameObjectUseOpcode`, `HandleGameobjectReportUse`). Codec:
-`crates/benilla-protocol/src/wrath_world_objects.rs`.
+`crates/wrathplus-protocol/src/wrath_world_objects.rs`.
 
 **Use (00B1)**: the shared `GameObjUse` command (right-click on a chest, door, mailbox, herb, ore
 vein or fishing bobber, from `target/click`) had no Wrath route, so nothing was sent on 3.3.5. It

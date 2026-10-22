@@ -5,7 +5,7 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `QueryHa
 `SMSG_DEATH_RELEASE_LOC`, `SMSG_PRE_RESURRECT`), `SpellEffects.cpp` (`SMSG_SUMMON_REQUEST`),
 `MiscHandler.cpp`, `MovementHandler.cpp` (`HandleSummonResponseOpcode`), `SpellHandler.cpp`
 (`HandleSelfResOpcode`), `QueryPackets.cpp`. No client-only behaviour is inferred; no Ghidra round.
-Codec: `crates/benilla-protocol/src/wrath_death.rs`. Resurrect request/response (015B/015C) are
+Codec: `crates/wrathplus-protocol/src/wrath_death.rs`. Resurrect request/response (015B/015C) are
 Wire A's spell-control unit and unchanged.
 
 **Shared (handled)**: 0216 corpse query (not found, or map, position, corpse map; AC's trailing zero

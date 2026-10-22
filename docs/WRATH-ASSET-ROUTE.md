@@ -1,11 +1,11 @@
 # Headless Wrath asset route
 
-`crates/benilla-formats/tests/wrath_asset_route.rs` is an environment-gated, read-only regression
+`crates/wrathplus-formats/tests/wrath_asset_route.rs` is an environment-gated, read-only regression
 against the effective installed archive chain. Run with `WOW_CLIENT_PROFILE=wrath`,
 `WOW_LOCALE=enUS`, and `WOW_DATA` pointing to the installed `Data` directory:
 
 ```sh
-cargo test -p benilla-formats --test wrath_asset_route -- --nocapture --test-threads 4
+cargo test -p wrathplus-formats --test wrath_asset_route -- --nocapture --test-threads 4
 ```
 
 It visits waypoint tiles at Northshire, Goldshire, Stormwind, Valiance Keep, Howling Fjord and

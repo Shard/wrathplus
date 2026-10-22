@@ -15,11 +15,11 @@ Git are required. Optional standalone tools: `cargo machete`, `typos`, `cargo ll
 
 ```sh
 scripts/quality/run.sh loc                         # all tracked Rust, or explicit file paths
-scripts/quality/run.sh fmt crates/benilla-bytes/src/lib.rs
-scripts/quality/run.sh clippy -p benilla-bytes      # defaults to workspace/all targets
+scripts/quality/run.sh fmt crates/wrathplus-bytes/src/lib.rs
+scripts/quality/run.sh clippy -p wrathplus-bytes      # defaults to workspace/all targets
 scripts/quality/run.sh machete                     # cargo-machete must be installed
 scripts/quality/run.sh typos                       # typos must be installed
-scripts/quality/run.sh crap -p benilla-bytes        # on-demand/pre-merge ONLY; real test coverage
+scripts/quality/run.sh crap -p wrathplus-bytes        # on-demand/pre-merge ONLY; real test coverage
 python3 scripts/quality/test_gate.py               # cheap synthetic contract tests
 ```
 
