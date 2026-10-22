@@ -41,7 +41,7 @@ impl GroupRoster {
     }
 
     /// `0x4918e0`: [`Self::in_party`], or a nonzero guid in the raid roster (`4918ee`).
-    fn in_group(&self, me: Option<u64>, guid: u64) -> bool {
+    pub(crate) fn in_group(&self, me: Option<u64>, guid: u64) -> bool {
         self.in_party(me, guid) || guid != 0 && self.raid.contains(&guid)
     }
 }

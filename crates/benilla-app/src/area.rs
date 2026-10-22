@@ -348,8 +348,7 @@ mod tests {
             group_mask: 3,
             friend_group_mask: 2,
             enemy_group_mask: 4,
-            enemies: [0; 4],
-            friends: [0; 4],
+            ..Default::default()
         };
         let me = Some(Some(&human));
         let zone = row(0, 2);

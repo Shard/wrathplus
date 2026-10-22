@@ -1,9 +1,9 @@
-//! Unit reaction: the `FactionTemplate.dbc` catalog and the 1.12 client's reaction comparator.
+//! Unit reaction: the `FactionTemplate.dbc` catalog and build 12340's reaction comparator.
 //!
 //! A unit's `UNIT_FIELD_FACTIONTEMPLATE` indexes `FactionTemplate.dbc`, and the reference's
-//! comparator `0x606640` turns two rows into hostile, neutral or friendly; every `UnitReaction`,
+//! comparator `00715440` turns two rows into hostile, neutral or friendly; every `UnitReaction`,
 //! `CanAttack` and `CanAssist` bottoms out in it. It is only the DBC half of `UnitReaction`
-//! (`0x6061e0`), whose group, charm, PvP-flag and sanctuary overrides need session state.
+//! (`007251c0`), whose group, charm, PvP-flag and sanctuary overrides need session state.
 //!
 //! Also `Faction.dbc`'s reputation identity: the reference checks `FactionHasReputation` before the
 //! comparator (`0x606530`), so a reputation faction's NPCs colour by the player's rank.
@@ -22,10 +22,12 @@ const FACTION_GROUP: &str = "DBFilesClient\\FactionGroup.dbc";
 const CHR_RACES: &str = "DBFilesClient\\ChrRaces.dbc";
 
 /// One `FactionTemplate.dbc` row: the fields the reaction comparator reads.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FactionTemplate {
     /// The row's `Faction.dbc` id, what another template's `enemies`/`friends` lists name.
     pub faction: u32,
+    /// `Flags` (field 2, `row + 8`): [`template_flags`].
+    pub flags: u32,
     /// The faction-group bits this template belongs to (Player/Alliance/Horde/Monster).
     pub group_mask: u32,
     pub friend_group_mask: u32,
@@ -36,7 +38,16 @@ pub struct FactionTemplate {
     pub friends: [u32; 4],
 }
 
-/// A unit's base reaction toward another on the reference's scale: `0x606640` returns these three,
+/// `FactionTemplate.dbc` `Flags` bits build 12340 reads.
+pub mod template_flags {
+    /// A contested-territory guard: hostile to a player flagged `PLAYER_FLAGS_CONTESTED_PVP`
+    /// (`0x7253ca` tail, `0x71f770`).
+    pub const CONTESTED_GUARD: u32 = 0x1000;
+    /// Hostile when no mask or list relates the two (`0x715440`'s tail).
+    pub const HOSTILE_BY_DEFAULT: u32 = 0x2000;
+}
+
+/// A unit's base reaction toward another on the reference's scale: `00715440` returns these three,
 /// and the reputation path widens the scale to 0..=6, hence the gaps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Reaction {
@@ -46,7 +57,8 @@ pub enum Reaction {
 }
 
 impl FactionTemplate {
-    /// `self`'s reaction toward `other`, branch for branch `0x606640`. Hostility is only ever
+    /// `self`'s reaction toward `other`, branch for branch 12340's `00715440`; with no mask or list
+    /// relating them, [`template_flags::HOSTILE_BY_DEFAULT`] decides hostile or neutral. Hostility is only ever
     /// `self`'s, so colour by the unit's reaction toward the player, as the nameplate resolver
     /// `0x7cbaa0` does: a player template is enemy-masked against the whole Monster group.
     pub fn reaction_toward(&self, other: &FactionTemplate) -> Reaction {
@@ -83,7 +95,11 @@ impl FactionTemplate {
                 return Reaction::Friendly;
             }
         }
-        Reaction::Neutral
+        if self.flags & template_flags::HOSTILE_BY_DEFAULT != 0 {
+            Reaction::Hostile
+        } else {
+            Reaction::Neutral
+        }
     }
 }
 
@@ -180,7 +196,7 @@ impl FactionInfo {
 }
 
 /// Total standing (base + wire) to rank 0..=7, hated to exalted, the reference's ladder
-/// (`0x4d63a0`); the unit reaction takes it capped at 6, Revered (`0x606439`). Widths from −42000:
+/// (`0x4d63a0`); 12340's unit reaction (`005d0600`) takes it uncapped. Widths from −42000:
 /// 36000, 3000, 3000, 3000, 6000, 12000, 21000, 1000 (vmangos `PointsInRank`).
 pub fn reputation_rank(total_standing: i32) -> u8 {
     match total_standing {
@@ -358,7 +374,7 @@ impl FactionCatalog {
     }
 }
 
-/// `FactionTemplate.dbc`: 14 fields, 56-byte rows at the offsets `0x606640` reads (vmangos
+/// `FactionTemplate.dbc`: 14 fields, 56-byte rows at the offsets `00715440` reads (vmangos
 /// `FactionTemplateEntry`).
 fn faction_template_schema() -> Schema {
     let mut s = Schema::new("FactionTemplate");
@@ -465,6 +481,7 @@ pub fn load_faction_catalog(chain: &mut Chain) -> Result<FactionCatalog> {
                 id,
                 FactionTemplate {
                     faction: at(1),
+                    flags: at(2),
                     group_mask: at(3),
                     friend_group_mask: at(4),
                     enemy_group_mask: at(5),
@@ -549,214 +566,5 @@ pub fn load_faction_catalog(chain: &mut Chain) -> Result<FactionCatalog> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A template with everything zeroed except what a test sets.
-    fn tpl(faction: u32) -> FactionTemplate {
-        FactionTemplate {
-            faction,
-            group_mask: 0,
-            friend_group_mask: 0,
-            enemy_group_mask: 0,
-            enemies: [0; 4],
-            friends: [0; 4],
-        }
-    }
-
-    /// Every branch, in the order `0x606640` tests them, and enemy-beats-friend precedence.
-    #[test]
-    fn comparator_branch_domain() {
-        let b = FactionTemplate {
-            group_mask: 0b0010,
-            ..tpl(50)
-        };
-
-        let a = FactionTemplate {
-            enemy_group_mask: 0b0010,
-            ..tpl(1)
-        };
-        assert_eq!(a.reaction_toward(&b), Reaction::Hostile);
-
-        // A.enemies[i] == B.faction → hostile, found in the last of the four slots.
-        let a = FactionTemplate {
-            enemies: [7, 8, 9, 50],
-            ..tpl(1)
-        };
-        assert_eq!(a.reaction_toward(&b), Reaction::Hostile);
-
-        // The enemies list is 0-terminated: a match after a 0 is never reached.
-        let a = FactionTemplate {
-            enemies: [7, 0, 50, 0],
-            ..tpl(1)
-        };
-        assert_eq!(a.reaction_toward(&b), Reaction::Neutral);
-
-        let a = FactionTemplate {
-            friend_group_mask: 0b0010,
-            ..tpl(1)
-        };
-        assert_eq!(a.reaction_toward(&b), Reaction::Friendly);
-
-        let a = FactionTemplate {
-            friends: [50, 0, 0, 0],
-            ..tpl(1)
-        };
-        assert_eq!(a.reaction_toward(&b), Reaction::Friendly);
-
-        // Friendship is read both ways: B's friend mask covers A's group.
-        let a = FactionTemplate {
-            group_mask: 0b1000,
-            ..tpl(1)
-        };
-        let b_friendly = FactionTemplate {
-            friend_group_mask: 0b1000,
-            ..b
-        };
-        assert_eq!(a.reaction_toward(&b_friendly), Reaction::Friendly);
-
-        let b_names_a = FactionTemplate {
-            friends: [1, 0, 0, 0],
-            ..b
-        };
-        assert_eq!(tpl(1).reaction_toward(&b_names_a), Reaction::Friendly);
-
-        assert_eq!(tpl(1).reaction_toward(&b), Reaction::Neutral);
-
-        // Hostility is tested first: an enemy-mask hit beats any friendship.
-        let a = FactionTemplate {
-            enemy_group_mask: 0b0010,
-            friend_group_mask: 0b0010,
-            friends: [50, 0, 0, 0],
-            ..tpl(1)
-        };
-        assert_eq!(a.reaction_toward(&b_names_a), Reaction::Hostile);
-    }
-
-    /// Unit templates toward a human player (template 1), the direction `0x7cbaa0` colours by;
-    /// ids from vmangos `creature_template.faction`, expected colours from a reference capture.
-    #[test]
-    fn real_dbc_reactions_match_reference_capture() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_faction_catalog(&mut chain).expect("load faction catalog");
-        assert!(
-            cat.len() > 200,
-            "FactionTemplate loaded ({} rows)",
-            cat.len()
-        );
-
-        let human_player = cat.template(1).expect("human player template (1)");
-        let tpl = |id: u32| {
-            cat.template(id)
-                .unwrap_or_else(|| panic!("faction template {id}"))
-        };
-        let reaction = |id: u32| tpl(id).reaction_toward(human_player);
-        assert_eq!(
-            reaction(12),
-            Reaction::Friendly,
-            "Marshal Dughan (Stormwind)"
-        );
-        assert_eq!(reaction(31), Reaction::Neutral, "Chicken (critter)");
-        assert_eq!(reaction(17), Reaction::Hostile, "Defias Trapper");
-        assert_eq!(
-            reaction(26),
-            Reaction::Hostile,
-            "Kobold Miner (aggro mine kobold)"
-        );
-        assert_eq!(
-            reaction(25),
-            Reaction::Neutral,
-            "Kobold Vermin (non-aggro starter kobold)"
-        );
-        // The player is hostile toward the vermin (attackable) while the vermin is neutral to it.
-        assert_eq!(human_player.reaction_toward(tpl(25)), Reaction::Hostile);
-
-        // Stormwind (faction 72) has slot 19 and a human base of 4000, friendly before any
-        // template comparison; the Chicken's faction 28 has no slot.
-        let stormwind = cat
-            .reputation_faction(72)
-            .expect("Stormwind (72) has reputation");
-        assert_eq!(stormwind.rep_index, 19);
-        assert_eq!(stormwind.base_for(1, 1), 4000, "human base with Stormwind");
-        assert_eq!(reputation_rank(stormwind.base_for(1, 1)), 4, "friendly");
-        assert!(cat.reputation_faction(28).is_none(), "critter: no rep");
-        // Orc (race 2) base with Stormwind is hated (−42000): rank 0, hostile.
-        assert_eq!(stormwind.base_for(2, 1), -42000);
-        assert_eq!(reputation_rank(stormwind.base_for(2, 1)), 0);
-
-        // The unit tooltip (`0x529fe0`) shows "Stormwind" under a Stormwind guard to a human.
-        assert_eq!(cat.faction_name(72), Some("Stormwind"));
-        assert!(
-            stormwind.tooltip_shows_for(1, 1),
-            "Stormwind's matched slot is not rep-hidden for a human"
-        );
-        // Players never get the line: player factions have no reputation slot.
-        assert!(
-            cat.reputation_faction(tpl(1).faction).is_none(),
-            "the human player faction has no reputation slot"
-        );
-    }
-
-    #[test]
-    fn reputation_rank_thresholds() {
-        for (standing, rank) in [
-            (-42000, 0),
-            (-6001, 0),
-            (-6000, 1),
-            (-3001, 1),
-            (-3000, 2),
-            (-1, 2),
-            (0, 3),
-            (2999, 3),
-            (3000, 4),
-            (8999, 4),
-            (9000, 5),
-            (20999, 5),
-            (21000, 6),
-            (41999, 6),
-            (42000, 7),
-            (42999, 7),
-        ] {
-            assert_eq!(reputation_rank(standing), rank, "standing {standing}");
-        }
-        // The nameplate's collapse: <= 1 hostile, >= 4 friendly, else neutral.
-        assert_eq!(Reaction::from_rank(0), Reaction::Hostile);
-        assert_eq!(Reaction::from_rank(1), Reaction::Hostile);
-        assert_eq!(Reaction::from_rank(2), Reaction::Neutral);
-        assert_eq!(Reaction::from_rank(3), Reaction::Neutral);
-        assert_eq!(Reaction::from_rank(4), Reaction::Friendly);
-        assert_eq!(Reaction::from_rank(7), Reaction::Friendly);
-    }
-
-    #[test]
-    fn real_gameobject_factions_resolve_toward_both_player_templates() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_faction_catalog(&mut chain).expect("load factions");
-        let (alliance, horde) = (
-            cat.template(1).expect("Alliance player template"),
-            cat.template(2).expect("Horde player template"),
-        );
-
-        // 114 "monster" (Deadmines' Factory Door): hostile to both, so no one can highlight it.
-        let monster = cat.template(114).expect("FactionTemplate 114");
-        assert_eq!(monster.reaction_toward(alliance), Reaction::Hostile);
-        assert_eq!(monster.reaction_toward(horde), Reaction::Hostile);
-
-        // 35 (levers, torches, Arathi Basin's banners): friendly to both, never gated.
-        let usable = cat.template(35).expect("FactionTemplate 35");
-        assert_eq!(usable.reaction_toward(alliance), Reaction::Friendly);
-        assert_eq!(usable.reaction_toward(horde), Reaction::Friendly);
-    }
-
-    #[test]
-    fn real_faction_group_names_by_mask() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_faction_catalog(&mut chain).expect("load factions");
-        assert_eq!(cat.faction_group_name(2), Some("Alliance"));
-        assert_eq!(cat.faction_group_name(4), Some("Horde"));
-        assert_eq!(cat.faction_group_name(0), None);
-    }
-}
+#[path = "factions_tests.rs"]
+mod tests;

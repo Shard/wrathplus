@@ -1,9 +1,8 @@
 //! Proven branch topology of 12340 CanAttack 00729740 / CanAssist 007293d0.
 //!
-//! This is not full native reaction parity or server spell legality. Reaction's group/global
-//! helpers and full forced-reputation comparator remain unresolved; callers supply the existing
-//! directional reaction ranks. FLAGS2 bit16 / vehicle metadata guards are also untraced and
-//! deliberately not guessed here. Missing creature metadata contributes no flags.
+//! Not server spell legality. Callers supply both directional ranks of
+//! [`reaction::unit_reaction`] (`007251c0`); `attack` carries the `UNIT_FIELD_FLAGS_2`
+//! `0x10000` vehicle guard on [`Context::world`]. Missing creature metadata contributes no flags.
 
 #[cfg(test)]
 use std::marker::PhantomData;
@@ -11,13 +10,21 @@ use std::marker::PhantomData;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::{Entity, Query, Res};
 
+#[path = "wrath_reaction.rs"]
+pub(super) mod reaction;
 use crate::net::{GuidIndex, ObjectStore};
 use benilla_protocol::types::{ObjectType, OwnerFallback};
+use reaction::{ReactionState, WorldInputs};
 
 /// A live descriptor by guid: the object manager's lookup (`0x468460`), asked afresh at every
 /// controller hop. Never a second object cache.
 pub(crate) trait StoreLookup: Sync {
     fn store(&self, guid: u64) -> Option<&ObjectStore>;
+
+    /// The session tables beside the stores, for a lookup that holds them.
+    fn world(&self) -> Option<ReactionState<'_>> {
+        None
+    }
 }
 
 /// A closure as a [`StoreLookup`], for a test whose stores are neither a query nor a param.
@@ -39,10 +46,8 @@ impl<'a, F: Fn(u64) -> Option<&'a ObjectStore> + Sync> StoreLookup for ByGuid<'a
 }
 
 /// No object streamed: every referenced owner stays missing.
-#[cfg(test)]
-struct NoStores;
+pub(crate) struct NoStores;
 
-#[cfg(test)]
 impl StoreLookup for NoStores {
     fn store(&self, _: u64) -> Option<&ObjectStore> {
         None
@@ -78,11 +83,16 @@ pub(crate) struct RelationInputs<'w, 's> {
     names: Option<Res<'w, crate::names::NameCache>>,
     index: Option<Res<'w, GuidIndex>>,
     stores: Query<'w, 's, &'static ObjectStore>,
+    world: WorldInputs<'w>,
 }
 
 impl StoreLookup for RelationInputs<'_, '_> {
     fn store(&self, guid: u64) -> Option<&ObjectStore> {
         guid_store(self.index.as_deref(), &self.stores, guid)
+    }
+
+    fn world(&self) -> Option<ReactionState<'_>> {
+        Some(self.world.state())
     }
 }
 
@@ -98,24 +108,26 @@ impl RelationInputs<'_, '_> {
 pub(crate) struct Context<'a> {
     pub(crate) names: Option<&'a crate::names::NameCache>,
     pub(crate) stores: &'a dyn StoreLookup,
+    /// The group roster, forced reactions and vehicles, as `stores` supplies them.
+    pub(crate) world: ReactionState<'a>,
 }
 
 impl<'a> Context<'a> {
-    /// No template cache and no streamed owner: creature metadata contributes no flags and every
-    /// controller hop misses. For tests.
-    #[cfg(test)]
+    /// No template cache, no streamed owner and no session tables: creature metadata contributes
+    /// no flags and every controller hop misses (a caller that holds none of them).
     pub(crate) fn none() -> Self {
-        Self {
-            names: None,
-            stores: &NoStores,
-        }
+        Self::new(None, &NoStores)
     }
 
     pub(crate) fn new(
         names: Option<&'a crate::names::NameCache>,
         stores: &'a dyn StoreLookup,
     ) -> Self {
-        Self { names, stores }
+        Self {
+            names,
+            stores,
+            world: stores.world().unwrap_or_default(),
+        }
     }
 
     /// Creature metadata flags off the template cache, for a Unit object only (a player has no
@@ -153,6 +165,13 @@ pub(super) fn controller<'a>(
     None
 }
 
+/// `UNIT_FIELD_FLAGS_2`, 0 when absent.
+fn flags_2(unit: &ObjectStore) -> u32 {
+    unit.0
+        .get(benilla_protocol::types::Field::UnitFlags2)
+        .unwrap_or(0)
+}
+
 fn same_duel(actor: &ObjectStore, target: &ObjectStore) -> bool {
     actor.0.player_duel_team() != 0
         && target.0.player_duel_team() != 0
@@ -187,6 +206,12 @@ pub(super) fn attack(
         || (!apc && t & 0x200 != 0)
         || (tpc && a & 0x100 != 0)
         || (!tpc && a & 0x200 != 0)
+    {
+        return false;
+    }
+    // `0x729886`: either side's `UNIT_FIELD_FLAGS_2 & 0x10000` arms the vehicle leg on both.
+    if (flags_2(actor) | flags_2(target)) & 0x1_0000 != 0
+        && (ctx.world.guarded_vehicle(actor) || ctx.world.guarded_vehicle(target))
     {
         return false;
     }

@@ -121,7 +121,14 @@ pub(crate) fn can_assist(
     let (Some(store), Some(actor)) = (store, self_store) else {
         return false;
     };
-    let toward = super::ring::reaction_from_player(factions, reputations, Some(store), self_store);
+    let toward = super::ring::reaction_between(
+        factions,
+        reputations,
+        self_store,
+        Some(store),
+        self_store,
+        ctx,
+    );
     super::wrath_relations::assist(actor, store, toward, ctx)
 }
 

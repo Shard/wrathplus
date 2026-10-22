@@ -4,7 +4,7 @@
 //! bright arc toward the camera. The vertical fade on wall and ledge pieces is matched to
 //! captures: the reference's edge-fade ramp (`0x6147f0`) is untraced.
 
-use benilla_formats::{load_faction_catalog, reputation_rank, Reaction};
+use benilla_formats::{load_faction_catalog, Reaction};
 use benilla_protocol::EntityKind;
 use bevy::prelude::*;
 
@@ -388,125 +388,73 @@ pub(super) fn push_ring(
     batch.tris();
 }
 
-/// The target's reaction toward our player as a rank `0..=6`, the direction every NPC colour
-/// uses (`0x605960` and `0x7cbaa0` ask `UnitReaction 0x6061e0` with the unit as `this`). When
-/// both carry `UNIT_FIELD_FLAGS` bit 3, a duel (`0x606296`) or mutual FFA decides first. Then
-/// `0x606530`: a faction with a reputation slot (`0x605fc0`) answers with our reputation rank
-/// (`0x4d63a0`), even in GM mode; any other goes to the template comparator (`0x606640`). Neutral
-/// when anything is missing. `0x606439` caps that answer at 6, so Revered and Exalted both read 6.
-/// Not applied: the party rung (`0x6062b0`), the contested guard, forced reactions and the summon
-/// tail.
+/// The target's reaction toward our player, `UnitReaction 007251c0` with the unit as `this`
+/// ([`super::wrath_relations::reaction::unit_reaction`]), the direction every NPC colour uses. Detached: no
+/// group roster, forced reactions or owner lookup (a pet's controller misses); a caller holding a
+/// [`super::wrath_relations::Context`] asks [`reaction_between`].
 pub(crate) fn ring_reaction(
     factions: Option<&Factions>,
     reputations: &Reputations,
     target_store: Option<&ObjectStore>,
     self_store: Option<&ObjectStore>,
 ) -> u8 {
-    if let (Some(target), Some(own)) = (target_store, self_store) {
-        if let Some(rank) = duel_reaction(&target.0, &own.0) {
-            return rank;
-        }
-        if ffa_reaction(&target.0, &own.0) {
-            return Reaction::Hostile as u8;
-        }
-    }
-    let resolved = (|| {
-        let catalog = &factions?.0;
-        let self_store = self_store?;
-        let target_tpl = catalog.template(target_store?.0.unit_faction_template()?)?;
-        // A reputation faction: our rank with it.
-        if let Some(info) = catalog.reputation_faction(target_tpl.faction) {
-            let standing = reputations
-                .0
-                .get(info.rep_index as usize)
-                .map_or(0, |&(_flags, s)| s);
-            let race = self_store.0.unit_race().unwrap_or(0);
-            let class = self_store.0.unit_class().unwrap_or(0);
-            return Some(reputation_rank(info.base_for(race, class) + standing));
-        }
-        // The template comparator: 1, 3 or 4 on the rank scale.
-        let self_tpl = catalog.template(self_store.0.unit_faction_template()?)?;
-        Some(target_tpl.reaction_toward(self_tpl) as u8)
-    })();
-    // `0x606439` (`cmp esi,6` / `jl` / `mov esi,6`) caps `0x606530`'s answer: Exalted's 7 reads 6.
-    resolved.map_or(Reaction::Neutral as u8, |rank| rank.min(REACTION_CAP))
+    let none = super::wrath_relations::Context::none();
+    reaction_between(
+        factions,
+        reputations,
+        target_store,
+        self_store,
+        self_store,
+        none,
+    )
 }
 
-/// Revered, the highest rank `UnitReaction`'s generic leg answers (`0x606439`).
-const REACTION_CAP: u8 = 6;
+/// `UnitReaction 007251c0`, `from` toward `to`, with `me` the active player: neutral (3) until both
+/// stream.
+pub(crate) fn reaction_between(
+    factions: Option<&Factions>,
+    reputations: &Reputations,
+    from: Option<&ObjectStore>,
+    to: Option<&ObjectStore>,
+    me: Option<&ObjectStore>,
+    ctx: super::wrath_relations::Context,
+) -> u8 {
+    let (Some(from), Some(to)) = (from, to) else {
+        return Reaction::Neutral as u8;
+    };
+    let factions = factions.map(|f| &f.0);
+    let rx = super::wrath_relations::reaction::Reactions {
+        factions,
+        reputations,
+        ctx,
+        me,
+    };
+    super::wrath_relations::reaction::unit_reaction(&rx, from, to)
+}
 
 /// `UNIT_FIELD_FLAGS` bit 3, player-controlled in behaviour: players and their pets carry it, wild
 /// creatures do not. `UnitReaction` needs it on both sides before any player-vs-player rung
 /// (`0x606217`, `0x60622f`), and `CanAttack` picks its reaction arm by it (`0x606a13`).
 const UNIT_FLAG_PVP_ATTACKABLE: u32 = 1 << 3;
 
-/// The duel rung of `UnitReaction` (`0x60626b`–`0x6062ad`): hostile (1) between opposing teams,
-/// friendly (4) on one team, `None` when no duel relates the two. It needs team and arbiter both:
-/// `PLAYER_DUEL_ARBITER` is set at the challenge, `PLAYER_DUEL_TEAM` only when the countdown ends
-/// (`Player::UpdateDuelFlag`), so the arbiter alone would turn the opponent red during the count.
-fn duel_reaction(
-    target: &benilla_protocol::ObjectFields,
-    own: &benilla_protocol::ObjectFields,
-) -> Option<u8> {
-    match duel_rung(target, own) {
-        DuelRung::Engaged { rank, .. } => Some(rank),
-        _ => None,
-    }
-}
-
-/// The both-FFA rung of `UnitReaction` (`0x60632c`): two player-controlled units both flagged
-/// free-for-all are hostile whatever their factions. Vanilla uses PLAYER_FLAGS bit 7;
-/// Wrath `007251c0` reads BYTES_2 byte 1 bit 2 after the duel rung. This source
-/// correction does not implement the omitted native controller/group/reputation branches.
-/// A plain PvP flag has no such rung: a same-faction player flagged for PvP stays friendly.
-fn ffa_reaction(
-    target: &benilla_protocol::ObjectFields,
-    own: &benilla_protocol::ObjectFields,
-) -> bool {
-    let player_controlled =
-        |u: &benilla_protocol::ObjectFields| u.unit_flags() & UNIT_FLAG_PVP_ATTACKABLE != 0;
-    player_controlled(target)
-        && player_controlled(own)
-        && target.unit_is_ffa_pvp()
-        && own.unit_is_ffa_pvp()
-}
-
-/// The local player's reaction toward a unit, `0x6061e0` with the player as `this`. This direction
-/// reaches leg 3 (`0x606372`), which answers a reputation faction by the at-war bit alone, never
-/// the standing, so a not-at-war neutral NPC is friendly here and neutral to [`ring_reaction`]: a
-/// friendly-category plate with a yellow bar. Not applied, each only ever making a unit
-/// friendlier: forced reactions (`0x4d6490`), the party rung and the charmed-player case.
+/// The local player's reaction toward a unit, `007251c0` with the player as `this`: a reputation
+/// faction answers by its at-war bit, never the standing, so a not-at-war neutral NPC is friendly
+/// here and neutral to [`ring_reaction`]. Detached, as [`ring_reaction`] is.
 pub(crate) fn reaction_from_player(
     factions: Option<&Factions>,
     reputations: &Reputations,
     target_store: Option<&ObjectStore>,
     self_store: Option<&ObjectStore>,
 ) -> u8 {
-    // The player-vs-player block (`0x606217`) runs first in both directions.
-    if let (Some(target), Some(own)) = (target_store, self_store) {
-        if let Some(rank) = duel_reaction(&target.0, &own.0) {
-            return rank;
-        }
-        if ffa_reaction(&target.0, &own.0) {
-            return Reaction::Hostile as u8;
-        }
-    }
-    let resolved = (|| {
-        let catalog = &factions?.0;
-        let target_tpl = catalog.template(target_store?.0.unit_faction_template()?)?;
-        // Leg 3: a reputation faction answers by the at-war bit alone.
-        if let Some(at_war) = at_war_with(catalog, reputations, target_tpl.faction) {
-            return Some(if at_war {
-                Reaction::Hostile as u8
-            } else {
-                Reaction::Friendly as u8
-            });
-        }
-        // Leg 4: the template comparator, player toward unit.
-        let self_tpl = catalog.template(self_store?.0.unit_faction_template()?)?;
-        Some(self_tpl.reaction_toward(target_tpl) as u8)
-    })();
-    resolved.unwrap_or(Reaction::Neutral as u8)
+    let none = super::wrath_relations::Context::none();
+    reaction_between(
+        factions,
+        reputations,
+        self_store,
+        target_store,
+        self_store,
+        none,
+    )
 }
 
 /// Leg 3: whether we are at war with the `Faction.dbc` faction a unit's template names; `None` when
@@ -564,11 +512,12 @@ pub(crate) fn can_attack_from_player(
         return false; // fields not streamed yet; the reference's null path refuses too
     };
     // 12340's `CanAttack 00729740`, on both reaction directions and `ctx`'s live owner lookup.
+    let me = Some(own);
     super::wrath_relations::attack(
         own,
         target,
-        reaction_from_player(factions, reputations, target_store, self_store),
-        ring_reaction(factions, reputations, target_store, self_store),
+        reaction_between(factions, reputations, me, Some(target), me, ctx),
+        reaction_between(factions, reputations, Some(target), me, me, ctx),
         ctx,
     )
 }
@@ -634,7 +583,7 @@ pub(crate) fn plate_is_friendly(
     }
 }
 
-/// Why [`duel_reaction`]'s rung did or did not fire, with the values it judged; `/reaction` prints
+/// Why the duel rung of [`super::wrath_relations::reaction::unit_reaction`] did or did not fire, with the values it judged; `/reaction` prints
 /// it from this same walk.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DuelRung {
@@ -707,6 +656,7 @@ pub(crate) mod tests {
         let make = |pc: bool, ffa: bool, old_ffa: bool, team: u32| {
             let mut pairs = Vec::new();
             let mut set = |field: Field, value| pairs.push((field.span().unwrap().index, value));
+            set(Field::ObjectType, 0x19);
             set(Field::UnitFlags, if pc { 8 } else { 0 });
             set(Field::PlayerFlags, if old_ffa { 0x80 } else { 0 });
             set(Field::UnitBytes2, if ffa { 0x400 } else { 0 });
@@ -716,25 +666,31 @@ pub(crate) mod tests {
             ObjectStore(ObjectFields::from_pairs(&pairs))
         };
         let native = |pc, ffa, team| make(pc, ffa, ffa, team);
+        let reps = Reputations::default();
         for own_pc in [false, true] {
             for target_pc in [false, true] {
                 for own_ffa in [false, true] {
                     for target_ffa in [false, true] {
                         let own = native(own_pc, own_ffa, 0);
                         let target = native(target_pc, target_ffa, 0);
+                        let hostile = own_pc && target_pc && own_ffa && target_ffa;
                         assert_eq!(
-                            super::ffa_reaction(&target.0, &own.0),
-                            own_pc && target_pc && own_ffa && target_ffa
+                            ring_reaction(None, &reps, Some(&target), Some(&own)),
+                            if hostile { 1 } else { 3 }
                         );
                     }
                 }
             }
         }
         for (packed, old) in [(true, false), (false, true)] {
-            let unit = make(true, packed, old, 0);
-            assert_eq!(super::ffa_reaction(&unit.0, &unit.0), packed);
+            let (own, target) = (make(true, packed, old, 0), make(true, packed, old, 0));
+            let rank = ring_reaction(None, &reps, Some(&target), Some(&own));
+            assert_eq!(
+                rank,
+                if packed { 1 } else { 3 },
+                "PLAYER_FLAGS 0x80 is 1.12's"
+            );
         }
-        let reps = Reputations::default();
         let own = native(true, true, 1);
         for (team, expected) in [(1, 4), (2, 1)] {
             let target = native(true, true, team);
@@ -812,6 +768,7 @@ pub(crate) mod tests {
         };
         // Us: a player-controlled Human, faction template 1.
         let me = ObjectStore(ObjectFields::from_fields(&[
+            (benilla_protocol::types::Field::ObjectType, 0x19),
             (benilla_protocol::types::Field::UnitFactionTemplate, 1),
             (
                 benilla_protocol::types::Field::UnitFlags,
@@ -865,11 +822,10 @@ pub(crate) mod tests {
         assert_eq!(rank(&unit(12), &quiet), 4);
     }
 
-    /// The reputation leg walks the ladder up to Revered and stops: `0x606439` caps the rank at 6,
-    /// so a Stormwind unit reads the same to a Revered and an Exalted human, while the ladder
-    /// itself, which the reputation pane reads, still reaches 7.
+    /// The reputation leg walks the whole ladder: 12340's `005d0600` has no cap, so a Stormwind unit
+    /// reads Exalted (7) to an Exalted human, as the reputation pane's ladder does.
     #[test]
-    fn the_reputation_rank_is_capped_at_revered() {
+    fn the_reputation_rank_reaches_exalted() {
         use crate::net::ObjectStore;
         use crate::target::{stormwind_fixture, HUMAN_WARRIOR};
         const FIELD_UNIT_FACTIONTEMPLATE: u16 =
@@ -878,10 +834,15 @@ pub(crate) mod tests {
 
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-        let me = ObjectStore(ObjectFields::from_fields(&[(
-            benilla_protocol::types::Field::UnitBytes0,
-            HUMAN_WARRIOR,
-        )]));
+        let me = ObjectStore(ObjectFields::from_fields(&[
+            (benilla_protocol::types::Field::ObjectType, 0x19),
+            (
+                benilla_protocol::types::Field::UnitFlags,
+                UNIT_FLAG_PVP_ATTACKABLE,
+            ),
+            (benilla_protocol::types::Field::UnitFactionTemplate, 1),
+            (benilla_protocol::types::Field::UnitBytes0, HUMAN_WARRIOR),
+        ]));
         // Both sides of the Honored, Revered and Exalted thresholds, and the wire's own ceiling.
         for (total, want) in [
             (8_999, 4),
@@ -889,8 +850,8 @@ pub(crate) mod tests {
             (20_999, 5),
             (21_000, 6),
             (41_999, 6),
-            (42_000, 6),
-            (42_999, 6),
+            (42_000, 7),
+            (42_999, 7),
         ] {
             let (factions, template, reps) = stormwind_fixture(&mut chain, total);
             let unit = ObjectStore(ObjectFields::from_pairs(&[(
@@ -903,11 +864,6 @@ pub(crate) mod tests {
                 "standing {total}"
             );
         }
-        assert_eq!(
-            benilla_formats::reputation_rank(42_000),
-            7,
-            "the ladder is not capped"
-        );
     }
 
     /// Cenarion Circle, faction 609 with reputation slot 36: not at war, its NPCs are neither
@@ -928,6 +884,7 @@ pub(crate) mod tests {
             ]))
         };
         let me = ObjectStore(ObjectFields::from_fields(&[
+            (benilla_protocol::types::Field::ObjectType, 0x19),
             (benilla_protocol::types::Field::UnitFactionTemplate, 1), // Human
             (
                 benilla_protocol::types::Field::UnitFlags,
@@ -1012,6 +969,7 @@ pub(crate) mod tests {
         let reps = Reputations::default();
         let player = |tpl: u32| {
             ObjectStore(ObjectFields::from_fields(&[
+                (benilla_protocol::types::Field::ObjectType, 0x19),
                 (benilla_protocol::types::Field::UnitFactionTemplate, tpl),
                 (
                     benilla_protocol::types::Field::UnitFlags,
