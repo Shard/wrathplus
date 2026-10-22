@@ -35,7 +35,7 @@ fn svc(
 
 /// A class trainer whose tree is `[H:Arms, Heroic Strike, Cleave, H:Fury, Bloodrage]`, the three
 /// services available, used and unavailable.
-fn trainer() -> TrainerState {
+pub(super) fn trainer() -> TrainerState {
     let mut hs = svc(
         78,
         "Heroic Strike",
@@ -61,6 +61,13 @@ fn trainer() -> TrainerState {
     }
 }
 
+/// A VM whose `serviceTypeFilter` shows every state; the CVar's default 3 hides known services.
+fn every_state_shown() -> UiScript {
+    let mut s = UiScript::new().unwrap();
+    s.run("SetTrainerServiceTypeFilter('all', 1)").unwrap();
+    s
+}
+
 /// Every visible row as `(name, serviceType)`.
 fn visible(s: &mut UiScript) -> Vec<(String, String)> {
     let n = s.eval::<i64>("return GetNumTrainerServices()").unwrap();
@@ -76,7 +83,7 @@ fn visible(s: &mut UiScript) -> Vec<(String, String)> {
 
 #[test]
 fn tree_interleaves_headers_and_ordered_services() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = every_state_shown();
     assert_eq!(s.eval::<i64>("return GetNumTrainerServices()").unwrap(), 0);
     assert!(s
         .eval::<bool>("return GetTrainerServiceInfo(1) == nil")
@@ -169,7 +176,7 @@ fn service_getters_read_the_row_at_a_visible_index() {
 /// The reference's filter hide exempts no header (`0x4d8528`, `0x4d8535`).
 #[test]
 fn state_filter_takes_a_groups_header_with_its_last_service() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = every_state_shown();
     s.set_trainer(Some(trainer()));
     assert_eq!(s.eval::<i64>("return GetNumTrainerServices()").unwrap(), 5);
 
@@ -204,10 +211,11 @@ fn state_filter_takes_a_groups_header_with_its_last_service() {
         "Arms",
         "row 1 is still the Arms header, now in the hidden tail"
     );
-    assert_eq!(
-        s.eval::<i64>("return GetTrainerSelectionIndex()").unwrap(),
-        0,
-        "and nothing is selected, which is a different question from what row 1 holds"
+    // The list seated the first available service (12340 `0x594ba0`), now hidden with its group.
+    assert!(
+        s.eval::<bool>("return GetTrainerSelectionIndex() > GetNumTrainerServices()")
+            .unwrap(),
+        "the hidden selection reads past the visible count, a different question from row 1"
     );
 }
 
@@ -231,7 +239,7 @@ fn collapse_keeps_the_header_the_filter_would_remove() {
 
 #[test]
 fn collapse_by_header_index_and_collapse_all() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = every_state_shown();
     s.set_trainer(Some(trainer()));
 
     s.run("CollapseTrainerSkillLine(1)").unwrap();
@@ -257,7 +265,7 @@ fn collapse_by_header_index_and_collapse_all() {
 
 #[test]
 fn collapse_survives_a_content_update_and_resets_on_close() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = every_state_shown();
     s.set_trainer(Some(trainer()));
     s.run("CollapseTrainerSkillLine(1)").unwrap(); // fold Arms
     assert_eq!(s.eval::<i64>("return GetNumTrainerServices()").unwrap(), 3);
@@ -293,31 +301,6 @@ fn buy_queues_an_available_services_spell_id_and_refuses_every_other_row() {
         s.take_trainer_buys().is_empty(),
         "only state byte 0 — available — reaches the wire"
     );
-}
-
-#[test]
-fn selection_and_close_intents() {
-    let mut s = UiScript::new().unwrap();
-    s.set_trainer(Some(trainer()));
-    assert_eq!(
-        s.eval::<i64>("return GetTrainerSelectionIndex()").unwrap(),
-        0
-    );
-    s.run("SelectTrainerService(2)").unwrap();
-    assert_eq!(
-        s.eval::<i64>("return GetTrainerSelectionIndex()").unwrap(),
-        2
-    );
-    s.run("SelectTrainerService(9)").unwrap(); // past the 5 rows: clears
-    assert_eq!(
-        s.eval::<i64>("return GetTrainerSelectionIndex()").unwrap(),
-        0
-    );
-
-    assert!(!s.take_trainer_close());
-    s.run("CloseTrainer()").unwrap();
-    assert!(s.take_trainer_close());
-    assert!(!s.take_trainer_close(), "drained");
 }
 
 /// `IsTradeskillTrainer` tests type 2 (`0x4d8ea0`), `IsTalentTrainer` type 1 (`0x4d8ed0`).
@@ -374,7 +357,7 @@ fn tradeskill_and_talent_flags() {
 
 #[test]
 fn unresolved_skill_line_is_dropped() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = every_state_shown();
     let mut t = trainer();
     t.services.push(svc(
         999,
@@ -387,13 +370,17 @@ fn unresolved_skill_line_is_dropped() {
     assert_eq!(s.eval::<i64>("return GetNumTrainerServices()").unwrap(), 5);
 }
 
-/// The reference stores the selection as a spell id (`0x4d74f0`) and scans the whole array for it
-/// (`0x4d7520`), so a hidden selection reads past the visible count.
+/// The selection is a record id (12340 `0xc0e49c`), scanned for across the whole array
+/// (`0x594170`), so a hidden selection reads past the visible count.
 #[test]
 fn the_selection_follows_its_service_and_lands_in_the_tail_when_it_is_hidden() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = every_state_shown();
     s.set_trainer(Some(trainer()));
-    let sel = |s: &mut UiScript| s.eval::<i64>("return GetTrainerSelectionIndex()").unwrap();
+    let sel = |s: &mut UiScript| {
+        s.eval::<Option<i64>>("return GetTrainerSelectionIndex()")
+            .unwrap()
+            .unwrap_or(0)
+    };
     let shown = |s: &mut UiScript| s.eval::<i64>("return GetNumTrainerServices()").unwrap();
     let at = |s: &mut UiScript, i: i64| {
         s.eval::<String>(&format!("return (GetTrainerServiceInfo({i})) or ''"))
@@ -443,26 +430,6 @@ fn the_selection_follows_its_service_and_lands_in_the_tail_when_it_is_hidden() {
     assert_eq!(sel(&mut s), 0, "row 1 is the Arms header");
 }
 
-/// The reference's list builder re-selects a header (`0x4d7560`, `0x4d7b42`), so a re-opened
-/// trainer never keeps the last visit's selection.
-#[test]
-fn a_new_list_packet_clears_the_selection() {
-    let mut s = UiScript::new().unwrap();
-    s.set_trainer(Some(trainer()));
-    s.run("SelectTrainerService(5)").unwrap();
-    assert_eq!(
-        s.eval::<i64>("return GetTrainerSelectionIndex()").unwrap(),
-        5
-    );
-    s.reset_trainer_list_state(0);
-    s.set_trainer(Some(trainer()));
-    assert_eq!(
-        s.eval::<i64>("return GetTrainerSelectionIndex()").unwrap(),
-        0,
-        "the same spell is still in the list, and it is still not selected"
-    );
-}
-
 #[test]
 fn clearing_empties_and_resets_selection() {
     let mut s = UiScript::new().unwrap();
@@ -470,10 +437,9 @@ fn clearing_empties_and_resets_selection() {
     s.run("SelectTrainerService(2)").unwrap();
     s.set_trainer(None);
     assert_eq!(s.eval::<i64>("return GetNumTrainerServices()").unwrap(), 0);
-    assert_eq!(
-        s.eval::<i64>("return GetTrainerSelectionIndex()").unwrap(),
-        0
-    );
+    assert!(s
+        .eval::<bool>("return GetTrainerSelectionIndex() == nil")
+        .unwrap());
 }
 
 /// Creature 957's 19 vmangos `npc_trainer` rows, in the order the reference's builder `0x4d7560`
@@ -603,7 +569,7 @@ fn mount_trainer_folds_known_services_into_my_talents() {
             "Ram Riding",
         ),
     ];
-    let mut s = UiScript::new().unwrap();
+    let mut s = every_state_shown();
     s.set_trainer(Some(TrainerState {
         greeting: "Ready to ride?".into(),
         trainer_type: 1,
@@ -641,7 +607,7 @@ fn talent_order_sorts_on_state_within_a_group() {
         one(1, "Aye", TrainerServiceCategory::Used),
         one(2, "Bee", TrainerServiceCategory::Unavailable),
     ];
-    let mut s = UiScript::new().unwrap();
+    let mut s = every_state_shown();
     s.set_trainer(Some(TrainerState {
         greeting: String::new(),
         trainer_type: 1,

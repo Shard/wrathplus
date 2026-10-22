@@ -1824,7 +1824,7 @@ mod tests {
         assert!(failures.is_empty(), "load errors: {failures:?}");
 
         // Discovery found it. One, not thirteen: `SMSG_ADDON_INFO` answers status 2 for the
-        // chain's twelve secure addons, and the Lua index space drops them.
+        // chain's Blizzard addons, which the reply answers as secure, and the Lua index space drops them.
         seat_stock_addon_reply(&mut script);
         assert_eq!(script.eval::<i64>("return GetNumAddOns()").ok(), Some(1));
         assert_eq!(
@@ -1883,11 +1883,12 @@ mod tests {
     }
 
     /// Seat the `SMSG_ADDON_INFO` reply hiding the secure addons, as world entry does: the Lua
-    /// index space does not exist until the server answers, as in the reference.
+    /// index space does not exist until the server answers, as in the reference. A stock 3.3.5
+    /// install announces its `Blizzard_*` addons, which the server answers as secure.
     fn seat_stock_addon_reply(script: &mut UiScript) {
-        let hidden: Vec<String> = benilla_protocol::types::STOCK_SECURE_ADDONS
+        let hidden: Vec<String> = WRATH_BLIZZARD_ADDONS
             .iter()
-            .map(|a| a.name.to_string())
+            .map(|a| a.to_string())
             .collect();
         script.note_addon_info_reply(&hidden);
     }
@@ -1910,7 +1911,7 @@ mod tests {
         let mut script = UiScript::new().unwrap();
         let _ = load_wrath_third_party(&mut script, None, &[], true);
 
-        // One, not thirteen: the chain's twelve secure addons are hidden by the reply.
+        // One: the chain's Blizzard addons are hidden by the reply.
         seat_stock_addon_reply(&mut script);
         assert_eq!(script.eval::<i64>("return GetNumAddOns()").ok(), Some(1));
         assert_eq!(
@@ -2051,7 +2052,7 @@ mod tests {
         script.set_screen_size(1024.0, 768.0);
         let _ = load_wrath_third_party(&mut script, None, &[], true);
 
-        // Discovered and described, not run; one row, the chain's twelve hidden by the reply.
+        // Discovered and described, not run; one row, the chain's Blizzard addons hidden by the reply.
         seat_stock_addon_reply(&mut script);
         assert_eq!(script.eval::<i64>("return GetNumAddOns()").ok(), Some(1));
         assert_eq!(
@@ -2183,7 +2184,7 @@ mod tests {
                 "actual addon load errors: {failures:?}"
             );
             // Registration alone does not admit the in-game index space: mirror the server reply.
-            script.note_addon_info_reply(&[]);
+            seat_stock_addon_reply(&mut script);
             script.fire_event("PLAYER_LOGIN", vec![]);
             script.set_unit(
                 "player",

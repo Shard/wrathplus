@@ -381,6 +381,11 @@ pub(super) fn feed_action_state(
     // The events in the reference's flush order, the `ACTIONBAR_*` one first.
     if gen_changed {
         script.fire_event("ACTIONBAR_UPDATE_COOLDOWN", vec![]);
+        // 12340 `0x53bac0` fires `UPDATE_SHAPESHIFT_COOLDOWN` just ahead of `SPELL_UPDATE_COOLDOWN`
+        // while the stance bar has a form.
+        if script.num_shapeshift_forms() > 0 {
+            script.fire_event("UPDATE_SHAPESHIFT_COOLDOWN", vec![]);
+        }
         script.fire_event("SPELL_UPDATE_COOLDOWN", vec![]);
         script.fire_event("BAG_UPDATE_COOLDOWN", vec![]);
     }

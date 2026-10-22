@@ -57,8 +57,14 @@ mod reeval;
 
 pub(crate) struct UiTrainerPlugin;
 
+/// `serviceTypeFilter` (12340 `0x51ed64`, name `0xa006e0`, `"%d"` of 3, record `ds:0xbd09e4`): the
+/// trainer window's state filter, one bit per service state. The VM reads and writes it
+/// (`benilla_ui` trainer filter); registering it here seeds it and saves it with the config.
+const CVARS: &[crate::cvars::Registered] = &[crate::cvars::same("serviceTypeFilter", "3")];
+
 impl Plugin for UiTrainerPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         net::register(app);
         app.init_resource::<TrainerOpen>()
             .init_resource::<TrainerErrors>()
@@ -299,10 +305,10 @@ pub(crate) fn feed_trainer(
     let Some(skill_lines) = skill_lines.as_deref() else {
         return;
     };
-    // The per-list reset goes in before the snapshot, so `TRAINER_SHOW` finds it; the stock window
-    // re-applies its saved filter only on its own `ADDON_LOADED`.
+    // The per-list reset goes in before the snapshot, so `TRAINER_SHOW` finds it. The filter is the
+    // `serviceTypeFilter` CVar, which no list resets.
     if open.fresh_list {
-        script.reset_trainer_list_state(open.trainer_type);
+        script.reset_trainer_list_state();
         open.fresh_list = false;
     }
     // The player's money, level and skill triggers, read every frame so the reader never backs up.

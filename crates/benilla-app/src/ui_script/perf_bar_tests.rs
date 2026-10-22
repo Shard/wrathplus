@@ -221,7 +221,7 @@ fn hovering_the_meter_shows_the_live_latency() {
         "the button over the meter takes the mouse"
     );
 
-    s.run("this = MainMenuBarPerformanceBarFrameButton MainMenuBarPerformanceBarFrameButton:GetScript(\"OnEnter\")()")
+    s.run("MainMenuBarPerformanceBarFrameButton:GetScript(\"OnEnter\")(MainMenuBarPerformanceBarFrameButton)")
         .unwrap();
     assert_eq!(
         s.eval::<String>("return GameTooltipTextLeft1:GetText()")
@@ -266,7 +266,7 @@ fn hovering_the_meter_shows_the_live_latency() {
         "the refresh rebuilds BOTH lines — a held-open plate never decays to one"
     );
 
-    s.run("this = MainMenuBarPerformanceBarFrameButton MainMenuBarPerformanceBarFrameButton:GetScript(\"OnLeave\")()").unwrap();
+    s.run("MainMenuBarPerformanceBarFrameButton:GetScript(\"OnLeave\")(MainMenuBarPerformanceBarFrameButton)").unwrap();
     assert!(
         !s.eval::<bool>("return GameTooltip:IsVisible()").unwrap(),
         "leaving hides the plate"
