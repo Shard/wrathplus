@@ -56,7 +56,7 @@ fn the_three_bindings_have_the_reference_shapes() {
 
 /// Through the real hit test: right-click the player portrait, click the row, answer the confirm.
 #[test]
-fn the_self_menu_row_gates_on_the_binding_and_confirms_before_sending() {
+fn the_self_menu_row_shows_solo_and_confirms_before_sending() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
@@ -109,7 +109,9 @@ fn the_self_menu_row_gates_on_the_binding_and_confirms_before_sending() {
 
     let open_self_menu = |s: &mut UiScript| {
         s.run("CloseDropDownMenus()").unwrap();
-        s.run(r#"PlayerFrame_OnClick("RightButton")"#).unwrap();
+        // 3.3.5's PlayerFrame menu: `SecureUnitButton_OnLoad`'s `showmenu` (`PlayerFrame.lua:46`).
+        s.run(r#"ToggleDropDownMenu(1, nil, PlayerFrameDropDown, "PlayerFrame", 106, 27)"#)
+            .unwrap();
         s.resolve();
     };
     let row_labels = |s: &mut UiScript| -> Vec<String> {
@@ -122,26 +124,14 @@ fn the_self_menu_row_gates_on_the_binding_and_confirms_before_sending() {
             .collect()
     };
 
-    // Off, the row is hidden, not greyed (`UnitPopup.lua:379`). Solo it is the SELF menu's only
-    // candidate row, so with it gone the menu does not open at all.
+    // 3.3.5 shows the row solo outside an instance, whatever `CanResetInstances` answers: it
+    // hides only inside one or for a party member who is not the leader (`UnitPopup.lua:695`).
     open_self_menu(&mut s);
-    assert!(
-        s.eval::<bool>("return not DropDownList1:IsVisible()")
-            .unwrap(),
-        "solo with no lockout to reset, the SELF menu has nothing to show"
-    );
-
-    s.set_can_reset_instances(true);
-    open_self_menu(&mut s);
-    assert!(
-        s.eval::<bool>("return DropDownList1:IsVisible()").unwrap(),
-        "the one showable row is enough to open the SELF menu"
-    );
     let labels = row_labels(&mut s);
     let row = labels
         .iter()
         .position(|l| l == "Reset all instances")
-        .unwrap_or_else(|| panic!("the row shows once the binding says so: {labels:?}"));
+        .unwrap_or_else(|| panic!("the row shows solo: {labels:?}"));
 
     let button = format!("DropDownList1Button{}", row + 1);
     let (cx, cy) = s

@@ -83,11 +83,11 @@ fn harness_with(player: &str) -> UiScript {
     super::test_ui::seat_chain_addon(&mut s, "Blizzard_MacroUI");
     s.run("MacroFrame_LoadUI()").unwrap();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-    // The icon chooser's list is the app's push.
-    s.set_macro_icons(vec![
-        "Interface\\Icons\\Ability_Ambush".into(),
-        "Interface\\Icons\\Ability_BackStab".into(),
-        "Interface\\Icons\\Spell_Fire_FlameBolt".into(),
+    // The icon chooser's list is the app's push: 12340's spell-icon names, unprefixed.
+    s.set_macro_spell_icons(vec![
+        "Ability_Ambush".into(),
+        "Ability_BackStab".into(),
+        "Spell_Fire_FlameBolt".into(),
     ]);
     s
 }
@@ -182,8 +182,8 @@ fn typing_a_body_and_closing_the_window_commits_it() {
     );
 }
 
-/// `MacroFrame.macroBase` is 0 or `MAX_MACROS` (18) and every binding takes `macroBase + i`, so the
-/// character tab starts at 19 (`Blizzard_MacroUI.lua:1`, `:42`).
+/// `MacroFrame.macroBase` is 0 or `MAX_ACCOUNT_MACROS` (36) and every binding takes
+/// `macroBase + i`, so the character tab starts at 37 (`Blizzard_MacroUI.lua:1`, `:47`).
 #[test]
 fn the_character_tab_creates_in_the_second_index_range_and_switching_saves() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -203,7 +203,7 @@ fn the_character_tab_creates_in_the_second_index_range_and_switching_saves() {
         "/say account",
         "the tab switch saved the body first"
     );
-    assert_eq!(s.eval::<i64>("return MacroFrame.macroBase").unwrap(), 18);
+    assert_eq!(s.eval::<i64>("return MacroFrame.macroBase").unwrap(), 36);
 
     s.run("MacroNewButton:Click()").unwrap();
     s.run(r#"MacroPopupEditBox:SetText("Char")"#).unwrap();
@@ -216,9 +216,9 @@ fn the_character_tab_creates_in_the_second_index_range_and_switching_saves() {
         (1, 1)
     );
     assert_eq!(
-        s.eval::<String>("return GetMacroInfo(19)").unwrap(),
+        s.eval::<String>("return GetMacroInfo(37)").unwrap(),
         "Char",
-        "the character tab's first slot is index 19"
+        "the character tab's first slot is index 37"
     );
 
     s.run("MacroFrameTab1:Click()").unwrap();
@@ -287,7 +287,7 @@ fn dragging_a_macro_button_loads_the_cursor_with_the_macro_payload() {
     no_errors(&s, "drag");
     let payload = s.cursor_payload();
     assert!(
-        matches!(&payload, Some(CursorPayload::Macro(m)) if m.index == 1),
+        matches!(&payload, Some(CursorPayload::Macro(m)) if m.id == 1),
         "the macro payload, carrying its index: {payload:?}"
     );
 

@@ -169,7 +169,7 @@ mod tests {
             ..Default::default()
         });
 
-        let rows = feed::display_rows(&guild, None, None);
+        let rows = feed::display_rows(&guild, None, None, &|_| String::new());
         assert_eq!(rows.len(), 3, "every member, always");
         assert_eq!(guild.num_members(), 2, "but the count is the online tally");
         assert!(
@@ -179,7 +179,7 @@ mod tests {
         assert!(!rows[2].info.online);
 
         guild.set_show_offline(true);
-        let rows = feed::display_rows(&guild, None, None);
+        let rows = feed::display_rows(&guild, None, None, &|_| String::new());
         assert_eq!(rows.len(), 3);
         assert_eq!(guild.num_members(), 3, "now the count is everybody");
     }

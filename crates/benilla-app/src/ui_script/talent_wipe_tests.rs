@@ -36,8 +36,9 @@ fn the_confirm_shows_and_accept_queues_the_wipe() {
     assert_eq!(
         s.eval::<String>("return StaticPopup1Text:GetText()")
             .unwrap(),
-        "Do you want to unlearn all of your talents?  The cost will increase each time you do it.",
-        "the GlobalStrings sentence, which names no number of its own"
+        "Do you want to unlearn all of your talents?  This will unsummon any controlled pet and the \
+         cost will increase each time.",
+        "3.3.5's GlobalStrings sentence, which names no number of its own"
     );
 
     s.run("StaticPopup_OnClick(StaticPopup1, 1)").unwrap();

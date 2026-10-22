@@ -357,8 +357,8 @@ pub(crate) struct MeetingStoneInputs<'w, 's> {
     tutorials: Option<MessageWriter<'w, crate::tutorial::TutorialEvent>>,
 }
 
-/// The meeting stone's feed: the `0x295` lines, the rebuild and `MEETINGSTONE_CHANGED` per
-/// arrival; the four display replies; the two globals pushed when they moved.
+/// The meeting stone's feed: the `0x295` lines and the rebuild per arrival; the four display
+/// replies; the two globals pushed when they moved.
 fn feed_meeting_stone(
     script: Option<NonSendMut<UiScript>>,
     mut stone: ResMut<MeetingStone>,
@@ -389,13 +389,12 @@ fn feed_meeting_stone(
                 ));
             }
         }
-        // Every status, silent or out of range, rebuilds and fires. The globals reach the VM
-        // first: the stock handler's first call is `IsInMeetingStoneQueue()` (`Minimap.xml:222`).
+        // Every status, silent or out of range, rebuilds. No event: 12340's event table has no
+        // `MEETINGSTONE_CHANGED`.
         let text = build_stone_text(&script, areas, new);
         stone.text = StoneText::Built(text.clone());
         stone.dirty = false;
         script.set_meeting_stone(new, Some(text));
-        script.fire_event("MEETINGSTONE_CHANGED", vec![]);
     }
 
     for notice in std::mem::take(&mut stone.notices) {
@@ -506,13 +505,9 @@ pub(crate) fn feed_dialog_verbs(
     let now = Instant::now();
 
     script.set_pet_untrainer_pending(pet.pending().is_some());
-    if pet.ask {
-        pet.ask = false;
-        script.fire_event(
-            "CONFIRM_PET_UNLEARN",
-            vec![ScriptValue::Int(i64::from(pet.cost))],
-        );
-    }
+    // No dialog event: 12340's event table has no `CONFIRM_PET_UNLEARN` (the 3.x client has no
+    // pet untrainer), so the owed ask is consumed silently.
+    pet.ask = false;
 
     script.set_instance_boot_secs(boot.secs(now));
     for event in std::mem::take(&mut boot.events) {

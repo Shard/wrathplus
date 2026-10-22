@@ -4,9 +4,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::types::{
-    ActionButton, ACTION_KIND_ITEM, ACTION_KIND_MACRO, ACTION_KIND_SPELL,
-};
+use benilla_protocol::types::{ActionButton, ACTION_KIND_ITEM, ACTION_KIND_SPELL};
 use benilla_ui::script::UiScript;
 
 use crate::net::{ClientCommand, NetCommands};
@@ -382,12 +380,11 @@ pub(crate) fn use_action(
         }
         // The macro arm (`0x4e5ee0` calls `0x4f1460`): each body line goes through the chat
         // input, as if typed.
-        Some(b) if b.kind == ACTION_KIND_MACRO => {
-            if !crate::ui_macro::run_macro(script, b.action) {
-                debug!(
-                    "ui_action: macro action {action} (macro {}) is empty",
-                    b.action
-                );
+        Some(b) if benilla_ui::script::macro_action_id(b.kind, b.action).is_some() => {
+            let id = benilla_ui::script::macro_action_id(b.kind, b.action).unwrap_or(0);
+            let index = script.macros().index_of_id(id).unwrap_or(0);
+            if !crate::ui_macro::run_macro(script, index as u32) {
+                debug!("ui_action: macro action {action} (macro id {id:#x}) is empty");
             }
         }
         Some(b) => {

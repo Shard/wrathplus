@@ -454,7 +454,7 @@ fn demo_unit_feed(script: Option<NonSendMut<UiScript>>, mut fired: Local<VmMemo<
                 name: "spawn".into(),
                 texture: Some("Interface\\Icons\\Ability_Racial_Cannibalize".into()),
                 body: ".spawn 16032".into(),
-                local_only: false,
+                id: 1,
             }],
             character: Vec::new(),
         });
@@ -583,6 +583,20 @@ impl benilla_ui::script::TextMeasure for FixedWidthFont {
             Some(w) if w > 0.0 && natural > w => (w, 12.0 * (natural / w).ceil(), natural),
             _ => (natural, 12.0, natural),
         }
+    }
+
+    /// Inline, as [`crate::ui_text::AtlasMeasurer`] answers it: `.0` per byte, a multi-line box's
+    /// rows starting after each newline (no width wrap).
+    fn editbox_advances(
+        &mut self,
+        req: &benilla_ui::script::EditBoxAdvanceRequest,
+    ) -> Option<(Vec<f32>, Vec<usize>, f32)> {
+        let cum = (0..=req.text.len()).map(|i| i as f32 * self.0).collect();
+        if req.wrap_width.is_none() {
+            return Some((cum, vec![0], 0.0));
+        }
+        let breaks = req.text.match_indices('\n').map(|(i, _)| i + 1);
+        Some((cum, std::iter::once(0).chain(breaks).collect(), 12.0))
     }
 }
 

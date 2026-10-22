@@ -217,7 +217,7 @@ pub(super) fn seed(s: &mut UiScript) {
             name: "Hello".into(),
             texture: Some(r"Interface\Icons\INV_Misc_QuestionMark".into()),
             body: "/wave".into(),
-            local_only: false,
+            id: 1,
         }],
         character: vec![],
     });

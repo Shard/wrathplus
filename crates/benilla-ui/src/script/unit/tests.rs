@@ -2,6 +2,9 @@
 
 use crate::script::{PartyState, PlayerRecord, UiScript, UnitGuids, UnitState};
 
+#[path = "is_unit_tests.rs"]
+mod is_unit;
+
 fn player() -> UnitState {
     UnitState {
         exists: true,
@@ -1113,9 +1116,14 @@ fn an_unrecognised_unit_token_raises_and_a_recognised_empty_one_does_not() {
         );
     }
 
-    // A two-unit call checks both tokens.
-    assert!(s.run(r#"UnitIsUnit("player", "bogus")"#).is_err());
-    assert!(s.run(r#"UnitIsUnit("bogus", "player")"#).is_err());
+    // `UnitIsUnit` resolves through the name-tolerant `0x60abf0`: an unknown token is nil, not an
+    // error (12340 `0x60c3d0`).
+    assert!(s
+        .eval::<bool>(r#"return UnitIsUnit("player", "bogus") == nil"#)
+        .unwrap());
+    assert!(s
+        .eval::<bool>(r#"return UnitIsUnit("bogus", "player") == nil"#)
+        .unwrap());
     assert!(s.run(r#"UnitIsUnit("player", "party3")"#).is_ok());
 }
 
@@ -1695,15 +1703,6 @@ fn every_unit_predicate_is_one_or_nil_and_never_a_boolean() {
                 exists: true,
                 is_player: true,
                 reaction: 5,
-                ..Default::default()
-            },
-        ),
-        (
-            "UnitIsUnit",
-            r#"UnitIsUnit("target", "target")"#,
-            UnitState {
-                exists: true,
-                guid: 42,
                 ..Default::default()
             },
         ),
