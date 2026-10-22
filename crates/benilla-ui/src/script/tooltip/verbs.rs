@@ -32,9 +32,9 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
     m.set(
         "SetOwner",
         lua.create_function(
-            |lua, (this, owner, anchor, x, y): (Table, Table, Value, Option<f32>, Option<f32>)| {
+            |lua, (this, owner, anchor, x, y): (Table, Value, Value, Option<f32>, Option<f32>)| {
                 let h = frame_handle_of(lua, &this)?;
-                let owner_h = frame_handle_of(lua, &owner)?;
+                let owner_h = owner_frame(lua, &this, h, owner)?;
                 // The gate is `lua_isstring` (`0x6f3510`): a string or number is read, and any
                 // other type counts as absent rather than raising.
                 let anchor = optional_string(lua, &anchor);
@@ -300,6 +300,38 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
 
     lua.set_named_registry_value(REG_TOOLTIP_METHODS, m)?;
     Ok(())
+}
+
+/// `SetOwner`'s owner argument, refused as build 12340 refuses it (`0x61eb40`): not a table is the
+/// usage error, a table with no object `Couldn't find 'this'`, an object that is not a frame
+/// `Wrong object type`, and the tooltip itself `Can't set owner to self`; each names the tooltip
+/// by `GetName()` or `<unnamed>`.
+fn owner_frame(lua: &Lua, this: &Table, tip: FrameHandle, owner: Value) -> mlua::Result<FrameHandle> {
+    let refuse = |what: &str| {
+        let name = this
+            .get::<mlua::Function>("GetName")
+            .and_then(|f| f.call::<Option<String>>(this.clone()))
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "<unnamed>".to_string());
+        mlua::Error::runtime(what.replace("%s", &name))
+    };
+    let Value::Table(owner) = owner else {
+        return Err(refuse("Usage: %s:SetOwner(frame)"));
+    };
+    let id = crate::script::object::decode_id(&owner)
+        .map_err(|_| refuse("%s:SetOwner(): Couldn't find 'this' in frame object"))?;
+    let frame = lua
+        .app_data_ref::<Model>()
+        .expect("model app_data")
+        .id_to_frame
+        .get(&id)
+        .copied();
+    let frame = frame.ok_or_else(|| refuse("%s:SetOwner(): Wrong object type, expected frame"))?;
+    if frame == tip {
+        return Err(refuse("%s:SetOwner(): Can't set owner to self"));
+    }
+    Ok(frame)
 }
 
 /// SetOwner's placement, shared with Wrath's `SetAnchorType`: the mode resolved from its name,

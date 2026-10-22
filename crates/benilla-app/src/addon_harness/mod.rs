@@ -683,13 +683,13 @@ fn drive_ui_probe(script: &mut UiScript) -> Vec<String> {
         -- Open, then close: a toggle left open would leak state into nothing here, but the second
         -- call is what exercises an override's close path.
         try(ToggleBackpack); try(ToggleBackpack)
-        if PlayerFrame then
+        if PlayerFrame then -- 3.3.5 passes `self`; `this` stays for the addons that read it
             this = PlayerFrame
-            try(UnitFrame_OnEnter); try(UnitFrame_OnLeave)
+            try(UnitFrame_OnEnter and function() UnitFrame_OnEnter(PlayerFrame) end)
+            try(UnitFrame_OnLeave and function() UnitFrame_OnLeave(PlayerFrame) end)
         end
         if ActionButton1 then
-            this = ActionButton1
-            try(ActionButton_Update)
+            this = ActionButton1; try(ActionButton_Update and function() ActionButton_Update(this) end)
         end
         -- HOVER. Nothing above puts a tooltip on screen, and a whole class of addon only runs
         -- there: hooks on GameTooltip's OnShow/OnHide, the FrameXML globals an addon replaces
