@@ -161,6 +161,14 @@ fn release_on_enter<T: AskOnce>(
     cache.clear_pending();
 }
 
+/// The mailbox's body cache (`ui_mail`), here beside the trait: its type is core's, so the impl
+/// cannot live with the feature after the crate split.
+impl AskOnce for crate::app_core::interaction::MailOpen {
+    fn clear_pending(&mut self) {
+        self.bodies.clear_pending();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

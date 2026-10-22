@@ -28,7 +28,7 @@ import re
 import subprocess
 import sys
 
-PRIVACY = {"E0603", "E0616", "E0624", "E0451", "E0364", "E0365"}
+PRIVACY = {"E0603", "E0616", "E0624", "E0451", "E0364", "E0365", "E0423", "private-type"}
 VIS_RE = re.compile(r"\bpub\s*\((?:crate|super|self|in [^)]*)\)\s*")
 DECL_RE = re.compile(
     r"^(\s*)(?:#\[[^\]]*\]\s*)*((?:pub(?:\s*\([^)]*\))?\s+)?)"
@@ -56,14 +56,19 @@ def check(crate, env):
 
 
 def code_of(m):
-    return (m.get("code") or {}).get("code") or "other"
+    code = (m.get("code") or {}).get("code")
+    if not code and re.match(r"type `[^`]+` is private", m.get("message", "")):
+        return "private-type"
+    return code or "other"
 
 
 def def_span(m):
     """The span a privacy error points at as the item's definition, if it gives one."""
     for child in m.get("children", []):
         for sp in child.get("spans", []):
-            if "defined here" in (child.get("message") or "") or (sp.get("label") or "").endswith("defined here"):
+            msg = child.get("message") or ""
+            label = sp.get("label") or ""
+            if "defined here" in msg or label.endswith("defined here") or label == "private field" or "not visible here" in msg:
                 return sp["file_name"], sp["line_start"]
     for sp in m.get("spans", []):
         if not sp.get("is_primary") and "defined here" in (sp.get("label") or ""):
@@ -83,6 +88,8 @@ def find_reexported(root, d):
         + re.escape(m.group(1))
         + r"\b"
     )
+    # Or a narrower re-export of it, `pub(crate) use …::{…, NAME, …}`, one hop down a chain.
+    reuse = re.compile(r"^[ \t]*pub\s*\([^)]*\)\s+use\b[^;]*?\b" + re.escape(m.group(1)) + r"\b[^;]*;", re.M)
     base = os.path.dirname(os.path.join(root, sp["file_name"]))
     for dp, _, fs in os.walk(base):
         for f in sorted(fs):
@@ -92,6 +99,32 @@ def find_reexported(root, d):
             for i, l in enumerate(open(path).read().split("\n")):
                 if decl.match(l):
                     return os.path.relpath(path, root), i + 1
+    for dp, _, fs in os.walk(base):
+        for f in sorted(fs):
+            if not f.endswith(".rs"):
+                continue
+            path = os.path.join(dp, f)
+            text = open(path).read()
+            hit = reuse.search(text)
+            if hit:
+                return os.path.relpath(path, root), text.count("\n", 0, hit.start()) + 1
+    return None
+
+
+def find_type(root, name):
+    """A crate-private type a public signature names (`type 'X' is private`), by name in the layer
+    crates."""
+    decl = re.compile(r"^\s*pub\s*\([^)]*\)\s+(?:struct|enum|type|trait|union)\s+" + re.escape(name) + r"\b")
+    for base in sorted(os.listdir(os.path.join(root, "crates"))):
+        if not base.startswith("benilla-app"):
+            continue
+        for dp, _, fs in os.walk(os.path.join(root, "crates", base, "src")):
+            for f in sorted(fs):
+                if f.endswith(".rs"):
+                    path = os.path.join(dp, f)
+                    for i, l in enumerate(open(path).read().split("\n")):
+                        if decl.match(l):
+                            return os.path.relpath(path, root), i + 1
     return None
 
 
@@ -109,6 +142,8 @@ def find_field(root, struct, field):
                 lines = open(path).read().split("\n")
                 for i, l in enumerate(lines):
                     if pat.search(l):
+                        if field.isdigit():
+                            return os.path.relpath(path, root), i + 1
                         depth = 0
                         for j in range(i, min(i + 400, len(lines))):
                             depth += lines[j].count("{") - lines[j].count("}")
@@ -119,11 +154,19 @@ def find_field(root, struct, field):
     return None
 
 
-def widen_line(root, rel, line_no):
+def widen_line(root, rel, line_no, every=False):
     """Make the declaration starting at `line_no` (or the next declaration below its attributes)
-    `pub`; `True` when the file changed."""
+    `pub`; `True` when the file changed. `every` widens each qualifier on the line: a tuple
+    struct's fields (E0423)."""
     path = os.path.join(root, rel)
     lines = open(path).read().split("\n")
+    if every:
+        for k in range(line_no - 1, min(line_no + 8, len(lines))):
+            if VIS_RE.search(lines[k]):
+                lines[k] = VIS_RE.sub("pub ", lines[k])
+                open(path, "w").write("\n".join(lines))
+                return True
+        return False
     for k in range(line_no - 1, min(line_no + 8, len(lines))):
         l = lines[k]
         if l.strip().startswith("#[") or l.strip().startswith("///") or not l.strip():
@@ -140,7 +183,19 @@ def widen_line(root, rel, line_no):
             elif mfield:
                 new = mfield.group(1) + "pub " + l[len(mfield.group(1)):]
             else:
-                new = re.sub(r"^(\s*)", r"\1pub ", l, count=1)
+                # An entry of a multi-line `use` list: widen the statement it belongs to.
+                for j in range(k - 1, max(k - 40, -1), -1):
+                    if ";" in lines[j]:
+                        return False
+                    mu = re.match(r"(\s*)(pub\s*\([^)]*\)\s*)?use\b", lines[j])
+                    if mu:
+                        if mu.group(2):
+                            lines[j] = VIS_RE.sub("pub ", lines[j], count=1)
+                        else:
+                            lines[j] = mu.group(1) + "pub " + lines[j][len(mu.group(1)):]
+                        open(path, "w").write("\n".join(lines))
+                        return True
+                return False  # not a declaration: never guess
         if new != l:
             lines[k] = new
             open(path, "w").write("\n".join(lines))
@@ -170,6 +225,9 @@ def main():
             span = def_span(d)
             if span is None and code_of(d) in ("E0364", "E0365"):
                 span = find_reexported(root, d)
+            if span is None and code_of(d) == "private-type":
+                mt = re.match(r"type `(?:[\w:]*::)?(\w+)` is private", d["message"])
+                span = find_type(root, mt.group(1)) if mt else None
             if span is None and code_of(d) in ("E0616", "E0451"):
                 mm = re.search(r"field[s]? `([^`]+)`(?:.*?)of (?:struct|union) `(?:[\w:]*::)?(\w+)", d["message"])
                 if mm:
@@ -177,7 +235,7 @@ def main():
                         span = find_field(root, mm.group(2), field)
                         if span and (span not in seen):
                             seen.add(span)
-                            if args.apply and widen_line(root, *span):
+                            if args.apply and widen_line(root, *span, every=field.isdigit()):
                                 progress += 1
                             widened[code_of(d)] += 1
                     continue
@@ -189,7 +247,7 @@ def main():
                 continue
             seen.add(key)
             widened[code_of(d)] += 1
-            if args.apply and widen_line(root, *key):
+            if args.apply and widen_line(root, *key, every=code_of(d) == "E0423"):
                 progress += 1
         print(f"round {rnd + 1}: {len(priv)} privacy errors, {progress} declarations widened", file=sys.stderr)
         if not args.apply or progress == 0:
@@ -200,6 +258,11 @@ def main():
     verb = "widened" if args.apply else "would widen (first round)"
     print(f"{args.package}: {verb} {len(seen)} declarations ({dict(widened)}); privacy errors left {left}")
     print(f"{args.package}: other errors {dict(rest)}")
+    for d in diags:
+        if code_of(d) in PRIVACY:
+            sp = next((s for s in d.get("spans", []) if s.get("is_primary")), None)
+            where = f"{sp['file_name']}:{sp['line_start']}" if sp else "?"
+            print(f"  left {code_of(d)} {where}: {d['message'][:120]} -> def {def_span(d)}")
     for d in diags:
         if code_of(d) not in PRIVACY:
             sp = next((s for s in d.get("spans", []) if s.get("is_primary")), None)

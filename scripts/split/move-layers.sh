@@ -3,7 +3,7 @@
 # checkout $PWD is in. The layers and their modules are scripts/split/layers.txt; every ui_*
 # module not listed elsewhere is ui; the rest stays in benilla-app, the root.
 #
-#   scripts/split/move-layers.sh [--layers "core net"] [--drop-reexports] [--widen]
+#   scripts/split/move-layers.sh [--layers "core net"] [--drop-reexports] [--widen] [--test-support]
 #
 # For each layer, in dependency order: crates/benilla-app-<layer> with benilla-app's package,
 # dependencies and features, a path dependency on every lower layer crate (and a dev-dependency
@@ -18,6 +18,9 @@
 # `--drop-reexports` then deletes each module's re-exports (a glob `use super::*` that relied on
 # one breaks; the dry run counts them). `--widen` turns every `pub(crate)` in the layer crates
 # into `pub`, the blanket widening; without it the compiler names each item a crate boundary hides.
+# `--test-support` turns each `#[cfg(test)]` in the layer crates that gates anything but a test
+# module into `#[cfg(any(test, feature = "test-support"))]`: a test helper (a constructor, a probe
+# method, `local_state::test_env`) is invisible to a dependent crate's tests otherwise.
 #
 # It never commits and never builds. Run it on a throwaway worktree for a dry run, or on the move
 # commit's tree, then `cargo check` bottom-up: `-p benilla-app-core`, `-net`, `-world`, `-ui`,
@@ -30,12 +33,14 @@ src=$app/src
 layers="core net world ui tools"
 drop=0
 widen=0
+test_support=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --layers) layers="$2"; shift 2 ;;
         --drop-reexports) drop=1; shift ;;
         --widen) widen=1; shift ;;
-        *) echo "usage: $0 [--layers \"core net …\"] [--drop-reexports] [--widen]" >&2; exit 2 ;;
+        --test-support) test_support=1; shift ;;
+        *) echo "usage: $0 [--layers \"core net …\"] [--drop-reexports] [--widen] [--test-support]" >&2; exit 2 ;;
     esac
 done
 
@@ -130,5 +135,17 @@ if [ $widen = 1 ]; then
     for b in $lower; do
         find crates/benilla-app-$b/src -name '*.rs' -exec perl -pi -e 's/\bpub\(crate\)/pub/g' {} +
     done
+fi
+if [ $test_support = 1 ]; then
+    n=0
+    for b in $lower; do
+        for f in $(grep -rlF '#[cfg(test)]' crates/benilla-app-$b/src); do
+            c=$(perl -0 -ne '$n = () = /#\[cfg\(test\)\]\n(?!(?:\s*#\[[^\n]*\n)*\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w*tests?\b)/g; print $n' "$f")
+            [ "$c" -gt 0 ] || continue
+            perl -0pi -e 's/#\[cfg\(test\)\]\n(?!(?:\s*#\[[^\n]*\n)*\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w*tests?\b)/#[cfg(any(test, feature = "test-support"))]\n/g' "$f"
+            n=$((n + c))
+        done
+    done
+    echo "test-support: $n test-only items opened to dependent crates' tests"
 fi
 echo "moved: $(for b in $lower; do echo -n "$b=$(echo $(of $b) | wc -w | tr -d ' ') "; done)"

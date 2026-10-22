@@ -122,16 +122,6 @@ pub(crate) struct UiPaint;
 
 pub(crate) use crate::app_core::schedule::UiInput;
 
-/// The pre-boot pair, replaced by [`lifecycle::seed_vm_clock`] at the first VM.
-impl Default for UiClock {
-    fn default() -> Self {
-        Self {
-            anchor: std::time::Instant::now(),
-            ui_now: 0.0,
-        }
-    }
-}
-
 /// The FrameXML digest this process loads, which the corpus harness stamps on each report.
 pub(crate) fn framexml_digest() -> String {
     content::digest()
@@ -141,12 +131,6 @@ pub(crate) fn framexml_digest() -> String {
 pub(crate) fn run_or_warn(script: &benilla_ui::script::UiScript, chunk: &str) {
     if let Err(e) = script.run(chunk) {
         warn!("ui_script: chunk failed: {e}");
-    }
-}
-
-impl Default for UiScaleCvar {
-    fn default() -> Self {
-        Self(1.0)
     }
 }
 
