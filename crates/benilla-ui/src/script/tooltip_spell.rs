@@ -806,9 +806,11 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                     let name = {
                         let mut model = lua.app_data_mut::<Model>().expect("model app_data");
                         clear_content(&mut model, h);
-                        // The same 1..36 lookup as `GetActionText` and the bar icon, so the
+                        // The same id lookup as `GetActionText` and the bar icon, so the
                         // three agree on a slot's macro.
-                        model.macros.get(a.action as usize).map(|m| m.name.clone())
+                        super::macro_action_id(a.kind, a.action)
+                            .and_then(|id| model.macros.by_id(id))
+                            .map(|m| m.name.clone())
                     };
                     fire_cleared(lua, h);
                     if let Some(name) = name {

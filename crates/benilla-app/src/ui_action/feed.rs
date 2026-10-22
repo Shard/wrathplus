@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 
-use benilla_protocol::types::{ACTION_KIND_ITEM, ACTION_KIND_MACRO, ACTION_KIND_SPELL};
+use benilla_protocol::types::{ACTION_KIND_ITEM, ACTION_KIND_SPELL};
 use benilla_ui::script::{ActionSlot, ScriptValue, UiScript};
 
 use crate::entities::ItemDisplays;
@@ -339,9 +339,9 @@ pub(super) fn feed_actions(
                 }
                 // A macro slot shows the macro's own icon (`0x4e6bf9` calls `0x4f0fd0`), never its
                 // bound spell's, though its state follows the bound spell.
-                ACTION_KIND_MACRO => (
-                    macros
-                        .get(button.action as usize)
+                kind if benilla_ui::script::macro_action_id(kind, button.action).is_some() => (
+                    benilla_ui::script::macro_action_id(kind, button.action)
+                        .and_then(|id| macros.by_id(id))
                         .and_then(|m| m.texture.clone()),
                     0,
                     false,
@@ -369,7 +369,10 @@ pub(super) fn feed_actions(
             .into_iter()
             .filter(|a| {
                 fresh.get(a) != memory.pushed.get(a)
-                    || (macros_moved && fresh.get(a).is_some_and(|s| s.kind == ACTION_KIND_MACRO))
+                    || (macros_moved
+                        && fresh.get(a).is_some_and(|s| {
+                            benilla_ui::script::macro_action_id(s.kind, s.action).is_some()
+                        }))
             })
             .collect();
         for &action in &changed {

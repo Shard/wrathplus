@@ -1050,7 +1050,7 @@ pub(super) fn seed_ui_fixture(
                 return;
             };
             // Made through the live `CreateMacro` path, so `UPDATE_MACROS` reaches the window as a
-            // player's edit does; icons index `SpellIcon.dbc`. The bodies: a plain `/cast`, a
+            // player's edit does; icons index the spell-icon list. The bodies: a plain `/cast`, a
             // multi-line macro, and a `/script` line the bar's bound-spell resolve must decline.
             const SEED: [(&str, u32, &str); 4] = [
                 ("Charge", 1, "/cast Charge"),
@@ -1065,7 +1065,7 @@ pub(super) fn seed_ui_fixture(
             let mut seed = String::new();
             for (name, icon, body) in SEED {
                 seed.push_str(&format!(
-                    "CreateMacro(\"{name}\", {icon}, \"{}\", 1, nil)\n",
+                    "CreateMacro(\"{name}\", {icon}, \"{}\")\n",
                     // Lua-escape the body's quotes and newlines.
                     body.replace('"', "\\\"").replace('\n', "\\n")
                 ));

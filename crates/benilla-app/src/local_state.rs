@@ -84,12 +84,12 @@ pub(crate) fn config_path() -> Option<PathBuf> {
     home().map(|h| h.join("config.toml"))
 }
 
-/// `benilla-config/macros/account.txt`: the account-wide macro tab (indices 1..=18).
+/// `benilla-config/macros/account.txt`: the account-wide macro tab (indices 1..=36).
 pub(crate) fn macros_account_path() -> Option<PathBuf> {
     home().map(|h| h.join("macros/account.txt"))
 }
 
-/// `benilla-config/macros/<realm>-<character>.txt`: the per-character macro tab (19..=36), the
+/// `benilla-config/macros/<realm>-<character>.txt`: the per-character macro tab (37..=54), the
 /// reference's `WTF/Account/<ACC>/<REALM>/<CHAR>/macros-cache.txt` flattened into one folder.
 pub(crate) fn macros_character_path(realm: &str, character: &str) -> Option<PathBuf> {
     let key = format!("{}-{}", file_token(realm), file_token(character));

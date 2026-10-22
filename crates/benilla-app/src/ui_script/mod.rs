@@ -454,7 +454,7 @@ fn demo_unit_feed(script: Option<NonSendMut<UiScript>>, mut fired: Local<VmMemo<
                 name: "spawn".into(),
                 texture: Some("Interface\\Icons\\Ability_Racial_Cannibalize".into()),
                 body: ".spawn 16032".into(),
-                local_only: false,
+                id: 1,
             }],
             character: Vec::new(),
         });

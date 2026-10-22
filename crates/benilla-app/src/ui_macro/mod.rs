@@ -25,7 +25,7 @@ pub(crate) struct MacroFiles {
     identity: crate::ui_script::VmMemo<Option<(String, String)>>,
 }
 
-/// Macro index to its bound spell, the reference's `[rec+0x564]` (read by `0x4e5ba0`), which an
+/// Macro id to its bound spell, the reference's `[rec+0x564]` (read by `0x4e5ba0`), which an
 /// action-bar macro slot's state reads through. A missing entry names no macro, which `0x4e5030`
 /// greys, unlike a macro that casts nothing.
 #[derive(Resource, Default)]
@@ -176,10 +176,10 @@ fn load_macros(
     files.character = crate::local_state::macros_character_path(realm, character);
     *files.identity.get(&script) = Some(id.clone());
 
-    let read = |path: &Option<std::path::PathBuf>| -> Vec<benilla_ui::script::MacroView> {
+    let read = |path: &Option<std::path::PathBuf>, base| -> Vec<benilla_ui::script::MacroView> {
         let Some(path) = path else { return Vec::new() };
         match std::fs::read_to_string(path) {
-            Ok(text) => store::parse(&text),
+            Ok(text) => store::parse(&text, base),
             // Absent is the first run, not a failure.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
             Err(e) => {
@@ -189,8 +189,8 @@ fn load_macros(
         }
     };
     let state = MacroState {
-        account: read(&files.account),
-        character: read(&files.character),
+        account: read(&files.account, 0),
+        character: read(&files.character, benilla_ui::script::CHARACTER_MACRO_BASE),
     };
     info!(
         "ui_macro: {} account + {} character macros for {character} on {realm}",
@@ -244,25 +244,23 @@ fn rebind_macro_spells(
 
     let (macros, book) = (script.macros(), script.spellbook());
     let mut fresh = std::collections::HashMap::new();
-    for index in 1..=(benilla_ui::script::MAX_MACROS as u32 * 2) {
-        let Some(m) = macros.get(index as usize) else {
-            continue;
-        };
-        fresh.insert(index, run::bound_spell(&table, &m.body, &book));
+    // By macro id, which the action words carry.
+    for m in macros.account.iter().chain(&macros.character) {
+        fresh.insert(m.id, run::bound_spell(&table, &m.body, &book));
     }
     // The engine's copy, for `GetActionAutocast`, re-pushed on every recompute so a fresh VM has
     // it. The book flag stays the player's: `run::bound_spell` resolves the player's book only.
     script.set_macro_bindings(
         fresh
             .iter()
-            .map(|(&index, b)| {
+            .map(|(&id, b)| {
                 let spell = match *b {
                     BoundSpell::None => 0,
                     BoundSpell::Unresolved => -1,
                     BoundSpell::Spell(id) => id as i32,
                 };
                 (
-                    index,
+                    id,
                     benilla_ui::script::MacroBinding {
                         spell,
                         pet_book: false,
