@@ -584,8 +584,9 @@ fn feed_auras(
     }
     if changed {
         script.fire_event("UNIT_AURA", vec![ScriptValue::Str("player".into())]);
-        // The cache rebuild's own event, no arguments (`0x4e437f`): the stock buff bar and
-        // `MiniMapTrackingFrame` register it, the unit frames `UNIT_AURA`.
+        // Labelled: 12340's event table keeps `PLAYER_AURAS_CHANGED` (`0x608af5`), but no stock
+        // 3.3.5 FrameXML, GlueXML or Blizzard addon registers it (the buff bar reads `UNIT_AURA`);
+        // its 12340 fire site is not traced. Kept for addons, with no arguments.
         script.fire_event("PLAYER_AURAS_CHANGED", vec![]);
     }
     // The reference fires these from the live descriptor's aura fields and the record's aura bits

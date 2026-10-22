@@ -949,7 +949,9 @@ fn revered_and_exalted_npc_targets_read_their_ranks_and_plates_are_green() {
             FIELD_UNIT_FACTIONTEMPLATE,
             template,
         )]));
-        let reaction = crate::ui_unit::unit_reaction(Some(&factions), &reps, &guard, Some(&me));
+        let none = crate::target::RelationContext::none();
+        let reaction =
+            crate::ui_unit::unit_reaction(Some(&factions), &reps, &guard, Some(&me), none);
         s.seat(
             "target",
             Some(UnitState {

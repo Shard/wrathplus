@@ -3,9 +3,9 @@
 
 use bevy::prelude::*;
 
-/// `ui_aura::feed_auras` fires `PLAYER_AURAS_CHANGED` and `UNIT_AURA` inline, so a feed whose
-/// state their handlers re-read (the stance feed) runs `.before(AuraEvents)` or they read last
-/// frame's.
+/// `ui_aura::feed_auras` fires `UNIT_AURA` (and the addon-only `PLAYER_AURAS_CHANGED`) inline,
+/// so a feed whose state their handlers re-read (the stance feed) runs `.before(AuraEvents)` or
+/// they read last frame's.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct AuraEvents;
 
