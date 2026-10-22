@@ -215,13 +215,19 @@ pub(super) mod tests {
         r.rows().iter().map(|&i| r.realms[i].name.clone()).collect()
     }
 
-    /// The US client reads its two categories from the install's own `Cfg_Categories.dbc`.
+    /// The enUS client reads its categories from the install's own 12340 `Cfg_Categories.dbc`: every
+    /// row its LocaleMask admits (no Region column on 3.3.5), by the table's own ids, so the US tab
+    /// is id 2 and Oceanic id 3 (1.12's were 1 and 5). Only tabs holding a realm ever show.
     #[test]
     fn the_us_categories_come_from_the_install() {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let loaded = benilla_formats::load_realm_categories(&mut chain, 1).expect("DBC");
-        assert_eq!(loaded, us());
+        let named = |id: u32| loaded.iter().find(|c| c.id == id).map(|c| c.name.as_str());
+        assert_eq!(named(1), Some("Development"));
+        assert_eq!(named(2), Some("United States"));
+        assert_eq!(named(3), Some("Oceanic"));
+        assert_eq!(loaded.len(), 36, "the enUS rows the LocaleMask admits");
     }
 
     /// A category byte is an id, matched for equality: 1 and 5 are the two US tabs.

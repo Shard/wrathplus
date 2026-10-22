@@ -29,7 +29,6 @@ pub(crate) fn type_chain(kind: FrameKind) -> &'static [&'static str] {
         FrameKind::PlayerModel => &["PlayerModel", "Model", "Frame", "Region"],
         FrameKind::DressUpModel => &["DressUpModel", "PlayerModel", "Model", "Frame", "Region"],
         FrameKind::TabardModel => &["TabardModel", "PlayerModel", "Model", "Frame", "Region"],
-        FrameKind::ModelFFX => &["ModelFFX", "Model", "Frame", "Region"],
         FrameKind::MessageFrame => &["MessageFrame", "Frame", "Region"],
         FrameKind::ScrollingMessageFrame => &["ScrollingMessageFrame", "Frame", "Region"],
         FrameKind::ColorSelect => &["ColorSelect", "Frame", "Region"],

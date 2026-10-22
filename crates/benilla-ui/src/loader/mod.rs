@@ -298,15 +298,9 @@ pub fn join_ref(base: &str, path: &str) -> String {
 
 /// A `CSimpleModel` kind, whose `LoadXML` (`0x76cac0`) reads `scale=` as the model's scale.
 pub(super) fn model_kind_tag(tag: &str) -> bool {
-    [
-        "Model",
-        "PlayerModel",
-        "DressUpModel",
-        "TabardModel",
-        "ModelFFX",
-    ]
-    .iter()
-    .any(|k| k.eq_ignore_ascii_case(tag))
+    ["Model", "PlayerModel", "DressUpModel", "TabardModel"]
+        .iter()
+        .any(|k| k.eq_ignore_ascii_case(tag))
 }
 
 impl Loader<'_> {

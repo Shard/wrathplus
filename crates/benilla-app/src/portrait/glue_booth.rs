@@ -134,6 +134,10 @@ pub(crate) enum GlueScene {
     MainMenu,
     /// A character's stage, [`glue_stage`] of its race and class.
     Race { race: u8, class: u8 },
+    /// A stage by name, as the stock glue's `SetCharSelectBackground` and
+    /// `SetCharCustomizeBackground` name it (`GlueParent.lua`'s `SetBackgroundModel` path); see
+    /// [`super::stage_from_path`].
+    Stage(&'static str),
 }
 
 /// The glue screens' input to the booth: the scene (`None` tears the booth down; select shows Orc
@@ -229,6 +233,7 @@ fn scene_token(scene: GlueScene) -> &'static str {
     match scene {
         GlueScene::MainMenu => "MainMenu_Northrend",
         GlueScene::Race { race, class } => glue_stage(race, class),
+        GlueScene::Stage(name) => name,
     }
 }
 
@@ -696,7 +701,9 @@ pub(super) fn sync_glue_scene(
     // main menu always fogs.
     let fog = match which {
         GlueScene::MainMenu => true,
-        GlueScene::Race { .. } => matches!(preview.look, Some(GlueLook::Create(_))),
+        GlueScene::Race { .. } | GlueScene::Stage(_) => {
+            matches!(preview.look, Some(GlueLook::Create(_)))
+        }
     };
     // The ghost light fork (`0x472150`, [`ghost_rig`]), shared by the scene, character and pet.
     let ghost = matches!(
@@ -1577,6 +1584,7 @@ pub(super) fn drive_create_test(
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use benilla_assets::ModelLight;
     use benilla_formats::M2Light;
 
@@ -1603,6 +1611,7 @@ mod tests {
             assert_eq!(scene_token(GlueScene::Race { race, class }), want);
         }
         assert_eq!(scene_token(GlueScene::MainMenu), "MainMenu_Northrend");
+        assert_eq!(scene_token(GlueScene::Stage("BloodElf")), "BloodElf");
         assert_eq!(
             glue_stage_model_path("DeathKnight"),
             "Interface\\Glues\\Models\\UI_DeathKnight\\UI_DeathKnight.m2"

@@ -40,17 +40,12 @@ pub(super) const DEFAULT_BINDINGS: &str = r"WTF\DefaultBindings.wtf";
 /// The core interface: the chain's own [`TOC`], patched or not, as an [`Addon`] over the chain, or
 /// `None` when the chain has no such file.
 pub(super) fn core() -> Option<Addon> {
-    read(TOC).map(|bytes| core_from(&benilla_ui::source::decode(&bytes)))
+    read(TOC).map(|bytes| core_at(TOC, &benilla_ui::source::decode(&bytes)))
 }
 
-/// The core over `toc`'s text: each file line prefixed with the toc's own directory, in the toc's
-/// order, as the runner builds its paths (`0x6edbe5`, `0x6edcf4`, `0x6edd0c`) and dispatches each
-/// in turn (`0x6edd51`).
-pub(super) fn core_from(toc: &str) -> Addon {
-    core_at(TOC, toc)
-}
-
-/// [`core_from`] for any stock toc at `path` (GlueXML's as FrameXML's).
+/// The core over the text of the stock toc at `path` (FrameXML's, GlueXML's): each file line
+/// prefixed with the toc's own directory, in the toc's order, as the runner builds its paths
+/// (`0x6edbe5`, `0x6edcf4`, `0x6edd0c`) and dispatches each in turn (`0x6edd51`).
 pub(super) fn core_at(path: &str, toc: &str) -> Addon {
     let dir = path.rsplit_once('\\').map_or("", |(d, _)| d);
     addon(

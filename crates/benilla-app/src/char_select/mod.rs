@@ -5,6 +5,7 @@
 
 mod addons;
 mod dialog;
+pub(crate) mod glue_rows;
 mod input;
 mod refresh;
 mod screen;
@@ -71,7 +72,11 @@ impl Plugin for CharSelectPlugin {
             .init_resource::<addons::AddonsPanel>()
             .add_systems(
                 OnEnter(ClientState::CharSelect),
-                (screen::enter_select, stamp_select_entry),
+                (
+                    screen::enter_select.run_if(|| !crate::ui_script::glue::stock_glue_active()),
+                    stamp_select_entry,
+                    crate::ui_script::glue::enter_stock_select,
+                ),
             )
             .add_systems(
                 OnExit(ClientState::CharSelect),
@@ -119,7 +124,8 @@ impl Plugin for CharSelectPlugin {
                         // After the UI tick: the addons panel holds the VM, and a glue screen
                         // has no push the tick must see, so the chain takes the drain side.
                         .after(crate::ui_script::UiInput)
-                        .run_if(in_state(ClientState::CharSelect)),
+                        .run_if(in_state(ClientState::CharSelect))
+                        .run_if(|| !crate::ui_script::glue::stock_glue_active()),
                 )
                     .chain()
                     .after(benilla_world::schedule::WorldStage::Net),
