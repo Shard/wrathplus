@@ -2,11 +2,11 @@
 //! and the item-tooltip views every window reads.
 
 #[cfg(test)]
+mod charge_tests;
+#[cfg(test)]
 mod descriptor_tests;
 #[cfg(test)]
 mod item_spell_tests;
-#[cfg(test)]
-mod charge_tests;
 
 use std::collections::{HashMap, HashSet};
 
@@ -1290,12 +1290,9 @@ pub(crate) fn apply_container_source(
     }
     // After the push, so a repaint reads the corrected `locked`.
     pushed |= !transitioned.is_empty();
-    // No arguments: the reference's five fire sites (`0x495415`, `0x495455`, `0x49557d`,
-    // `0x5d859a`, `0x5d94b9`) call `FrameScript_SignalEvent` (`0x703e50`), which pushes none, and
-    // stock consumers repaint from `this` (`ContainerFrame.lua:39`, `PaperDollFrame.lua:601`,
-    // `BankFrame.lua:209`).
-    for _ in transitioned {
-        script.fire_event("ITEM_LOCK_CHANGED", Vec::new());
+    // The slot each lock names: 3.3.5's consumers repaint only the slot the arguments name.
+    for (bag, slot) in transitioned {
+        script.fire_event("ITEM_LOCK_CHANGED", super::lock_args(bag, slot));
     }
     // The reference fires `BAG_OPEN(id)` from the handler (`0x5e3b35`); here it follows this
     // frame's `BAG_UPDATE`s, so the frame shown paints the bag as it is.
@@ -1356,12 +1353,11 @@ fn diff_and_push(
     for id in &closed {
         script.fire_event("BAG_CLOSED", vec![ScriptValue::Int(*id)]);
     }
-    // `PLAYERBANKSLOTS_CHANGED` has two producers in the reference: the slot's guid changing
-    // (`0x5ddcf0` fires `0x5ddd6e`) with no arguments, and the same item's fields changing
-    // (`0x4c7180` fires `0x4c728d`) with `arg1 = "player"`. So the slot's guid decides, not its
-    // view: two identical stacks swapped push equal views and still fire the argless one twice.
+    // `PLAYERBANKSLOTS_CHANGED(slot)`, the 1-based bank slot, from both of 12340's producers: the
+    // slot's guid changing (`0x6dedd0`) and the same item's fields changing (`0x5e84c0`), each
+    // `"%d"` of the field index less 0x26. So two identical stacks swapped still fire twice.
     // Planned before `memory` is rewritten, fired after the push, outside the `changed` gate.
-    let vault: Vec<bool> = {
+    let vault: Vec<i64> = {
         let empty = HashMap::new();
         let now = fresh.get(&BANK_CONTAINER).map_or(&empty, |c| &c.slots);
         let was = memory
@@ -1369,14 +1365,11 @@ fn diff_and_push(
             .get(&BANK_CONTAINER)
             .map_or(&empty, |c| &c.slots);
         (1..=28u32)
-            .filter_map(|slot| {
+            .filter(|&slot| {
                 let i = slot as usize - 1;
-                if guids.vault[i] != memory.vault_guids[i] {
-                    Some(false)
-                } else {
-                    (now.get(&slot) != was.get(&slot)).then_some(true)
-                }
+                guids.vault[i] != memory.vault_guids[i] || now.get(&slot) != was.get(&slot)
             })
+            .map(i64::from)
             .collect()
     };
     memory.vault_guids = guids.vault;
@@ -1414,9 +1407,9 @@ fn diff_and_push(
         for &bag in &changed {
             script.set_container(bag, fresh.get(&bag).cloned());
         }
-        // Ahead of `BAG_UPDATE`, one argless event per restacked slot.
-        for _ in &restacked {
-            script.fire_event("ITEM_LOCK_CHANGED", Vec::new());
+        // Ahead of `BAG_UPDATE`, one event per restacked slot.
+        for &(bag, slot) in &restacked {
+            script.fire_event("ITEM_LOCK_CHANGED", super::lock_args(bag, slot));
         }
         debug!(
             "ui_items: fed {} changed bag(s) — {}",
@@ -1436,15 +1429,9 @@ fn diff_and_push(
         }
         memory.pushed = fresh;
     }
-    // One event per changed vault slot, with no slot argument: every bank button repaints from
-    // its own slot (`feed_char` fires the same event for the bank-bag buttons).
-    for &same_item in &vault {
-        let args = if same_item {
-            vec![ScriptValue::Str("player".into())]
-        } else {
-            Vec::new()
-        };
-        script.fire_event("PLAYERBANKSLOTS_CHANGED", args);
+    // One event per changed vault slot; `feed_char` fires slots 29-35 for the bank-bag buttons.
+    for &slot in &vault {
+        script.fire_event("PLAYERBANKSLOTS_CHANGED", vec![ScriptValue::Int(slot)]);
     }
     // A `BAG_CLOSED` or vault event alone still went into the VM.
     !changed.is_empty() || !closed.is_empty() || !vault.is_empty()

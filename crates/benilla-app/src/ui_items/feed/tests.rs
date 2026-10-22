@@ -45,10 +45,10 @@ fn a_server_opened_bag_fires_bag_open_with_its_container_id() {
     assert!(s.eval::<Vec<String>>("return SEEN").unwrap().is_empty());
 }
 
-/// A new guid fires the argless event, a restack fires it with `"player"`, and two identical
-/// items swapped fire the argless one twice though the views are equal.
+/// A new guid and a restack both fire the bank slot (12340's `0x6dedd0`, `0x5e84c0`), and two
+/// identical items swapped fire both slots though the views are equal.
 #[test]
-fn playerbankslots_changed_names_its_producer_by_the_slot_guid() {
+fn playerbankslots_changed_names_the_bank_slot() {
     let mut s = UiScript::new().unwrap();
     s.run(
         "SEEN = {} \
@@ -84,7 +84,7 @@ fn playerbankslots_changed_names_its_producer_by_the_slot_guid() {
     let mut guids = NO_BAGS;
     let mut memory = FeedMemory::default();
 
-    // An item arrives in vault slot 1: the descriptor path, no arguments.
+    // An item arrives in vault slot 1: the descriptor path.
     guids.vault[0] = 0xF00D;
     apply_container_source(
         &mut s,
@@ -94,9 +94,9 @@ fn playerbankslots_changed_names_its_producer_by_the_slot_guid() {
         Vec::new(),
         Vec::new(),
     );
-    assert_eq!(seen(&mut s), vec!["PLAYERBANKSLOTS_CHANGED nil"]);
+    assert_eq!(seen(&mut s), vec!["PLAYERBANKSLOTS_CHANGED 1"]);
 
-    // The same item restacks: the item watcher's path, with the unit token.
+    // The same item restacks: the item watcher's path, the same slot.
     apply_container_source(
         &mut s,
         &mut memory,
@@ -105,7 +105,7 @@ fn playerbankslots_changed_names_its_producer_by_the_slot_guid() {
         Vec::new(),
         Vec::new(),
     );
-    assert_eq!(seen(&mut s), vec!["PLAYERBANKSLOTS_CHANGED player"]);
+    assert_eq!(seen(&mut s), vec!["PLAYERBANKSLOTS_CHANGED 1"]);
 
     apply_container_source(
         &mut s,
@@ -154,7 +154,7 @@ fn playerbankslots_changed_names_its_producer_by_the_slot_guid() {
         Vec::new(),
         Vec::new(),
     );
-    assert_eq!(seen(&mut s), vec!["PLAYERBANKSLOTS_CHANGED nil"]);
+    assert_eq!(seen(&mut s), vec!["PLAYERBANKSLOTS_CHANGED 2"]);
     guids.vault.swap(0, 1);
     let pushed = apply_container_source(
         &mut s,
@@ -167,8 +167,8 @@ fn playerbankslots_changed_names_its_producer_by_the_slot_guid() {
     assert_eq!(
         seen(&mut s),
         vec![
-            "PLAYERBANKSLOTS_CHANGED nil".to_string(),
-            "PLAYERBANKSLOTS_CHANGED nil".to_string()
+            "PLAYERBANKSLOTS_CHANGED 1".to_string(),
+            "PLAYERBANKSLOTS_CHANGED 2".to_string()
         ],
         "the swap the pushed containers cannot see"
     );
@@ -429,11 +429,9 @@ fn a_stack_ticking_down_fires_item_lock_changed_before_bag_update() {
     );
     assert_eq!(
         s.eval::<String>("return table.concat(ORDER, ' ')").unwrap(),
-        "ITEM_LOCK_CHANGED:nil,nil BAG_UPDATE:0,nil",
-        "the shot signal fires — with NO arguments, as all five of the reference's fire sites \
-         do — and precedes BAG_UPDATE. The slot it names travels in the fact \
-         that it fired at all, which is enough: every consumer repaints from its own `this`, \
-         and Quiver's shot timer only needs to know that A shot happened"
+        "ITEM_LOCK_CHANGED:0,1 BAG_UPDATE:0,nil",
+        "the shot signal names its slot, `bag, slot` as 3.3.5's ContainerFrame reads it, and \
+         precedes BAG_UPDATE"
     );
 
     // A different item in the slot, with a different count: a swap, no lock event.
