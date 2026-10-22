@@ -75,3 +75,32 @@ fn truthy(v: Option<mlua::Value>) -> bool {
         Some(_) => true,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::FollowRequest;
+    use crate::script::UiScript;
+
+    /// A unit token follows the unit; stock `UnitPopup.lua`'s `FollowUnit(name, 1)` follows the
+    /// name exactly.
+    #[test]
+    fn follow_unit_takes_a_token_or_a_name() {
+        let mut s = UiScript::new().unwrap();
+        s.run(r#"FollowUnit("target"); FollowUnit("Ally", 1); FollowUnit("Bob")"#)
+            .unwrap();
+        assert_eq!(
+            s.take_follow_requests(),
+            [
+                FollowRequest::ByUnit("target".into()),
+                FollowRequest::ByName {
+                    name: "Ally".into(),
+                    exact: true,
+                },
+                FollowRequest::ByName {
+                    name: "Bob".into(),
+                    exact: false,
+                },
+            ]
+        );
+    }
+}
