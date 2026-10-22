@@ -162,10 +162,10 @@ fn an_addon_tooltip_from_the_template_gets_the_plate() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// An addon's own `<OnLoad>` calls `GameTooltip_OnLoad()` with no argument (`TipBuddy.xml:1402`);
-/// the stock helper reads `this` (`GameTooltip.lua:79-82`) and tints the plate.
+/// An addon's own `<OnLoad>` calls 3.3.5's `GameTooltip_OnLoad(self)` (`GameTooltip.lua:78`), which
+/// tints the plate. The 1.12 bare call reads a nil `self` here, as on the reference.
 #[test]
-fn an_addon_may_call_gametooltip_onload_the_reference_way_with_no_argument() {
+fn an_addon_may_call_gametooltip_onload_with_its_tooltip() {
     benilla_formats::wow_data_or_skip!();
     let s = harness();
     let report = load_addon_xml(
@@ -174,11 +174,11 @@ fn an_addon_may_call_gametooltip_onload_the_reference_way_with_no_argument() {
              <GameTooltip name="MyTip" inherits="GameTooltipTemplate" frameStrata="TOOLTIP" hidden="true" parent="UIParent">
                <Scripts>
                  <OnLoad>
-                   GameTooltip_OnLoad()
-                   this:SetOwner(UIParent, "ANCHOR_NONE")
+                   GameTooltip_OnLoad(self)
+                   self:SetOwner(UIParent, "ANCHOR_NONE")
                  </OnLoad>
                  <OnHide>
-                   GameTooltip_OnHide()
+                   GameTooltip_OnHide(self)
                  </OnHide>
                </Scripts>
              </GameTooltip>
@@ -186,7 +186,7 @@ fn an_addon_may_call_gametooltip_onload_the_reference_way_with_no_argument() {
     );
     assert!(
         report.errors.is_empty(),
-        "a bare GameTooltip_OnLoad() must not error: {:?}",
+        "GameTooltip_OnLoad(self) must not error: {:?}",
         report.errors
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -370,8 +370,8 @@ fn an_instance_attribute_beats_the_templates() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// `GameTooltipTextLeft1` exists, hidden, from load: the template declares 30 hidden line pairs
-/// (`GameTooltipTemplate.xml:17-556`), so a corpus guard such as `GameTooltipTextLeft1:IsVisible()`
+/// `GameTooltipTextLeft1` exists, hidden, from load: the template declares 8 hidden line pairs
+/// (`GameTooltipTemplate.xml:17-160`; more grow as lines are added), so a corpus guard such as `GameTooltipTextLeft1:IsVisible()`
 /// (`Participant/Resurrection.lua:294`) answers false. A declared pair counts as a line, and adds
 /// size, only once filled.
 #[test]
@@ -382,7 +382,7 @@ fn the_tooltip_line_globals_exist_cold_and_do_not_count_as_lines() {
     for name in [
         "GameTooltipTextLeft1",
         "GameTooltipTextRight1",
-        "GameTooltipTextLeft30",
+        "GameTooltipTextLeft8",
     ] {
         assert!(
             s.eval::<bool>(&format!("return {name} ~= nil")).unwrap(),
@@ -405,7 +405,7 @@ fn the_tooltip_line_globals_exist_cold_and_do_not_count_as_lines() {
     assert_eq!(
         s.eval::<i64>("return GameTooltip:NumLines()").unwrap(),
         0,
-        "30 declared pairs must not inflate NumLines"
+        "8 declared pairs must not inflate NumLines"
     );
 
     // Filled, the declared pair is the line.

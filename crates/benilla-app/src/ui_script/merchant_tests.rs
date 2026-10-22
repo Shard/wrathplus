@@ -755,7 +755,7 @@ fn shipped_merchant_hover_scopes_highlight_and_anchors_item_tooltip() {
     assert!(!has_text(&quads, "Shield"), "the head carries no type word");
     assert!(!has_text(&quads, "Main Hand"), "row 1's tooltip cleared");
 
-    s.mouse_move(1000.0, 10.0);
+    s.mouse_move(600.0, 500.0); // off every frame: 3.3.5's corner holds the backpack button
     s.resolve();
     let quads = s.extract();
     assert!(!has_text(&quads, "Off Hand"), "tooltip hidden on leave");
