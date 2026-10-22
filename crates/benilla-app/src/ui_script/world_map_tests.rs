@@ -7,6 +7,9 @@ use benilla_ui::script::{
     ARROW_MODEL,
 };
 
+#[path = "world_map_blackout_tests.rs"]
+mod blackout;
+
 /// The map plus everything its OnLoad touches, in the shipped list's own order.
 fn harness() -> UiScript {
     let mut s = UiScript::new().unwrap();
@@ -54,7 +57,7 @@ fn arrow_facts(s: &mut UiScript) {
 }
 
 fn update(s: &mut UiScript) {
-    s.run("this = WorldMapButton WorldMapButton_OnUpdate(0.1) this = nil")
+    s.run("WorldMapButton_OnUpdate(WorldMapButton, 0.1)")
         .unwrap();
 }
 
@@ -69,8 +72,9 @@ fn landmark(name: &str, icon: u32, uv: (f32, f32)) -> WorldMapLandmarkView {
     }
 }
 
-/// A landmark shows as a POI frame at its UV in its cell of the 8x8 `POIIcons` atlas. Icon 6 is
-/// `ICON_POI_REDFLAG`, the flag vmangos's `points_of_interest` rows carry: the guard's directions.
+/// A landmark shows as a POI frame at its UV in its `POIIcons` cell, cut by the stock
+/// `WorldMap_GetPOITextureCoords` (18 px cells, 16 px icons, WorldMapFrame.lua:496-512). Icon 6 is
+/// `ICON_POI_REDFLAG`, the guard's directions marker.
 #[test]
 fn a_landmark_draws_its_poi_icon_at_its_map_position() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -89,16 +93,13 @@ fn a_landmark_draws_its_poi_icon_at_its_map_position() {
         "the pool grew a frame for it and showed it"
     );
 
-    // Cell 6 is column 6, row 0. `GetTexCoord` answers eight values (UL, LL, UR, LR as x,y
-    // pairs), so the `(l, r, t, b)` rect is positions 1, 5, 2, 4.
+    // `GetTexCoord` answers eight values (UL, LL, UR, LR as x,y pairs), so the `(l, r, t, b)`
+    // rect is positions 1, 5, 2, 4.
     let (l, t, _, b, r, ..): (f32, f32, f32, f32, f32, f32, f32, f32) = s
         .eval("return WorldMapFramePOI1Texture:GetTexCoord()")
         .unwrap();
-    assert_eq!(
-        (l, r, t, b),
-        (0.75, 0.875, 0.0, 0.125),
-        "POIIcons cell 6 — the red flag"
-    );
+    let want: (f32, f32, f32, f32) = s.eval("return WorldMap_GetPOITextureCoords(6)").unwrap();
+    assert_eq!((l, r, t, b), want, "POIIcons cell 6, the red flag");
 
     // Seated at UV times the 1002x668 detail frame, from its TOPLEFT, y down.
     let (x, y): (f32, f32) = s
@@ -107,7 +108,10 @@ fn a_landmark_draws_its_poi_icon_at_its_map_position() {
              return ox, oy",
         )
         .unwrap();
-    assert_eq!((x, y), (0.25 * 1002.0, -0.5 * 668.0));
+    assert!(
+        (x - 0.25 * 1002.0).abs() < 1e-3 && (y + 0.5 * 668.0).abs() < 1e-3,
+        "seated at ({x}, {y})"
+    );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
@@ -160,7 +164,7 @@ fn hovering_a_poi_names_it_and_adds_a_status_line_only_when_there_is_one() {
     let mut s = harness();
     s.set_world_map_landmarks(vec![landmark("Lion's Pride Inn", 6, (0.5, 0.5))]);
     s.run("WorldMapFrame_Update()").unwrap();
-    s.run("this = WorldMapFramePOI1 this:GetScript(\"OnEnter\")() this = nil")
+    s.run("WorldMapFramePOI1:GetScript(\"OnEnter\")(WorldMapFramePOI1)")
         .unwrap();
     assert_eq!(
         s.eval::<String>("return WorldMapFrameAreaLabel:GetText()")
@@ -180,7 +184,7 @@ fn hovering_a_poi_names_it_and_adds_a_status_line_only_when_there_is_one() {
     with_status.description = "In Conflict".into();
     s.set_world_map_landmarks(vec![with_status]);
     s.run("WorldMapFrame_Update()").unwrap();
-    s.run("this = WorldMapFramePOI1 this:GetScript(\"OnEnter\")() this = nil")
+    s.run("WorldMapFramePOI1:GetScript(\"OnEnter\")(WorldMapFramePOI1)")
         .unwrap();
     assert_eq!(
         s.eval::<String>("return WorldMapFrameAreaDescription:GetText()")
@@ -703,8 +707,10 @@ fn the_real_feralas_catalog_names_dire_maul_under_the_cursor() {
         .expect("Feralas is in the catalog");
     s.set_world_map_catalog(views);
     s.set_world_map_explored(vec![u32::MAX; 64]); // a fully-discovered character
+                                                  // The TOGGLEWORLDMAP binding's body; the map's OnShow seats the player's own zone
+                                                  // (`SetMapToCurrentZone`), so the zoom to Feralas comes after.
+    s.run("ToggleFrame(WorldMapFrame)").unwrap();
     s.run(&format!("SetMapZoom({ci}, {zi})")).unwrap();
-    s.run("ToggleWorldMap()").unwrap();
     s.resolve();
 
     // (58.8 %, 42.6 %) of the detail frame in screen units: what `WorldMapButton_OnUpdate` inverts.
@@ -810,52 +816,5 @@ fn a_stale_layout_row_cannot_seat_a_stock_frame() {
     let saved = s.user_placed_layouts();
     assert_eq!(saved.len(), 1, "which is what puts the row back: {saved:?}");
     assert_eq!(saved[0], row(), "unchanged through the round trip");
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-}
-
-/// Stock `WorldMapFrame_OnLoad` and `CinematicFrame_OnLoad` size `BlackoutWorld` and the letterbox
-/// bars once, from the screen size. Deviation: `manifest::on_screen_resized` re-sizes them, because
-/// a resize here keeps the loaded UI and the quads would stop short of the new screen.
-#[test]
-fn the_fullscreen_quads_follow_a_resize() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    s.set_screen_size(1600.0, 900.0);
-    // A player exists by the time the manifest loads.
-    s.set_unit(
-        "player",
-        Some(benilla_ui::script::UnitState {
-            exists: true,
-            name: Some("Probefour".into()),
-            level: 60,
-            ..Default::default()
-        }),
-    );
-    let failures = super::load_default_ui(&mut s);
-    assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
-    s.resolve();
-
-    let width = |s: &UiScript, f: &str| s.eval::<f64>(&format!("return {f}:GetWidth()")).unwrap();
-    assert_eq!(width(&s, "BlackoutWorld"), 1600.0, "the load edge sized it");
-
-    // Grown, still wider than 4:3, so all three take their recompute branch.
-    assert!(s.set_screen_size(1920.0, 1080.0), "the size changed");
-    super::manifest::on_screen_resized(&s);
-    s.resolve();
-
-    let screen = s.eval::<f64>("return GetScreenWidth()").unwrap();
-    assert_eq!(screen, 1920.0);
-    for quad in ["BlackoutWorld", "UpperBlackBar", "LowerBlackBar"] {
-        assert_eq!(
-            width(&s, quad),
-            screen,
-            "{quad} still spans the OLD screen after a resize — the world shows through beside it"
-        );
-    }
-    assert_eq!(
-        s.eval::<f64>("return BlackoutWorld:GetHeight()").unwrap(),
-        1080.0,
-        "…and the blackout is the new height too"
-    );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }

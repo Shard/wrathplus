@@ -147,6 +147,7 @@ impl PluginGroup for GamePlugins {
             .add(crate::login::LoginPlugin)
             .add(crate::realm_select::RealmSelectPlugin)
             .add(crate::char_create::CharCreatePlugin)
+            .add(crate::ui_script::glue_create::StockCreatePlugin)
             .add(SoundPlugin)
             .add(TargetPlugin)
             .add(TransportPlugin)
@@ -1030,16 +1031,14 @@ pub(crate) mod schedule_tests {
     }
 
     /// Why a VM holder in `Update` ordered before the tick may stay out of
-    /// [`crate::ui_script::UiFeed`], keyed by a suffix of the system's full name, with the
-    /// reason.
+    /// [`crate::ui_script::UiFeed`], keyed by a suffix of the system's full name, with the reason.
     const OUTSIDE_THE_FEED_PHASE: &[(&str, &str)] = &[];
 
-    /// The VM ticks once a frame (`extract::tick_script`, in `UiInput`): a push the tick must
-    /// see rides `UiFeed`, chained after the net drain and before the tick; a drain of what it
-    /// produced is `.after(UiInput)`. Read off the built graph. Fails a holder with no path to or
-    /// from the tick, one before the tick outside `UiFeed` and not argued in
-    /// [`OUTSIDE_THE_FEED_PHASE`], a `UiFeed` member the graph does not place between the drain
-    /// and the tick, and a stale row.
+    /// The VM ticks once a frame (`extract::tick_script`, in `UiInput`): a push the tick must see
+    /// rides `UiFeed`, chained after the net drain and before the tick; a drain of what it produced
+    /// is `.after(UiInput)`. Read off the built graph. Fails a holder with no path to or from the
+    /// tick, one before the tick outside `UiFeed` and not argued in [`OUTSIDE_THE_FEED_PHASE`], a
+    /// `UiFeed` member the graph does not place between the drain and the tick, and a stale row.
     #[test]
     fn every_vm_holder_in_update_declares_its_side_of_the_tick() {
         let mut app = headless_client();
@@ -1181,8 +1180,9 @@ pub(crate) mod schedule_tests {
          "the battleground probe: dev-only (`WOW_PROBE_BG`, `cfg(feature = \"dev\")`) so it is not in a player build at all, and its `mem::take` is of its OWN pending-events string, not a queue anything else fills. Its one real VM dependency is the Lua event tap, which self-heals: `EVENT_DRAIN` returns a `<tap-gone>` sentinel when the tap's globals are missing — the case this window causes, since a tap installed in the boot VM is discarded when `mint_entry_vm` builds the interface — and the probe re-installs on the next frame"),
         ("ui_death.rs", "feed_death", Because::MemoLatched,
          "`feed.vm: VmMemo<DeathAnnounced>`: a fresh memo makes the first snapshot an edge and re-announces a held offer, confirm and corpse range"),
-        ("ui_script/glue/host.rs", "stock_glue", Because::Deliberate,
-         "the stock glue's screens: its VM is the glue VM `enter_stock_login`/`enter_stock_select` install at OnEnter(Login)/OnEnter(CharSelect), before any Update, and it runs only while that VM hosts the screen (`stock_glue_up`); the in-game interface is never up here"),
+        ("ui_script/glue/host.rs", "stock_glue", Because::Deliberate, "argued at the fn"),
+        ("ui_script/glue_create.rs", "drive_stock_create", Because::Deliberate,
+         "the stock glue's create screen: its VM is the glue VM that persists from CharSelect, and it runs only while that VM hosts CharCreate (`stock_create_up`); the in-game interface is never up here"),
         ("screenshot.rs", "ask_for_captures", Because::FilledByVm,
          "`pending` holds only the VM's own `Screenshot()` asks, and the take spawns a capture, publishing nothing"),
         ("screenshot.rs", "report_captures", Because::FilledByVm,
@@ -1270,11 +1270,10 @@ pub(crate) mod schedule_tests {
         }
     }
 
-    /// A consumer (a system taking `NonSend[Mut]<UiScript>` whose body has a [`CONSUMES`]
-    /// marker) passes if the schedule shows `ingame_ui_up` on it or a set above it, if it is a
-    /// `fire_event` driven by a `VmMemo` parameter, or if [`EXEMPT`] argues it. Read off the
-    /// schedule, where a gate on a set, a tuple or the member all look alike. A stale `EXEMPT`
-    /// row fails too.
+    /// A consumer (a system taking `NonSend[Mut]<UiScript>` whose body has a [`CONSUMES`] marker)
+    /// passes if the schedule shows `ingame_ui_up` on it or a set above it, if it is a `fire_event`
+    /// driven by a `VmMemo` parameter, or if [`EXEMPT`] argues it. Read off the schedule, where a
+    /// gate on a set, a tuple or the member all look alike. A stale `EXEMPT` row fails too.
     #[test]
     fn every_one_shot_consumer_that_holds_the_vm_is_gated_or_argued() {
         use crate::test_support::{fn_items, rel_path, rust_files, src_dir};

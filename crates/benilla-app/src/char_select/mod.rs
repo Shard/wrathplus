@@ -16,6 +16,7 @@ use benilla_protocol::Character;
 use bevy::prelude::*;
 
 use crate::glue_strings::GlueStrings;
+use crate::ui_script::glue::native_glue;
 
 use crate::net::{
     CharListMessage, CharPick, CharRequest, CharacterLoginFailedMessage, EnteredWorldMessage,
@@ -72,11 +73,7 @@ impl Plugin for CharSelectPlugin {
             .init_resource::<addons::AddonsPanel>()
             .add_systems(
                 OnEnter(ClientState::CharSelect),
-                (
-                    screen::enter_select.run_if(|| !crate::ui_script::glue::stock_glue_active()),
-                    stamp_select_entry,
-                    crate::ui_script::glue::enter_stock_select,
-                ),
+                (screen::enter_select.run_if(native_glue), stamp_select_entry),
             )
             .add_systems(
                 OnExit(ClientState::CharSelect),
@@ -125,7 +122,7 @@ impl Plugin for CharSelectPlugin {
                         // has no push the tick must see, so the chain takes the drain side.
                         .after(crate::ui_script::UiInput)
                         .run_if(in_state(ClientState::CharSelect))
-                        .run_if(|| !crate::ui_script::glue::stock_glue_active()),
+                        .run_if(native_glue),
                 )
                     .chain()
                     .after(benilla_world::schedule::WorldStage::Net),

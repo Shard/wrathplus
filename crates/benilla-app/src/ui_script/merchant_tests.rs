@@ -975,7 +975,7 @@ fn shipped_merchant_frame_arms_the_buy_cursor_on_hover() {
     assert_eq!(s.ui_cursor(), None, "no override before any hover");
 
     // The row button's inline `<OnEnter>`, fired as the engine fires it: `this` bound first.
-    s.run("this = MerchantItem1ItemButton MerchantItem1ItemButton:GetScript(\"OnEnter\")() this = nil")
+    s.run("MerchantItem1ItemButton:GetScript(\"OnEnter\")(MerchantItem1ItemButton)")
         .unwrap();
     s.tick(0.016);
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
@@ -995,12 +995,12 @@ fn shipped_merchant_frame_arms_the_buy_cursor_on_hover() {
     s.set_modifiers(false, false, false);
 
     // OnLeave resets the cursor and clears `itemHover` (`MerchantFrame.xml:87-91`).
-    s.run("this = MerchantItem1ItemButton MerchantItem1ItemButton:GetScript(\"OnLeave\")() this = nil")
+    s.run("MerchantItem1ItemButton:GetScript(\"OnLeave\")(MerchantItem1ItemButton)")
         .unwrap();
     s.tick(0.016);
     assert_eq!(s.ui_cursor(), None, "leaving the row resets the cursor");
 
-    s.run("this = MerchantItem2ItemButton MerchantItem2ItemButton:GetScript(\"OnEnter\")() this = nil")
+    s.run("MerchantItem2ItemButton:GetScript(\"OnEnter\")(MerchantItem2ItemButton)")
         .unwrap();
     s.tick(0.016);
     assert_eq!(

@@ -25,6 +25,6 @@ update, 020A request account data, 020B update account data (caller-compressed),
 account-data times, 0374 set title (`SetTitle`: an int32 `CharTitles` bit index, -1 clears; App
 wires Native UI's title verb).
 
-Not actionable: 02EF addon info (not self-describing: its entry count comes from the client's auth
-addon block; Connected keeps an empty addon list), 00F9 opening cinematic and 0154/0156 death bind
+Not actionable: 02EF addon info (not self-describing, so it is decoded against the 23 stock
+secure addons our auth block names; Connected carries the ones it marked secure), 00F9 opening cinematic and 0154/0156 death bind
 point (AC `Handle_NULL`).

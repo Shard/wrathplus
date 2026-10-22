@@ -385,7 +385,7 @@ fn scrolling_edit_helpers_answer_bare_calls_from_a_handler() {
 
     // A bare call with `this` set, as a handler makes it.
     s.run(
-        "this = SeEdit; ScrollingEdit_OnTextChanged(); ScrollingEdit_OnCursorChanged(0, 42, 0, 14); this = nil",
+        "ScrollingEdit_OnTextChanged(SeEdit); ScrollingEdit_OnCursorChanged(SeEdit, 0, 42, 0, 14)",
     )
     .unwrap();
     assert!(

@@ -7,8 +7,15 @@ use bevy::prelude::*;
 use super::{TrainerErrors, TrainerOpen};
 use crate::net::NetHandlerApp;
 
-/// Register the trainer handlers, one per kind, plus the session-end listener.
+/// `serviceTypeFilter` (12340 `0x51ed64`, name `0xa006e0`, `"%d"` of 3, record `ds:0xbd09e4`): the
+/// trainer window's state filter, one bit per service state. The VM reads and writes it
+/// (`benilla_ui` trainer filter); registering it here seeds it and saves it with the config.
+pub(crate) const CVARS: &[crate::cvars::Registered] =
+    &[crate::cvars::same("serviceTypeFilter", "3")];
+
+/// Register the trainer handlers, one per kind, plus the session-end listener and the filter CVar.
 pub(super) fn register(app: &mut App) {
+    crate::cvars::RegisterCvars::register_cvars(app, CVARS);
     use SessionEventKind as K;
     app.net_handler(K::TrainerList, on_list)
         .net_handler(K::TrainerBuySucceeded, on_buy_succeeded)

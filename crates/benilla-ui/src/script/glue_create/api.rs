@@ -41,7 +41,7 @@ fn values(v: Vec<Value>) -> mlua::Result<MultiValue> {
     Ok(MultiValue::from_vec(v))
 }
 
-pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
     // GetAvailableRaces() (`0x4e1880`): (name, fileString, enabled) per create-list race, the
     // names in the selected sex.
     set(lua, "GetAvailableRaces", |lua, _| {
@@ -261,6 +261,21 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         values(vec![])
     })?;
 
+    // GetCreateBackgroundModel(): the `UI_<name>` stage `CharacterCreate.lua` hands
+    // `SetBackgroundModel`. Inferred: its binding was not found; App seeds 12340's select-screen
+    // rule (`GetSelectBackgroundModel` `0x4e3620`), the race file with no entry.
+    set(lua, "GetCreateBackgroundModel", |lua, _| {
+        let name = state(lua, |s| {
+            let key = (s.selection.race, s.selection.class);
+            s.catalog
+                .backgrounds
+                .get(&key)
+                .cloned()
+                .or_else(|| s.race_row().map(|r| r.file.clone()))
+        });
+        values(vec![name.map_or(Ok(Value::Nil), |n| str_value(lua, &n))?])
+    })?;
+
     // GetHairCustomization() / GetFacialHairCustomization() (`0x4e0900`, `0x4e0970`): the race's
     // tokens, "NORMAL" with no race.
     set(lua, "GetHairCustomization", |lua, _| {
@@ -328,20 +343,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         values(vec![])
     })?;
 
-    // GetRandomName() (`0x4dfca0`): 12340 rolls `0x4e63a0` until the name check passes with 4 to
-    // 10 letters. Labelled: the generator is unread, so this is a stand-in of the same shape.
+    // GetRandomName() (`0x4dfca0`): the selected race and sex's `NameGen.dbc` walk
+    // ([`super::name_gen`]); "" with no names for them.
     set(lua, "GetRandomName", |lua, _| {
         let name = state(lua, |s| {
-            const C: &[u8] = b"bdfghklmnrstvz";
-            const V: &[u8] = b"aeiou";
-            let len = 4 + (s.next_random() % 7) as usize;
-            let mut out = String::with_capacity(len);
-            for i in 0..len {
-                let set = if i % 2 == 0 { C } else { V };
-                let ch = set[(s.next_random() % set.len() as u64) as usize] as char;
-                out.push(if i == 0 { ch.to_ascii_uppercase() } else { ch });
-            }
-            out
+            let key = (s.selection.race, s.selection.sex);
+            let names = s.catalog.names.get(&key).cloned().unwrap_or_default();
+            super::name_gen::random_name(&names, || s.next_random())
         });
         values(vec![str_value(lua, &name)?])
     })?;
