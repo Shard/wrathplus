@@ -46,6 +46,9 @@ pub struct SpellDisplay {
     /// Build 12340's `AttributesEx7` (`+0x2c`): `0x800` interrupts only non-players, `0x1000`
     /// silences only non-players, `0x2000` the cast cannot be shown as uninterruptible.
     pub attributes_ex7: u32,
+    /// Build 12340's `AttributesEx6` (`+0x28`): `0x1` hides the tooltip cooldown cell,
+    /// `0x80000000` keeps op 11 off the category recovery.
+    pub attributes_ex6: u32,
     /// Build 12340's `SchoolMask` (`+0x284`), one bit per school.
     pub school_mask: u32,
     /// `SpellFamilyName` (column 160): `GetSpellModifiers` (`0x6e6b30`) applies nothing unless it
@@ -90,6 +93,9 @@ pub struct SpellDisplay {
     /// The category's `SpellCategory.dbc` flags carry `0x2`, matching every cooldown query
     /// (`GetCooldownInfo` `0x6e13e0`); true only for wand Shoot's 351, whose swing sweeps the bar.
     pub category_wildcard: bool,
+    /// The category's `SpellCategory.dbc` flags carry `0x1`: its recovery scales by the main-hand
+    /// weapon's delay, per 1000 ms (`007fef60`).
+    pub category_weapon_speed: bool,
     /// `RecoveryTime` (column 19): the spell's own cooldown in ms.
     pub recovery_ms: u32,
     /// `InterruptFlags` (column 21): what breaks the cast; `0xf` on timed casts, `0x1` movement.
@@ -248,6 +254,7 @@ impl Default for SpellDisplay {
             attributes_ex4: 0,
             attributes_ex5: 0,
             attributes_ex7: 0,
+            attributes_ex6: 0,
             school_mask: 0,
             spell_family: 0,
             spell_family_flags: 0,
@@ -264,6 +271,7 @@ impl Default for SpellDisplay {
             dispel: 0,
             category: 0,
             category_wildcard: false,
+            category_weapon_speed: false,
             recovery_ms: 0,
             interrupt_flags: 0,
             aura_interrupt_flags: 0,

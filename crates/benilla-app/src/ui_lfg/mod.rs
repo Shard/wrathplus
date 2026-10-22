@@ -2,7 +2,7 @@
 //! preview receipts are reduced by [`l1`], the queue, role check, proposal, boot and status ones by
 //! [`l2`] (in the same drain); the other families stay queued for their owners.
 pub(crate) mod auth;
-mod catalog;
+pub(crate) mod catalog;
 mod l1;
 mod l2;
 

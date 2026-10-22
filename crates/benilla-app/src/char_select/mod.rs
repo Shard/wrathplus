@@ -9,6 +9,7 @@ pub(crate) mod glue_rows;
 mod input;
 mod refresh;
 mod screen;
+pub(crate) mod service_reply;
 
 use benilla_protocol::CharAction;
 #[cfg(test)]
@@ -59,6 +60,7 @@ pub(crate) const CVARS: &[crate::cvars::Registered] = {
 
 impl Plugin for CharSelectPlugin {
     fn build(&self, app: &mut App) {
+        service_reply::register(app);
         crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.insert_state(self.start)
             .configure_sets(Update, InWorldGated.run_if(in_state(ClientState::InWorld)))
@@ -441,9 +443,7 @@ pub(super) enum GlueRaise {
 
 fn delete_result(
     native: Option<MessageReader<crate::net::WrathCharActionResultMessage>>,
-    services: Option<
-        ResMut<crate::net::wrath_char_service_capture::NativeCharServiceReplies>,
-    >,
+    services: Option<MessageReader<service_reply::CharServiceReply>>,
     mut dialog: ResMut<crate::glue::dialog::GlueDialog>,
     strings: Option<Res<GlueStrings>>,
     (answers, raises): (
@@ -472,7 +472,7 @@ fn delete_result(
             dialog.close();
         }
     }
-    for reply in services.into_iter().flat_map(|mut q| q.0.drain(..).collect::<Vec<_>>()) {
+    for reply in service_reply::replies_for(services, ClientState::CharSelect) {
         let code = match &reply {
             _ if reply.changed_roster() => {
                 if dialog.kind == Some(DialogKind::Status) {
@@ -1217,80 +1217,6 @@ mod tests {
             dialog.text, "Character deletion failed",
             "fallback without GlueStrings"
         );
-    }
-
-    /// A refused native rename opens the dialog with its `CHAR_NAME_*` key; an applied one
-    /// (result 0, the roster already refreshed) opens nothing.
-    #[test]
-    fn a_refused_character_service_raises_the_glue_dialog() {
-        use crate::glue::dialog::GlueDialog;
-        use crate::net::wrath_char_service_capture::NativeCharServiceReplies;
-        use benilla_protocol::wrath_char_services::Reply;
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .init_resource::<GlueDialog>()
-            .init_resource::<NativeCharServiceReplies>()
-            .add_systems(Update, delete_result);
-        app.world_mut()
-            .resource_mut::<NativeCharServiceReplies>()
-            .0
-            .push_back(Reply::Rename {
-                result: 0,
-                renamed: Some((7, "Newname".into())),
-            });
-        app.update();
-        assert!(!app.world().resource::<GlueDialog>().is_open());
-        app.world_mut()
-            .resource_mut::<NativeCharServiceReplies>()
-            .0
-            .push_back(Reply::Rename {
-                result: 0x5e,
-                renamed: None,
-            });
-        app.update();
-        assert!(app.world().resource::<GlueDialog>().is_open());
-        assert!(app
-            .world()
-            .resource::<NativeCharServiceReplies>()
-            .0
-            .is_empty());
-    }
-
-    /// An applied rename takes down its `CHAR_RENAME_IN_PROGRESS` status; the status's Cancel
-    /// closes it too.
-    #[test]
-    fn an_applied_rename_or_cancel_takes_down_the_rename_status() {
-        use crate::glue::dialog::{DialogKind, GlueDialog, GlueDialogAnswer};
-        use crate::net::wrath_char_service_capture::NativeCharServiceReplies;
-        use benilla_protocol::wrath_char_services::Reply;
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .add_message::<GlueDialogAnswer>()
-            .init_resource::<GlueDialog>()
-            .init_resource::<NativeCharServiceReplies>()
-            .add_systems(Update, delete_result);
-        app.world_mut()
-            .resource_mut::<GlueDialog>()
-            .open_status("Renaming Character...");
-        app.world_mut()
-            .resource_mut::<NativeCharServiceReplies>()
-            .0
-            .push_back(Reply::Rename {
-                result: 0,
-                renamed: Some((7, "Newname".into())),
-            });
-        app.update();
-        assert!(!app.world().resource::<GlueDialog>().is_open());
-        app.world_mut()
-            .resource_mut::<GlueDialog>()
-            .open_status("Renaming Character...");
-        app.world_mut().write_message(GlueDialogAnswer {
-            kind: DialogKind::Status,
-            button1: true,
-            button2: false,
-        });
-        app.update();
-        assert!(!app.world().resource::<GlueDialog>().is_open());
     }
 
     /// `0x4d9bd0`'s order: the two locks, then the rename flag, else enter.

@@ -16,7 +16,6 @@ use super::spell_deps::{Chance, Changes, Deps, RangeSeen, Reagents, Seen, UnitFi
 use crate::items::Items;
 use crate::net::{NetCommands, ObjectStore, Objects, SelfPlayer};
 use crate::spell::usable::{self, CostBasis};
-use crate::spell::SpellsCastTime;
 use crate::ui_action::{PlayerActions, Spells};
 use crate::ui_items::{count_of, InventoryScope};
 use crate::ui_trainer::TrainerTooltipSubjects;
@@ -72,6 +71,40 @@ pub(crate) struct ViewCtx<'a, 'w, 's> {
     pub(super) spell_mods: &'a crate::spell::SpellModifiers,
     /// The VM's `GlobalStrings.lua`, where the keyed cells and the `$` tokens' templates resolve.
     pub(super) get: &'a dyn Fn(&str) -> Option<String>,
+}
+
+/// The player's worn ranged weapon and main hand as [`super::cast_cells::Weapons`], each read only
+/// where the spell reads it: the ranged slot for a ranged spell in the player's view (`007ff480`
+/// and `007ff180` read the caster's), the main hand for a weapon-speed category in either
+/// (`007fef60` reads the active player's). A template not cached yet reads as no weapon.
+fn worn_weapons(
+    vctx: &ViewCtx,
+    d: &benilla_formats::SpellDisplay,
+    player_view: bool,
+    deps: &mut Deps,
+) -> super::cast_cells::Weapons {
+    const MAIN_HAND: u8 = 15;
+    const RANGED: u8 = 17;
+    let Some(store) = vctx.store else {
+        return super::cast_cells::Weapons::default();
+    };
+    let mut worn = |slot: u8| {
+        deps.worn |= 1 << slot;
+        let guid = store.0.player_inv_slot(slot).filter(|&g| g != 0)?;
+        let entry = vctx.objects.object(guid)?.object_entry()?;
+        vctx.items.template(entry, guid, vctx.commands)
+    };
+    let ranged = (player_view && d.attributes & 0x2 != 0)
+        .then(|| worn(RANGED).map(|t| (t.delay_ms, t.ranged_mod_range)))
+        .flatten();
+    let main_hand_delay = d
+        .category_weapon_speed
+        .then(|| worn(MAIN_HAND).map(|t| t.delay_ms))
+        .flatten();
+    super::cast_cells::Weapons {
+        ranged,
+        main_hand_delay,
+    }
 }
 
 /// Build one spell's tooltip view, every cell resolved here where the catalogs live, and what it
@@ -158,51 +191,28 @@ pub(crate) fn build_view(
         }
     }
     let cost = super::cost_cell::cost_cell(d, resolved_cost, &spells.catalog, vctx.get);
-    // The range cell: two attribute gates, `GetMinMaxRange` (`0x6e3480`, `0x52e9c2`), then
-    // `max <= 0`. There is no melee wording: the melee row (flags bit 0, row 2 only) resolves to
-    // `max(reach + casterReach + 1.3333334, 5.0)` and prints like any other, usually "5 yd range".
-    let range = (!d.tooltip_omits_range_line())
-        .then(|| {
-            let row = spells.ranges.get(d.range_index);
-            // The pet views read the pet's reaches, which are among the pet's own inputs.
-            if matches!(caster, ViewCaster::Player)
-                && benilla_formats::min_max_range_reads_units(d, row)
-            {
-                deps.borrow_mut().range_units = true;
-            }
-            // The call passes a null target (`0x52e9c2`): the auto-attack target is the melee arm's
-            // own lookup, and the ranged arm, with no target, pads nothing.
-            let targets = benilla_formats::RangeTargets {
-                target: None,
-                attack_target: vctx.attack_target,
-            };
-            let (min, max) = vctx
-                .spell_mods
-                .min_max_range(d, row, vctx.range_caster, targets)?;
-            if max <= 0.0 {
-                return None;
-            }
-            // `SPELL_RANGE`'s hole is a string: the number is composed first, `"%d"` or `"%d-%d"`
-            // (`0x854fb4`, Charge's 8-25), each a `fistp` conversion that rounds to nearest.
-            let yd = |v: f32| f64::from(v).round_ties_even() as i64;
-            let yards = if min > 0.0 {
-                format!("{}-{}", yd(min), yd(max))
-            } else {
-                format!("{}", yd(max))
-            };
-            keyed(vctx.get, "SPELL_RANGE", &[Arg::S(&yards)])
-        })
-        .flatten();
-    // The cast line: gate `0x52eb15` also omits it for a TRADE_SKILL or ATTACK `Effect[0]`; then
-    // the ladder `0x52eb45`-`0x52ec90` over `GetCastTime(1)` (`52eb4d`), unclamped, where a
-    // negative time is "Instant cast" (`0x52ebce`) and a zero one is "Instant cast" only for a
-    // mana spell with a cost (`0x52ec4b`).
-    let cast_time = if d.tooltip_omits_cast_line() {
-        None
-    } else {
-        // `GetCastTime` takes the selector too (`52eb45`), and its level term is `0x6e3130`'s. The
-        // player's is its level only where the row scales by one.
-        if matches!(caster, ViewCaster::Player)
+    // The range, cast and cooldown cells, 12340's (`super::cast_cells`). A melee row reads the
+    // caster's and the auto-attack target's reaches; the pet views read the pet's own.
+    let player_view = matches!(caster, ViewCaster::Player);
+    let weapons = worn_weapons(vctx, d, player_view, &mut deps.borrow_mut());
+    if player_view && super::cast_cells::range_reads_units(d, &spells.ranges, vctx.spell_mods) {
+        deps.borrow_mut().range_units = true;
+    }
+    let range = super::cast_cells::range_cell(
+        d,
+        &spells.ranges,
+        vctx.spell_mods,
+        vctx.range_caster,
+        vctx.attack_target,
+        weapons
+            .ranged
+            .filter(|_| player_view)
+            .map(|(_, scale)| scale),
+        vctx.get,
+    );
+    let (cast_time, cooldown) = if super::cast_cells::has_cast_line(d) {
+        // The level term is `0x6e3130`'s; the player's is read only where the row scales by one.
+        if player_view
             && spells
                 .cast_times
                 .get(d.casting_time_index)
@@ -210,59 +220,39 @@ pub(crate) fn build_view(
         {
             deps.borrow_mut().unit(UnitField::Level);
         }
-        let level = match caster {
-            ViewCaster::Player => vctx.store.and_then(|s| s.0.unit_level()).unwrap_or(0),
-            ViewCaster::Pet(pet) => pet_level(pet),
+        let (level, haste_unit) = match caster {
+            ViewCaster::Player => {
+                deps.borrow_mut().unit(UnitField::CastSpeed);
+                let level = vctx.store.and_then(|s| s.0.unit_level()).unwrap_or(0);
+                (level, vctx.store.map(|s| &s.0))
+            }
+            ViewCaster::Pet(pet) => (pet_level(pet), pet),
         };
-        let base = spells.cast_time_unclamped_ms(d, level, vctx.spell_mods);
-        // `%.3g` templates: the seconds go over as a real.
-        if base > 0 {
-            let (key, v) = if base >= 60_000 {
-                ("SPELL_CAST_TIME_MIN", f64::from(base) / 60_000.0)
-            } else {
-                ("SPELL_CAST_TIME_SEC", f64::from(base) / 1000.0)
-            };
-            keyed(vctx.get, key, &[Arg::F(v)])
+        // The ranged attack time is the player's, a pet view's too (`007fef60`).
+        let reads_ranged_time = d.ranged_speed_cooldown() || player_view && d.attributes & 0x2 != 0;
+        let ranged_time = if reads_ranged_time {
+            deps.borrow_mut().unit(UnitField::RangedTime);
+            vctx.store
+                .and_then(|s| s.0.unit_ranged_attack_time())
+                .unwrap_or(0)
         } else {
-            let key = if base < 0 {
-                "SPELL_CAST_TIME_INSTANT"
-            } else if d.on_next_swing() {
-                "SPELL_ON_NEXT_SWING"
-            } else if d.tooltip_on_next_ranged() {
-                "SPELL_ON_NEXT_RANGED"
-            } else if d.tooltip_channeled() {
-                "SPELL_CAST_CHANNELED"
-            } else if d.power_type == 0 && resolved_cost > 0 {
-                "SPELL_CAST_TIME_INSTANT"
-            } else {
-                "SPELL_CAST_TIME_INSTANT_NO_MANA"
-            };
-            keyed(vctx.get, key, &[])
-        }
-    };
-    // The larger recovery column (`0x52eada`): op 11 follows the ranged-speed category pad. The
-    // ranged attack time is the player's, a pet view's too.
-    let ranged_ms = if d.ranged_speed_cooldown() {
-        deps.borrow_mut().unit(UnitField::RangedTime);
-        vctx.store
-            .and_then(|s| s.0.unit_ranged_attack_time())
-            .unwrap_or(0)
+            0
+        };
+        let player_ranged = weapons
+            .ranged
+            .filter(|_| player_view)
+            .map(|(delay, _)| (delay, ranged_time));
+        let mods = vctx.spell_mods;
+        let ms = super::cast_cells::cast_time_ms(d, spells, mods, level, haste_unit, player_ranged);
+        let cooldown_ms =
+            super::cast_cells::cooldown_ms(d, mods, weapons.main_hand_delay, ranged_time);
+        (
+            super::cast_cells::cast_cell(d, ms, resolved_cost, vctx.get),
+            super::cast_cells::cooldown_cell(d, cooldown_ms, vctx.get),
+        )
     } else {
-        0
+        (None, None)
     };
-    let (own_recovery, category_recovery) = vctx.spell_mods.spell_cooldowns(d, ranged_ms);
-    let recovery_ms = own_recovery.max(category_recovery);
-    let cooldown = (recovery_ms > 0)
-        .then(|| {
-            let secs = f64::from(recovery_ms) / 1000.0;
-            let (key, v) = if secs >= 60.0 {
-                ("SPELL_RECAST_TIME_MIN", secs / 60.0)
-            } else {
-                ("SPELL_RECAST_TIME_SEC", secs)
-            };
-            keyed(vctx.get, key, &[Arg::F(v)])
-        })
-        .flatten();
     // The required-form line (`0x52f10a`-`0x52f2ae`). With `AttributesEx2` bit 19 set the mask is
     // permissive (Inner Fire in Shadowform), and the line is skipped (`0x52f115`).
     let requires_form = (d.stances != 0 && !d.form_mask_is_permissive())
@@ -345,8 +335,9 @@ pub(crate) fn build_view(
         rank: d.rank.clone(),
         // The aura variant's right column (`0x52f8e5`), gated on `SpellDispelType.dbc` `[+0x28]`.
         dispel_type: spells.catalog.dispel_name(d).map(str::to_string),
+        cost_range_lines: range.lines(cost.as_deref()),
+        range: range.single(),
         cost,
-        range,
         cast_time,
         cooldown,
         requires_item,

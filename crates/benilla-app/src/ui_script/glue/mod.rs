@@ -41,12 +41,15 @@ pub(crate) fn load_glue_ui(script: &UiScript) -> Vec<String> {
     failures
 }
 
-/// Whether the stock GlueXML screens host the login screen this run (`WOW_STOCK_GLUE=1`), in
-/// place of the native Rust screen. Off by default until the stock screen is proven live; the
-/// native screen is deleted then.
+/// Whether the stock GlueXML screens host the glue screens this run: wherever the install carries
+/// `GlueXML.toc`, unless `WOW_NATIVE_GLUE=1` asks for the native Rust screens, the fallback kept
+/// through the first live sessions and deleted then. With no install (a hermetic run) the native
+/// screens host.
 pub(crate) fn stock_glue_active() -> bool {
-    static ON: std::sync::LazyLock<bool> =
-        std::sync::LazyLock::new(|| std::env::var("WOW_STOCK_GLUE").as_deref() == Ok("1"));
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        std::env::var("WOW_NATIVE_GLUE").as_deref() != Ok("1")
+            && reference_ui::read(GLUE_TOC).is_some()
+    });
     *ON
 }
 

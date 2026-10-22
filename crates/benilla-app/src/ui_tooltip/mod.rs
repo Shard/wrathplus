@@ -16,9 +16,11 @@ use crate::ui_script::UiFeed;
 use crate::ui_trainer::TrainerFeed;
 use crate::ui_unit::{enrich_unit, snapshot, unit_reaction, SnapshotTables, UnitFeed};
 
-mod spell_deps;
+/// The spell tooltip's range, cast and cooldown cells, 12340's.
+mod cast_cells;
 /// The spell tooltip's cost cell, its runes and its per-type keys.
 mod cost_cell;
+mod spell_deps;
 pub(crate) mod spell_feed;
 use spell_feed::feed_spell_tooltips;
 

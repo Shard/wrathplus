@@ -1,4 +1,4 @@
-//! The stock CharacterCreate on the glue VM (`WOW_STOCK_GLUE=1`): the host side of
+//! The stock CharacterCreate on the glue VM (`glue::stock_glue_active`): the host side of
 //! [`benilla_ui::script::glue_create`]. Entering the screen seeds the API's catalog from the
 //! installed data; each frame the VM's selection dresses the create booth, `CreateCharacter`
 //! goes out through the native create's wire path, and its result comes back as the engine's

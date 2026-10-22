@@ -55,6 +55,7 @@ mod tooltip;
 mod tooltip_owner;
 mod tooltip_item;
 mod tooltip_spell;
+mod tooltip_spell_lines;
 mod tooltip_unit;
 mod toplevel;
 mod visibility;

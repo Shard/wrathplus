@@ -85,7 +85,7 @@ impl Plugin for CharCreatePlugin {
     }
 }
 
-/// The native screen runs unless the stock GlueXML screen hosts the create (`WOW_STOCK_GLUE=1`).
+/// The native screen runs unless the stock GlueXML screen hosts the create (`stock_glue_active`).
 fn native_create() -> bool {
     !crate::ui_script::glue::stock_glue_active()
 }
@@ -593,7 +593,7 @@ fn paid_flow(
     paid: &mut paid::PaidChange,
     dialog: &mut crate::glue::dialog::GlueDialog,
     answers: &mut MessageReader<crate::glue::dialog::GlueDialogAnswer>,
-    services: Option<ResMut<crate::net::wrath_char_service_capture::NativeCharServiceReplies>>,
+    services: Option<MessageReader<crate::char_select::service_reply::CharServiceReply>>,
     pick: &CharPick,
     sel: &CreateSelection,
     strings: &GlueStrings,
@@ -623,13 +623,12 @@ fn paid_flow(
             _ => {}
         }
     }
-    let Some(mut services) = services else {
-        return;
-    };
+    // Read whether or not a change is pending: this screen's replies answer it or nothing.
+    let replies = crate::char_select::service_reply::replies_for(services, ClientState::CharCreate);
     if paid.0.is_none() {
         return;
     }
-    for reply in services.0.drain(..).collect::<Vec<_>>() {
+    for reply in replies {
         use benilla_protocol::wrath_char_services::Reply;
         let code = match &reply {
             _ if reply.changed_roster() => {
@@ -668,7 +667,7 @@ fn create_result(
         ResMut<paid::PaidChange>,
         ResMut<crate::glue::dialog::GlueDialog>,
         MessageReader<crate::glue::dialog::GlueDialogAnswer>,
-        Option<ResMut<crate::net::wrath_char_service_capture::NativeCharServiceReplies>>,
+        Option<MessageReader<crate::char_select::service_reply::CharServiceReply>>,
         Res<CharPick>,
     ),
 ) {
