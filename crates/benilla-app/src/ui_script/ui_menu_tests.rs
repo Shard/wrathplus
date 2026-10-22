@@ -1,5 +1,5 @@
-//! The stock `UIMenu` kit as the chat menu uses it: rows fixed at 104x16 by `UIMenu_Initialize`,
-//! the label the button's own text, the shortcut a sibling anchored RIGHT. `SetText` anchors a new
+//! The stock `UIMenu` kit as the chat menu uses it: rows 16 high, as wide as `UIMenu_AutoSize`
+//! makes them, the label the button's own text, the shortcut a sibling anchored RIGHT. `SetText` anchors a new
 //! label by the normal font's `justifyH` (`CSimpleButton::SetFontString`, `0x778d20`).
 
 use benilla_ui::script::UiScript;
@@ -10,6 +10,8 @@ use super::test_ui::load_ui as load_xml;
 fn chat_menu() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
+    // Before the load: `ChatMenu_OnLoad` measures its rows (`UIMenu_AutoSize`).
+    s.set_text_measurer(Box::new(super::FixedWidthFont(8.0)));
     for f in [
         r"Interface\FrameXML\GlobalStrings.lua",
         r"Interface\FrameXML\Fonts.xml",
@@ -28,8 +30,10 @@ fn chat_menu() -> UiScript {
     ] {
         load_xml(&mut s, f);
     }
-    s.set_text_measurer(Box::new(super::FixedWidthFont(8.0)));
     s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
+    // As the session does at login (`ui_chat::settings`): `FloatingChatFrame_Update` sides the
+    // button frame the menu button, and so the menu, hang from (`FloatingChatFrame.lua:167`).
+    s.fire_event("UPDATE_CHAT_WINDOWS", vec![]);
     let _ = s.errors();
     s
 }
@@ -48,25 +52,39 @@ fn chat_menu_rows_left_align_their_label_and_right_align_their_shortcut() {
     assert!(s.errors().is_empty(), "opening it raises: {:?}", s.errors());
     s.resolve();
 
-    // Macro is the tenth row `ChatMenu_OnLoad` adds (`ChatFrame.lua:2301`).
+    // Macro is the twelfth row 3.3.5's `ChatMenu_OnLoad` adds (`ChatFrame.lua:4250`).
     assert_eq!(
-        s.eval::<String>("return ChatMenuButton10:GetText()")
+        s.eval::<String>("return ChatMenuButton12:GetText()")
             .unwrap(),
         "Macro"
     );
     assert_eq!(
-        s.eval::<String>("return ChatMenuButton10ShortcutText:GetText()")
+        s.eval::<String>("return ChatMenuButton12ShortcutText:GetText()")
             .unwrap(),
         "/macro"
     );
-    // `UIMenu_Initialize` fixes the row at 104 wide (`UIMenu.lua:16`).
-    let (row_l, row_r) = edges(&mut s, "ChatMenuButton10");
-    assert_eq!(row_r - row_l, 104.0, "UIMENU_BUTTON_WIDTH");
+    // `UIMenu_AutoSize` widens every row to the widest label plus shortcut, plus 20 of padding
+    // (`UIMenu.lua:143-171`), as `ChatMenu_OnLoad` ends (`ChatFrame.lua:4251`).
+    let widest = s
+        .eval::<f32>(
+            "local w = 0 for i = 1, ChatMenu.numButtons do \
+               local b = _G['ChatMenuButton'..i] \
+               local t = _G['ChatMenuButton'..i..'ShortcutText']:GetText() or '' \
+               w = math.max(w, 8 * (#b:GetText() + #t)) end return w",
+        )
+        .unwrap();
+    let (row_l, row_r) = edges(&mut s, "ChatMenuButton12");
+    assert_eq!(row_r - row_l, widest + 20.0, "the auto-sized row");
+    assert_eq!(
+        s.eval::<f32>("return ChatMenu:GetWidth()").unwrap(),
+        widest + 20.0 + 24.0,
+        "and the menu, its two 12-wide borders around it"
+    );
 
     // The label's implicit anchor is LEFT to LEFT (0, 0), from `<NormalFont justifyH="LEFT"/>`.
     let (p, rp, x, y): (String, String, f32, f32) = s
         .eval(
-            "local p, _, rp, x, y = ChatMenuButton10:GetFontString():GetPoint(1) \
+            "local p, _, rp, x, y = ChatMenuButton12:GetFontString():GetPoint(1) \
              return p, rp, x, y",
         )
         .unwrap();
@@ -75,12 +93,12 @@ fn chat_menu_rows_left_align_their_label_and_right_align_their_shortcut() {
         ("LEFT", "LEFT", 0.0, 0.0),
         "the label is anchored by the normal font's justify"
     );
-    let (label_l, label_r) = edges(&mut s, "ChatMenuButton10:GetFontString()");
+    let (label_l, label_r) = edges(&mut s, "ChatMenuButton12:GetFontString()");
     assert_eq!(label_l, row_l, "the label starts at the row's left edge");
     // The template anchors the shortcut string RIGHT.
-    let (short_l, short_r) = edges(&mut s, "ChatMenuButton10ShortcutText");
+    let (short_l, short_r) = edges(&mut s, "ChatMenuButton12ShortcutText");
     assert_eq!(short_r, row_r, "the shortcut ends at the row's right edge");
-    // With 8 px glyphs "Macro" spans 40 and "/macro" 48 of 104; a centred label (32..72) overlaps.
+    // With 8 px glyphs "Macro" spans 40 and "/macro" 48: left and right, they never meet.
     assert!(
         label_r <= short_l,
         "label {label_l}..{label_r} collides with shortcut {short_l}..{short_r}"
@@ -106,8 +124,10 @@ fn a_menu_rows_label_reports_the_normal_fonts_justify_and_object() {
         "LEFT"
     );
     assert!(
-        s.eval::<bool>("return ChatMenuButton1:GetFontString():GetFontObject() == GameFontNormal")
-            .unwrap(),
-        "the label inherits the button's normal font object"
+        s.eval::<bool>(
+            "return ChatMenuButton1:GetFontString():GetFontObject() == GameFontNormalLeft"
+        )
+        .unwrap(),
+        "the label inherits the button's normal font object (`UIMenu.xml:31`)"
     );
 }

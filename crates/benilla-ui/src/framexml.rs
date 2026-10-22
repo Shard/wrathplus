@@ -339,8 +339,7 @@ fn element_from_node(node: roxmltree::Node) -> Element {
 /// attributes override or extend the template's (case-insensitively). The reference merges
 /// nothing: `LoadXML` re-enters itself on the one object against each template, the most distant
 /// first, then the instance (`0x76985c`; `<Frames>` repeat the walk, `0x76a060`), and reads `name`
-/// and `id` from the instance alone (`PreLoadXML 0x769770`). Here `name` and `virtual` merge like
-/// any attribute. A cycle is skipped with a warning.
+/// and `id` from the instance alone (`PreLoadXML 0x769770`), as `merge` does. Cycles warn.
 pub fn expand(
     element: &Element,
     templates: &HashMap<String, Element>,
@@ -422,9 +421,10 @@ fn expand_inner(
     }
 }
 
-/// [`expand`]'s merge; `over`'s tag wins, and its body when it has one.
+/// [`expand`]'s merge; `over`'s tag wins, its body when it has one, its `name`/`virtual` alone.
 fn merge(base: &Element, over: &Element) -> Element {
     let mut attrs = base.attrs.clone();
+    attrs.retain(|(k, _)| !matches!(k.to_ascii_lowercase().as_str(), "name" | "virtual"));
     for (k, v) in &over.attrs {
         if let Some(slot) = attrs.iter_mut().find(|(ek, _)| ek.eq_ignore_ascii_case(k)) {
             slot.1 = v.clone();

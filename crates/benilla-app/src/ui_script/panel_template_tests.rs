@@ -329,39 +329,33 @@ fn a_scroll_frame_from_the_template_wires_its_bar_two_parents_deep() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Three links: `UIOptionsCheckButtonTemplate`'s size (`UIOptionsFrame.xml:6-10`) over
-/// `OptionsCheckButtonTemplate`'s hit rect and click sound (`OptionsFrameTemplates.xml:40-51`) over
-/// `UICheckButtonTemplate`.
+/// Two links in 3.3.5: `OptionsCheckButtonTemplate`'s label over `OptionsBaseCheckButtonTemplate`'s
+/// size, hit rect and click sound (`OptionsPanelTemplates.xml:10-58`).
 #[test]
 fn the_options_check_button_resolves_its_whole_inheritance_chain() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    s.run(
-        r#"MyOpt = CreateFrame("CheckButton", "MyOpt", UIParent, "UIOptionsCheckButtonTemplate")"#,
-    )
-    .unwrap();
+    s.run(r#"MyOpt = CreateFrame("CheckButton", "MyOpt", UIParent, "OptionsCheckButtonTemplate")"#)
+        .unwrap();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 
     assert_eq!(
         s.eval::<(f64, f64)>("return MyOpt:GetWidth(), MyOpt:GetHeight()")
             .unwrap(),
         (26.0, 26.0),
-        "UIOptionsFrame.xml's own size override, the LAST link in the chain"
+        "OptionsBaseCheckButtonTemplate's size, the ROOT link"
     );
     let (_, right, _, _) = s
         .eval::<(f64, f64, f64, f64)>("return MyOpt:GetHitRectInsets()")
         .unwrap();
-    assert_eq!(
-        right, -100.0,
-        "OptionsCheckButtonTemplate's label-catching hit rect, the MIDDLE link"
-    );
+    assert_eq!(right, -100.0, "and its label-catching hit rect");
     assert!(
         s.eval::<bool>(r#"return getglobal("MyOptText") ~= nil"#)
             .unwrap(),
-        "and UICheckButtonTemplate's label, the ROOT link — still named after the caller"
+        "OptionsCheckButtonTemplate's label, the LEAF link, named after the caller"
     );
 
-    // The middle link's OnClick plays the option toggle sounds.
+    // The root link's OnClick plays the option toggle sounds.
     let _ = s.take_sounds();
     s.run("MyOpt:Click()").unwrap();
     assert!(
@@ -369,33 +363,6 @@ fn the_options_check_button_resolves_its_whole_inheritance_chain() {
         "clicking an options checkbox makes the reference's toggle sound"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-}
-
-/// `PanelTemplates_TabResize`'s `tab` defaults to `this` (`UIPanelTemplates.lua:33-38`), and stock
-/// tabs call it without one from `OnLoad` or `OnShow`; a real `OnLoad` is what sets `this`.
-#[test]
-fn tab_resize_falls_back_to_this_when_no_tab_is_passed() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = harness();
-    s.set_text_measurer(Box::new(super::FixedWidthFont(6.0)));
-    let doc = benilla_ui::framexml::parse(
-        r#"<Ui>
-            <Button name="ProbeTab" inherits="CharacterFrameTabButtonTemplate" text="Macros">
-                <Anchors><Anchor point="TOPLEFT"/></Anchors>
-                <Scripts><OnLoad>PanelTemplates_TabResize(0)</OnLoad></Scripts>
-            </Button>
-        </Ui>"#,
-    )
-    .unwrap();
-    let report = benilla_ui::loader::load_in(&s, &doc, "test", &|_: &str| None);
-    assert!(
-        report.errors.is_empty(),
-        "the OnLoad must not throw: {:?}",
-        report.errors
-    );
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-    let width = s.eval::<f64>("return ProbeTab:GetWidth()").unwrap();
-    assert!(width > 0.0, "the tab got a width, got {width}");
 }
 
 /// The stock tab fits its text once, in `<OnShow>` (`CharacterFrameTemplates.xml:77-80`), so the
