@@ -695,12 +695,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let mode = match name.as_deref() {
                 None => None, // no-arg == ResetCursor
                 Some("POINT_CURSOR") => Some(UiCursorMode::Point),
+                Some("INSPECT_CURSOR") => Some(UiCursorMode::Inspect), // `UIParent.lua:2917-2919`
                 Some("CAST_CURSOR") => Some(UiCursorMode::Cast),
                 Some("CAST_ERROR_CURSOR") => Some(UiCursorMode::CastError),
                 Some("BUY_CURSOR") => Some(UiCursorMode::Buy),
                 Some("BUY_ERROR_CURSOR") => Some(UiCursorMode::UnableBuy),
-                // Ignored: the reference loads an unknown name as a custom cursor bitmap, which is
-                // not built.
+                // Ignored: an unknown name is a custom cursor bitmap, which is not built.
                 Some(_) => return Ok(()),
             };
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");

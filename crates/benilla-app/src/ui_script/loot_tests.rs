@@ -1,6 +1,6 @@
 use benilla_ui::script::{
-    DressUpIntent, ExtractedQuad, LootRow, LootState, MerchantItem, MerchantState, QuadContent,
-    SoundRequest, UiScript,
+    ExtractedQuad, LootRow, LootState, MerchantItem, MerchantState, QuadContent, SoundRequest,
+    UiScript,
 };
 
 use super::test_ui::load_ui as load_xml;
@@ -92,15 +92,15 @@ fn shipped_loot_frame_drives_end_to_end() {
     for f in super::test_ui::LOOT_UI {
         load_xml(&mut s, f);
     }
-    assert_eq!(
-        load_xml(&mut s, "Interface\\FrameXML\\LootFrame.xml"),
-        34,
-        "the STOCK file's own shape: the window, its portrait overlay and Next/Prev art, \
-         four LootButton rows each carrying ItemButtonTemplate's sub-frames, the two pagers, the \
-         close button, and GroupLootDropDown with the dropdown template's own children. Our \
-         transcription materialized 10 — a count is a fingerprint of a file, not a property of a \
-         loot window, and this one is now the reference's"
-    );
+    load_xml(&mut s, "Interface\\FrameXML\\LootFrame.xml");
+    // The stock file's own shape, by name: the harness seats the whole 3.3.5 session, so a
+    // per-file frame count measures nothing.
+    assert!(s
+        .eval::<bool>(
+            "return LootFrame:GetObjectType() == 'Frame' and LootButton4:GetObjectType() == 'Button' \
+             and LootFrameUpButton and LootFrameDownButton and LootCloseButton and true"
+        )
+        .unwrap());
 
     s.resolve();
     let has_icon = |quads: &[ExtractedQuad], needle: &str| {
@@ -112,7 +112,7 @@ fn shipped_loot_frame_drives_end_to_end() {
         !has_icon(&s.extract(), "INV_Misc_Coin_01"),
         "loot window starts hidden"
     );
-    assert!(s.eval::<bool>("return GetLeftFrame() == nil").unwrap());
+    assert!(s.eval::<bool>("return GetUIPanel('left') == nil").unwrap());
 
     s.set_loot(Some(coin_and_two_items()));
     s.fire_event("LOOT_OPENED", vec![]);
@@ -252,13 +252,15 @@ fn shipped_loot_frame_drives_end_to_end() {
     );
     assert!(!s.eval::<bool>("return LootFrame:IsVisible()").unwrap());
     assert!(
-        s.eval::<bool>("return GetLeftFrame() == nil").unwrap(),
+        s.eval::<bool>("return GetUIPanel('left') == nil").unwrap(),
         "HideUIPanel vacated the left slot"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Only an empty loot plays a Lua sound, `LOOTWINDOWOPENEMPTY` (LootFrame.lua:135-136).
+/// Only an empty loot plays a Lua sound, `LOOTWINDOWOPENEMPTY` (LootFrame.lua:197-199). Stock
+/// `LootFrame_Show` shows the window before it counts the rows (`:165-166`), so `OnShow` reads the
+/// previous open's count: the kit plays on an empty open that follows an empty one.
 #[test]
 fn loot_empty_roll_plays_the_empty_open_kit() {
     benilla_formats::wow_data_or_skip!();
@@ -290,15 +292,22 @@ fn loot_empty_roll_plays_the_empty_open_kit() {
     }));
     s.fire_event("LOOT_OPENED", vec![]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
+    assert!(
+        s.take_sounds().is_empty(),
+        "OnShow still reads the last open's three rows"
+    );
+    s.fire_event("LOOT_CLOSED", vec![]);
+    s.fire_event("LOOT_OPENED", vec![]);
     assert_eq!(
         s.take_sounds(),
         vec![SoundRequest::KitName("LOOTWINDOWOPENEMPTY".into())],
-        "an empty loot roll plays the empty-open kit"
+        "an empty loot roll after an empty one plays the empty-open kit"
     );
 }
 
 /// A fishing open plays "FISHING REEL IN" (kit 3407, "Fishing Reel in": the lookup ignores case)
-/// and swaps the skull for `FishingLoot-Icon`; every show resets it (LootFrame.lua:134-140).
+/// from `OnShow`, whose `FishingLoot-Icon` stock `LootFrame_Show` then overwrites with the skull
+/// (LootFrame.lua:194, :200-203).
 #[test]
 fn fishing_loot_open_plays_the_reel_and_swaps_the_portrait() {
     benilla_formats::wow_data_or_skip!();
@@ -328,12 +337,8 @@ fn fishing_loot_open_plays_the_reel_and_swaps_the_portrait() {
     );
     let quads = s.extract();
     assert!(
-        has_icon(&quads, "FishingLoot-Icon"),
-        "the portrait ring shows the fishing icon"
-    );
-    assert!(
-        !has_icon(&quads, "TargetDead"),
-        "…instead of the dead-target skull"
+        has_icon(&quads, "TargetDead") && !has_icon(&quads, "FishingLoot-Icon"),
+        "the skull, stamped after OnShow's fishing icon"
     );
 
     s.fire_event("LOOT_CLOSED", vec![]);
@@ -464,7 +469,7 @@ fn shipped_loot_pushed_to_center_by_merchant() {
     s.fire_event("LOOT_OPENED", vec![]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert!(
-        s.eval::<bool>("return GetLeftFrame():GetName() == \"LootFrame\"")
+        s.eval::<bool>("return GetUIPanel('left'):GetName() == \"LootFrame\"")
             .unwrap(),
         "loot took the empty left slot"
     );
@@ -488,12 +493,12 @@ fn shipped_loot_pushed_to_center_by_merchant() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 
     assert!(
-        s.eval::<bool>("return GetCenterFrame():GetName() == \"LootFrame\"")
+        s.eval::<bool>("return GetUIPanel('center'):GetName() == \"LootFrame\"")
             .unwrap(),
         "loot was pushed to center, not replaced"
     );
     assert!(
-        s.eval::<bool>("return GetLeftFrame():GetName() == \"MerchantFrame\"")
+        s.eval::<bool>("return GetUIPanel('left'):GetName() == \"MerchantFrame\"")
             .unwrap(),
         "merchant took the left slot loot vacated"
     );
@@ -626,15 +631,19 @@ fn ctrl_and_shift_on_a_loot_row_preview_and_post_without_looting() {
         "an unmodified click still loots the row"
     );
 
-    assert!(s.focus_editbox("ChatFrameEditBox"));
+    // `ChatEdit_InsertLink` writes into the open box with a leading space (ChatFrame.lua:3490-3493).
+    s.run(r#"ChatFrame_OpenChat("")"#).unwrap();
+    let typed = |s: &UiScript| {
+        s.eval::<String>("return ChatEdit_GetActiveWindow():GetText()")
+            .unwrap()
+    };
     s.set_modifiers(true, false, false);
     s.mouse_button(x, y, "LeftButton", true);
     s.mouse_button(x, y, "LeftButton", false);
     s.set_modifiers(false, false, false);
     assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
-            .unwrap(),
-        WOOL_LINK,
+        typed(&s),
+        format!(" {WOOL_LINK}"),
         "the row's full escaped link landed in the chat box"
     );
     assert!(
@@ -653,9 +662,8 @@ fn ctrl_and_shift_on_a_loot_row_preview_and_post_without_looting() {
         s.errors()
     );
     assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
-            .unwrap(),
-        WOOL_LINK,
+        typed(&s),
+        format!(" {WOOL_LINK}"),
         "and it must not disturb what is already typed"
     );
     assert!(
@@ -675,17 +683,13 @@ fn ctrl_and_shift_on_a_loot_row_preview_and_post_without_looting() {
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 
-    // Ctrl: the dressing room wearing it, and no loot. Last, because the room takes the left panel
-    // slot and moves the loot window (pushable 2 against 7).
+    // Ctrl: `DressUpItemLink`, which dresses only an item with a display (DressUpFrame.lua:2-3);
+    // cloth has none, so nothing opens, and nothing is looted either.
     s.set_modifiers(false, true, false);
     s.mouse_button(x, y, "LeftButton", true);
     s.mouse_button(x, y, "LeftButton", false);
     s.set_modifiers(false, false, false);
-    assert_eq!(
-        s.take_dressup_intents(),
-        vec![DressUpIntent::Dress, DressUpIntent::TryOn(2589)],
-        "re-dress first, then try the looted item on"
-    );
+    assert!(s.take_dressup_intents().is_empty(), "not dressable");
     assert!(
         s.take_loot_picks().is_empty(),
         "a ctrl-click must not also loot the row"
@@ -947,8 +951,8 @@ fn the_loot_bind_confirm_raises_the_dialog_and_okay_calls_loot_slot() {
     assert_eq!(
         s.eval::<String>("return StaticPopup1Text:GetText()")
             .unwrap(),
-        "Looting this item will bind it to you.",
-        "the real GlobalStrings LOOT_NO_DROP, which carries no format specifier"
+        "Looting |cff1eff00Wool Cloth|r will bind it to you.",
+        "3.3.5's LOOT_NO_DROP formats the row's item in its quality colour (GlobalStrings.lua:4812)"
     );
     assert_eq!(
         s.eval::<String>("return StaticPopup1Button1:GetText()")
@@ -1152,18 +1156,13 @@ fn stock_loot_rows_wear_the_item_button_art_and_light_under_the_cursor() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 
     s.resolve();
-    let border = |quads: &[ExtractedQuad]| {
-        quads
-            .iter()
-            .filter(|q| {
-                matches!(&q.content, QuadContent::Texture { path: Some(p), .. }
-                    if p.contains("UI-Quickslot2"))
-            })
-            .count()
-    };
     assert_eq!(
-        border(&s.extract()),
-        3,
+        s.eval::<Vec<bool>>(
+            "local t = {} for i = 1, 4 do local b = _G['LootButton' .. i] t[i] = (b:IsShown() \
+             and b:GetNormalTexture():GetTexture():find('UI%-Quickslot2')) ~= nil end return t"
+        )
+        .unwrap(),
+        [true, true, true, false],
         "ItemButtonTemplate's <NormalTexture> is the Quickslot border on each of the three rows"
     );
 
