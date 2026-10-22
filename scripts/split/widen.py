@@ -62,18 +62,30 @@ def code_of(m):
     return code or "other"
 
 
-def def_span(m):
-    """The span a privacy error points at as the item's definition, if it gives one."""
+def def_spans(m):
+    """Every span a privacy error points at as the item's definition, most direct first: a tuple
+    struct's field, then the "defined here" notes (which may name only a re-export of it)."""
+    out = []
+    for sp in m.get("spans", []):
+        if "private if any of the fields" in (sp.get("label") or ""):
+            out.append((sp["file_name"], sp["line_start"]))
     for child in m.get("children", []):
         for sp in child.get("spans", []):
             msg = child.get("message") or ""
             label = sp.get("label") or ""
             if "defined here" in msg or label.endswith("defined here") or label == "private field" or "not visible here" in msg:
-                return sp["file_name"], sp["line_start"]
+                out.append((sp["file_name"], sp["line_start"]))
     for sp in m.get("spans", []):
-        if not sp.get("is_primary") and "defined here" in (sp.get("label") or ""):
-            return sp["file_name"], sp["line_start"]
-    return None
+        label = sp.get("label") or ""
+        if not sp.get("is_primary") and "defined here" in label:
+            out.append((sp["file_name"], sp["line_start"]))
+    return list(dict.fromkeys(out))
+
+
+def def_span(m):
+    """The most direct of [`def_spans`], if any."""
+    spans = def_spans(m)
+    return spans[0] if spans else None
 
 
 def find_reexported(root, d):
@@ -226,7 +238,7 @@ def main():
             if span is None and code_of(d) in ("E0364", "E0365"):
                 span = find_reexported(root, d)
             if span is None and code_of(d) == "private-type":
-                mt = re.match(r"type `(?:[\w:]*::)?(\w+)` is private", d["message"])
+                mt = re.match(r"type `(?:[\w:]*::)?(\w+)(?:<[^`]*>)?` is private", d["message"])
                 span = find_type(root, mt.group(1)) if mt else None
             if span is None and code_of(d) in ("E0616", "E0451"):
                 mm = re.search(r"field[s]? `([^`]+)`(?:.*?)of (?:struct|union) `(?:[\w:]*::)?(\w+)", d["message"])
@@ -242,13 +254,21 @@ def main():
             if span is None:
                 print(f"no definition span: {d['message']}", file=sys.stderr)
                 continue
-            key = (os.path.relpath(os.path.join(root, span[0]), root), span[1])
-            if key in seen:
-                continue
-            seen.add(key)
-            widened[code_of(d)] += 1
-            if args.apply and widen_line(root, *key, every=code_of(d) == "E0423"):
-                progress += 1
+            # The first candidate that changes a file: a field already `pub` leaves the
+            # re-export the note names.
+            every = code_of(d) == "E0423" or "tuple struct constructor" in d["message"]
+            for cand in [span] + [s for s in def_spans(d) if s != span]:
+                key = (os.path.relpath(os.path.join(root, cand[0]), root), cand[1])
+                if key in seen:
+                    continue
+                seen.add(key)
+                if not args.apply:
+                    widened[code_of(d)] += 1
+                    break
+                if widen_line(root, *key, every=every):
+                    widened[code_of(d)] += 1
+                    progress += 1
+                    break
         print(f"round {rnd + 1}: {len(priv)} privacy errors, {progress} declarations widened", file=sys.stderr)
         if not args.apply or progress == 0:
             break
@@ -256,7 +276,7 @@ def main():
     rest = collections.Counter(code_of(d) for d in diags if code_of(d) not in PRIVACY)
     left = sum(1 for d in diags if code_of(d) in PRIVACY)
     verb = "widened" if args.apply else "would widen (first round)"
-    print(f"{args.package}: {verb} {len(seen)} declarations ({dict(widened)}); privacy errors left {left}")
+    print(f"{args.package}: {verb} {sum(widened.values())} declarations ({dict(widened)}); privacy errors left {left}")
     print(f"{args.package}: other errors {dict(rest)}")
     for d in diags:
         if code_of(d) in PRIVACY:

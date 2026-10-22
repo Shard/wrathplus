@@ -63,7 +63,14 @@ if [ $drop = 1 ]; then
     done
 fi
 
-lower=""   # the layers already moved, lowest first
+# The layers already moved, lowest first: an earlier run's crates count, so each layer can be its
+# own commit (`--layers core`, then `--layers net`, …).
+lower=""
+new=""   # the layers this run moves
+for l in core net world ui tools; do
+    [[ " $layers " == *" $l "* ]] && continue
+    [ -f crates/benilla-app-$l/Cargo.toml ] && lower+=" $l"
+done
 for l in $layers; do
     crate=benilla-app-$l
     dst=crates/$crate
@@ -92,14 +99,23 @@ for l in $layers; do
         c="$(cfg_of "$m")"
         [ -n "$c" ] && echo "$c" >> "$dst/src/lib.rs"
         echo "pub mod $m;" >> "$dst/src/lib.rs"
-        # The module's files, and the `#[path]` siblings its root file names at src/.
-        for f in $src/$m.rs $(find $src/$m -name '*.rs' 2>/dev/null); do
+        # The module's files, and the `#[path]` siblings at src/ they name, transitively: a
+        # sibling may itself be a module root with test siblings (`ui_cast` -> `ui_spell_targeting`
+        # -> its tests).
+        sibs=""
+        todo="$src/$m.rs $(find $src/$m -name '*.rs' 2>/dev/null || true)"
+        while [ -n "${todo// /}" ]; do
+            set -- $todo; f="$1"; shift; todo="$*"
             [ -f "$f" ] || continue
-            { grep -oE '#\[path = "[^"/]+\.rs"\]' "$f" || true; } | sed -E 's/#\[path = "(.*)"\]/\1/' | while read -r p; do
-                d="$(dirname "$f")"
-                [ "$d" = "$src" ] && [ -f "$d/$p" ] && git mv "$d/$p" "$dst/src/$p" || true
+            [ "$(dirname "$f")" = "$src" ] || [ "$f" = "$src/$m.rs" ] || case "$f" in $src/$m/*) ;; *) continue ;; esac
+            for p in $( { grep -oE '#\[path = "[^"/]+\.rs"\]' "$f" || true; } | sed -E 's/#\[path = "(.*)"\]/\1/'); do
+                [ "$(dirname "$f")" = "$src" ] && [ -f "$src/$p" ] || continue
+                case " $sibs " in *" $p "*) continue ;; esac
+                sibs+=" $p"
+                todo+=" $src/$p"
             done
         done
+        for p in $sibs; do git mv "$src/$p" "$dst/src/$p"; done
         [ -f $src/$m.rs ] && git mv $src/$m.rs "$dst/src/$m.rs"
         [ -d $src/$m ] && git mv $src/$m "$dst/src/$m"
         perl -0pi -e "s/^(?:pub(?:\(crate\))? )?mod $m;\n/pub use benilla_app_$l::$m;\n/m" $src/lib.rs
@@ -117,19 +133,35 @@ for l in $layers; do
     fi
     git add "$dst"
     lower+=" $l"
+    new+=" $l"
 done
 
-# The root depends on every layer crate and forwards its features.
-deps=""; devf=""; tsf=""
-for b in $lower; do
+# The root depends on every layer crate and forwards its features; its own tests get each layer
+# crate's test helpers through a dev-dependency with `test-support`, as the layer crates do.
+deps=""; devdeps=""; devf=""; tsf=""
+for b in $new; do
     deps+="benilla-app-$b = { path = \"../benilla-app-$b\", default-features = false }"$'\n'
+    devdeps+="benilla-app-$b = { path = \"../benilla-app-$b\", default-features = false, features = [\"test-support\"] }"$'\n'
     devf+=", \"benilla-app-$b/dev\""
     tsf+="\"benilla-app-$b/test-support\", "
 done
-DEVF="$devf" TSF="${tsf%, }" DEPS="$deps" perl -0pi -e '
+DEVF="$devf" TSF="${tsf%, }" DEPS="$deps" DEVDEPS="$devdeps" perl -0pi -e '
     s/^(dev = \[[^\]]*)\]/$1$ENV{DEVF}]/m;
     s/^test-support = \[\]/test-support = [$ENV{TSF}]/m;
-    s/^\[dependencies\]\n/[dependencies]\n$ENV{DEPS}/m' $app/Cargo.toml
+    s/^\[dependencies\]\n/[dependencies]\n$ENV{DEPS}/m;
+    s/^\[dev-dependencies\]\n/[dev-dependencies]\n$ENV{DEVDEPS}/m' $app/Cargo.toml
+
+# The shipped UI tree goes with `ui_script` (its `include_dir!` and source-tree reads name its own
+# crate), and the dev resolver in `run_mode` (core) names that crate's folder.
+case " $lower " in
+    *" ui "*)
+        if [ -d $app/assets ]; then
+            git mv $app/assets crates/benilla-app-ui/assets
+            perl -0pi -e 's/Some\(std::path::Path::new\(env!\("CARGO_MANIFEST_DIR"\)\)\)/Some(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "\/..\/benilla-app-ui")))/' \
+                crates/benilla-app-core/src/run_mode.rs
+        fi
+        ;;
+esac
 
 if [ $widen = 1 ]; then
     for b in $lower; do
@@ -146,6 +178,31 @@ if [ $test_support = 1 ]; then
             n=$((n + c))
         done
     done
-    echo "test-support: $n test-only items opened to dependent crates' tests"
+    # A test module another crate's tests name (`use crate::ui_pet::press_tests::…`) is a shared
+    # helper too: open it the same way.
+    o=0
+    for b in $lower; do
+        for f in $(grep -rlE '^\s*#\[cfg\(test\)\]' crates/benilla-app-$b/src); do
+            for name in $(perl -0 -ne 'while (/#\[cfg\(test\)\]\n(?:\s*#\[[^\n]*\n)*\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w*tests?)\b/g) { print "$1\n" }' "$f" | sort -u); do
+                # The declaring file's module path: `ui_pet/mod.rs` -> `ui_pet`, `a/b.rs` -> `a::b`.
+                mp="${f#crates/benilla-app-$b/src/}"; mp="${mp%.rs}"; mp="${mp%/mod}"; mp="${mp//\//::}"
+                users=$(grep -rlE "crate::$mp::$name(::|\b)" crates/benilla-app*/src --include=*.rs | grep -v "^crates/benilla-app-$b/" || true)
+                [ -n "$users" ] || continue
+                NAME="$name" perl -0pi -e 's/#\[cfg\(test\)\]\n((?:\s*#\[[^\n]*\n)*\s*)(?:pub(?:\([^)]*\))?\s+)?mod\s+$ENV{NAME}\b/#[cfg(any(test, feature = "test-support"))]\n$1pub mod $ENV{NAME}/g' "$f"
+                o=$((o + 1))
+            done
+        done
+    done
+    echo "test-support: $o test modules other crates' tests name, opened"
+    # A `test_support` module is the shared helpers' home; its items are for other crates' tests.
+    t=0
+    for b in $lower; do
+        for f in $(find crates/benilla-app-$b/src -path '*test_support*' -name '*.rs'); do
+            c=$(grep -c 'pub(crate)' "$f" || true)
+            perl -pi -e 's/\bpub\(crate\)/pub/g' "$f"
+            t=$((t + c))
+        done
+    done
+    echo "test-support: $n test-only items opened to dependent crates' tests; $t test_support items made pub"
 fi
 echo "moved: $(for b in $lower; do echo -n "$b=$(echo $(of $b) | wc -w | tr -d ' ') "; done)"
