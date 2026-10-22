@@ -52,6 +52,7 @@ fn vm() -> UiScript {
             ((2, 0), [9, 9, 9, 9, 9]),
             ((2, 1), [9, 9, 9, 9, 9]),
         ]),
+        backgrounds: HashMap::from([((2, 1), "Orc".to_string())]),
     });
     s.run("ResetCharCustomize()").unwrap();
     s
@@ -91,6 +92,16 @@ fn the_lists_answer_triples_and_the_selection_reads_back_at_once() {
     assert_eq!(
         s.eval::<String>("return GetHairCustomization()").unwrap(),
         "HORN"
+    );
+    assert_eq!(
+        s.eval::<String>("return GetCreateBackgroundModel()").unwrap(),
+        "Orc"
+    );
+    s.run("SetSelectedRace(1)").unwrap();
+    assert_eq!(
+        s.eval::<String>("return GetCreateBackgroundModel()").unwrap(),
+        "Human",
+        "no seeded stage: the race file"
     );
 }
 
