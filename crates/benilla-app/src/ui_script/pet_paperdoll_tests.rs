@@ -16,6 +16,9 @@ fn load_pet_page() -> UiScript {
         super::test_ui::load_ui_strict(&mut s, f);
     }
     s.set_unit("player", Some(player_unit()));
+    // The login's pet-bar pass: the page decides the Pet tab only on its events
+    // (PetPaperDollFrame.lua:130-135, 51-64).
+    s.fire_event("PET_BAR_UPDATE", vec![]);
     s
 }
 
@@ -48,7 +51,7 @@ fn pet_unit() -> UnitState {
     }
 }
 
-/// A hunter pet: `hunter_pet` is `HasPetUI`'s second return, which gates the training points and
+/// A hunter pet: `hunter_pet` is `HasPetUI`'s second return, which gates the XP block and
 /// the diet icon. The family and diet are CreatureFamily.dbc's Boar (id 5, food mask 63).
 fn hunter_pet_stats() -> PetStats {
     PetStats {
@@ -117,20 +120,30 @@ fn take_pet(s: &mut UiScript) {
     s.fire_event("UNIT_PET", vec![ScriptValue::Str("player".into())]);
 }
 
-/// The frame count fingerprints the stock `PetPaperDollFrame.xml`; it moves only with that file.
+/// The stock 3.3.5 page loads clean with its pet and companion halves and three sub-tabs
+/// (`PetPaperDollFrame.xml`).
 #[test]
 fn shipped_pet_page_loads_clean() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    let mut pet_frames = 0;
     for f in super::test_ui::CHARACTER_UI {
-        let n = super::test_ui::load_ui_strict(&mut s, f);
-        if *f == "Interface\\FrameXML\\PetPaperDollFrame.xml" {
-            pet_frames = n;
-        }
+        super::test_ui::load_ui_strict(&mut s, f);
     }
     assert!(s.errors().is_empty(), "load errors: {:?}", s.errors());
-    assert_eq!(pet_frames, 34, "the reference's own PetPaperDollFrame.xml");
+    for (name, ty) in [
+        ("PetPaperDollFrame", "Frame"),
+        ("PetPaperDollFramePetFrame", "Frame"),
+        ("PetPaperDollFrameCompanionFrame", "Frame"),
+        ("PetPaperDollFrameTab1", "Button"),
+        ("PetPaperDollFrameTab2", "Button"),
+        ("PetPaperDollFrameTab3", "Button"),
+        ("PetModelFrame", "PlayerModel"),
+    ] {
+        let got: Option<String> = s
+            .eval(&format!("return {name} and {name}:GetObjectType()"))
+            .unwrap();
+        assert_eq!(got.as_deref(), Some(ty), "{name}");
+    }
     assert!(!s
         .eval::<bool>("return PetPaperDollFrame:IsVisible()")
         .unwrap());
@@ -211,17 +224,13 @@ fn the_page_reads_the_pets_own_snapshot() {
         .unwrap());
 
     let drawn = texts(&mut s);
-    for want in ["123", "88", "210", "Snarl", "(Loyalty Level 6) Best Friend"] {
+    // 3.3.5 has no loyalty line and no training points (PetPaperDollFrame.lua:466-491).
+    for want in ["123", "88", "210", "Snarl", "Level 58 Boar"] {
         assert!(
             drawn.iter().any(|t| t.contains(want)),
             "expected {want:?} on the page; drew {drawn:?}"
         );
     }
-    // Unspent training points, total minus spent (`PetPaperDollFrame.lua:85-86`).
-    assert!(
-        drawn.iter().any(|t| t == "40"),
-        "unspent training points (170-130); drew {drawn:?}"
-    );
     assert!(s.errors().is_empty(), "errors: {:?}", s.errors());
 }
 
@@ -249,10 +258,10 @@ fn the_page_borrows_the_windows_name_line_and_gives_it_back() {
     assert!(s.errors().is_empty(), "errors: {:?}", s.errors());
 }
 
-/// A pet lost under its open page closes the window before any repaint
-/// (`PetPaperDollFrame.lua:32-37`).
+/// A pet lost under its open page turns the window back to the player's page
+/// (`PetPaperDollFrame.lua:56-58`: `ToggleCharacter("PaperDollFrame")`).
 #[test]
-fn the_pet_leaving_closes_the_page_under_it() {
+fn the_pet_leaving_turns_the_window_back_to_the_player() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = load_pet_page();
     give_pet(&mut s);
@@ -261,14 +270,19 @@ fn the_pet_leaving_closes_the_page_under_it() {
 
     take_pet(&mut s);
     assert!(
-        !s.eval::<bool>("return CharacterFrame:IsVisible()").unwrap(),
+        !s.eval::<bool>("return PetPaperDollFrame:IsVisible()")
+            .unwrap(),
         "the pet's page cannot outlive the pet"
+    );
+    assert!(
+        s.eval::<bool>("return PaperDollFrame:IsVisible()").unwrap(),
+        "…and the window stays open on the player's page"
     );
     assert!(s.errors().is_empty(), "errors: {:?}", s.errors());
 }
 
-/// A warlock's minion passes `HasPetUI` but not its second return, so the three hunter-only pieces
-/// stay down (`PetPaperDollFrame.lua:83-93`).
+/// A warlock's minion passes `HasPetUI` but not its second return, so the hunter-only XP block
+/// stays down (`PetPaperDollFrame.lua:486-490`).
 #[test]
 fn a_minion_gets_the_page_without_the_hunter_furniture() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -286,12 +300,6 @@ fn a_minion_gets_the_page_without_the_hunter_furniture() {
     );
     assert!(!s
         .eval::<bool>("return PetPaperDollPetInfo:IsVisible()")
-        .unwrap());
-    assert!(!s
-        .eval::<bool>("return PetTrainingPointText:IsVisible()")
-        .unwrap());
-    assert!(!s
-        .eval::<bool>("return PetTrainingPointLabel:IsVisible()")
         .unwrap());
     assert!(
         texts(&mut s).iter().any(|t| t.contains("210")),
