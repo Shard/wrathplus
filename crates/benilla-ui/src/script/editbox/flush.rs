@@ -28,6 +28,15 @@ pub(in crate::script) fn update(lua: &Lua, h: FrameHandle, dt: f32) {
 /// `or 6` (`0x77acde`, in `0x77ac60`) are not modelled: the promotion only relayouts, which
 /// re-windows a single-line box whose window benilla keeps host-side, and fires nothing, since
 /// bit 0 is sampled before it; benilla has no IME composition.
+///
+/// The reference measures the caret inside the leg (`0x77da80` → `0x772ae0`), so `OnCursorChanged`
+/// always precedes the text change's `OnTextChanged`, and stock `ScrollingEdit_OnTextChanged`
+/// depends on it: it reads the `cursorOffset` its `OnCursorChanged` stored
+/// (`UIPanelTemplates.lua:338`–`365`). A focused box whose advance table is pending, with no
+/// inline measurer, holds `OnTextChanged` by keeping bit 0 up, so the relayout reruns and the
+/// event fires after the caret leg, on the flush where the host's table lands. Deviation: an
+/// unfocused box with no inline measurer never gets a table, so it fires `OnTextChanged` without
+/// the caret leg rather than never.
 pub(super) fn flush(lua: &Lua, h: FrameHandle) {
     let Some((entry, owed)) = with_eb(lua, h, |eb| (eb.dirty, eb.relayout_owed)) else {
         return;
@@ -40,12 +49,23 @@ pub(super) fn flush(lua: &Lua, h: FrameHandle) {
             eb.relayout_owed = !done;
         });
     }
-    if entry & EditBoxState::DIRTY_CURSOR != 0 && caret(lua, h) {
+    let placed = entry & EditBoxState::DIRTY_CURSOR == 0 || caret(lua, h);
+    if placed {
         with_eb(lua, h, |eb| eb.dirty &= !EditBoxState::DIRTY_CURSOR);
     }
-    if text_changed {
+    if text_changed && !placed && focused(lua, h) {
+        // Held: bit 0 stays up until the caret leg places.
+        with_eb(lua, h, |eb| eb.dirty |= EditBoxState::DIRTY_TEXT);
+    } else if text_changed {
         fire_script(lua, frame_id_of(lua, h), "OnTextChanged");
     }
+}
+
+fn focused(lua: &Lua, h: FrameHandle) -> bool {
+    lua.app_data_ref::<Model>()
+        .expect("model app_data")
+        .focused_editbox
+        == Some(h)
 }
 
 /// The caret leg `0x77da80`: it restarts the blink (`0x77dd68`), fires `OnCursorChanged`, then
@@ -55,11 +75,7 @@ pub(super) fn flush(lua: &Lua, h: FrameHandle) {
 fn caret(lua: &Lua, h: FrameHandle) -> bool {
     with_eb(lua, h, |eb| eb.blink_accum = 0.0);
     let placed = cursor_changed(lua, h);
-    let focused = lua
-        .app_data_ref::<Model>()
-        .expect("model app_data")
-        .focused_editbox
-        == Some(h);
+    let focused = focused(lua, h);
     with_eb(lua, h, |eb| eb.caret_shown = focused);
     placed
 }
@@ -128,12 +144,7 @@ fn cursor_changed(lua: &Lua, h: FrameHandle) -> bool {
 /// Deviation: not gated on the cursor lying inside the scroll window (`0x77a7bd`–`0x77a7d7`),
 /// which benilla's host keeps around the caret.
 fn blink(lua: &Lua, h: FrameHandle, dt: f32) {
-    let focused = lua
-        .app_data_ref::<Model>()
-        .expect("model app_data")
-        .focused_editbox
-        == Some(h);
-    if !focused {
+    if !focused(lua, h) {
         return;
     }
     with_eb(lua, h, |eb| {
@@ -146,3 +157,7 @@ fn blink(lua: &Lua, h: FrameHandle, dt: f32) {
         }
     });
 }
+
+#[cfg(test)]
+#[path = "flush_hold_tests.rs"]
+mod hold_tests;

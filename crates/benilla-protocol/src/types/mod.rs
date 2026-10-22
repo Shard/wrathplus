@@ -120,10 +120,7 @@ pub use guild::{
     GUILD_MOTD_MAX_LENGTH, GUILD_NAME_MAX_LENGTH, GUILD_NOTE_MAX_LENGTH, GUILD_RANKS_MAX_COUNT,
     GUILD_RANKS_MIN_COUNT, GUILD_RANK_MAX_LENGTH,
 };
-pub use instance::{
-    InstanceResetFailed, InstanceResetFailure, RaidGroupOnly, RaidInstanceMessage,
-    RaidInstanceWarning,
-};
+pub use instance::RaidGroupOnly;
 pub use items::{
     item_query, open_item, use_item, wrap_item, ItemDamage, ItemInfo,
     ItemSpellEntry, ItemUseSpell, UseItemTarget, BAG_PLAYER_INVENTORY, ITEM_DYNFLAG_UNLOCKED,

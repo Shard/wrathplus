@@ -135,17 +135,17 @@ impl UiScript {
 }
 
 /// The hardware-event gate `0x494a50(0)`: inside a binding body.
-fn in_binding(lua: &Lua) -> bool {
+pub(super) fn in_binding(lua: &Lua) -> bool {
     let model = lua.app_data_ref::<Model>().expect("model app_data");
     model.input.binding_depth > 0
 }
 
-fn push(lua: &Lua, input: BindingInput) {
+pub(super) fn push(lua: &Lua, input: BindingInput) {
     let mut model = lua.app_data_mut::<Model>().expect("model app_data");
     model.input.queue.push(input);
 }
 
-fn push_call(lua: &Lua, call: ScriptCall) {
+pub(super) fn push_call(lua: &Lua, call: ScriptCall) {
     let mut model = lua.app_data_mut::<Model>().expect("model app_data");
     model.script_calls.push(call);
 }
@@ -153,7 +153,7 @@ fn push_call(lua: &Lua, call: ScriptCall) {
 /// A zoom's optional amount: `0x6f34d0` (is-number, a numeric string passes) then `0x6f3620`,
 /// else the stored `1.0f` (`0x50b42d`). A NaN or infinite amount is dropped: what `0x50fc60`'s
 /// tick conversion makes of it is not established.
-fn zoom_amount(lua: &Lua, v: Option<Value>) -> Option<f32> {
+pub(super) fn zoom_amount(lua: &Lua, v: Option<Value>) -> Option<f32> {
     let n = match v {
         Some(v) => lua.coerce_number(v).ok().flatten().unwrap_or(1.0),
         None => 1.0,
@@ -167,47 +167,6 @@ fn inert(lua: &Lua, names: &[&str]) -> mlua::Result<()> {
     let g = lua.globals();
     for name in names {
         g.set(*name, lua.create_function(|_, _: MultiValue| Ok(()))?)?;
-    }
-    Ok(())
-}
-
-/// Build 12340 only: the 3.x flying-era binding names, which the 1.12 surface lacks.
-pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
-    // The 3.x flying-era names the stock `JUMP` and `SITORSTAND` bodies call. Each Start fires the
-    // ground verb and raises the held key; the engine picks one by the mover's state: on foot the
-    // jump or the sit, flying the ascend or descend (the jump `0x9883f0` refuses a flier). Each
-    // Stop releases the key. The same gate as the movement table.
-    let flying_era: [(&str, &[BindingInput]); 4] = [
-        (
-            "JumpOrAscendStart",
-            &[
-                BindingInput::Fire(FiredInput::Jump),
-                BindingInput::Start(HeldInput::Ascend),
-            ],
-        ),
-        ("AscendStop", &[BindingInput::Stop(HeldInput::Ascend)]),
-        (
-            "SitStandOrDescendStart",
-            &[
-                BindingInput::Fire(FiredInput::SitOrStand),
-                BindingInput::Start(HeldInput::Descend),
-            ],
-        ),
-        ("DescendStop", &[BindingInput::Stop(HeldInput::Descend)]),
-    ];
-    let g = lua.globals();
-    for (name, inputs) in flying_era {
-        g.set(
-            name,
-            lua.create_function(move |lua, _: MultiValue| {
-                if in_binding(lua) {
-                    for &input in inputs {
-                        push(lua, input);
-                    }
-                }
-                Ok(())
-            })?,
-        )?;
     }
     Ok(())
 }

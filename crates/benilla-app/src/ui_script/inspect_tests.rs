@@ -440,10 +440,9 @@ fn shipped_inspect_frame_drives_end_to_end() {
 }
 
 /// `PanelTemplates_SelectTab` disables the selected tab (`UIPanelTemplates.lua:125`), so clicking
-/// it does nothing; `ToggleInspect`'s close-when-showing branch (`Blizzard_InspectUI.lua:67-83`)
-/// is reached only by calling it directly.
+/// it does nothing. 3.3.5's `Blizzard_InspectUI` has no `ToggleInspect`.
 #[test]
-fn the_active_tab_is_inert_and_toggle_inspect_closes() {
+fn the_active_tab_is_inert() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = armed();
     s.run(r#"InspectUnit("target")"#).unwrap();
@@ -461,43 +460,5 @@ fn the_active_tab_is_inert_and_toggle_inspect_closes() {
         "clicking the disabled active tab changes nothing"
     );
 
-    s.run(r#"ToggleInspect("InspectPaperDollFrame")"#).unwrap();
-    assert!(
-        !s.eval::<bool>("return InspectFrame:IsVisible()").unwrap(),
-        "ToggleInspect on the showing page closes the window (ref ToggleInspect)"
-    );
     assert!(s.errors().is_empty(), "tab errors: {:?}", s.errors());
-}
-
-/// Re-opening through `ToggleInspect` after a close raises, as in the reference:
-/// `InspectFrame_OnHide` clears `this.unit`, so `OnShow` runs with no token, and
-/// `SetPortraitTexture` (`0x519ef0`) raises its usage error at its `lua_isstring` gate
-/// (`0x519fb4`), before the portrait is touched. Stock 1.12 has no inspect binding and no caller
-/// outside the hidden window's own tabs, so only an addon or a macro gets here.
-#[test]
-fn toggle_inspect_reopens_after_a_close_and_raises_like_the_reference() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let s = armed();
-    s.run(r#"InspectUnit("target")"#).unwrap();
-    s.run(r#"ToggleInspect("InspectPaperDollFrame")"#).unwrap();
-    assert!(!s.eval::<bool>("return InspectFrame:IsVisible()").unwrap());
-    let _ = s.errors();
-
-    s.run(r#"ToggleInspect("InspectPaperDollFrame")"#).unwrap();
-    assert!(
-        s.eval::<bool>("return InspectFrame:IsVisible()").unwrap(),
-        "the window still shows — Show() runs before OnShow raises"
-    );
-    // Two raises: `InspectFrame` and `InspectPaperDollFrame` each run their own `OnShow` under
-    // their own pcall, the first dying at the portrait's gate, the second at `UnitLevel`'s.
-    let errors = s.errors();
-    assert_eq!(errors.len(), 2, "one raise per OnShow handler: {errors:?}");
-    assert!(
-        errors[0].contains(r#"Usage: SetPortraitTexture(texture, "unit")"#),
-        "the portrait's gate, before the name line is ever reached: {errors:?}"
-    );
-    assert!(
-        errors[1].contains(r#"Usage: UnitLevel("unit")"#),
-        "and the paper doll's own handler, dying at its first getter: {errors:?}"
-    );
 }
