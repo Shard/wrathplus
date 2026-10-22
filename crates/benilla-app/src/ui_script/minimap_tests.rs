@@ -341,3 +341,90 @@ fn the_ping_holds_then_fades_on_its_timer() {
     assert!(!shown(&s), "5.5 s hold, the last 0.5 fading, then hidden");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
+
+/// The stock 3.3.5 tracking menu (`MiniMapTrackingDropDown_Initialize`, Minimap.lua:424-466) over
+/// installed `Spell.dbc` data: the book's tracking spells, classified as the app's feed does, come
+/// first, then the town types a mage may use and None. A spell row casts; a type row selects and
+/// repaints the icon; None leaves the folder's `None` icon (12340 `0x57f1b0`, `0x57f380`,
+/// `0x57f4f0`).
+#[test]
+fn the_stock_tracking_menu_lists_the_books_tracking_spells_then_the_town_types() {
+    let data = benilla_formats::wow_data_or_skip!();
+    use benilla_ui::script::{SpellBookState, SpellSlotView, UnitState};
+
+    let mut chain = benilla_formats::Chain::open_wrath(&data, "enUS").expect("read-only chain");
+    let catalog = benilla_formats::load_spell_catalog(&mut chain).expect("Spell.dbc");
+    // Find Herbs, Find Minerals and Fireball, which tracks nothing.
+    let book = SpellBookState {
+        slots: [2383u32, 2580, 133]
+            .map(|id| {
+                let d = catalog.get(id).expect("an installed spell");
+                SpellSlotView {
+                    spell_id: id,
+                    name: d.name.clone(),
+                    texture: d.icon.clone(),
+                    ..Default::default()
+                }
+            })
+            .to_vec(),
+        ..Default::default()
+    };
+
+    let mut s = UiScript::new().unwrap();
+    s.set_screen_size(1024.0, 768.0);
+    load_xml(&mut s, "Interface\\FrameXML\\Minimap.xml");
+    s.set_unit(
+        "player",
+        Some(UnitState {
+            exists: true,
+            class_file: Some("MAGE".into()),
+            ..Default::default()
+        }),
+    );
+    s.set_spellbook(book.clone());
+    s.set_tracking_spells(crate::ui_aura::tracking_spells(&book, &catalog));
+
+    let open = |s: &mut UiScript| {
+        s.run("HideDropDownMenu(1) MiniMapTrackingButton:Click()")
+            .unwrap();
+        s.eval::<Vec<String>>(
+            "local t = {} for i = 1, DropDownList1.numButtons do \
+                 t[#t + 1] = _G['DropDownList1Button' .. i]:GetText() or '' end return t",
+        )
+        .unwrap()
+    };
+    let icon = |s: &UiScript| {
+        s.eval::<String>("return MiniMapTrackingIcon:GetTexture()")
+            .unwrap()
+    };
+    assert_eq!(icon(&s), "Interface\\Minimap\\Tracking\\None");
+
+    let rows = open(&mut s);
+    assert_eq!(
+        rows.len(),
+        2 + 12 + 1,
+        "two spells, a mage's twelve types, None: {rows:?}"
+    );
+    assert_eq!(&rows[..3], ["Find Herbs", "Find Minerals", "Repair"]);
+    assert_eq!(rows.last().map(String::as_str), Some("None"));
+
+    s.run("DropDownList1Button1:Click()").unwrap();
+    assert_eq!(
+        s.take_spell_casts(),
+        vec![(2383, false)],
+        "a spell row casts it"
+    );
+
+    open(&mut s);
+    s.run("DropDownList1Button3:Click()").unwrap();
+    s.tick(0.0);
+    assert_eq!(icon(&s), "Interface\\Minimap\\Tracking\\Repair");
+    assert_eq!(s.tracked_town_type(), Some((1, 0x1000)));
+
+    open(&mut s);
+    s.run("DropDownList1Button15:Click()").unwrap();
+    s.tick(0.0);
+    assert_eq!(icon(&s), "Interface\\Minimap\\Tracking\\None");
+    assert_eq!(s.tracked_town_type(), None);
+    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
+}

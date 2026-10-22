@@ -264,8 +264,8 @@ fn feed_spellbook(
             fresh.slots.len()
         );
         script.set_spellbook(fresh.clone());
-        // Build 12340's highest-rank list (`0xbe5d88`): the book's spells no known higher rank
-        // supersedes, by `KnownHigherRank` (`0x60c8d0`), the `ShowAllSpellRanks` off view.
+        script.set_tracking_spells(crate::ui_aura::tracking_spells(&fresh, &spells.catalog));
+        // 12340's highest-rank list (`0xbe5d88`): spells no higher known rank (`0x60c8d0`) beats.
         script.set_spellbook_highest_rank(highest_rank_slots(
             &fresh,
             skill_lines.as_deref().map(|s| &s.catalog),

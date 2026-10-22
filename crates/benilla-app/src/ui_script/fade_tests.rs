@@ -19,6 +19,11 @@ fn a_started_fade_ramps_off_uiparents_tick_and_completes() {
     load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
     load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
     s.resolve();
+    // Let the tracking icon's load-time shine finish first: the stock walk skips the fade that
+    // slides into a finished one's slot (`UIParent.lua:2456-2491`).
+    for _ in 0..3 {
+        s.tick(1.0);
+    }
     s.run(r#"CreateFrame("Frame", "BenillaFadeProbe")"#)
         .unwrap();
     s.run("UIFrameFadeIn(BenillaFadeProbe, 1.0)").unwrap();
@@ -38,7 +43,8 @@ fn a_started_fade_ramps_off_uiparents_tick_and_completes() {
     let mid = s.eval::<f64>("return BenillaFadeProbe:GetAlpha()").unwrap();
     assert!(
         (mid - 0.5).abs() < 1e-3,
-        "half the timeToFade in, half the ramp: {mid}"
+        "half the timeToFade in, half the ramp: {mid} {:?}",
+        s.errors()
     );
 
     s.tick(0.6); // past timeToFade
@@ -109,3 +115,4 @@ fn a_flash_alternates_then_stops() {
         "showWhenDone was nil, so it ends hidden"
     );
 }
+
