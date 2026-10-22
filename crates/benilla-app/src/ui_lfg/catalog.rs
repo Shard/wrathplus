@@ -12,7 +12,7 @@ pub(super) struct Catalog(pub(super) Arc<WrathLfgCatalog>);
 
 /// `DungeonEncounter.dbc` for `GetLFGProposalEncounter`, with each row's `SpellIcon` path.
 #[derive(Resource)]
-pub(super) struct Encounters(pub(super) Arc<Vec<WrathLfgEncounter>>);
+pub(crate) struct Encounters(pub(crate) Arc<Vec<WrathLfgEncounter>>);
 
 pub(super) fn load(mut commands: Commands, assets: Option<Res<benilla_assets::WorldAssets>>) {
     use benilla_assets::LockRecover;
