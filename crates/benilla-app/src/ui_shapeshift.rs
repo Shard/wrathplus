@@ -133,6 +133,15 @@ pub(crate) fn push_forms(
     edge
 }
 
+/// `SPELL_UPDATE_COOLDOWN` as 12340's `0x53bac0` fires it: `UPDATE_SHAPESHIFT_COOLDOWN` just
+/// ahead while the stance bar has a form.
+pub(crate) fn fire_spell_update_cooldown(script: &mut UiScript) {
+    if script.num_shapeshift_forms() > 0 {
+        script.fire_event("UPDATE_SHAPESHIFT_COOLDOWN", vec![]);
+    }
+    script.fire_event("SPELL_UPDATE_COOLDOWN", vec![]);
+}
+
 /// Whether any form's active ring or texture moved, over lists of one membership.
 fn active_moved(old: &[ShapeshiftFormView], fresh: &[ShapeshiftFormView]) -> bool {
     old.iter()

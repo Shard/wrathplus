@@ -63,7 +63,7 @@ pub(super) fn trainer() -> TrainerState {
 
 /// A VM whose `serviceTypeFilter` shows every state; the CVar's default 3 hides known services.
 fn every_state_shown() -> UiScript {
-    let mut s = UiScript::new().unwrap();
+    let s = UiScript::new().unwrap();
     s.run("SetTrainerServiceTypeFilter('all', 1)").unwrap();
     s
 }

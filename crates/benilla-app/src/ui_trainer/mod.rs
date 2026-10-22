@@ -52,19 +52,13 @@ pub(crate) struct TrainerTooltipSubjects {
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct TrainerFeed;
 
-mod net;
+pub(crate) mod net;
 mod reeval;
 
 pub(crate) struct UiTrainerPlugin;
 
-/// `serviceTypeFilter` (12340 `0x51ed64`, name `0xa006e0`, `"%d"` of 3, record `ds:0xbd09e4`): the
-/// trainer window's state filter, one bit per service state. The VM reads and writes it
-/// (`benilla_ui` trainer filter); registering it here seeds it and saves it with the config.
-const CVARS: &[crate::cvars::Registered] = &[crate::cvars::same("serviceTypeFilter", "3")];
-
 impl Plugin for UiTrainerPlugin {
     fn build(&self, app: &mut App) {
-        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         net::register(app);
         app.init_resource::<TrainerOpen>()
             .init_resource::<TrainerErrors>()

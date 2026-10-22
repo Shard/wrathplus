@@ -241,10 +241,11 @@ fn the_middle_strip_tiles_along_its_length_only() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// The reference fires `UPDATE_SHAPESHIFT_FORMS` only when the form list changes (`0x4b28ff`,
-/// `0x4b2e43`): its `ShapeshiftBar_Update` re-shows the middle strip with no manage pass
-/// (BonusActionBarFrame.lua:170, 177), so a state change sent as one would draw the strip over the
-/// raised bar. Driven through [`crate::ui_shapeshift::push_forms`].
+/// 12340 fires `UPDATE_SHAPESHIFT_FORMS` only when the form list changes (`0x54252d`, `0x53fe44`,
+/// `0x542647`), and each state edge has its own event, so a state move never rebuilds the shelf.
+/// 3.3.5's `ShapeshiftBar_Update` ends with the manage pass (BonusActionBarFrame.lua:149), so even
+/// a list edge leaves the shelf down under a raised bar. Driven through
+/// [`crate::ui_shapeshift::push_forms`].
 #[test]
 fn a_forms_state_change_leaves_the_shelf_down_over_the_raised_bar() {
     benilla_formats::wow_data_or_skip!();
@@ -408,8 +409,8 @@ fn a_forms_state_change_leaves_the_shelf_down_over_the_raised_bar() {
     );
     assert_eq!(log(&s), "");
 
-    // A fourth stance learned is a list edge: `ShapeshiftBar_Update` shows the strip over the
-    // raised bar until the next pass.
+    // A fourth stance learned is a list edge: `ShapeshiftBar_Update` sizes the strip, then its own
+    // manage pass takes the shelf down again under the raised bar.
     assert_eq!(
         push_forms(
             &mut s,
@@ -425,10 +426,14 @@ fn a_forms_state_change_leaves_the_shelf_down_over_the_raised_bar() {
     );
     assert_eq!(log(&s), "UPDATE_SHAPESHIFT_FORMS");
     assert!(
-        shown(&s, "ShapeshiftBarMiddle"),
-        "the learn edge: Update shows the strip"
+        !shown(&s, "ShapeshiftBarMiddle"),
+        "the learn edge's own pass keeps the strip down"
     );
-    s.run("UIParent_ManageFramePositions()").unwrap();
-    assert!(!shown(&s, "ShapeshiftBarMiddle"));
+    assert_eq!(
+        s.eval::<f64>("return ShapeshiftBarMiddle:GetWidth()")
+            .unwrap(),
+        74.0,
+        "sized for four forms: 37 * (4 - 2)"
+    );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }

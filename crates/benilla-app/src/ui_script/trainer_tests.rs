@@ -673,9 +673,10 @@ fn the_state_filter_survives_a_restart_through_the_cvar() {
         i
     };
     let boot = |s: &mut UiScript, saved: Option<&str>| {
-        // The host's seeding: the config file's values, then its registered rows.
-        s.set_cvar_saved_base(saved.map(|v| ("serviceTypeFilter".to_string(), v.to_string())));
-        s.register_cvars([("serviceTypeFilter", "3")]);
+        // The session seat registered the shipped rows; the host writes the config file's value.
+        if let Some(v) = saved {
+            s.set_cvar_host("serviceTypeFilter", v);
+        }
         s.set_addon_chain_reader(Box::new(super::reference_ui::read));
         s.register_addons(vec![info()], None, None, None);
         s.set_unit(
@@ -738,6 +739,8 @@ fn the_state_filter_survives_a_restart_through_the_cvar() {
 fn a_new_list_packet_clears_the_collapse_set_and_keeps_the_filter() {
     benilla_formats::wow_data_or_skip!();
     let mut s = trainer_script();
+    // Back to the CVar's stock 3, "already known" off, from the helper's "used" on.
+    s.run("SetTrainerServiceTypeFilter('used', 0)").unwrap();
     s.set_trainer(Some(menu()));
     s.fire_event(
         "ADDON_LOADED",
@@ -752,7 +755,7 @@ fn a_new_list_packet_clears_the_collapse_set_and_keeps_the_filter() {
     assert_eq!(
         s.cvar("serviceTypeFilter").as_deref(),
         Some("3"),
-        "the CVar's default"
+        "the CVar's stock mask"
     );
     assert!(on(&mut s, "available") && on(&mut s, "unavailable") && !on(&mut s, "used"));
     assert_eq!(
@@ -844,6 +847,8 @@ fn learning_a_spell_keeps_the_filter_and_the_collapse_a_re_open_keeps_the_filter
     const DAZALAR: u64 = 0xabc;
 
     let mut s = trainer_script();
+    // Back to the CVar's stock 3, "already known" off, from the helper's "used" on.
+    s.run("SetTrainerServiceTypeFilter('used', 0)").unwrap();
     s.fire_event(
         "ADDON_LOADED",
         vec![ScriptValue::Str("Blizzard_TrainerUI".into())],
@@ -946,7 +951,8 @@ fn learning_a_spell_takes_the_detail_pane_with_it_instead_of_stranding_the_last_
     const DAZALAR: u64 = 0xabc;
 
     let mut s = trainer_script();
-    // The CVar's default: "already known" off, so a learned service leaves the list.
+    // Back to the CVar's stock 3, "already known" off, from the helper's "used" on.
+    s.run("SetTrainerServiceTypeFilter('used', 0)").unwrap();
     s.fire_event(
         "ADDON_LOADED",
         vec![ScriptValue::Str("Blizzard_TrainerUI".into())],
