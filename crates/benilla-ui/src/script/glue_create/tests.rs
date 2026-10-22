@@ -53,6 +53,10 @@ fn vm() -> UiScript {
             ((2, 1), [9, 9, 9, 9, 9]),
         ]),
         backgrounds: HashMap::from([((2, 1), "Orc".to_string())]),
+        names: HashMap::from([(
+            (1, 0),
+            ["Agamand", "Andromath", "Antonidas", "Nielas"].map(String::from).to_vec(),
+        )]),
     });
     s.run("ResetCharCustomize()").unwrap();
     s

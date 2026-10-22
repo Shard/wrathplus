@@ -55,7 +55,7 @@ const SPELL: &str = "DBFilesClient\\Spell.dbc";
 
 /// The 1.12 record's 173 fields plus slots for the 3.3.5-only columns the build-12340 layout
 /// maps in (`wrath_layouts::spell`); a 1.12 file no longer parses.
-const SPELL_FIELDS: usize = 190;
+const SPELL_FIELDS: usize = 191;
 /// `SpellFamilyFlags[2]`, family bits 64-95 (3.3.5 column 211; AzerothCore `flag96
 /// SpellFamilyFlags`, 209-211).
 const COL_SPELL_FAMILY_FLAGS_2: usize = 173;
@@ -72,6 +72,9 @@ const COL_ATTRIBUTES_EX7: usize = 187;
 const COL_RUNE_COST_ID: usize = 188;
 /// `PowerDisplayId` (3.3.5 column 228): the `PowerDisplay.dbc` row naming a vehicle power.
 const COL_POWER_DISPLAY_ID: usize = 189;
+/// `AttributesEx6` (3.3.5 column 10, `+0x28`): bit `0x1` hides the tooltip's cooldown cell and
+/// `0x80000000` keeps spell-mod op 11 off the category recovery (`006238a0`, `007fef60`).
+const COL_ATTRIBUTES_EX6: usize = 190;
 /// `Category` (`+0x8`): the shared-cooldown `SpellCategory.dbc` id, such as potions 4.
 const COL_CATEGORY: usize = 2;
 const COL_CAST_UI: usize = 3;
@@ -475,8 +478,9 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
     let icons = crate::dbc::load_spell_icon_map(chain)?;
     let dispel_types = load_spell_dispel_types(chain)?;
     // Categories whose `SpellCategory.dbc` flags carry `0x2` match every cooldown query
-    // (`GetCooldownInfo` `0x6e13e0`); only wand Shoot's 351 does.
-    let wildcard_categories: std::collections::HashSet<u32> = {
+    // (`GetCooldownInfo` `0x6e13e0`); only wand Shoot's 351 does. Flag `0x1` scales the category
+    // recovery by the main-hand weapon's delay (`007fef60`).
+    let (wildcard_categories, weapon_speed_categories) = {
         let bytes = chain
             .read_file("DBFilesClient\\SpellCategory.dbc")
             .context("reading SpellCategory.dbc")?;
@@ -490,11 +494,14 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
             benilla_dbc::FieldType::UInt32,
         ));
         let rs = parse(&bytes, s, "SpellCategory.dbc")?;
-        rs.records()
-            .iter()
-            .filter(|r| u32_at(r, 1).unwrap_or(0) & 0x2 != 0)
-            .filter_map(|r| u32_at(r, 0))
-            .collect()
+        let with = |bit: u32| -> std::collections::HashSet<u32> {
+            rs.records()
+                .iter()
+                .filter(|r| u32_at(r, 1).unwrap_or(0) & bit != 0)
+                .filter_map(|r| u32_at(r, 0))
+                .collect()
+        };
+        (with(0x2), with(0x1))
     };
 
     let spell_bytes = chain.read_file(SPELL).context("reading Spell.dbc")?;
@@ -572,6 +579,7 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 attributes_ex3: u32_at(r, COL_ATTRIBUTES_EX3).unwrap_or(0),
                 attributes_ex4: u32_at(r, COL_ATTRIBUTES_EX4).unwrap_or(0),
                 attributes_ex5: u32_at(r, COL_ATTRIBUTES_EX5).unwrap_or(0),
+                attributes_ex6: u32_at(r, COL_ATTRIBUTES_EX6).unwrap_or(0),
                 attributes_ex7: u32_at(r, COL_ATTRIBUTES_EX7).unwrap_or(0),
                 // Slot 1 is build 12340's `SchoolMask` (column 225, `+0x284`); `school` its lowest.
                 school_mask: u32_at(r, COL_SCHOOL).unwrap_or(0),
@@ -609,6 +617,8 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 // Resolved at load, read off the armed record (`0x6e1563`).
                 category_wildcard: u32_at(r, COL_CATEGORY)
                     .is_some_and(|c| wildcard_categories.contains(&c)),
+                category_weapon_speed: u32_at(r, COL_CATEGORY)
+                    .is_some_and(|c| weapon_speed_categories.contains(&c)),
                 recovery_ms: u32_at(r, COL_RECOVERY_TIME).unwrap_or(0),
                 interrupt_flags: u32_at(r, COL_INTERRUPT_FLAGS).unwrap_or(0),
                 aura_interrupt_flags: u32_at(r, COL_AURA_INTERRUPT_FLAGS).unwrap_or(0),

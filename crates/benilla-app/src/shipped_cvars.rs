@@ -21,6 +21,7 @@ pub(crate) const FEATURE_ROWS: &[&[Registered]] = &[
     crate::ui_guild::CVARS,
     crate::ui_loot::CVARS,
     crate::ui_trade::CVARS,
+    crate::ui_trainer::net::CVARS,
     crate::video::CVARS,
     crate::world_backdrop::CVARS,
 ];

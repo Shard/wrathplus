@@ -53,6 +53,8 @@ pub struct GlueCreateCatalog {
     pub dials: HashMap<(u8, u8), [u8; 5]>,
     /// `GetCreateBackgroundModel`'s `UI_<name>` stage per (race, class).
     pub backgrounds: HashMap<(u8, u8), String>,
+    /// `NameGen.dbc`'s names per (race, sex), which `GetRandomName` learns from.
+    pub names: HashMap<(u8, u8), Vec<String>>,
 }
 
 /// The selection: race and class ids, sex 0 or 1, the dials `[skin, face, hair style, hair
@@ -217,6 +219,7 @@ fn state<R>(lua: &Lua, f: impl FnOnce(&mut GlueCreateState) -> R) -> R {
 }
 
 mod api;
+mod name_gen;
 pub(super) use api::install;
 
 #[cfg(test)]

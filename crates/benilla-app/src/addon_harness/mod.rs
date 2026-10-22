@@ -283,7 +283,7 @@ fn survey_one(
 
     // The render baseline: every widget that exists before this addon runs, taken after the
     // dependency chain so a library's frames are not charged to its consumer.
-    let baseline = RenderBaseline::of(&script);
+    let baseline = RenderBaseline::of(&mut script);
     // The warning mark, taken at the same seam: `seq` is monotonic and never reused, so a
     // high-water mark is a valid cut of a log that evicts and dedupes.
     let warn_mark = script.diagnostics().last().map_or(0, |d| d.seq);
@@ -683,14 +683,12 @@ fn drive_ui_probe(script: &mut UiScript) -> Vec<String> {
         -- Open, then close: a toggle left open would leak state into nothing here, but the second
         -- call is what exercises an override's close path.
         try(ToggleBackpack); try(ToggleBackpack)
-        if PlayerFrame then
-            this = PlayerFrame
-            try(UnitFrame_OnEnter); try(UnitFrame_OnLeave)
+        -- 3.3.5's handlers take the frame first, where 1.12's read `this`.
+        local function on(fn, frame)
+            if frame and type(fn) == "function" then try(function() fn(frame) end) end
         end
-        if ActionButton1 then
-            this = ActionButton1
-            try(ActionButton_Update)
-        end
+        on(UnitFrame_OnEnter, PlayerFrame); on(UnitFrame_OnLeave, PlayerFrame)
+        on(ActionButton_Update, ActionButton1)
         -- HOVER. Nothing above puts a tooltip on screen, and a whole class of addon only runs
         -- there: hooks on GameTooltip's OnShow/OnHide, the FrameXML globals an addon replaces
         -- (GameTooltip_SetDefaultAnchor), and the ones that SCRAPE the line regions
@@ -711,7 +709,6 @@ fn drive_ui_probe(script: &mut UiScript) -> Vec<String> {
             end)
             try(function() GameTooltip:Hide() end)
         end
-        this = nil
     "#,
     );
     let mut out = script.errors().split_off(before);

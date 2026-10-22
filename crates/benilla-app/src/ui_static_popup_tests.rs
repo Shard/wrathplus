@@ -1,26 +1,35 @@
 use super::*;
-use std::collections::VecDeque;
 
-/// The newest `0x147` warning sets the lock on the `GetTime` clock and leaves the other receipts.
+/// The queued changes on the `GetTime` clock, and the view's encounter counts (`00553830`).
 #[test]
-fn the_lock_warning_is_taken_and_the_rest_stay() {
-    let mut fifo = VecDeque::from([
-        Packet::Reset { map: 33 },
-        Packet::LockWarning {
-            timeout_ms: 60_000,
-            encounter_mask: 0b1011,
-            raw_flag: 1,
-        },
-        Packet::LastInstance { map: 34 },
-    ]);
-    let lock = take_lock_warning(&mut fifo, 100.0).expect("a warning");
-    assert_eq!(fifo.len(), 2);
-    let view = lock.view();
-    assert_eq!(
-        (view.expires_at, view.extending, view.encounters_completed),
-        (160.0, true, 3)
+fn lock_changes_set_clear_and_count_encounters() {
+    let changes = lock_changes(
+        vec![Some((60_000, 0b1010, 1)), None, Some((30_000, 0b1010, 0))],
+        100.0,
     );
-    assert_eq!(take_lock_warning(&mut fifo, 100.0), None);
+    assert_eq!(changes.len(), 3);
+    assert!(changes[1].is_none());
+    assert_eq!(changes[0].map(|l| l.expires_at), Some(160.0));
+    let lock = changes[2].expect("the last warning sets");
+    let row = |map, difficulty, bit| benilla_ui::script::WrathLfgEncounter {
+        map,
+        difficulty,
+        bit,
+        name: String::new(),
+        icon: None,
+    };
+    let rows = [
+        row(533, 0, 1),
+        row(533, 0, 2),
+        row(533, 0, 3),
+        row(533, 1, 1),
+        row(36, 0, 3),
+    ];
+    let view = lock.view(&rows, Some((533, 0)));
+    assert_eq!((view.expires_at, view.extending), (130.0, false));
+    assert_eq!((view.encounters_total, view.encounters_completed), (3, 2));
+    let none = lock.view(&rows, None);
+    assert_eq!((none.encounters_total, none.encounters_completed), (0, 0));
 }
 
 /// The active group's set glyph slots, 1-based.

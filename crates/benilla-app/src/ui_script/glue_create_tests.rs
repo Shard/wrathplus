@@ -16,7 +16,8 @@ fn stock_create_vm() -> Option<UiScript> {
     script.set_screen_size(1600.0, 1000.0);
     let failures = load_glue_ui(&script);
     assert!(failures.is_empty(), "{failures:#?}");
-    script.set_glue_create_catalog(super::catalog(&catalog, Some(&classes), false));
+    let names = benilla_formats::name_gen::load_name_gen(&mut chain).expect("NameGen");
+    script.set_glue_create_catalog(super::catalog(&catalog, Some(&classes), false, names));
     script.seed_glue_create_rng(7);
     script.fire_event("FRAMES_LOADED", vec![]);
     script.fire_event("SET_GLUE_SCREEN", vec![s("charcreate")]);
@@ -89,6 +90,16 @@ fn the_stock_character_create_drives_the_selection_on_the_installed_data() {
         "the face dial moves"
     );
     script.run("CharCreateRandomizeButton:Click()").unwrap();
+    // The stock Random Name button fills the box from the Troll female `NameGen.dbc` walk.
+    assert!(script.eval::<bool>("return CharacterCreateRandomName:IsVisible() == 1").unwrap());
+    script.run("CharacterCreateRandomName:Click()").unwrap();
+    let random = script.eval::<String>("return CharacterCreateNameEdit:GetText()").unwrap();
+    assert!(
+        (4..=10).contains(&random.len())
+            && random.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+            && random.chars().all(|c| c.is_ascii_alphabetic()),
+        "{random:?}"
+    );
 
     // Okay sends the typed name; Back returns to the list.
     script
@@ -128,6 +139,7 @@ fn host_vm() -> UiScript {
         valid: vec![(1, 1), (2, 1)],
         dials: HashMap::from([((2, 1), [4, 4, 4, 4, 4])]),
         backgrounds: HashMap::new(),
+        names: HashMap::new(),
     });
     script
         .run(

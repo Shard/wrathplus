@@ -24,8 +24,16 @@ pub(super) struct RenderBaseline {
 }
 
 impl RenderBaseline {
-    /// Snapshot the VM. Cheap: one walk of the arena, no allocation per quad.
-    pub(super) fn of(script: &UiScript) -> Self {
+    /// Let the stock interface build what it builds lazily from the seated session, then snapshot
+    /// the VM, so the stock widgets are never charged to the surveyed addon: 3.3.5's `BuffFrame`
+    /// creates `BuffButtonN` on its first `UNIT_AURA` for the player (BuffFrame.lua:143), which the
+    /// session start would otherwise fire after the snapshot. The snapshot is one arena walk.
+    pub(super) fn of(script: &mut UiScript) -> Self {
+        script.fire_event(
+            "UNIT_AURA",
+            vec![benilla_ui::script::ScriptValue::Str("player".into())],
+        );
+        script.tick(0.1);
         let targets: HashSet<ZTarget> = script.live_targets().into_iter().collect();
         let frames = targets
             .iter()
@@ -154,8 +162,7 @@ pub(super) fn measure_render(
         -- open, as the reference's is.
         try(OpenBackpack)
         if ActionButton1 then
-            this = ActionButton1
-            try(ActionButton_Update)
+            try(function() ActionButton_Update(ActionButton1) end)
         end
         -- A RUNNING cooldown. Nothing else makes a cooldown-count addon paint: OmniCC's hook only
         -- builds its text frame when `start > 0 and duration > OmniCC.min and enable > 0`, and its
@@ -170,7 +177,6 @@ pub(super) fn measure_render(
                 GameTooltip:Show()
             end)
         end
-        this = nil
     "#,
     );
     for _ in 0..10 {
