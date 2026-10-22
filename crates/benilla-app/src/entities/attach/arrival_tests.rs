@@ -108,7 +108,7 @@ fn app() -> Option<App> {
 }
 
 /// A player's look: race, sex, face, hair style and its worn set.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Look {
     race: u8,
     sex: u8,
@@ -148,6 +148,8 @@ fn arrive(app: &mut App, look: Look) -> Entity {
             Equipment {
                 bodyslots: look.equip,
                 settled: true,
+                // The feed's dials beside the gear: skin, hair style, colour, facial hair.
+                look: [0, look.hair, 0, 0],
                 ..Default::default()
             },
             // UNIT_FIELD_BYTES_0 (36): race, gender; PLAYER_BYTES (193): face, hair style.
@@ -218,7 +220,12 @@ fn a_crowd_composites_off_the_main_thread_and_each_body_waits_for_its_atlas() {
                     .fetch(&look.key());
                 assert!(
                     matches!(atlas, Some(Some(_))),
-                    "a body is built only over its finished atlas"
+                    "{look:?}: a body is built only over its finished atlas, got {}",
+                    match atlas {
+                        None => "no entry",
+                        Some(None) => "a failed composite",
+                        Some(Some(_)) => "an atlas",
+                    }
                 );
                 assert!(children(&app, e) > 0, "and draws once built");
             }
