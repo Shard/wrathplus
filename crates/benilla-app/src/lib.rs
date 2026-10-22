@@ -8,9 +8,10 @@
 //! reference does. The capture harness (`$WOW_CAPTURE`) boots straight in-world.
 
 // A player build's dead code is the seam working: with `--no-default-features` every symbol only an
-// instrument calls goes unused, and a `cfg` per item would spread seam knowledge into gameplay
-// modules. Dev builds warn normally.
-#![cfg_attr(not(feature = "dev"), allow(dead_code))]
+// instrument calls goes unused, and so does every re-export only an instrument imports (the dress
+// and ground censuses' `BodyPartsDesc`, `ground_derived`, …); a `cfg` per item would spread seam
+// knowledge into gameplay modules. Dev builds warn normally, so an import nothing uses still warns.
+#![cfg_attr(not(feature = "dev"), allow(dead_code, unused_imports))]
 
 /// The realtime-audio allocation tripwire: in debug builds an allocation inside `sound::output`'s
 /// `no_alloc` scopes (the output IO callback, the render pass) aborts the process; release builds
