@@ -763,95 +763,6 @@ fn set_trainer_service_selects_the_builder_and_never_renders_its_own_line() {
     assert!(s.take_errors().is_empty());
 }
 
-/// `SetCraftSpell` is a selector like `SetTrainerService`: a rod recipe hovers the rod's item
-/// tooltip while its row's icon is the spell's, which is the reference's shape, not a bug.
-#[test]
-fn set_craft_spell_selects_the_builder_like_the_trainer_hover_does() {
-    let mut s = script();
-    s.set_screen_size(800.0, 600.0);
-    s.set_item_template(
-        6218,
-        ItemTemplateView {
-            name: "Runed Copper Rod".into(),
-            quality: 1,
-            ..Default::default()
-        },
-    );
-    s.set_spell_tooltip(
-        7420,
-        SpellTooltipView {
-            name: "Enchant Bracer - Minor Health".into(),
-            cast_time: Some("Instant cast".into()),
-            description: "Permanently enchant bracers.".into(),
-            ..Default::default()
-        },
-    );
-    let recipe = |spell_id: u32, name: &str, tooltip: CraftTooltip| CraftRecipe {
-        spell_id,
-        tooltip,
-        name: name.into(),
-        sub_name: String::new(),
-        difficulty: TradeSkillDifficulty::Optimal,
-        num_available: 1,
-        icon: Some("Interface\\Icons\\Spell_Holy_Heal".into()),
-        description: Some("the OLD two-line stub's second line".into()),
-        needs_item_target: false,
-        reagents: vec![],
-        tools: vec![],
-        spell_level: 0,
-    };
-    s.set_craft(Some(CraftState {
-        name: "Enchanting".into(),
-        rank: 100,
-        max_rank: 150,
-        craft_type: 3,
-        recipes: vec![
-            recipe(
-                7420,
-                "Enchant Bracer - Minor Health",
-                CraftTooltip::Spell(7420),
-            ),
-            recipe(7421, "Runed Copper Rod", CraftTooltip::Item(6218)),
-        ],
-    }));
-
-    s.run(
-        r#"
-        local a = CreateFrame("Button", "AB2"); a:SetPoint("CENTER", 0, 0); a:SetWidth(10); a:SetHeight(10)
-        CreateFrame("GameTooltip", "TT")
-        TT:SetOwner(a, "ANCHOR_RIGHT")
-        TT:SetCraftSpell(1)
-    "#,
-    )
-    .unwrap();
-    let texts = left_lines(&mut s);
-    assert_eq!(texts[0], "Enchant Bracer - Minor Health");
-    assert!(
-        texts.iter().any(|t| t == "Instant cast"),
-        "the SHARED spell builder's law, not a two-line stub: {texts:?}"
-    );
-    assert!(
-        !texts
-            .iter()
-            .any(|t| t == "the OLD two-line stub's second line"),
-        "the row's own `description` field is no longer the tooltip's source: {texts:?}"
-    );
-
-    s.run(
-        r#"
-        TT:SetOwner(AB2, "ANCHOR_RIGHT")
-        TT:SetCraftSpell(2)
-    "#,
-    )
-    .unwrap();
-    let texts = left_lines(&mut s);
-    assert_eq!(
-        texts[0], "Runed Copper Rod",
-        "a CREATE_ITEM recipe hovers the ITEM, though its icon is the spell's: {texts:?}"
-    );
-    assert!(s.take_errors().is_empty());
-}
-
 /// `0x532b00` skips the remaining line on `untilCancelled` (`0x532bda`, `0x532bdf`), never on
 /// whether the aura has a duration yet.
 #[test]
@@ -1038,24 +949,6 @@ fn quest_reward_spell_getters_and_hovers() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// A craft recipe row whose detail icon hovers `tooltip`.
-fn craft_recipe(spell_id: u32, name: &str, tooltip: CraftTooltip) -> CraftRecipe {
-    CraftRecipe {
-        spell_id,
-        tooltip,
-        name: name.into(),
-        sub_name: String::new(),
-        difficulty: TradeSkillDifficulty::Optimal,
-        num_available: 1,
-        icon: None,
-        description: None,
-        needs_item_target: false,
-        reagents: vec![],
-        tools: vec![],
-        spell_level: 0,
-    }
-}
-
 /// Firebolt (3110) on a pet-bar slot.
 fn firebolt_slot() -> PetActionView {
     PetActionView {
@@ -1077,7 +970,7 @@ fn firebolt() -> SpellTooltipView {
     }
 }
 
-/// Pet-bar tokens and craft item subjects name no spell, so they are left out.
+/// Pet-bar tokens name no spell, so they are left out.
 #[test]
 fn the_spell_subjects_are_what_the_setters_read_from_the_vm() {
     let mut s = script();
@@ -1124,16 +1017,6 @@ fn the_spell_subjects_are_what_the_setters_read_from_the_vm() {
         }],
         ..Default::default()
     });
-    s.set_craft(Some(CraftState {
-        name: "Beast Training".into(),
-        rank: 0,
-        max_rank: 0,
-        craft_type: 1,
-        recipes: vec![
-            craft_recipe(24599, "Bite", CraftTooltip::Spell(17253)),
-            craft_recipe(7421, "Runed Copper Rod", CraftTooltip::Item(6218)),
-        ],
-    }));
     let aura = |spell_id| AuraState {
         spell_id,
         ..Default::default()
@@ -1152,7 +1035,7 @@ fn the_spell_subjects_are_what_the_setters_read_from_the_vm() {
 
     let mut subjects = s.spell_tooltip_subjects();
     subjects.sort_unstable();
-    assert_eq!(subjects, vec![116, 133, 172, 589, 1459, 2580, 8921, 17253]);
+    assert_eq!(subjects, vec![116, 133, 172, 589, 1459, 2580, 8921]);
     // The pet's bar and book are read through the builder's unit selector: the pet's views.
     let mut pet_subjects = s.pet_spell_tooltip_subjects();
     pet_subjects.sort_unstable();
@@ -1161,7 +1044,7 @@ fn the_spell_subjects_are_what_the_setters_read_from_the_vm() {
 
 /// The builder's unit selector picks the view built against the pet: `SetPetAction` passes it
 /// (`0x532888`, `0x5328d0`), `SetSpell` on the pet book (`0x532e23`) and a pet-learn
-/// `SetTrainerService` (`0x533a7f`); the player's book, a class service and a craft pass 0.
+/// `SetTrainerService` (`0x533a7f`); the player's book and a class service pass 0.
 #[test]
 fn the_unit_selector_setters_read_the_pet_view() {
     let mut s = script();
@@ -1210,13 +1093,6 @@ fn the_unit_selector_setters_read_the_pet_view() {
         services: vec![service(true), service(false)],
         ..Default::default()
     }));
-    s.set_craft(Some(CraftState {
-        name: "Beast Training".into(),
-        rank: 0,
-        max_rank: 0,
-        craft_type: 1,
-        recipes: vec![craft_recipe(24599, "Sacrifice", CraftTooltip::Spell(7812))],
-    }));
     s.run(
         r#"
         local a = CreateFrame("Button", "PB1"); a:SetPoint("CENTER", 0, 0); a:SetWidth(10); a:SetHeight(10)
@@ -1230,7 +1106,6 @@ fn the_unit_selector_setters_read_the_pet_view() {
         -- Row 1 is the group header.
         PET_SERVICE = desc(function() TT:SetTrainerService(2) end)
         SERVICE = desc(function() TT:SetTrainerService(3) end)
-        CRAFT = desc(function() TT:SetCraftSpell(1) end)
     "#,
     )
     .unwrap();
@@ -1240,7 +1115,6 @@ fn the_unit_selector_setters_read_the_pet_view() {
     assert_eq!(got("PET_SERVICE"), "absorb 318 damage");
     assert_eq!(got("BOOK"), "absorb 305 damage");
     assert_eq!(got("SERVICE"), "absorb 305 damage");
-    assert_eq!(got("CRAFT"), "absorb 305 damage");
     assert!(s.take_spell_tooltip_asks().is_empty());
     assert!(s.take_pet_spell_tooltip_asks().is_empty());
     assert!(s.take_errors().is_empty());
@@ -1322,46 +1196,26 @@ fn a_missed_view_re_renders_the_tooltip_when_the_app_answers() {
     assert!(s.take_errors().is_empty());
 }
 
-/// Beast Training's icon has no fallback name, so its miss is a hidden plate.
+/// An enchant link's miss shows its name line, and the answer fills it.
 #[test]
-fn a_hidden_miss_shows_and_an_enchant_link_fills_when_answered() {
+fn an_enchant_link_fills_when_answered() {
     let mut s = script();
     s.set_screen_size(800.0, 600.0);
-    s.set_craft(Some(CraftState {
-        name: "Beast Training".into(),
-        rank: 0,
-        max_rank: 0,
-        craft_type: 1,
-        recipes: vec![craft_recipe(24599, "Bite", CraftTooltip::Spell(17253))],
-    }));
     s.run(
         r#"
         local a = CreateFrame("Button", "CI"); a:SetPoint("CENTER", 0, 0); a:SetWidth(10); a:SetHeight(10)
-        CreateFrame("GameTooltip", "TT")
         CreateFrame("GameTooltip", "REF")
-        TT:SetOwner(CI, "ANCHOR_RIGHT")
-        TT:SetCraftSpell(1)
         REF:SetOwner(CI, "ANCHOR_PRESERVE")
         REF:SetHyperlink("|cffffd000|Henchant:20034|h[Enchant Weapon - Crusader]|h|r")
     "#,
     )
     .unwrap();
-    assert_eq!(s.eval::<i64>("return TT:NumLines()").unwrap(), 0);
-    assert!(!s.eval::<bool>("return TT:IsShown() == 1").unwrap());
     assert_eq!(
         s.eval::<String>("return REFTextLeft1:GetText()").unwrap(),
         "Enchant Weapon - Crusader"
     );
     assert_eq!(s.eval::<i64>("return REF:NumLines()").unwrap(), 1);
 
-    s.set_spell_tooltip(
-        17253,
-        SpellTooltipView {
-            name: "Bite".into(),
-            description: "Bite the enemy.".into(),
-            ..Default::default()
-        },
-    );
     s.set_spell_tooltip(
         20034,
         SpellTooltipView {
@@ -1370,12 +1224,6 @@ fn a_hidden_miss_shows_and_an_enchant_link_fills_when_answered() {
             description: "Permanently enchant a melee weapon.".into(),
             ..Default::default()
         },
-    );
-    assert!(s.eval::<bool>("return TT:IsShown() == 1").unwrap());
-    assert_eq!(
-        s.eval::<(String, String)>("return TTTextLeft1:GetText(), TTTextLeft2:GetText()")
-            .unwrap(),
-        ("Bite".to_string(), "Bite the enemy.".to_string())
     );
     assert_eq!(
         s.eval::<(i64, String)>("return REF:NumLines(), REFTextLeft3:GetText()")
@@ -1475,22 +1323,25 @@ fn a_line_rewritten_in_place_ends_the_wait() {
 fn a_wait_replaced_by_an_earlier_re_render_is_not_replayed() {
     let mut s = script();
     s.set_screen_size(800.0, 600.0);
-    s.set_craft(Some(CraftState {
-        name: "Beast Training".into(),
-        rank: 0,
-        max_rank: 0,
-        craft_type: 1,
-        recipes: vec![craft_recipe(24599, "Firebolt", CraftTooltip::Spell(3110))],
-    }));
+    // A pet-bar spell with no name: its miss is a hidden plate, so `OnShow` waits for the answer.
+    s.set_pet_actions(
+        true,
+        true,
+        true,
+        vec![PetActionView {
+            spell_id: Some(3110),
+            ..Default::default()
+        }],
+    );
     s.run(
         r#"
         local a = CreateFrame("Button", "PB1"); a:SetPoint("CENTER", 0, 0); a:SetWidth(10); a:SetHeight(10)
         CreateFrame("GameTooltip", "A")
         CreateFrame("GameTooltip", "B")
         A:SetOwner(PB1, "ANCHOR_RIGHT")
-        A:SetCraftSpell(1)
+        A:SetPetAction(1)
         B:SetOwner(PB1, "ANCHOR_RIGHT")
-        B:SetCraftSpell(1)
+        B:SetPetAction(1)
         A:SetScript("OnShow", function()
             B:SetOwner(PB1, "ANCHOR_RIGHT")
             B:SetHyperlink("|cffffd000|Henchant:20034|h[Enchant Weapon - Crusader]|h|r")
@@ -1498,7 +1349,7 @@ fn a_wait_replaced_by_an_earlier_re_render_is_not_replayed() {
     "#,
     )
     .unwrap();
-    s.set_spell_tooltip(3110, firebolt());
+    s.set_pet_spell_tooltip(3110, firebolt());
     assert_eq!(
         s.eval::<(i64, String)>("return B:NumLines(), BTextLeft1:GetText()")
             .unwrap(),
