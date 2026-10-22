@@ -802,9 +802,31 @@ Budget about 1 h 10 min for steps 2 to 4, then the gates.
 `PlaySeq::next` renamed `advance` (`should_implement_trait`), and `Default` for the `TestDeps` and
 `TestObjects` fixtures.
 
-Not covered by the dry run: `cargo machete` pruning of each crate's dependency list (they start
-as benilla-app's), and the player build (`--no-default-features`), which forwards `dev` the same
-way and should be checked once on the move tree.
+**The play binary and the player build on the moved tree** (same dry run):
+
+- `cargo build --profile play -p benilla` (what `cargo play` builds; the installed binary carries
+  the `dev` instruments, so default features): 22 min, no rustc warning; `ld` repeats its
+  `__eh_frame section too large` note, as the unmoved build does. Headless smoke, no window:
+  `benilla --help` prints the usage and exits 1, `WOW_CAPTURE=list benilla` lists the four
+  captures (tools crate) and exits 0, both before any setup.
+- Player tests (`--no-default-features --lib --no-fail-fast`, the gate's `player-tests` rung on
+  the six crates and `benilla-formats`): core 62, net 197, world 1,642/7 ignored, ui 2,439/9,
+  tools 47, formats 441 pass; the root 175 pass and 2 fail,
+  `the_movement_chain_keeps_its_order` and `the_cvar_hooks_register_in_plugin_order`, which fail
+  the same way on the unmoved tree (24ec10d8): without `dev` they read no system or observer names.
+
+**Unused dependencies** (`cargo machete` on the moved tree; each crate starts with the root's
+list, the unmoved root has none; prune after the move, not in it; `bevy_egui` is optional and named
+in each crate's `dev` feature, so removing it edits that feature too):
+
+| Crate | Unused |
+|---|---|
+| core (19) | anyhow, arboard, assert_no_alloc, bevy_egui, bytemuck, cosmic-text, crossbeam-channel, fontdb, half, image, include_dir, kira, libc, mint, rand, rtrb, symphonia, wgpu, winit |
+| net (21) | arboard, assert_no_alloc, avian3d, bevy_egui, bytemuck, cosmic-text, fontdb, half, image, include_dir, kira, libc, mint, rand, regex, rtrb, serde, symphonia, toml, wgpu, winit |
+| world (8) | arboard, bevy_egui, bytemuck, include_dir, rand, regex, wgpu, winit |
+| ui (14) | assert_no_alloc, avian3d, bevy_egui, cosmic-text, fontdb, half, kira, mint, regex, rtrb, serde, symphonia, toml, wgpu |
+| tools (14) | anyhow, arboard, assert_no_alloc, cosmic-text, fontdb, half, include_dir, kira, mint, rand, regex, rtrb, symphonia, winit |
+| root (20) | anyhow, arboard, avian3d, bevy_egui, bytemuck, cosmic-text, fontdb, half, image, include_dir, kira, libc, mint, rand, regex, rtrb, serde, symphonia, wgpu, winit |
 
 ## Coordination with in-flight work
 

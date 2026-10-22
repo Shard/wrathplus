@@ -223,8 +223,15 @@ fn the_movement_kinds_other_handlers_are_pinned() {
 
 /// The movement chain's order in `Update`, by function name: the drain, then the movers in their
 /// fixed order, with the NPC token feed seated between the drain and the facing driver.
+///
+/// Dev builds only: Bevy keeps system and observer names only with its `debug` feature, which only
+/// the `dev` build turns on (through `benilla-world/dev` and `bevy_egui`); a player build reads
+/// empty names, so there is nothing to compare and the test returns at once.
 #[test]
 fn the_movement_chain_keeps_its_order() {
+    if !crate::run_mode::dev_affordances() {
+        return;
+    }
     let mut app = crate::game_plugins::schedule_tests::headless_client();
     let names: Vec<String> = app.world_mut().schedule_scope(Update, |world, schedule| {
         schedule.initialize(world).expect("Update initializes");
