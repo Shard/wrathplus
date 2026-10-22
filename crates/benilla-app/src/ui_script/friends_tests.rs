@@ -47,8 +47,21 @@ fn push(s: &mut UiScript, state: SocialState, event: &str) {
     s.fire_event(event, Vec::new());
 }
 
+/// The window open on the friends list, fed `friends` with the first selected.
+fn with_friends(friends: Vec<FriendInfo>) -> UiScript {
+    let mut s = setup();
+    s.run("ToggleFriendsFrame(1)").unwrap();
+    let state = SocialState {
+        friends,
+        selected_friend: 1,
+        ..Default::default()
+    };
+    push(&mut s, state, "FRIENDLIST_UPDATE");
+    s
+}
+
 /// With no guild seated, `IsInGuild()` is nil and `FriendsFrame_OnShow`'s `InGuildCheck()` greys
-/// the guild tab (`FriendsFrame.lua:78`, `:920-922`).
+/// the guild tab (`FriendsFrame.lua:251`, `:1841-1852`).
 #[test]
 fn the_window_opens_on_friends_with_the_guild_tab_disabled() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -74,7 +87,7 @@ fn the_window_opens_on_friends_with_the_guild_tab_disabled() {
         1,
         "the guild tab is disabled, not absent"
     );
-    // `ToggleFriendsFrame(3)` returns early without a guild (`FriendsFrame.lua:750`).
+    // `ToggleFriendsFrame(3)` returns early without a guild (`FriendsFrame.lua:1435-1437`).
     s.run("ToggleFriendsFrame(3)").unwrap();
     assert!(
         !s.eval::<bool>("return GuildFrame:IsVisible()").unwrap(),
@@ -83,20 +96,18 @@ fn the_window_opens_on_friends_with_the_guild_tab_disabled() {
     assert!(s
         .eval::<bool>("return FriendsListFrame:IsVisible()")
         .unwrap());
-    // Big window tabs (20px ends) along the bottom; the Friends/Ignore pair is compact (16px).
+    // Big window tabs (20px ends) along the bottom; Friends/Ignore/Pending are the header's tabs
+    // (`FriendsFrame.xml:1575-1630`), shown on the window's first tab (`FriendsFrame.lua:256`).
     assert_eq!(
         s.eval::<f64>("return FriendsFrameTab1Left:GetWidth()")
             .unwrap(),
         20.0,
         "the window tab strip keeps the big tab art"
     );
-    assert_eq!(
-        s.eval::<f64>("return FriendsFrameToggleTab1Left:GetWidth()")
-            .unwrap(),
-        16.0,
-        "the in-panel toggle pair is the compact tab art"
-    );
-    // The selected tab again closes the window (`FriendsFrame.lua:753-755`).
+    assert!(s
+        .eval::<bool>("return FriendsTabHeaderTab1:IsVisible()")
+        .unwrap());
+    // The selected tab again closes the window (`FriendsFrame.lua:1438-1441`).
     s.run("ToggleFriendsFrame(1)").unwrap();
     assert!(!s.eval::<bool>("return FriendsFrame:IsVisible()").unwrap());
 }
@@ -133,111 +144,98 @@ fn the_social_tabs_fit_their_labels_on_the_first_show() {
     assert!(s.errors().is_empty(), "no handler errors: {:?}", s.errors());
 }
 
-/// Fails if `GetFriendInfo`'s six returns come back out of order.
+/// Online rows first, then the offline header's row, then offline rows; a WoW friend reads
+/// `name, Level N Class` over its area, and `<AFK>` picks the away icon
+/// (`FriendsFrame.lua:2138-2159`). Fails if `GetFriendInfo`'s returns come back out
+/// of order.
 #[test]
 fn friend_rows_render_the_online_and_offline_templates() {
     let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = setup();
-    s.run("ToggleFriendsFrame(1)").unwrap();
-    push(
-        &mut s,
-        SocialState {
-            friends: vec![
-                FriendInfo {
-                    status: "<AFK>".to_string(),
-                    ..friend("Onerogue", 60, "Rogue", "Elwynn Forest", true)
-                },
-                friend("Twomage", 0, "", "", false),
-            ],
-            selected_friend: 1,
-            ..Default::default()
+    let s = with_friends(vec![
+        FriendInfo {
+            // 3.3.5's `CHAT_FLAG_AFK`, which `ui_social` feeds (`GlobalStrings.lua:1432`).
+            status: "<Away>".to_string(),
+            ..friend("Onerogue", 60, "Rogue", "Elwynn Forest", true)
         },
-        "FRIENDLIST_UPDATE",
-    );
-
+        friend("Twomage", 0, "", "", false),
+    ]);
+    let row = |s: &UiScript, expr: &str| {
+        s.eval::<String>(&format!(
+            "return FriendsFrameFriendsScrollFrame{expr} or ''"
+        ))
+        .unwrap()
+    };
+    assert_eq!(row(&s, "Button1Name:GetText()"), "Onerogue, Level 60 Rogue");
+    assert_eq!(row(&s, "Button1Info:GetText()"), "Elwynn Forest");
     assert_eq!(
-        s.eval::<String>("return FriendsFrameFriendButton1ButtonTextNameLocation:GetText()")
-            .unwrap(),
-        "Onerogue |cffffffff- Elwynn Forest|r <AFK>"
-    );
-    assert_eq!(
-        s.eval::<String>("return FriendsFrameFriendButton1ButtonTextInfo:GetText()")
-            .unwrap(),
-        "Level 60 Rogue"
-    );
-    assert_eq!(
-        s.eval::<String>("return FriendsFrameFriendButton2ButtonTextNameLocation:GetText()")
-            .unwrap(),
-        "|cff999999Twomage - Offline|r"
+        row(&s, "Button1Status:GetTexture()"),
+        "Interface\\FriendsFrame\\StatusIcon-Away"
     );
     assert!(
-        s.eval::<bool>("return FriendsFrameFriendButton2:IsVisible()")
+        s.eval::<bool>("return FriendsFrameOfflineHeader:IsVisible()")
             .unwrap(),
-        "both rows shown"
+        "online and offline friends both present: the header row sits between them"
+    );
+    assert!(!s
+        .eval::<bool>("return FriendsFrameFriendsScrollFrameButton2:IsShown()")
+        .unwrap());
+    assert_eq!(row(&s, "Button3Name:GetText()"), "Twomage");
+    assert!(
+        s.eval::<bool>("return FriendsFrameFriendsScrollFrameButton3:IsVisible()")
+            .unwrap(),
+        "the offline row is shown"
     );
     assert!(
-        !s.eval::<bool>("return FriendsFrameFriendButton3:IsVisible()")
+        !s.eval::<bool>("return FriendsFrameFriendsScrollFrameButton4:IsVisible()")
             .unwrap(),
         "rows past the list are hidden"
     );
 }
 
+/// Send Message follows the selected friend's connection (`FriendsFrame.lua:426-442`); 3.3.5 has
+/// no Remove or Group Invite button, they are the row's menu.
 #[test]
 fn the_friend_buttons_follow_the_selection() {
     let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = setup();
-    s.run("ToggleFriendsFrame(1)").unwrap();
-
-    push(&mut s, SocialState::default(), "FRIENDLIST_UPDATE");
-    for button in ["SendMessage", "GroupInvite", "RemoveFriend"] {
-        assert!(
-            !s.eval::<bool>(&format!(
-                "return FriendsFrame{button}Button:IsEnabled() ~= 0"
-            ))
-            .unwrap(),
-            "{button} is disabled with no friends"
-        );
-    }
-
-    push(
-        &mut s,
-        SocialState {
-            friends: vec![friend("Twomage", 0, "", "", false)],
-            selected_friend: 1,
-            ..Default::default()
-        },
-        "FRIENDLIST_UPDATE",
+    let send_enabled = |friends: Vec<FriendInfo>| {
+        with_friends(friends)
+            .eval::<bool>("return FriendsFrameSendMessageButton:IsEnabled() ~= 0")
+            .unwrap()
+    };
+    assert!(
+        !send_enabled(vec![]),
+        "Send Message is disabled with no friends"
     );
     assert!(
-        s.eval::<bool>("return FriendsFrameRemoveFriendButton:IsEnabled() ~= 0")
-            .unwrap(),
-        "an offline friend can still be removed"
+        !send_enabled(vec![friend("Twomage", 0, "", "", false)]),
+        "an offline friend cannot be whispered"
     );
-    assert!(
-        !s.eval::<bool>("return FriendsFrameSendMessageButton:IsEnabled() ~= 0")
-            .unwrap(),
-        "…but not whispered"
-    );
+    assert!(send_enabled(vec![friend(
+        "Onerogue",
+        60,
+        "Rogue",
+        "Elwynn Forest",
+        true
+    )]));
 }
 
-/// Remove Friend queues the row index (the app resolves the guid); Group Invite queues the name.
+/// The menu's verbs act on `FriendsFrame.selectedFriend`, which `FriendsList_Update` reads back
+/// after a selection (`FriendsFrame.lua:1407-1424`): Remove queues the row index (the app resolves
+/// the guid), Group Invite and Send Message the name.
 #[test]
 fn the_friend_buttons_queue_their_verbs() {
     let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = setup();
-    s.run("ToggleFriendsFrame(1)").unwrap();
-    push(
-        &mut s,
-        SocialState {
-            friends: vec![
-                friend("Onerogue", 60, "Rogue", "Elwynn Forest", true),
-                friend("Twomage", 40, "Mage", "Westfall", true),
-            ],
-            selected_friend: 2,
-            ..Default::default()
-        },
-        "FRIENDLIST_UPDATE",
-    );
+    let mut s = with_friends(vec![
+        friend("Onerogue", 60, "Rogue", "Elwynn Forest", true),
+        friend("Twomage", 40, "Mage", "Westfall", true),
+    ]);
+    s.run("FriendsFrame_SelectFriend(FRIENDS_BUTTON_TYPE_WOW, 2) FriendsList_Update()")
+        .unwrap();
+    // `InviteUnit` acts only for a held player (`wrath_chat_verbs.rs`).
+    s.set_unit_guids(&benilla_ui::script::UnitGuids {
+        player: 1,
+        ..Default::default()
+    });
     let _ = s.take_social_requests();
 
     s.run("FriendsFrame_RemoveFriend()").unwrap();
@@ -256,15 +254,20 @@ fn the_friend_buttons_queue_their_verbs() {
     s.run("FriendsFrame_SendMessage()").unwrap();
     s.tick(0.05);
     assert!(s
-        .eval::<bool>("return ChatFrameEditBox:IsVisible()")
+        .eval::<bool>("return ChatFrame1EditBox:IsVisible()")
         .unwrap());
     assert_eq!(
-        s.eval::<(String, String)>("return ChatFrameEditBox.chatType, ChatFrameEditBox.tellTarget")
-            .unwrap(),
+        s.eval::<(String, String)>(
+            "return ChatFrame1EditBox:GetAttribute('chatType'), \
+             ChatFrame1EditBox:GetAttribute('tellTarget')"
+        )
+        .unwrap(),
         ("WHISPER".to_string(), "Twomage".to_string())
     );
 }
 
+/// The header's second tab shows the ignore list, headed by `IGNORED` when it has rows, and
+/// Remove Player drops the selected name (`FriendsFrame.lua:449-584`, `:1344-1348`).
 #[test]
 fn the_ignore_list_is_the_other_half_of_tab_one() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -280,7 +283,7 @@ fn the_ignore_list_is_the_other_half_of_tab_one() {
         "IGNORELIST_UPDATE",
     );
 
-    s.run("FriendsFrameToggleTab2:Click()").unwrap();
+    s.run("FriendsTabHeaderTab2:Click()").unwrap();
     assert!(s
         .eval::<bool>("return IgnoreListFrame:IsVisible()")
         .unwrap());
@@ -292,34 +295,37 @@ fn the_ignore_list_is_the_other_half_of_tab_one() {
             .unwrap(),
         "Ignore List"
     );
+    let names: Vec<String> = s
+        .eval(
+            "local t = {} for i = 1, 3 do local b = _G['FriendsFrameIgnoreButton' .. i] \
+             if b:IsShown() and b.name:IsShown() then t[#t + 1] = b.name:GetText() end end return t",
+        )
+        .unwrap();
     assert_eq!(
-        s.eval::<String>("return FriendsFrameIgnoreButton1ButtonTextName:GetText()")
-            .unwrap(),
-        "Spammer"
-    );
-    assert_eq!(
-        s.eval::<String>("return FriendsFrameIgnoreButton2ButtonTextName:GetText()")
-            .unwrap(),
-        "Ninja"
+        names,
+        ["Spammer", "Ninja"],
+        "the header row, then the two names"
     );
 
+    s.run("FriendsFrame_SelectSquelched(SQUELCH_TYPE_IGNORE, 1) IgnoreList_Update()")
+        .unwrap();
     let _ = s.take_social_requests();
-    s.run("FriendsFrame_UnIgnore()").unwrap();
+    s.run("FriendsFrameUnsquelchButton:Click()").unwrap();
     assert_eq!(
         s.take_social_requests(),
         vec![SocialRequest::DelIgnore("Spammer".to_string())]
     );
 
-    // Through the ignore frame's own toggle pair: the friends frame's copy hides with its list.
-    s.run("IgnoreFrameToggleTab1:Click()").unwrap();
+    s.run("FriendsTabHeaderTab1:Click()").unwrap();
     assert!(s
         .eval::<bool>("return FriendsListFrame:IsVisible()")
         .unwrap());
-    // Stock `ShowIgnorePanel` only shows the window (`FriendsFrame.lua:781-788`).
-    s.run("ShowIgnorePanel()").unwrap();
+    // `ToggleIgnorePanel` raises the window on the ignore half (`FriendsFrame.lua:1480-1494`).
+    s.run("HideUIPanel(FriendsFrame) ToggleIgnorePanel()")
+        .unwrap();
     assert!(s.eval::<bool>("return FriendsFrame:IsVisible()").unwrap());
     assert!(s
-        .eval::<bool>("return FriendsListFrame:IsVisible()")
+        .eval::<bool>("return IgnoreListFrame:IsVisible()")
         .unwrap());
 }
 
@@ -549,7 +555,8 @@ fn the_who_edit_box_sends_its_filter() {
     let _ = s.take_social_requests();
     s.run("WhoFrameEditBox:SetText(\"z-\\\"Elwynn Forest\\\" 1-10\")")
         .unwrap();
-    s.run("WhoFrameEditBox_OnEnterPressed()").unwrap();
+    s.run("WhoFrameEditBox_OnEnterPressed(WhoFrameEditBox)")
+        .unwrap();
     assert_eq!(
         s.take_social_requests(),
         vec![SocialRequest::Who("z-\"Elwynn Forest\" 1-10".to_string())]
@@ -659,32 +666,30 @@ fn right_clicking_a_who_row_opens_the_friend_menu() {
     // The stock `WHISPER` row is `ChatFrame_SendTell(name)`, applied at the box's next `OnUpdate`.
     s.tick(0.05);
     assert_eq!(
-        s.eval::<(String, String)>("return ChatFrameEditBox.chatType, ChatFrameEditBox.tellTarget")
-            .unwrap(),
+        s.eval::<(String, String)>(
+            "return ChatFrame1EditBox:GetAttribute('chatType'), \
+             ChatFrame1EditBox:GetAttribute('tellTarget')"
+        )
+        .unwrap(),
         ("WHISPER".to_string(), "Tigole".to_string())
     );
 }
 
-/// Stock `FriendsFrame_ShowDropdown` opens only for a connected friend (`FriendsFrame.lua:35-37`).
+/// From the friends list an offline friend still gets a menu, the offline one
+/// (`FriendsFrame.lua:139-144`, `friendsList` set at `:1274`).
 #[test]
-fn right_clicking_an_offline_friend_opens_nothing() {
+fn right_clicking_an_offline_friend_opens_the_offline_menu() {
     let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = setup();
-    s.run("ToggleFriendsFrame(1)").unwrap();
-    push(
-        &mut s,
-        SocialState {
-            friends: vec![friend("Twomage", 0, "", "", false)],
-            selected_friend: 1,
-            ..Default::default()
-        },
-        "FRIENDLIST_UPDATE",
-    );
-    s.run("FriendsFrameFriendButton1:Click(\"RightButton\")")
+    let s = with_friends(vec![friend("Twomage", 0, "", "", false)]);
+    s.run("FriendsFrameFriendsScrollFrameButton1:Click(\"RightButton\")")
         .unwrap();
-    assert!(
-        !s.eval::<bool>("return DropDownList1:IsVisible()").unwrap(),
-        "nothing to offer an offline friend"
+    assert!(s.eval::<bool>("return DropDownList1:IsVisible()").unwrap());
+    assert!(s
+        .eval::<bool>("return FriendsDropDown.initialize == FriendsFrameOfflineDropDown_Initialize")
+        .unwrap());
+    assert_eq!(
+        s.eval::<String>("return FriendsDropDown.name").unwrap(),
+        "Twomage"
     );
 }
 
@@ -692,23 +697,14 @@ fn right_clicking_an_offline_friend_opens_nothing() {
 #[test]
 fn selecting_a_row_reads_back_in_the_same_tick() {
     let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = setup();
-    s.run("ToggleFriendsFrame(1)").unwrap();
-    push(
-        &mut s,
-        SocialState {
-            friends: vec![
-                friend("Onerogue", 60, "Rogue", "Elwynn Forest", true),
-                friend("Twomage", 40, "Mage", "Westfall", true),
-            ],
-            selected_friend: 1,
-            ..Default::default()
-        },
-        "FRIENDLIST_UPDATE",
-    );
+    let mut s = with_friends(vec![
+        friend("Onerogue", 60, "Rogue", "Elwynn Forest", true),
+        friend("Twomage", 40, "Mage", "Westfall", true),
+    ]);
     let _ = s.take_social_requests();
 
-    s.run("FriendsFrameFriendButton2:Click()").unwrap();
+    s.run("FriendsFrameFriendsScrollFrameButton2:Click()")
+        .unwrap();
     assert_eq!(
         s.eval::<i64>("return GetSelectedFriend()").unwrap(),
         2,

@@ -54,7 +54,7 @@ const CATEGORY_ITEM: u32 = 4;
 /// -1 arm is readable; vmangos sends 0 or 1.
 const QUEUE_ENABLED: f64 = 1.0;
 
-/// The `UPDATE_TICKET` `arg1` for no ticket; the Help window tests `arg1 and arg1 ~= 0`.
+/// The `UPDATE_TICKET` `arg1` the hook records for no ticket: the event's absent arg, nil, as 0.
 const NO_TICKET: f64 = 0.0;
 
 /// Settle before the first ask, so the Help window's login-time `GetGMTicket()` is answered before
