@@ -253,6 +253,14 @@ fn the_stock_character_select_drives_the_roster_pick_and_booth() {
         preview.look.is_some(),
         "the selected character stands on the stage"
     );
+    // A background naming no known stage leaves the booth's scene as it was.
+    app.world_mut()
+        .non_send_resource_mut::<UiScript>()
+        .run("SetCharSelectBackground('Interface\\\\Custom\\\\UI_Nowhere.m2')")
+        .unwrap();
+    app.update();
+    let preview = app.world().resource::<crate::portrait::GluePreview>();
+    assert!(preview.scene == Some(crate::portrait::GlueScene::Stage("Human")));
     let sent: Vec<_> = pick_rx.try_iter().collect();
     assert!(
         matches!(sent[..], [crate::net::CharRequest::Enter(12)]),

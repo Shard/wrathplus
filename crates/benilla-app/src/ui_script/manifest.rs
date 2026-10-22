@@ -468,12 +468,10 @@ mod tests {
         assert_eq!(order, ["ExhaustionTick", "PlayerFrame"]);
     }
 
-    /// A shipped `.xml` neither the Wrath root nor the glue additions (`glue/glue.toc`, the glue
-    /// VM's own) lists never loads, with no error to say so.
+    /// A shipped `.xml` neither the Wrath root nor the glue VM's `glue/glue.toc` lists never loads.
     #[test]
     fn the_manifest_lists_every_shipped_file_and_nothing_else() {
-        let mut listed = shipped_manifest_files();
-        listed.extend(Addon::glue_additions().toc.files);
+        let mut listed = [Addon::glue_additions().toc.files, shipped_manifest_files()].concat();
         let mut shipped: Vec<String> = super::super::content::shipped_tree_files()
             .into_iter()
             .filter(|f| f.ends_with(".xml"))

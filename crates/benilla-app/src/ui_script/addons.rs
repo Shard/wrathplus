@@ -1823,8 +1823,8 @@ mod tests {
         let failures = load_wrath_third_party(&mut script, None, &[], true);
         assert!(failures.is_empty(), "load errors: {failures:?}");
 
-        // Discovery found it. One, not thirteen: `SMSG_ADDON_INFO` answers status 2 for the
-        // chain's twelve secure addons, and the Lua index space drops them.
+        // Discovery found it. One, not the chain's LoadOnDemand rows too: `SMSG_ADDON_INFO`
+        // answers status 2 for the secure built-ins, and the Lua index space drops them.
         seat_stock_addon_reply(&mut script);
         assert_eq!(script.eval::<i64>("return GetNumAddOns()").ok(), Some(1));
         assert_eq!(
@@ -1882,13 +1882,41 @@ mod tests {
         let _ = home;
     }
 
-    /// Seat the `SMSG_ADDON_INFO` reply hiding the secure addons, as world entry does: the Lua
-    /// index space does not exist until the server answers, as in the reference.
+    /// A secure built-in leaves `GetNumAddOns` and the index form of `GetAddOnInfo` once the reply
+    /// marks it, and stays reachable by name; before any reply the index space is empty.
+    #[test]
+    fn the_stock_addon_reply_hides_the_secure_built_ins_from_the_index_space() {
+        let _l = crate::local_state::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (home, _h) = hermetic_root("securereply");
+        let toc = "## Interface: 30300\n## Secure: 1\n## LoadOnDemand: 1\n";
+        write_addon(&home, "Blizzard_MacroUI", toc, &[]);
+        write_addon(&home, "Probe", "## Interface: 30300\n", &[]);
+        let mut script = UiScript::new().unwrap();
+        let _ = load_wrath_third_party(&mut script, None, &[], true);
+        assert_eq!(script.eval::<i64>("return GetNumAddOns()").ok(), Some(0));
+
+        seat_stock_addon_reply(&mut script);
+        assert_eq!(script.eval::<i64>("return GetNumAddOns()").ok(), Some(1));
+        assert_eq!(
+            script.eval::<String>("return (GetAddOnInfo(1))").ok(),
+            Some("Probe".into())
+        );
+        assert_eq!(
+            script
+                .eval::<String>("return (GetAddOnInfo('Blizzard_MacroUI'))")
+                .ok(),
+            Some("Blizzard_MacroUI".into())
+        );
+    }
+
+    /// Seat AzerothCore's `SMSG_ADDON_INFO` answer to our stock auth session, decoded as the IO
+    /// thread does: the Lua index space does not exist until the server answers, as in the reference.
     fn seat_stock_addon_reply(script: &mut UiScript) {
-        let hidden: Vec<String> = benilla_protocol::types::STOCK_SECURE_ADDONS
-            .iter()
-            .map(|a| a.name.to_string())
-            .collect();
+        let reply = [[2, 1, 0, 0, 0, 0, 0, 0].repeat(23), vec![0; 4]].concat();
+        let hidden = benilla_protocol::wrath_bootstrap::secure_addons(&reply);
+        assert_eq!(hidden.len(), 23);
         script.note_addon_info_reply(&hidden);
     }
 
@@ -1910,7 +1938,7 @@ mod tests {
         let mut script = UiScript::new().unwrap();
         let _ = load_wrath_third_party(&mut script, None, &[], true);
 
-        // One, not thirteen: the chain's twelve secure addons are hidden by the reply.
+        // One: the chain's secure built-ins are hidden by the reply.
         seat_stock_addon_reply(&mut script);
         assert_eq!(script.eval::<i64>("return GetNumAddOns()").ok(), Some(1));
         assert_eq!(
@@ -2182,8 +2210,9 @@ mod tests {
                 failures.is_empty(),
                 "actual addon load errors: {failures:?}"
             );
-            // Registration alone does not admit the in-game index space: mirror the server reply.
-            script.note_addon_info_reply(&[]);
+            // Registration alone does not admit the in-game index space: mirror the server reply,
+            // which hides the chain's secure built-ins.
+            seat_stock_addon_reply(&mut script);
             script.fire_event("PLAYER_LOGIN", vec![]);
             script.set_unit(
                 "player",

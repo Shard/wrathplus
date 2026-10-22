@@ -1159,12 +1159,10 @@ fn convert_entry_inner(
             light,
             fog,
         } => {
-            use crate::portrait::PortraitSource;
-            // A file pane publishes an idempotent tile request; `ui_models::compose_tiles` draws
-            // its quad each frame, so a cell packed later needs no re-conversion. A glue
-            // backdrop is the glue booth's scene instead, whatever file its Lua named.
-            let glue = name.as_deref().is_some_and(crate::portrait::glue_pane);
-            if let Some(path) = model.as_deref().filter(|_| !glue) {
+            use crate::portrait::{glue_pane, PortraitSource};
+            // A file pane publishes an idempotent tile request `ui_models::compose_tiles` draws each
+            // frame (no re-conversion); a glue backdrop ([`glue_pane`]) is the glue booth's scene.
+            if let Some(path) = model.as_deref().filter(|_| !name.as_deref().is_some_and(glue_pane)) {
                 let tiles = &mut booths.tiles;
                 let dpi = tiles.dpi.max(0.01);
                 let aspect = if h > 0.0 { w / h } else { 4.0 / 3.0 };
