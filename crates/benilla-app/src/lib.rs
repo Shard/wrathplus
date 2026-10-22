@@ -7,10 +7,8 @@
 //! have no world behind them, so with no server the client sits at the login screen, as the
 //! reference does. The capture harness (`$WOW_CAPTURE`) boots straight in-world.
 
-// A player build's dead code is the seam working: with `--no-default-features` every symbol only an
-// instrument calls goes unused, and so does every re-export only an instrument imports (the dress
-// and ground censuses' `BodyPartsDesc`, `ground_derived`, …); a `cfg` per item would spread seam
-// knowledge into gameplay modules. Dev builds warn normally, so an import nothing uses still warns.
+// A player build's dead code and instrument-only re-exports are the seam working; a `cfg` per item
+// would spread seam knowledge into gameplay modules. Dev builds warn normally.
 #![cfg_attr(not(feature = "dev"), allow(dead_code, unused_imports))]
 
 /// The realtime-audio allocation tripwire: in debug builds an allocation inside `sound::output`'s
@@ -56,8 +54,8 @@ mod dev;
 mod doodad_events;
 mod entities;
 pub mod experience;
-mod experience_ui;
 mod experience_ao;
+mod experience_ui;
 mod fishing_line;
 mod footprints;
 mod game_plugins;
@@ -70,9 +68,9 @@ mod guild;
 mod hover_log;
 mod inventory;
 mod items;
+mod launch_plan;
 mod loading_screen;
 mod local_state;
-mod launch_plan;
 mod login;
 mod loot;
 mod minimap;
@@ -81,10 +79,10 @@ mod nameplates;
 mod names;
 mod net;
 mod npc_text;
+mod overlay;
 mod pending_item_ops;
 /// Ships in part (the FPS journal and the clocks it reads); the rest is `dev`.
 mod perf;
-mod overlay;
 mod pipe_warm;
 mod player;
 mod poi_marker;
@@ -109,11 +107,11 @@ mod game_tip;
 mod name_persist;
 mod opaque2d;
 mod shipped_cvars;
+#[cfg(feature = "dev")]
+mod showcase_capture;
 /// Where "the client is going down" is observed, in `Last`; every system that persists state on the
 /// way out registers through it.
 mod shutdown;
-#[cfg(feature = "dev")]
-mod showcase_capture;
 mod smart_rect;
 mod sound;
 /// The two talent spell-modifier tables (`SMSG_SET_FLAT_/PCT_SPELL_MODIFIER`) and the read that
@@ -129,8 +127,9 @@ mod text_reshape;
 mod textinput;
 mod transport;
 mod tutorial;
-mod ui_action;
 mod ui_achievements;
+mod ui_action;
+mod ui_arena_team;
 mod ui_auction;
 mod ui_aura;
 mod ui_bank;
@@ -140,24 +139,27 @@ mod ui_battlefield_positions;
 mod ui_battlefield_score;
 mod ui_bind_confirm;
 mod ui_binder;
+mod ui_calendar;
 mod ui_cast;
 mod ui_char;
 mod ui_chat;
 mod ui_chat_verbs;
-mod ui_lfg;
-mod ui_calendar;
-mod ui_native;
 mod ui_guild_bank;
-mod ui_arena_team;
+mod ui_lfg;
+mod ui_native;
 mod ui_native_chat;
 // The native pet-name and WHO capture FIFOs live in `net` (split step 0 residue); the old paths stay.
 use net::{wrath_pet_name_capture as ui_native_pet_name, wrath_who_capture as ui_native_who};
+mod quest_reputation;
+mod quest_rewards;
+mod ui_companions;
 mod ui_death;
 mod ui_dialog_verbs;
 mod ui_dressup;
 mod ui_duel;
 mod ui_follow;
 mod ui_gamma;
+mod ui_glyphs;
 mod ui_gm_ticket;
 mod ui_gossip;
 mod ui_guild;
@@ -177,29 +179,21 @@ mod ui_merchant;
 mod ui_mirror;
 mod ui_models;
 mod ui_net;
+mod ui_paperdoll;
 mod ui_party;
 mod ui_pass;
 mod ui_pet;
 mod ui_pet_book;
 mod ui_pet_doll;
-mod ui_companions;
-mod ui_totems;
-mod ui_glyphs;
-mod ui_raid_vehicles;
-pub(crate) mod wrath_vehicle_seats;
-mod ui_unit_popup;
-mod ui_runes;
 mod ui_pet_stats;
 mod ui_pet_talent_tree;
-mod ui_vehicle;
-mod ui_paperdoll;
 mod ui_petition;
-mod quest_rewards;
-mod quest_reputation;
 mod ui_quest;
 mod ui_quest_log;
 mod ui_quest_share;
+mod ui_raid_vehicles;
 mod ui_reputation;
+mod ui_runes;
 mod ui_saved;
 mod ui_script;
 mod ui_session;
@@ -207,18 +201,21 @@ mod ui_shapeshift;
 mod ui_social;
 mod ui_spellbook;
 mod ui_stable;
-mod ui_summon;
 mod ui_static_popup;
+mod ui_summon;
 mod ui_tabard;
 mod ui_talent;
 mod ui_talent_wipe;
 mod ui_taxi;
 mod ui_text;
 mod ui_tooltip;
+mod ui_totems;
 mod ui_trade;
 mod ui_tradeskill;
 mod ui_trainer;
 mod ui_unit;
+mod ui_unit_popup;
+mod ui_vehicle;
 mod ui_world_map;
 mod video;
 mod vplates;
@@ -226,6 +223,7 @@ mod weapon_trail;
 mod world_backdrop;
 mod world_state;
 mod world_state_ui;
+pub(crate) mod wrath_vehicle_seats;
 
 use bevy::prelude::*;
 
@@ -416,45 +414,46 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
         // unit is 1280 px and the plate lands at the border texture's native 128×32, diffable
         // against the BLP.
         resolution: if run_mode::showcase_active() {
-            bevy::window::WindowResolution::new(1920, 1080)
-                .with_scale_factor_override(1.0)
-        } else { video::at_requested_dpi(
-            // Same opt-in as the UI load (`ui_script::lifecycle::ui_wanted`); the two must agree,
-            // or the right content is captured at the wrong size.
-            if capturing && crate::run_mode::capture_ui_opted_in() {
-                // `$WOW_WIN` overrides here too, for scale-dependent UI bugs.
-                if let Some(win) = video::requested_window_size() {
-                    win
-                } else {
-                    match std::env::var("WOW_CAPTURE").as_deref() {
-                        Ok("ui-actionbar") => UVec2::new(1300, 260),
-                        Ok("vplates") => UVec2::new(1024, 768),
-                        // Short enough for the action bar to overlap the chat edit box.
-                        Ok("ui-chatedit") => UVec2::new(566, 377),
-                        // The map's chrome is a centered 1024×768 block, with margin.
-                        Ok("ui-worldmap") => UVec2::new(1100, 800),
-                        _ => UVec2::new(640, 700),
-                    }
-                }
-                .into()
-            } else {
-                // `$WOW_WIN=WxH` (logical px) overrides the size. FFXGlow's blur is pinned in
-                // texels, so thin bright features self-amplify at high resolution; matching the
-                // reference's pixel density (`WOW_WIN=512x288` on a 2× display is 1024×576)
-                // isolates that term.
-                video::requested_window_size()
-                    // A run that reads no pixels gets a small window: it is held `AlwaysOnTop`
-                    // against the occlusion throttle (`capture::ProbeFocusPlugin`), and small and
-                    // cornered keeps it out of the way. Pixel runs keep the full size.
-                    .unwrap_or(if benilla_world::bgwin::no_pixel_run() {
-                        UVec2::new(640, 360)
+            bevy::window::WindowResolution::new(1920, 1080).with_scale_factor_override(1.0)
+        } else {
+            video::at_requested_dpi(
+                // Same opt-in as the UI load (`ui_script::lifecycle::ui_wanted`); the two must agree,
+                // or the right content is captured at the wrong size.
+                if capturing && crate::run_mode::capture_ui_opted_in() {
+                    // `$WOW_WIN` overrides here too, for scale-dependent UI bugs.
+                    if let Some(win) = video::requested_window_size() {
+                        win
                     } else {
-                        // The player's `gxResolution`; `bevy_winit` ignores it while fullscreen.
-                        video::boot_windowed_size()
-                    })
+                        match std::env::var("WOW_CAPTURE").as_deref() {
+                            Ok("ui-actionbar") => UVec2::new(1300, 260),
+                            Ok("vplates") => UVec2::new(1024, 768),
+                            // Short enough for the action bar to overlap the chat edit box.
+                            Ok("ui-chatedit") => UVec2::new(566, 377),
+                            // The map's chrome is a centered 1024×768 block, with margin.
+                            Ok("ui-worldmap") => UVec2::new(1100, 800),
+                            _ => UVec2::new(640, 700),
+                        }
+                    }
                     .into()
-            },
-        ) },
+                } else {
+                    // `$WOW_WIN=WxH` (logical px) overrides the size. FFXGlow's blur is pinned in
+                    // texels, so thin bright features self-amplify at high resolution; matching the
+                    // reference's pixel density (`WOW_WIN=512x288` on a 2× display is 1024×576)
+                    // isolates that term.
+                    video::requested_window_size()
+                        // A run that reads no pixels gets a small window: it is held `AlwaysOnTop`
+                        // against the occlusion throttle (`capture::ProbeFocusPlugin`), and small and
+                        // cornered keeps it out of the way. Pixel runs keep the full size.
+                        .unwrap_or(if benilla_world::bgwin::no_pixel_run() {
+                            UVec2::new(640, 360)
+                        } else {
+                            // The player's `gxResolution`; `bevy_winit` ignores it while fullscreen.
+                            video::boot_windowed_size()
+                        })
+                        .into()
+                },
+            )
+        },
         // `$WOW_NOVSYNC=1` uncaps presentation from boot so a headless FPS-journal run measures
         // frame cost, not the vsync ceiling; otherwise the player's `gxVSync` takes over from
         // `Startup` ([`crate::video`]).
