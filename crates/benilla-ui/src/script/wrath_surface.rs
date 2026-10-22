@@ -48,7 +48,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     install_trusted_secure_environment(lua)?;
     install_frame_methods(lua)?;
     wrath_cooldown::install(lua)?;
-    super::input_verbs::install_wrath(lua)?;
+    super::wrath_input_verbs::install(lua)?;
     install_compat(lua)
 }
 

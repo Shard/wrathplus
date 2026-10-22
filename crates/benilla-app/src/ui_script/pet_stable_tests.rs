@@ -88,6 +88,8 @@ fn call_pet_repaints_the_closed_stable_with_unknownobject_while_the_name_is_in_f
     // No stable visited: `GetStablePetInfo` misses and `GetSelectedStablePet()` is -1.
     s.set_unit("pet", Some(pet(None)));
     s.set_pet_stats(true, hunter_pet_stats());
+    // `GetPetTalentTree`, the 3.3.5 info line's fourth fill (`STABLE_PET_INFO_TEXT`).
+    s.set_wrath_pet_stable(Some("Ferocity".into()), false);
     s.fire_event("UNIT_PET", vec![ScriptValue::Str("player".into())]);
 
     assert!(
@@ -99,7 +101,10 @@ fn call_pet_repaints_the_closed_stable_with_unknownobject_while_the_name_is_in_f
         !s.eval::<bool>("return PetStableFrame:IsVisible()").unwrap(),
         "UNIT_PET must repaint the window without opening it"
     );
-    assert_eq!(level_text(&s).as_deref(), Some("Unknown Level 58 Boar"));
+    assert_eq!(
+        level_text(&s).as_deref(),
+        Some("Unknown Level 58 Boar|nFerocity")
+    );
     assert_eq!(
         s.eval::<String>("return PetStableCurrentPet.tooltip")
             .unwrap(),
@@ -109,14 +114,17 @@ fn call_pet_repaints_the_closed_stable_with_unknownobject_while_the_name_is_in_f
     assert_eq!(
         s.eval::<String>("return PetStableCurrentPet.tooltipSubtext")
             .unwrap(),
-        "Level 58 Boar"
+        "Level 58 Boar|nFerocity"
     );
 
     // The name lands; the window re-reads it on its next repaint, not on `UNIT_NAME_UPDATE`.
     s.set_unit("pet", Some(pet(Some("Snarl"))));
     s.fire_event("PET_STABLE_UPDATE", vec![]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-    assert_eq!(level_text(&s).as_deref(), Some("Snarl Level 58 Boar"));
+    assert_eq!(
+        level_text(&s).as_deref(),
+        Some("Snarl Level 58 Boar|nFerocity")
+    );
     assert_eq!(
         s.eval::<String>("return PetStableCurrentPet.tooltip")
             .unwrap(),

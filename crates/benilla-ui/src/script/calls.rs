@@ -76,6 +76,9 @@ pub enum ScriptCall {
     /// Build 12340 `SetActiveTalentGroup(group)` (`0x5c5e70`): cast the 1-based group's
     /// activation spell (63645/63644, table `0xad05e8`).
     ActivateTalentGroup { group: u8 },
+    /// Build 12340 `InteractUnit(unit)` (`0x527f00` → `0x5277b0`): the object's own interact, as a
+    /// right-click on it runs it.
+    InteractUnit { guid: u64 },
 }
 
 /// The mode the four `TargetNearest*` shims hand the TAB cycler `0x493f60`, the only byte that
