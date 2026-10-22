@@ -287,8 +287,11 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
                     vec![s("spell")?, index, s("spell")?, Value::Integer(a.action.into())]
                 }
                 super::action::ACTION_KIND_ITEM => vec![s("item")?, Value::Integer(a.action.into())],
+                // The macro's index now, from the slot's id.
                 super::action::ACTION_KIND_MACRO => {
-                    vec![s("macro")?, Value::Integer(a.action.into())]
+                    let id = super::macro_action_id(a.kind, a.action).unwrap_or(0);
+                    let index = model.macros.index_of_id(id).map_or(0, |i| i as i64);
+                    vec![s("macro")?, Value::Integer(index)]
                 }
                 _ => vec![],
             };

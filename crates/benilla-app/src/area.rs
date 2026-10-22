@@ -14,8 +14,8 @@
 //!   unnamed row resolves through its `AreaTableID`, a missing row never overrides. Then the
 //!   group's own row (`0x69d8f0`) refills the subzone. Both are exact-key lookups.
 //! - `GetRealZoneText` reads the zone name before the indoor override.
-//! - `GetMinimapZoneText` is subzone-else-zone (`0xb4da28`), with its own `MINIMAP_ZONE_CHANGED`
-//!   (`0x494970`).
+//! - `GetMinimapZoneText` is subzone-else-zone. It has no event of its own in 3.3.5: 12340's event
+//!   table has no `MINIMAP_ZONE_CHANGED`, and the minimap redraws on the `ZONE_CHANGED*` events.
 //!
 //! On the first world-enter `0x494780` also sets the world map to the player's zone
 //! (`0x4a6650`); that half lives in the world map feed (`ui_world_map`).
@@ -99,8 +99,7 @@ fn elect_event(cache: &ZoneCache, next: &ZoneSignal) -> Option<&'static str> {
     None
 }
 
-/// Resolves the texts and PvP info, pushes the zone caches, then fires the elected zone event and,
-/// independently, `MINIMAP_ZONE_CHANGED`.
+/// Resolves the texts and PvP info, pushes the zone caches, then fires the elected zone event.
 fn feed_zone_events(
     script: Option<NonSendMut<UiScript>>,
     world: benilla_world::world_point::WorldPoint,
@@ -242,8 +241,9 @@ fn feed_zone_events(
             signal.zone_text, signal.subzone_text
         );
     }
+    // No event of its own: 12340's event table has no `MINIMAP_ZONE_CHANGED`; the stock minimap
+    // redraws its zone text on the `ZONE_CHANGED*` events (`Minimap.lua`'s `Minimap_Update`).
     if minimap_changed {
-        script.fire_event("MINIMAP_ZONE_CHANGED", vec![]);
         debug!("area: minimap zone text → {minimap_text:?}");
     }
     cache.zone_id = Some(signal.zone_id);

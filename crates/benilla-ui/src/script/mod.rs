@@ -364,7 +364,10 @@ pub use layout_cache::{FrameLayout, LayoutPoint};
 pub use loot::{LootRow, LootState, LOOT_PORTRAIT_UNIT};
 pub use loot_roll::{LootRollEntry, LootRollsState};
 pub use loot_roll::wrath::{native_reasons as wrath_loot_roll_reasons, Entry as WrathLootRollEntry, State as WrathLootRollsState};
-pub use macros::{MacroBinding, MacroState, MacroView, MAX_MACROS, MAX_MACRO_BODY, MAX_MACRO_NAME};
+pub use macros::{
+    macro_action_id, macro_action_word, MacroBinding, MacroState, MacroView, CHARACTER_MACRO_BASE,
+    MAX_ACCOUNT_MACROS, MAX_CHARACTER_MACROS, MAX_MACRO_BODY, MAX_MACRO_NAME,
+};
 pub use mail::wrath::{
     Attachment as WrathMailAttachment, Inbox as WrathMailInbox, Row as WrathMailRow,
     WrathMailRequest,

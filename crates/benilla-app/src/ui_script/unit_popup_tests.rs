@@ -43,6 +43,11 @@ fn load_popup_frames(s: &mut UiScript) {
     ] {
         load_xml(s, file);
     }
+    // The player object, which the party verbs need (`InviteUnit`, 12340 `0x51a6e0`).
+    s.set_unit_guids(&benilla_ui::script::UnitGuids {
+        player: 1,
+        ..Default::default()
+    });
 }
 
 /// The FRIEND and PLAYER menus' labels and the target-frame newbie tip, as the stock
@@ -89,11 +94,6 @@ fn chat_name_right_click_opens_the_invite_menu() {
     s.set_screen_size(1024.0, 768.0);
     bake_strings(&s);
     load_popup_frames(&mut s);
-    // `InviteUnit` needs the player object (`0x51a6e0`).
-    s.set_unit_guids(&benilla_ui::script::UnitGuids {
-        player: 1,
-        ..Default::default()
-    });
     s.resolve();
     assert!(s.errors().is_empty(), "load errors: {:?}", s.errors());
 
@@ -112,45 +112,44 @@ fn chat_name_right_click_opens_the_invite_menu() {
         s.eval::<bool>("return DropDownList1:IsVisible()").unwrap(),
         "the chat-name right-click opens the FRIEND dropdown"
     );
-    // 3.3.5's FRIEND menu (`UnitPopup.lua:144`): the pop-out, note, spam, guild and remove rows
-    // hide for a name clicked in chat, Ignore stays.
+    // The FRIEND menu (`UnitPopup.lua:144`), titled by the clicked name, with the rows a stranger
+    // with no guild, no note and no chat line hides.
     assert_eq!(
-        menu_rows(&s),
+        labels(&s),
         ["Bob", "Whisper", "Invite", "Target", "Ignore", "Cancel"]
     );
 
-    // Click Invite through the real hit path → UnitPopup_OnClick → InviteByName("Bob").
-    let (ix, iy) = s
-        .eval::<(f64, f64)>("return DropDownList1Button3:GetCenter()")
-        .unwrap();
-    s.mouse_button(ix as f32, iy as f32, "LeftButton", true);
-    s.mouse_button(ix as f32, iy as f32, "LeftButton", false);
+    // Click Invite through the real hit path → UnitPopup_OnClick → InviteToGroup("Bob").
+    click_label(&mut s, "Invite");
     assert_eq!(
         s.take_party_requests(),
         vec![PartyRequest::InviteName("Bob".into())],
         "Invite on a chat name queues an invite-by-name"
     );
 
-    // A left-click on the name whispers instead: the stock `ChatFrame_SendTell` opens the box in
-    // WHISPER mode at the name.
+    // A left-click on the name whispers instead: the stock `ChatFrame_SendTell` opens the active
+    // box in WHISPER mode at the name (ChatFrame.lua:3113-3125).
     s.run(r#"SetItemRef("player:Carol", "|Hplayer:Carol|h[Carol]|h", "LeftButton")"#)
         .unwrap();
     s.tick(0.05);
-    let (chat_type, tell, open) = s
-        .eval::<(String, String, bool)>(
-            r#"local b = ChatEdit_ChooseBoxForSend()
-               return b:GetAttribute("chatType"), b:GetAttribute("tellTarget"), b:IsVisible()"#,
+    assert_eq!(
+        s.eval::<(String, String)>(
+            "local eb = ChatEdit_GetActiveWindow() \
+             return eb:GetAttribute('chatType'), eb:GetAttribute('tellTarget')"
         )
-        .unwrap();
-    assert_eq!((chat_type.as_str(), tell.as_str()), ("WHISPER", "Carol"));
+        .unwrap(),
+        ("WHISPER".to_string(), "Carol".to_string()),
+        "left-click a chat name opens a whisper"
+    );
     assert!(
-        open,
-        "the left-click opens the chosen box, its attributes at the name"
+        s.eval::<bool>("return ChatEdit_GetActiveWindow():IsVisible()")
+            .unwrap(),
+        "and the box is open"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Solo, right-clicking a friendly player target opens the PLAYER menu; Invite invites it by name.
+/// Solo, right-clicking a friendly player target opens the PLAYER menu; Invite invites the unit.
 #[test]
 fn solo_target_right_click_invites_a_player() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -158,11 +157,6 @@ fn solo_target_right_click_invites_a_player() {
     s.set_screen_size(1024.0, 768.0);
     bake_strings(&s);
     load_popup_frames(&mut s);
-    // `InviteUnit` needs the player object (`0x51a6e0`).
-    s.set_unit_guids(&benilla_ui::script::UnitGuids {
-        player: 1,
-        ..Default::default()
-    });
 
     s.set_unit(
         "player",
@@ -202,10 +196,9 @@ fn solo_target_right_click_invites_a_player() {
         s.eval::<bool>("return DropDownList1:IsVisible()").unwrap(),
         "a friendly player target opens the PLAYER menu solo"
     );
-    // 3.3.5's PLAYER menu (`UnitPopup.lua:141`) in order; the two refer-a-friend rows hide for a
-    // target that is not linked (`:787-794`).
+    // The PLAYER menu in `UnitPopup.lua:141`'s order; the RAF rows hide.
     assert_eq!(
-        menu_rows(&s),
+        labels(&s),
         [
             "Ally",
             "Set Focus",
@@ -221,16 +214,12 @@ fn solo_target_right_click_invites_a_player() {
         ]
     );
 
-    // Click Invite → UnitPopup_OnClick → InviteToParty("target") → InviteUnit.
-    let (ix, iy) = s
-        .eval::<(f64, f64)>("return DropDownList1Button5:GetCenter()")
-        .unwrap();
-    s.mouse_button(ix as f32, iy as f32, "LeftButton", true);
-    s.mouse_button(ix as f32, iy as f32, "LeftButton", false);
+    // Click Invite → UnitPopup_OnClick → InviteUnit(fullname) (UnitPopup.lua:1213-1214): by name.
+    click_label(&mut s, "Invite");
     assert_eq!(
         s.take_party_requests(),
         vec![PartyRequest::InviteName("Ally".into())],
-        "Invite invites the target by name (3.3.5's `InviteUnit(fullname)`, `UnitPopup.lua:1214`)"
+        "Invite on a player target invites the target's name"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
@@ -277,18 +266,7 @@ fn solo_target_trade_click_queues_an_initiate() {
     s.mouse_button(cx as f32, cy as f32, "RightButton", true);
     s.mouse_button(cx as f32, cy as f32, "RightButton", false);
     s.resolve();
-    assert_eq!(
-        s.eval::<String>("return DropDownList1Button7:GetText()")
-            .unwrap(),
-        "Trade",
-        "Trade is the seventh row: Compare Achievements sits between Invite and Trade"
-    );
-
-    let (tx, ty) = s
-        .eval::<(f64, f64)>("return DropDownList1Button7:GetCenter()")
-        .unwrap();
-    s.mouse_button(tx as f32, ty as f32, "LeftButton", true);
-    s.mouse_button(tx as f32, ty as f32, "LeftButton", false);
+    click_label(&mut s, "Trade");
     assert_eq!(
         s.take_trade_initiates(),
         vec!["target".to_string()],
@@ -297,7 +275,7 @@ fn solo_target_trade_click_queues_an_initiate() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Clicking Follow calls `FollowUnit("Ally", 1)` (`UnitPopup.lua:1325`): the `1` asks for an
+/// Clicking Follow calls `FollowByName("Ally", 1)` (`UnitPopup.lua:623`): the `1` asks for an
 /// exact match, so the menu never prefix-matches onto a bystander as `/follow rag` may.
 #[test]
 fn solo_target_follow_click_queues_an_exact_by_name_follow() {
@@ -340,18 +318,7 @@ fn solo_target_follow_click_queues_an_exact_by_name_follow() {
     s.mouse_button(cx as f32, cy as f32, "RightButton", true);
     s.mouse_button(cx as f32, cy as f32, "RightButton", false);
     s.resolve();
-    assert_eq!(
-        s.eval::<String>("return DropDownList1Button8:GetText()")
-            .unwrap(),
-        "Follow",
-        "Follow is the eighth row, after Trade"
-    );
-
-    let (fx, fy) = s
-        .eval::<(f64, f64)>("return DropDownList1Button8:GetCenter()")
-        .unwrap();
-    s.mouse_button(fx as f32, fy as f32, "LeftButton", true);
-    s.mouse_button(fx as f32, fy as f32, "LeftButton", false);
+    click_label(&mut s, "Follow");
     assert_eq!(
         s.take_follow_requests(),
         vec![FollowRequest::ByName {
@@ -407,18 +374,7 @@ fn solo_target_inspect_click_reaches_inspect_unit() {
     s.mouse_button(cx as f32, cy as f32, "RightButton", true);
     s.mouse_button(cx as f32, cy as f32, "RightButton", false);
     s.resolve();
-    assert_eq!(
-        s.eval::<String>("return DropDownList1Button4:GetText()")
-            .unwrap(),
-        "Inspect",
-        "Inspect is the fourth row (title, Set Focus, Whisper, Inspect)"
-    );
-
-    let (ix, iy) = s
-        .eval::<(f64, f64)>("return DropDownList1Button4:GetCenter()")
-        .unwrap();
-    s.mouse_button(ix as f32, iy as f32, "LeftButton", true);
-    s.mouse_button(ix as f32, iy as f32, "LeftButton", false);
+    click_label(&mut s, "Inspect");
     assert_eq!(
         s.eval::<String>("return BENILLA_TEST_INSPECTED").unwrap(),
         "target",
@@ -465,6 +421,11 @@ fn load_pet_menu_frames(s: &mut UiScript) {
     ] {
         load_xml(s, file);
     }
+    // The player object, which the party verbs need (`InviteUnit`, 12340 `0x51a6e0`).
+    s.set_unit_guids(&benilla_ui::script::UnitGuids {
+        player: 1,
+        ..Default::default()
+    });
 }
 
 /// The PET rows' labels and both dialogs' text as the stock strings have them
@@ -522,6 +483,8 @@ fn a_pet(s: &mut UiScript, name: &str) {
             health: 100,
             max_health: 100,
             level: 20,
+            // Held, so `UnitIsVisible("pet")` shows `PetFrame` (PetFrame.lua:40).
+            has_object: true,
             ..UnitState::default()
         }),
     );
@@ -529,15 +492,6 @@ fn a_pet(s: &mut UiScript, name: &str) {
         "UNIT_PET",
         vec![benilla_ui::script::ScriptValue::Str("player".into())],
     );
-}
-
-/// Every row of the open level-1 menu, title first.
-fn menu_rows(s: &UiScript) -> Vec<String> {
-    s.eval::<Vec<String>>(
-        "local t = {} for i = 1, DropDownList1.numButtons do \
-         t[i] = _G['DropDownList1Button' .. i]:GetText() or '' end return t",
-    )
-    .unwrap()
 }
 
 /// Right-clicks the centre of the pet frame's hit rect, the portrait half (`PetFrame.xml:15-17`).
@@ -576,54 +530,35 @@ fn the_pet_menu_forks_between_abandon_and_dismiss() {
         s.eval::<bool>("return DropDownList1:IsVisible()").unwrap(),
         "right-clicking the pet frame opens the PET menu"
     );
+    // The PET menu (`UnitPopup.lua:139`): Dismiss hides for an abandonable pet.
     assert_eq!(
-        s.eval::<i64>("return DropDownList1.numButtons").unwrap(),
-        5,
-        "title + Pet Details + Rename + Abandon + Cancel — no Dismiss"
+        labels(&s),
+        [
+            "Bruce",
+            "Set Focus",
+            "Pet Details",
+            "Rename",
+            "Abandon",
+            "Cancel"
+        ]
     );
-    for (row, text) in [
-        (2, "Pet Details"),
-        (3, "Rename"),
-        (4, "Abandon"),
-        (5, "Cancel"),
-    ] {
-        assert_eq!(
-            s.eval::<String>(&format!("return DropDownList1Button{row}:GetText()"))
-                .unwrap(),
-            text
-        );
-    }
 
     // The same pet after one rename: the server clears only the rename bit, so only that row goes.
     s.run("CloseDropDownMenus()").unwrap();
     s.set_pet_menu(true, false);
     right_click_the_pet_frame(&mut s);
     assert_eq!(
-        s.eval::<i64>("return DropDownList1.numButtons").unwrap(),
-        4,
-        "title + Pet Details + Abandon + Cancel"
-    );
-    assert_eq!(
-        s.eval::<String>("return DropDownList1Button3:GetText()")
-            .unwrap(),
-        "Abandon",
-        "Rename is gone and Abandon has moved up into its row"
+        labels(&s),
+        ["Bruce", "Set Focus", "Pet Details", "Abandon", "Cancel"],
+        "Rename is gone"
     );
 
     // A warlock's demon: neither bit. The menu flips whole.
     s.run("CloseDropDownMenus()").unwrap();
     s.set_pet_menu(false, false);
     right_click_the_pet_frame(&mut s);
-    assert_eq!(
-        s.eval::<i64>("return DropDownList1.numButtons").unwrap(),
-        3,
-        "title + Dismiss + Cancel"
-    );
-    assert_eq!(
-        s.eval::<String>("return DropDownList1Button2:GetText()")
-            .unwrap(),
-        "Dismiss"
-    );
+    // Pet Details too goes with Abandon (UnitPopup.lua:795-798).
+    assert_eq!(labels(&s), ["Bruce", "Set Focus", "Dismiss", "Cancel"]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
@@ -637,20 +572,20 @@ fn dismiss_sends_immediately_and_abandon_waits_for_the_confirm() {
     load_pet_menu_frames(&mut s);
     a_pet(&mut s, "Snuffles");
 
-    // A demon: Dismiss is row 2, and clicking it queues the verb with no dialog in between.
+    // A demon: clicking Dismiss queues the verb with no dialog in between.
     s.set_pet_menu(false, false);
     right_click_the_pet_frame(&mut s);
-    click_row(&mut s, 2);
+    click_label(&mut s, "Dismiss");
     assert!(
         !s.eval::<bool>("return StaticPopup1:IsVisible()").unwrap(),
         "Dismiss asks nothing"
     );
     assert_eq!(s.take_pet_gives_up(), (0, 1), "one dismiss, no abandon");
 
-    // A hunter pet: Abandon is row 4, and clicking it only opens the confirm.
+    // A hunter pet: clicking Abandon only opens the confirm.
     s.set_pet_menu(true, true);
     right_click_the_pet_frame(&mut s);
-    click_row(&mut s, 4);
+    click_label(&mut s, "Abandon");
     assert!(
         s.eval::<bool>("return StaticPopup1:IsVisible()").unwrap(),
         "Abandon opens the ABANDON_PET confirm"
@@ -671,7 +606,7 @@ fn dismiss_sends_immediately_and_abandon_waits_for_the_confirm() {
     assert!(!s.eval::<bool>("return StaticPopup1:IsVisible()").unwrap());
 
     right_click_the_pet_frame(&mut s);
-    click_row(&mut s, 4);
+    click_label(&mut s, "Abandon");
     click_frame(&mut s, "StaticPopup1Button1");
     assert_eq!(s.take_pet_gives_up(), (1, 0), "one abandon");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -691,7 +626,7 @@ fn renaming_a_pet_reads_the_name_back_before_sending_it() {
     s.set_pet_menu(true, true);
 
     right_click_the_pet_frame(&mut s);
-    click_row(&mut s, 3);
+    click_label(&mut s, "Rename");
     assert_eq!(
         s.eval::<String>("return StaticPopup1Text:GetText()")
             .unwrap(),
@@ -738,21 +673,19 @@ fn the_pet_details_row_opens_the_pet_paper_doll() {
     s.set_screen_size(1024.0, 768.0);
     bake_pet_strings(&s);
     load_pet_menu_frames(&mut s);
+    // Recorded after the load, which brings the session's own `ToggleCharacter`.
+    s.run("function ToggleCharacter(tab) BENILLA_TEST_TOGGLED = tab end")
+        .unwrap();
     a_pet(&mut s, "Bruce");
     s.set_pet_menu(true, true);
 
     right_click_the_pet_frame(&mut s);
-    click_row(&mut s, 2);
+    click_label(&mut s, "Pet Details");
     assert_eq!(
         s.eval::<String>("return BENILLA_TEST_TOGGLED").unwrap(),
         "PetPaperDollFrame"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-}
-
-/// Click an open dropdown row through the real hit path.
-fn click_row(s: &mut UiScript, row: u32) {
-    click_frame(s, &format!("DropDownList1Button{row}"));
 }
 
 /// Click any named frame through the real hit path.
@@ -763,4 +696,27 @@ fn click_frame(s: &mut UiScript, name: &str) {
     s.mouse_button(x as f32, y as f32, "LeftButton", true);
     s.mouse_button(x as f32, y as f32, "LeftButton", false);
     s.resolve();
+}
+
+/// The open menu's row texts in order, the title first.
+fn labels(s: &UiScript) -> Vec<String> {
+    s.eval::<Vec<String>>(
+        "local t = {} for i = 1, DropDownList1.numButtons do \
+         t[i] = _G['DropDownList1Button' .. i]:GetText() or '' end return t",
+    )
+    .unwrap()
+}
+
+/// Click the open menu's row labelled `label` through the real hit path.
+fn click_label(s: &mut UiScript, label: &str) {
+    let row = labels(s)
+        .iter()
+        .position(|l| l == label)
+        .unwrap_or_else(|| panic!("no {label:?} row in {:?}", labels(s)))
+        + 1;
+    let (x, y) = s
+        .eval::<(f64, f64)>(&format!("return DropDownList1Button{row}:GetCenter()"))
+        .unwrap();
+    s.mouse_button(x as f32, y as f32, "LeftButton", true);
+    s.mouse_button(x as f32, y as f32, "LeftButton", false);
 }

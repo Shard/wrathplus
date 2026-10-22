@@ -2,7 +2,8 @@
 //! [`LootRollsState`] and `START_LOOT_ROLL`/`CANCEL_LOOT_ROLL`.
 
 use benilla_ui::script::{
-    DressUpIntent, ExtractedQuad, LootRollEntry, LootRollsState, QuadContent, ScriptValue, UiScript,
+    DressUpIntent, ExtractedQuad, QuadContent, ScriptValue, UiScript, WrathLootRollEntry,
+    WrathLootRollsState,
 };
 
 use super::test_ui::{load_ui as load_xml, load_ui_no_warnings as load_xml_no_warnings};
@@ -90,46 +91,63 @@ fn setup() -> UiScript {
 const STAFF_LINK: &str = "|cffa335ee|Hitem:17182:0:0:0|h[Staff of Jordan]|h|r";
 const SWORD_LINK: &str = "|cffffffff|Hitem:25:0:0:0|h[Worn Shortsword]|h|r";
 
+/// One resolved 3.3.5 roll every vote may take (`vote_mask` pass/need/greed/disenchant, reasons
+/// all eligible).
+fn roll(
+    roll_id: u32,
+    entry: u32,
+    name: &str,
+    icon: &str,
+    quality: u32,
+    bind_on_pickup: bool,
+    link: &str,
+) -> WrathLootRollEntry {
+    WrathLootRollEntry {
+        roll_id,
+        entry,
+        count: 1,
+        vote_mask: 0b1111,
+        texture: Some(format!("Interface\\Icons\\{icon}")),
+        name: Some(name.into()),
+        quality: Some(quality),
+        bind_on_pickup,
+        time_left_ms: 60_000,
+        link: Some(link.into()),
+        reasons: [Some(0); 3],
+        disenchant_skill_required: Some(0),
+        ..Default::default()
+    }
+}
+
 /// Roll 7 resolved Epic and bind-on-pickup, roll 8 resolved Common, roll 9 with no template yet.
-fn rolls() -> LootRollsState {
-    LootRollsState {
+fn rolls() -> WrathLootRollsState {
+    WrathLootRollsState {
         rolls: vec![
-            LootRollEntry {
-                roll_id: 7,
-                name: Some("Staff of Jordan".into()),
-                texture: Some("Interface\\Icons\\INV_Staff_12".into()),
-                quantity: 1,
-                quality: Some(4), // Epic -> purple
-                bind_on_pickup: true,
-                time_left_ms: 42_000,
-                item_id: 17182,
-                link: Some(STAFF_LINK.into()),
-                random_property_id: 0,
-            },
-            LootRollEntry {
-                roll_id: 8,
-                name: Some("Worn Shortsword".into()),
-                texture: Some("Interface\\Icons\\INV_Sword_04".into()),
-                quantity: 1,
-                quality: Some(1), // Common -> white
-                bind_on_pickup: false,
-                time_left_ms: 60_000,
-                item_id: 25,
-                link: Some(SWORD_LINK.into()),
-                random_property_id: 0,
-            },
-            // No template yet: name, texture, quality and link (which embeds the name) are nil.
-            LootRollEntry {
+            roll(
+                7,
+                17182,
+                "Staff of Jordan",
+                "INV_Staff_12",
+                4,
+                true,
+                STAFF_LINK,
+            ),
+            roll(
+                8,
+                25,
+                "Worn Shortsword",
+                "INV_Sword_04",
+                1,
+                false,
+                SWORD_LINK,
+            ),
+            // No template yet: `GetLootRollItemInfo` answers nothing (loot_roll/wrath.rs).
+            WrathLootRollEntry {
                 roll_id: 9,
-                name: None,
-                texture: None,
-                quantity: 1,
-                quality: None,
-                bind_on_pickup: false,
-                time_left_ms: 55_000,
-                item_id: 4306,
-                link: None,
-                random_property_id: 0,
+                entry: 4306,
+                count: 1,
+                vote_mask: 0b1111,
+                ..Default::default()
             },
         ],
     }
@@ -140,8 +158,16 @@ fn rolls() -> LootRollsState {
 fn shipped_group_loot_frame_loads_clean_and_starts_hidden() {
     let _data = benilla_formats::wow_data_or_skip!();
     let (s, built) = setup_counted(&[]);
-    // The popups come inside the whole loot window, so the frame count is only a floor.
-    assert!(built > 4, "the loot window brought its frames");
+    // The kit seats the whole session on its first file, so the count says nothing; the popups are
+    // found by name and type instead.
+    let _ = built;
+    for i in 1..=4 {
+        assert_eq!(
+            s.eval::<String>(&format!("return GroupLootFrame{i}:GetObjectType()"))
+                .unwrap(),
+            "Frame"
+        );
+    }
 
     for i in 1..=4 {
         let name = format!("GroupLootFrame{i}");
@@ -159,7 +185,7 @@ fn shipped_group_loot_frame_loads_clean_and_starts_hidden() {
 fn start_loot_roll_claims_frames_in_order_and_paints_the_roll() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = setup();
-    s.set_loot_rolls(rolls());
+    s.set_wrath_loot_rolls(rolls());
 
     s.fire_event(
         "START_LOOT_ROLL",
@@ -244,7 +270,7 @@ fn start_loot_roll_claims_frames_in_order_and_paints_the_roll() {
 fn the_bop_confirm_popup_lands_the_withheld_vote() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = setup();
-    s.set_loot_rolls(rolls());
+    s.set_wrath_loot_rolls(rolls());
 
     // The app fires this after draining the confirm queue (`ui_loot_roll::drain_loot_rolls`).
     s.fire_event(
@@ -266,14 +292,14 @@ fn the_bop_confirm_popup_lands_the_withheld_vote() {
         .unwrap();
     assert_eq!((data, data2), (7, 1), "rollID and rollType ride the dialog");
 
-    // The 1.12 `LOOT_NO_DROP` and `OKAY` strings.
+    // 3.3.5's `LOOT_NO_DROP`, filled with the quality-coloured name (UIParent.lua:846), and `OKAY`.
     let dialog = s
         .eval::<String>("return StaticPopup_FindVisible(\"CONFIRM_LOOT_ROLL\"):GetName()")
         .unwrap();
     assert_eq!(
         s.eval::<String>(&format!("return {dialog}Text:GetText()"))
             .unwrap(),
-        "Looting this item will bind it to you."
+        "Looting |cffa335eeStaff of Jordan|r will bind it to you."
     );
     assert_eq!(
         s.eval::<String>(&format!("return {dialog}Button1:GetText()"))
@@ -285,7 +311,7 @@ fn the_bop_confirm_popup_lands_the_withheld_vote() {
 
     s.eval::<bool>(
         "local d = StaticPopup_FindVisible(\"CONFIRM_LOOT_ROLL\")\n\
-         StaticPopupDialogs[\"CONFIRM_LOOT_ROLL\"].OnAccept(d.data, d.data2)\nreturn true",
+         _G[d:GetName() .. \"Button1\"]:Click()\nreturn true",
     )
     .unwrap();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -301,7 +327,7 @@ fn the_bop_confirm_popup_lands_the_withheld_vote() {
 fn cancel_loot_roll_hides_only_that_frame() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = setup();
-    s.set_loot_rolls(rolls());
+    s.set_wrath_loot_rolls(rolls());
 
     s.fire_event(
         "START_LOOT_ROLL",
@@ -337,109 +363,28 @@ fn cancel_loot_roll_hides_only_that_frame() {
         .unwrap());
 }
 
-/// A roll with its item template in flight opens without error, with no name and no icon.
+/// A roll whose item is unresolved, or unknown, shows nothing: `GroupLootFrame_OnShow` hides a
+/// popup whose `GetLootRollItemInfo` name is nil before reading anything else (LootFrame.lua:339-345).
 #[test]
-fn in_flight_roll_opens_without_a_name_or_icon() {
+fn an_unresolved_roll_hides_its_popup() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = setup();
-    s.set_loot_rolls(rolls());
-
-    s.fire_event(
-        "START_LOOT_ROLL",
-        vec![ScriptValue::Int(9), ScriptValue::Int(55_000)],
-    );
-    assert!(
-        s.errors().is_empty(),
-        "an in-flight roll (all-nil GetLootRollItemInfo) must not error: {:?}",
-        s.errors()
-    );
-    assert!(s
-        .eval::<bool>("return GroupLootFrame1:IsVisible()")
-        .unwrap());
-    assert_eq!(s.eval::<i64>("return GroupLootFrame1.rollID").unwrap(), 9);
-    // `SetText(nil)` (`LootFrame.lua:274`) leaves no text, not "nil".
-    assert_eq!(
-        s.eval::<Option<String>>("return GroupLootFrame1Name:GetText()")
-            .unwrap(),
-        None,
-        ""
-    );
+    s.set_wrath_loot_rolls(rolls());
+    for roll in [9, 99] {
+        s.fire_event(
+            "START_LOOT_ROLL",
+            vec![ScriptValue::Int(roll), ScriptValue::Int(55_000)],
+        );
+        assert!(s.errors().is_empty(), "roll {roll}: {:?}", s.errors());
+    }
     assert!(!s
-        .eval::<bool>("return GroupLootFrame1Decoration:IsShown()")
+        .eval::<bool>("return GroupLootFrame1:IsVisible() or GroupLootFrame2:IsVisible()")
         .unwrap());
-
-    // No placeholder icon: `GroupLootFrame_OnShow` passes the nil texture to `SetTexture`
-    // (`LootFrame.lua:273`), which leaves the icon empty.
-    s.resolve();
-    let has_fallback_icon = s.extract().iter().any(|q| {
-        matches!(&q.content, QuadContent::Texture { path: Some(p), .. }
-                if p.contains("INV_Misc_QuestionMark"))
-    });
-    assert!(
-        !has_fallback_icon,
-        "the reference paints no placeholder for an unresolved item"
-    );
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// The stock popup paints only in `OnShow`, so a `START_LOOT_ROLL` that beats its roll to the model
-/// stays blank. On a cache miss the reference fires it from the item-template arrival callback
-/// (`0x61b460`, armed by `0x61b310`), and `feed_loot_rolls` holds it the same way.
-#[test]
-fn nothing_repaints_a_frame_that_opened_before_its_snapshot() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = setup();
-
-    // The order the app must never produce: the event first, against a model with no such roll.
-    s.fire_event(
-        "START_LOOT_ROLL",
-        vec![ScriptValue::Int(7), ScriptValue::Int(42_000)],
-    );
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-    assert!(s
-        .eval::<bool>("return GroupLootFrame1:IsVisible()")
-        .unwrap());
-    assert_eq!(
-        s.eval::<Option<String>>("return GroupLootFrame1Name:GetText()")
-            .unwrap(),
-        None,
-        "nothing to paint yet — this is the reported state"
-    );
-
-    s.set_loot_rolls(rolls());
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-
-    // No repaint: nothing re-enters `OnShow`, as in 1.12.
-    assert_eq!(
-        s.eval::<Option<String>>("return GroupLootFrame1Name:GetText()")
-            .unwrap(),
-        None,
-        "the name stays blank: the reference has no repaint path"
-    );
-    assert!(
-        !s.eval::<bool>("return GroupLootFrame1Decoration:IsShown()")
-            .unwrap(),
-        "and so does the BoP decoration"
-    );
-    s.resolve();
-    let quads = s.extract();
-    assert!(
-        !quads.iter().any(|q| {
-            matches!(&q.content, QuadContent::Texture { path: Some(p), .. }
-                if p.contains("INV_Staff_12"))
-        }),
-        "and no icon arrives either — same missing repaint, same one cause"
-    );
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-    assert_eq!(
-        s.eval::<Option<String>>("return GroupLootFrame1Name:GetText()")
-            .unwrap(),
-        None
-    );
-}
-
-/// `UIPARENT_MANAGED_FRAME_POSITIONS["GroupLootFrame1"]` (baseY 60, bottomEither 42, pet 42;
-/// `UIParent.lua:1577`) stacks the popups over the bottom bars; the pass finds the frame by name.
+/// `UIPARENT_MANAGED_FRAME_POSITIONS["GroupLootFrame1"]` (baseY true, bottomEither
+/// `actionBarOffset`; `UIParent.lua:1183`) stacks the popups over the bottom bars; the pass finds
+/// the frame by name.
 #[test]
 fn managed_positions_engage_for_the_bare_frame_name() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -467,36 +412,17 @@ fn managed_positions_engage_for_the_bare_frame_name() {
 
     let bottom = |s: &UiScript| s.eval::<f64>("return GroupLootFrame1:GetBottom()").unwrap();
 
-    // No bars: the row's base, 60, which the XML anchor also gives.
+    // No bars: `baseY = true` is `menuBarTop`, 55 (UIParent.lua:1164,1183,1245-1247).
     s.run("UIParent_ManageFramePositions()").unwrap();
     s.resolve();
-    assert_eq!(bottom(&s), 60.0, "baseY");
+    assert_eq!(bottom(&s), 55.0, "baseY");
 
-    // The pass reads `SHOW_MULTI_ACTIONBAR_1`/`_2`, not the bars (`UIParent.lua:1599-1606`).
-    s.run("SHOW_MULTI_ACTIONBAR_1 = 1 SHOW_MULTI_ACTIONBAR_2 = 1 UIParent_ManageFramePositions()")
+    // A shown bottom bar adds `bottomEither`, `actionBarOffset` 45; the pass reads the bars
+    // themselves (UIParent.lua:1163,1761-1763).
+    s.run("MultiBarBottomLeft:Show() UIParent_ManageFramePositions()")
         .unwrap();
     s.resolve();
-    assert_eq!(bottom(&s), 102.0, "60 + bottomEither 42 — the row engaged");
-
-    // The stance bar shows too. The pass touches its three shelf textures by name, unguarded
-    // (`UIParent.lua:1705-1732`), so the stand-in bar needs stand-in textures.
-    s.run(
-        "local t = { Show = function() end, Hide = function() end } \
-         ShapeshiftBarLeft, ShapeshiftBarMiddle, ShapeshiftBarRight = t, t, t",
-    )
-    .unwrap();
-    s.run(
-        "ShapeshiftBarFrame = ShapeshiftBarFrame or CreateFrame(\"Frame\", \"ShapeshiftBarFrame\") \
-         ShapeshiftBarFrame:Show() UIParent_ManageFramePositions()",
-    )
-        .unwrap();
-    s.resolve();
-    assert_eq!(bottom(&s), 144.0, "60 + 42 + pet 42");
-
-    s.run("ShapeshiftBarFrame:Hide() UIParent_ManageFramePositions()")
-        .unwrap();
-    s.resolve();
-    assert_eq!(bottom(&s), 102.0, "back to the multibar-only stack");
+    assert_eq!(bottom(&s), 100.0, "55 + bottomEither 45 — the row engaged");
 }
 
 /// The roll icon's OnClick (`LootFrame.xml:353-361`): ctrl dresses up the item and shift posts
@@ -510,7 +436,17 @@ fn ctrl_and_shift_on_the_roll_icon_preview_and_post_its_link() {
         "Interface\\FrameXML\\FloatingChatFrame.xml",
         "Interface\\FrameXML\\DressUpFrame.xml",
     ]);
-    s.set_loot_rolls(rolls());
+    s.set_wrath_loot_rolls(rolls());
+    // The rolled item's template, which `IsDressableItem` reads (DressUpFrame.lua:2-5).
+    s.set_item_template(
+        25,
+        benilla_ui::script::ItemTemplateView {
+            name: "Worn Shortsword".into(),
+            inventory_type: 13,
+            icon: Some("Interface\\Icons\\INV_Sword_04".into()),
+            ..Default::default()
+        },
+    );
 
     // Roll 8 is not bind-on-pickup, so the dice below vote without a confirm.
     s.fire_event(
@@ -530,16 +466,17 @@ fn ctrl_and_shift_on_the_roll_icon_preview_and_post_its_link() {
         "an unmodified icon click votes nothing"
     );
 
-    assert!(s.focus_editbox("ChatFrameEditBox"));
+    // An open chat box, which `ChatEdit_InsertLink` writes into (ChatFrame.lua).
+    s.run("ChatEdit_ActivateChat(ChatFrame1EditBox)").unwrap();
     s.set_modifiers(true, false, false);
     s.mouse_button(x, y, "LeftButton", true);
     s.mouse_button(x, y, "LeftButton", false);
     s.set_modifiers(false, false, false);
     assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
+        s.eval::<String>("return ChatEdit_GetActiveWindow():GetText()")
             .unwrap(),
-        SWORD_LINK,
-        "the rolled item's full escaped link landed in the chat box"
+        format!(" {SWORD_LINK}"),
+        "the rolled item's link, after `ChatEdit_InsertLink`'s parsing space (ChatFrame.lua:3492-3493)"
     );
 
     s.set_modifiers(false, true, false);
@@ -600,49 +537,4 @@ fn the_roll_template_carries_the_reference_name_and_the_parts_addons_reach_for()
     assert!(s
         .eval::<bool>(r#"return getglobal("BenillaGroupLootFrameTemplate") == nil"#)
         .unwrap());
-}
-
-/// The stock `GroupLootFrame_OnShow` reads `ITEM_QUALITY_COLORS[quality].r` with no fallback
-/// (`LootFrame.lua:275-276`), so an unresolved or unknown roll must still answer a quality.
-#[test]
-fn the_stock_group_loot_frame_survives_an_in_flight_roll() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    for f in crate::ui_script::test_ui::production_order(&[
-        super::test_ui::LOOT_UI,
-        &["Interface\\FrameXML\\LootFrame.xml"],
-    ]) {
-        load_xml(&mut s, f);
-    }
-    s.set_loot_rolls(rolls());
-
-    // Roll 9 is in flight and roll 99 unknown: both answer the reference's miss tail, quality 1
-    // (`0x4c31a3`).
-    for roll in [9, 99] {
-        s.run(&format!("GroupLootFrame_OpenNewFrame({roll}, 55000)"))
-            .unwrap_or_else(|e| panic!("stock OpenNewFrame raised on roll {roll}: {e}"));
-        assert!(
-            s.errors().is_empty(),
-            "stock GroupLootFrame_OnShow raised on roll {roll}: {:?}",
-            s.errors()
-        );
-    }
-    assert!(s
-        .eval::<bool>("return GroupLootFrame1:IsVisible() and GroupLootFrame2:IsVisible()")
-        .unwrap());
-
-    // The name is painted Common, set at `LootFrame.lua:276`.
-    let painted: (f64, f64, f64) = s
-        .eval("local r, g, b = GroupLootFrame1Name:GetTextColor()\nreturn r, g, b")
-        .unwrap();
-    let common: (f64, f64, f64) = s
-        .eval("local r, g, b = GetItemQualityColor(1)\nreturn r, g, b")
-        .unwrap();
-    assert!(
-        (painted.0 - common.0).abs() < 1e-6
-            && (painted.1 - common.1).abs() < 1e-6
-            && (painted.2 - common.2).abs() < 1e-6,
-        "the stock roll popup paints the miss tail's Common, got {painted:?} want {common:?}"
-    );
 }

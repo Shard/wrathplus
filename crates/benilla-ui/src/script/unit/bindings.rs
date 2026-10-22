@@ -413,38 +413,28 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // UnitIsUnit(a, b): both units exist and are the same token or share a nonzero GUID.
+    // UnitIsUnit(a, b) (12340 `0x60c3d0`): both arguments `lua_isstring`-gated; equal strings,
+    // case-insensitively, answer 1 at once; otherwise each side resolves through the token-or-
+    // member-name resolver (`0x60c1c0` → `0x60abf0`) and the same nonzero guid answers 1. An
+    // unknown token or name answers nil, never raises: stock `ShowReadyCheck` passes a name.
     g.set(
         "UnitIsUnit",
         lua.create_function(|lua, (a, b): (Value, Value)| {
-            // Both arguments are `lua_isstring`-gated, so either one nil raises.
-            let a = Some(crate::script::binding_abi::string_arg(
-                lua,
-                a,
-                r#"Usage: UnitIsUnit("unit", "otherUnit")"#,
-            )?);
-            let b = Some(crate::script::binding_abi::string_arg(
-                lua,
-                b,
-                r#"Usage: UnitIsUnit("unit", "otherUnit")"#,
-            )?);
-            // Both go through the resolver, so either one unrecognised raises.
-            check_unit_token(lua, &a)?;
-            check_unit_token(lua, &b)?;
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let (Some(a), Some(b)) = (a, b) else {
-                return Ok(Value::Nil);
-            };
-            let (Some(ua), Some(ub)) = (model.unit(&a), model.unit(&b)) else {
-                return Ok(Value::Nil);
-            };
-            if !ua.exists || !ub.exists {
-                return Ok(Value::Nil);
+            let usage = r#"Usage: UnitIsUnit("unit", "otherUnit")"#;
+            let a = crate::script::binding_abi::string_arg(lua, a, usage)?;
+            let b = crate::script::binding_abi::string_arg(lua, b, usage)?;
+            if a.eq_ignore_ascii_case(&b) {
+                return Ok(flag(true));
             }
-            // Unit tokens use the resolver's ASCII-insensitive identity semantics.
-            Ok(flag(
-                a.eq_ignore_ascii_case(&b) || (ua.guid != 0 && ua.guid == ub.guid),
-            ))
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            // A token the guid table seats resolves there, snapshot or not ("player" with no
+            // pushed player unit); otherwise the snapshot, then a member's name.
+            let guid = |t: &str| match model.unit_guids.resolve(t) {
+                Ok(Some(g)) => g,
+                _ => crate::script::wrath_unit_popup::guid_of(&model, t),
+            };
+            let (ga, gb) = (guid(&a), guid(&b));
+            Ok(flag(ga != 0 && ga == gb))
         })?,
     )?;
 

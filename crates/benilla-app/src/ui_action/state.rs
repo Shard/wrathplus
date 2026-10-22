@@ -13,7 +13,7 @@ use std::time::Instant;
 use bevy::prelude::*;
 
 use benilla_formats::RangeTargets;
-use benilla_protocol::types::{ACTION_KIND_ITEM, ACTION_KIND_MACRO, ACTION_KIND_SPELL};
+use benilla_protocol::types::{ACTION_KIND_ITEM, ACTION_KIND_SPELL};
 use benilla_ui::script::{ActionState, UiScript};
 
 use crate::creature_anim::{Casting, Engaged};
@@ -58,13 +58,13 @@ fn resolve_through_macro(
     bound: &crate::ui_macro::MacroBoundSpells,
 ) -> SlotResolve {
     use crate::ui_macro::BoundSpell;
-    match kind {
-        ACTION_KIND_MACRO => match bound.0.get(&action) {
+    match benilla_ui::script::macro_action_id(kind, action) {
+        Some(id) => match bound.0.get(&id) {
             Some(BoundSpell::Spell(s)) => SlotResolve::Action(ACTION_KIND_SPELL, *s),
             Some(BoundSpell::None) => SlotResolve::BareMacro,
             Some(BoundSpell::Unresolved) | None => SlotResolve::Dead,
         },
-        other => SlotResolve::Action(other, action),
+        None => SlotResolve::Action(kind, action),
     }
 }
 
