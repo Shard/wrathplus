@@ -69,7 +69,7 @@ fn new_area_splashes_zone_pvp_and_subzone_then_fades_out() {
     s.fire_event("ZONE_CHANGED_NEW_AREA", vec![]);
     assert!(visible(&s, "ZoneTextFrame"), "zone splash shows");
     assert_eq!(text_of(&s, "ZoneTextString"), "Westfall");
-    assert_eq!(text_of(&s, "PVPInfoTextString"), "Alliance Territory");
+    assert_eq!(text_of(&s, "PVPInfoTextString"), "(Alliance Territory)");
     assert_eq!(text_of(&s, "SubZoneTextString"), "");
 
     // The stock timeline: in 0.5 s, hold 1.0 s, out 2.0 s (`ZoneText.xml:5`).
@@ -102,8 +102,11 @@ fn subzone_hop_shows_only_the_small_line() {
     assert_eq!(text_of(&s, "SubZoneTextString"), "Goldshire");
 }
 
+/// 3.3.5's `ZoneText_OnEvent` (ZoneText.lua:78-86) splashes when the zone name changed, on any of
+/// its three events, and `ZONE_CHANGED_NEW_AREA` always re-splashes; 1.12's silent recache on a
+/// plain `ZONE_CHANGED` is gone.
 #[test]
-fn plain_zone_changed_recaches_silently_so_new_area_wont_resplash() {
+fn a_changed_zone_name_splashes_on_any_event_and_new_area_always_resplashes() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = harness();
     set_area(&mut s, "Elwynn Forest", "", "friendly", "Alliance");
@@ -111,6 +114,16 @@ fn plain_zone_changed_recaches_silently_so_new_area_wont_resplash() {
     s.tick(4.0);
     assert!(!visible(&s, "ZoneTextFrame"));
 
+    // Same zone, a new subzone: only the small line.
+    set_area(&mut s, "Elwynn Forest", "Goldshire", "friendly", "Alliance");
+    s.fire_event("ZONE_CHANGED", vec![]);
+    assert!(
+        !visible(&s, "ZoneTextFrame"),
+        "an unchanged zone name stays down"
+    );
+    s.tick(4.0);
+
+    // A new zone name on a plain ZONE_CHANGED splashes it.
     set_area(
         &mut s,
         "Westfall",
@@ -119,20 +132,20 @@ fn plain_zone_changed_recaches_silently_so_new_area_wont_resplash() {
         "Alliance",
     );
     s.fire_event("ZONE_CHANGED", vec![]);
-    assert!(
-        !visible(&s, "ZoneTextFrame"),
-        "plain ZONE_CHANGED never splashes the zone name"
-    );
-    s.fire_event("ZONE_CHANGED_NEW_AREA", vec![]);
-    assert!(
-        !visible(&s, "ZoneTextFrame"),
-        "NEW_AREA on the already-cached zone text must not re-splash"
-    );
+    assert!(visible(&s, "ZoneTextFrame"), "the zone name changed");
+    assert_eq!(text_of(&s, "ZoneTextString"), "Westfall");
+    s.tick(4.0);
+    assert!(!visible(&s, "ZoneTextFrame"));
 
+    // NEW_AREA on the already-cached name splashes again.
+    s.fire_event("ZONE_CHANGED_NEW_AREA", vec![]);
+    assert!(visible(&s, "ZoneTextFrame"), "NEW_AREA always re-splashes");
+
+    s.tick(4.0);
     set_area(&mut s, "Duskwood", "", "contested", "");
     s.fire_event("ZONE_CHANGED_NEW_AREA", vec![]);
     assert!(visible(&s, "ZoneTextFrame"));
-    assert_eq!(text_of(&s, "PVPInfoTextString"), "Contested Territory");
+    assert_eq!(text_of(&s, "PVPInfoTextString"), "(Contested Territory)");
 }
 
 /// Northshire Abbey is an outdoor subzone of Elwynn (`AreaTable` row 24, parent 12), so entering
@@ -212,7 +225,7 @@ fn inn_entry_splashes_the_inn_name_with_territory_line() {
     assert_eq!(text_of(&s, "ZoneTextString"), "Lion's Pride Inn");
     assert_eq!(
         text_of(&s, "PVPInfoTextString"),
-        "Alliance Territory",
+        "(Alliance Territory)",
         "SubZoneTextFrame fires last (FIFO) — its SetZoneText(1) leaves the territory line set"
     );
 }
@@ -273,7 +286,9 @@ fn room_to_room_hop_splashes_the_room_name_alone() {
     assert_eq!(text_of(&s, "SubZoneTextString"), "Library Wing");
 }
 
-/// An FFA pit: `GetZonePVPInfo`'s isArena, the leaf area's flag `0x80`.
+/// An FFA pit: 3.3.5's `GetZonePVPInfo` answers `"arena"` with isSubZonePvP when the leaf area's
+/// flag `0x80` set it, so `SetZoneText` writes `FREE_FOR_ALL_TERRITORY` into the arena line
+/// (ZoneText.lua:11-13, :21-25). The 3.3.5 PvP strings are parenthesised (GlobalStrings.lua).
 #[test]
 fn arena_pit_shows_the_ffa_line() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -284,12 +299,13 @@ fn arena_pit_shows_the_ffa_line() {
 
     s.set_zone_texts(ZoneTexts {
         is_arena: true,
-        ..area("Stranglethorn Vale", "Gurubashi Arena", "contested", "")
+        pvp_is_subzone: true,
+        ..area("Stranglethorn Vale", "Gurubashi Arena", "arena", "")
     });
     s.fire_event("ZONE_CHANGED", vec![]);
     assert!(visible(&s, "SubZoneTextFrame"));
     assert_eq!(text_of(&s, "SubZoneTextString"), "Gurubashi Arena");
-    assert_eq!(text_of(&s, "PVPArenaTextString"), "PvP Area");
+    assert_eq!(text_of(&s, "PVPArenaTextString"), "(PvP Area)");
 }
 
 /// With PvP info showing, `SubZoneTextString`'s `TOP` anchors to `PVPInfoTextString`'s `BOTTOM`.

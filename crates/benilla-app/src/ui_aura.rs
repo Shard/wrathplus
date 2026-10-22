@@ -478,10 +478,8 @@ fn feed_auras(
     let projection = projection_of(&list);
     let native_changed = memo.native_last.as_deref() != packet_player.map(Vec::as_slice);
     memo.native_last = packet_player.cloned();
-    let changed = !memo.present
-        || native_changed
-        || projection != memo.last
-        || tracking_spell != memo.tracking_last;
+    let tracking_moved = !memo.present || tracking_spell != memo.tracking_last;
+    let changed = !memo.present || native_changed || projection != memo.last || tracking_moved;
     memo.last = projection;
     memo.tracking_last = tracking_spell;
     memo.present = true;
@@ -579,6 +577,11 @@ fn feed_auras(
 
     script.set_player_auras(list);
     script.set_tracking(tracking);
+    // 3.3.5's `MiniMapTracking` repaints only on `MINIMAP_UPDATE_TRACKING` (Minimap.xml:479-482); the
+    // 12340 fire site is untraced, so it fires on the tracking spell's change, as the feed sees it.
+    if tracking_moved {
+        script.fire_event("MINIMAP_UPDATE_TRACKING", vec![]);
+    }
     if changed {
         script.fire_event("UNIT_AURA", vec![ScriptValue::Str("player".into())]);
         // The cache rebuild's own event, no arguments (`0x4e437f`): the stock buff bar and
