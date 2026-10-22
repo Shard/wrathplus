@@ -1,10 +1,9 @@
-//! The trainer window's icon, tooltip and group-key laws. They disagree on the same row as the
-//! reference does: the icon falls back to the wire wrapper's art where the tooltip hops to the
-//! taught spell, so about 806 shipped services show one spell's icon over another's tooltip. Do
-//! not unify them.
+//! Build 12340's trainer window laws: the icon (`GetTrainerServiceIcon 00595150`) reads the
+//! service spell itself, where the tooltip (`SetTrainerService 0062e900`) hops through a learn
+//! effect to the taught spell, so the two can name different spells on one row. Do not unify them.
 
 use benilla_formats::{
-    SkillLineCatalog, SpellCatalog, SPELL_ATTR_IS_TRADESKILL, SPELL_EFFECT_CREATE_ITEM,
+    SkillLineCatalog, SpellCatalog, SpellDisplay, SPELL_ATTR_IS_TRADESKILL,
     SPELL_EFFECT_LEARN_PET_SPELL, SPELL_EFFECT_LEARN_SPELL, SPELL_EFFECT_SKILL_STEP,
 };
 use benilla_protocol::types::trainer_spell_state;
@@ -17,11 +16,17 @@ use crate::ui_items::item_icon;
 
 use super::{TRAINER_TYPE_MOUNT, TRAINER_TYPE_TRADESKILL};
 
-/// `GetTrainerServiceIcon 0x4d8f50`: at a tradeskill trainer (`[0xb73a08]`), the item the wire
-/// spell's first learn effect (`0x4d8ff5`/`0x4d8ffa`) teaches to create (`0x4d906a`); otherwise
-/// the wire spell's own icon (`0x4d9008`), never the taught spell's (`0x4d8fd7`). An uncached
-/// template reads `None` until its answer re-fires `TRAINER_UPDATE`, as the client's cache
-/// callback does (`0x4d9140`).
+/// `Effect[0]` creating an item: `CREATE_ITEM` (24), `CREATE_ITEM_2` (157) or
+/// `CREATE_RANDOM_ITEM` (59), the item arm of the icon, tooltip and description.
+fn creates_item(d: &SpellDisplay) -> bool {
+    matches!(d.effects[0], 24 | 157 | 59)
+}
+
+/// `GetTrainerServiceIcon 00595150`: at a tradeskill trainer (`[0xc0e498] == 2`), a service
+/// spell whose `Effect[0]` creates an item shows that item's icon; otherwise the spell's own
+/// `SpellIconID`. Labelled: the reference reads the item's display id off the client's `Item.dbc`
+/// (`0065c290`); the template cache stands in, `None` until its answer re-fires `TRAINER_UPDATE`.
+/// Unlike 1.12, no learn effect is followed: 3.3.5 lists the taught spell itself.
 pub(super) fn service_icon(
     wire_spell: u32,
     trainer_type: u32,
@@ -31,33 +36,19 @@ pub(super) fn service_icon(
     commands: &NetCommands,
 ) -> Option<String> {
     let wire = spells.get(wire_spell)?;
-    if trainer_type == TRAINER_TYPE_TRADESKILL {
-        // The first learn slot wins; a zero trigger falls to the wire icon, not the next slot.
-        let taught = wire
-            .effects
-            .iter()
-            .position(|&e| e == SPELL_EFFECT_LEARN_SPELL || e == SPELL_EFFECT_LEARN_PET_SPELL)
-            .map(|i| wire.effect_trigger_spell[i])
-            .filter(|&t| t != 0);
-        // The taught spell's product item, slot 0 only.
-        if let Some(product) = taught
-            .and_then(|t| spells.get(t))
-            .map(|d| d.effect_item_type[0])
-            .filter(|&e| e != 0)
-        {
-            return items
-                .template(product, 0, commands)
-                .map(|t| t.display_info_id)
-                .and_then(|d| item_icon(icons, d));
-        }
+    if trainer_type == TRAINER_TYPE_TRADESKILL && creates_item(wire) {
+        return items
+            .template(wire.effect_item_type[0], 0, commands)
+            .map(|t| t.display_info_id)
+            .and_then(|d| item_icon(icons, d));
     }
     wire.icon.clone()
 }
 
-/// `SetTrainerService 0x5338b0` picks the subject a shared tooltip builder describes. An
-/// unresolvable trigger moves to the next slot (`0x5339f0`), unlike the icon's first match;
-/// `Attributes & 0x20` alone decides item or spell, as the spell builder `0x52e610` redirects on
-/// the same bit (`0x52e6d2`), and `Effect[0] == 24` only picks the item's slot.
+/// `SetTrainerService 0062e900` picks the subject the tooltip builders describe: the first learn
+/// effect (36, or 57 for the pet caster) whose taught spell resolves; an unresolvable one moves to
+/// the next slot. The taught spell shows as its item when it is a trade spell whose `Effect[0]`
+/// creates a nonzero `EffectItemType[0]`, else as itself; with no learn effect, the service spell.
 pub(super) fn service_tooltip(wire_spell: u32, spells: &SpellCatalog) -> TrainerTooltip {
     let wire_only = TrainerTooltip::Spell {
         spell_id: wire_spell,
@@ -72,17 +63,12 @@ pub(super) fn service_tooltip(wire_spell: u32, spells: &SpellCatalog) -> Trainer
             continue;
         }
         let trigger = wire.effect_trigger_spell[i];
-        // An unresolvable trigger moves to the next slot, not the fallback.
         let Some(taught) = spells.get(trigger) else {
             continue;
         };
-        if taught.attributes & SPELL_ATTR_IS_TRADESKILL != 0 {
-            let slot = if taught.effects[0] == SPELL_EFFECT_CREATE_ITEM {
-                i
-            } else {
-                0
-            };
-            return TrainerTooltip::Item(taught.effect_item_type[slot]);
+        let item = taught.effect_item_type[0];
+        if taught.attributes & SPELL_ATTR_IS_TRADESKILL != 0 && creates_item(taught) && item != 0 {
+            return TrainerTooltip::Item(item);
         }
         return TrainerTooltip::Spell {
             spell_id: trigger,
@@ -92,7 +78,10 @@ pub(super) fn service_tooltip(wire_spell: u32, spells: &SpellCatalog) -> Trainer
     wire_only
 }
 
-/// The list builder `0x4d7560`'s group key (`0x4d7786`). Type 2 resolves no skill line, so no row
+/// The list builder's group key. Labelled: transcribed from 1.12's `0x4d7560` (`0x4d7786`);
+/// 12340's builder (the writer of `[0xc0e4bc]`) is not traced. Its readers agree: a header row's
+/// name is the `[0xa13e08]` key table at a tradeskill trainer, else the `SkillLine.dbc` name
+/// (`00594e80`). Type 2 resolves no skill line, so no row
 /// drops: 1 when the wire spell steps a skill (`0x4d77b6`), else 2, labelled from the table at
 /// `0x807520`. Type 1 puts a known service in the signed `-1` group (`0x4d77e8`). The rest key on
 /// the taught spell's skill line (`0x4d7c60` → `0x60c920`), and 0 drops the service (`0x4d7807`).
@@ -135,7 +124,8 @@ pub(super) fn service_group(
     (line, name)
 }
 
-/// A wire `state` byte's category; anything but GREEN or GRAY, an unexpected value too, is gated.
+/// A wire `state` byte's category (`00594260`): 0 "available", 2 "used", anything else
+/// "unavailable".
 pub(super) fn category(state: u8) -> TrainerServiceCategory {
     match state {
         trainer_spell_state::GRAY => TrainerServiceCategory::Used,
