@@ -15,7 +15,7 @@ fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, body: &[u8]) {
 }
 
 #[test]
-fn one_owner_keeps_ordered_duplicates_and_both_boundaries_clear() {
+fn one_owner_replaces_the_forced_list_and_both_boundaries_clear() {
     let mut app = crate::game_plugins::schedule_tests::headless_client();
     let census = app
         .world()
@@ -24,7 +24,8 @@ fn one_owner_keeps_ordered_duplicates_and_both_boundaries_clear() {
     let owners = &census[&SessionEventKind::WrathFaction];
     assert_eq!(owners.len(), 1, "{owners:?}");
     assert!(owners[0].contains("wrath_faction_capture::receive"));
-    let off = [1, 0, 0, 0, 72, 0, 0, 0, 4, 0, 0, 0];
+    let one = [1, 0, 0, 0, 72, 0, 0, 0, 4, 0, 0, 0];
+    let two = [2, 0, 0, 0, 72, 0, 0, 0, 7, 0, 0, 0, 72, 0, 0, 0, 1, 0, 0, 0];
     let mut adapter = WrathEventAdapter::new();
     for event in [
         SessionEvent::Connected {
@@ -39,11 +40,19 @@ fn one_owner_keeps_ordered_duplicates_and_both_boundaries_clear() {
             end: benilla_protocol::SessionEnd::Lost,
         },
     ] {
-        dispatch(&mut app, &mut adapter, &off);
-        dispatch(&mut app, &mut adapter, &off[..11]);
-        dispatch(&mut app, &mut adapter, &off);
-        assert_eq!(app.world().resource::<NativeFactionPackets>().0.len(), 2);
+        dispatch(&mut app, &mut adapter, &two);
+        dispatch(&mut app, &mut adapter, &one[..11]);
+        let forced = app.world().resource::<ForcedReactions>();
+        assert_eq!(
+            forced.rank(72),
+            Some(7),
+            "the first row naming a faction wins"
+        );
+        dispatch(&mut app, &mut adapter, &one);
+        let forced = app.world().resource::<ForcedReactions>();
+        assert_eq!(forced.0, vec![(72, 4)], "each packet replaces the list");
+        assert_eq!(forced.rank(47), None);
         crate::net::handlers::dispatch(app.world_mut(), vec![event]);
-        assert!(app.world().resource::<NativeFactionPackets>().0.is_empty());
+        assert!(app.world().resource::<ForcedReactions>().0.is_empty());
     }
 }

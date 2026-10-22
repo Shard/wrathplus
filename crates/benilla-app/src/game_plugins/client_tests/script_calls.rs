@@ -188,8 +188,7 @@ fn with_factions(f: &mut Frame, old: u32, fields: &[(u16, u32)]) {
         group_mask,
         friend_group_mask,
         enemy_group_mask,
-        enemies: [0; 4],
-        friends: [0; 4],
+        ..Default::default()
     };
     let world = f.app.world_mut();
     world.insert_resource(crate::target::Factions::from_catalog(

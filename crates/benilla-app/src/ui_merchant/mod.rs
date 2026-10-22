@@ -959,8 +959,7 @@ pub(crate) mod purse_fixture {
                     group_mask: 3,
                     friend_group_mask: 2,
                     enemy_group_mask: 12,
-                    enemies: [0; 4],
-                    friends: [0; 4],
+                    ..Default::default()
                 },
             )]),
             std::collections::HashMap::new(),
@@ -1070,7 +1069,6 @@ mod tests {
         const OBJECT_ENTRY: u16 = Field::ObjectEntry.index();
         const ITEM_DURABILITY: u16 = Field::ItemDurability.index();
         const ITEM_MAXDURABILITY: u16 = Field::ItemMaxdurability.index();
-        const BYTES_0: u16 = Field::UnitBytes0.index();
         const VENDOR: u64 = 0xF130_0000_0000_0042;
         const SWORD: u64 = 0x4000_0000_0000_0007;
         const SWORD_ENTRY: u32 = 2488;
@@ -1119,8 +1117,7 @@ mod tests {
         let main_hand = FIELD_PLAYER_INV_SLOT_HEAD + 2 * 15;
         app.world_mut().spawn((
             SelfPlayer,
-            ObjectStore(ObjectFields::from_pairs(&[
-                (BYTES_0, crate::target::HUMAN_WARRIOR),
+            ObjectStore(crate::target::human_warrior_player(&[
                 (main_hand, SWORD as u32),
                 (main_hand + 1, (SWORD >> 32) as u32),
             ])),

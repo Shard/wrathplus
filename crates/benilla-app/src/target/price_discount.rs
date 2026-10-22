@@ -9,8 +9,8 @@ use super::{ring_reaction, Factions};
 /// Wrath: 3.3.5 has no honor ranks (`PLAYER_BYTES_3` byte 2 is the PvP title), so only the
 /// reputation term applies, 5% per rank above Neutral, as AzerothCore charges it
 /// (`Player::GetReputationPriceDiscount`, used for repairs and taxi fares). The 12340 client's own
-/// routine is untraced; the vendor's reaction toward the player stands in for the rank, and its
-/// Exalted rung depends on that reaction reaching 7.
+/// routine is untraced; the vendor's reaction toward the player stands in for the rank, which
+/// reaches 7 at Exalted (`005d0600` is uncapped).
 fn wrath_price_discount(reaction: u8) -> f64 {
     const NEUTRAL: u8 = 3;
     0.05 * f64::from(reaction.saturating_sub(NEUTRAL))
@@ -58,6 +58,21 @@ pub(crate) fn stormwind_fixture(
 #[cfg(test)]
 pub(crate) const HUMAN_WARRIOR: u32 = 1 | (1 << 8);
 
+/// A human warrior player as the native reaction reads one: player-typed, player-controlled,
+/// faction template 1 and [`HUMAN_WARRIOR`], with `extra` (descriptor index, value) pairs over it.
+#[cfg(test)]
+pub(crate) fn human_warrior_player(extra: &[(u16, u32)]) -> benilla_protocol::ObjectFields {
+    use benilla_protocol::types::Field;
+    let mut fields = benilla_protocol::ObjectFields::from_fields(&[
+        (Field::ObjectType, 0x19),
+        (Field::UnitFlags, 8),
+        (Field::UnitFactionTemplate, 1),
+        (Field::UnitBytes0, HUMAN_WARRIOR),
+    ]);
+    fields.merge(benilla_protocol::ObjectFields::from_pairs(extra));
+    fields
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -65,8 +80,6 @@ mod tests {
     use benilla_protocol::ObjectFields;
 
     const FIELD_UNIT_FACTIONTEMPLATE: u16 = Field::UnitFactionTemplate.index();
-    /// `UNIT_FIELD_BYTES_0`, absolute descriptor index.
-    const BYTES_0: u16 = Field::UnitBytes0.index();
 
     /// Wrath: 5% per rank above Neutral, never the 1.12 honor steps.
     #[test]
@@ -91,7 +104,7 @@ mod tests {
                 FIELD_UNIT_FACTIONTEMPLATE,
                 template,
             )]));
-            let me = ObjectStore(ObjectFields::from_pairs(&[(BYTES_0, HUMAN_WARRIOR)]));
+            let me = ObjectStore(human_warrior_player(&[]));
             let got = vendor_price_discount(Some(&factions), &reps, &vendor, &me);
             assert!((got - want).abs() < 1e-12, "standing {total}: got {got:e}");
         }

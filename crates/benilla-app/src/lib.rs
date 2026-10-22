@@ -186,7 +186,7 @@ mod ui_companions;
 mod ui_totems;
 mod ui_glyphs;
 mod ui_raid_vehicles;
-mod wrath_vehicle_seats;
+pub(crate) mod wrath_vehicle_seats;
 mod ui_unit_popup;
 mod ui_runes;
 mod ui_pet_stats;
