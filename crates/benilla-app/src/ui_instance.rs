@@ -320,35 +320,7 @@ fn raid_instance_line(kind: u32, map: u32, difficulty: u32, seconds: i32) -> Opt
 pub(crate) mod net {
     use super::*;
 
-    use benilla_protocol::{SessionEvent, SessionEventKind};
-
     use crate::net::wrath_instance_control_capture::NativeInstanceControlPackets;
-    use crate::net::NetHandlerApp;
-
-    /// 1.12's lockout kinds: no 3.3.5 adapter produces them. Labelled, for the protocol to retire.
-    pub(super) fn register(app: &mut App) {
-        use SessionEventKind as K;
-        app.net_handler(K::RaidInstanceMessage, unproduced)
-            .net_handler(K::InstanceSaveCreated, unproduced)
-            .net_handler(K::InstanceReset, unproduced)
-            .net_handler(K::InstanceResetFailed, unproduced)
-            .net_handler(K::UpdateLastInstance, unproduced)
-            .net_handler(K::UpdateInstanceOwnership, unproduced);
-    }
-
-    fn unproduced(In(ev): In<SessionEvent>) {
-        if matches!(
-            ev,
-            SessionEvent::RaidInstanceMessage { .. }
-                | SessionEvent::InstanceSaveCreated { .. }
-                | SessionEvent::InstanceReset { .. }
-                | SessionEvent::InstanceResetFailed { .. }
-                | SessionEvent::UpdateLastInstance { .. }
-                | SessionEvent::UpdateInstanceOwnership { .. }
-        ) {
-            warn!("ui_instance: a 1.12 lockout event on a 3.3.5 session, dropped: {ev:?}");
-        }
-    }
 
     /// The one consumer of the capture's lockout kinds, in wire order: lines, welcomes and the
     /// latch here, and the lock's set and clear (`00513b20`: a timed warning sets, a zero one or
@@ -601,7 +573,6 @@ pub(crate) struct UiInstancePlugin;
 
 impl Plugin for UiInstancePlugin {
     fn build(&self, app: &mut App) {
-        net::register(app);
         app.init_resource::<InstanceState>().add_systems(
             Update,
             (
