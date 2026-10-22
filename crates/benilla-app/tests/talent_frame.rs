@@ -332,7 +332,10 @@ fn a_wheel_spin_over_the_grid_scrolls_the_tree() {
             r#"
             local scroll = PlayerTalentFrameScrollFrame:GetVerticalScroll()
             assert(scroll > 0,
-                "one notch down pans the frame, got " .. tostring(scroll))
+                "one notch down pans the frame, got " .. tostring(scroll)
+                .. " (range " .. tostring(PlayerTalentFrameScrollFrame:GetVerticalScrollRange())
+                .. ", wheel " .. tostring(PlayerTalentFrameScrollFrame:IsMouseWheelEnabled())
+                .. ", under " .. tostring(GetMouseFocus() and GetMouseFocus():GetName()) .. ")")
             assert(PlayerTalentFrameScrollFrameScrollBar:GetValue() == scroll,
                 "the bar follows the frame, got " .. tostring(PlayerTalentFrameScrollFrameScrollBar:GetValue()))
             "#,

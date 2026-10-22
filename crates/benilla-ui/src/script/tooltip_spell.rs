@@ -39,6 +39,11 @@ pub struct SpellTooltipView {
     /// the power-type keys, falling back to health.
     pub cost: Option<String>,
     pub range: Option<String>,
+    /// When `Some`, the app's composed cost/range double lines in order, replacing the one
+    /// `cost`/`range` line: build 12340's `SPELL_RANGE_DUAL` pair (`006238a0`, `0x624230`), whose
+    /// enemy and friendly cells take two lines. With no cost the reference never clears its left
+    /// buffer, so the enemy text repeats as line two's left cell; the app ports that as is.
+    pub cost_range_lines: Option<Vec<(String, Option<String>)>>,
     /// The cast cell ("1.5 sec cast", "Instant", "Next melee", "Channeled"); `None` is a passive
     /// spell, whose cast and cooldown line is omitted.
     pub cast_time: Option<String>,
@@ -343,29 +348,21 @@ fn render_spell(
         }
     }
     if !aura && !talent_builder {
-        match (&v.cost, &v.range) {
-            (Some(c), Some(r)) => append_line(
-                lua,
-                this,
-                (c.clone(), WHITE),
-                Some((r.clone(), WHITE)),
-                false,
-            )?,
-            (Some(c), None) => append_line(lua, this, (c.clone(), WHITE), None, false)?,
-            (None, Some(r)) => append_line(lua, this, (r.clone(), WHITE), None, false)?,
-            (None, None) => {}
+        // The one cost|range line, or the app's composed lines (`cost_range_lines`).
+        let lines = v
+            .cost_range_lines
+            .clone()
+            .unwrap_or_else(|| match (&v.cost, &v.range) {
+                (Some(c), r) => vec![(c.clone(), r.clone())],
+                (None, Some(r)) => vec![(r.clone(), None)],
+                (None, None) => Vec::new(),
+            });
+        for (left, right) in lines {
+            append_line(lua, this, (left, WHITE), right.map(|r| (r, WHITE)), false)?;
         }
         if let Some(ct) = &v.cast_time {
-            match &v.cooldown {
-                Some(cd) => append_line(
-                    lua,
-                    this,
-                    (ct.clone(), WHITE),
-                    Some((cd.clone(), WHITE)),
-                    false,
-                )?,
-                None => append_line(lua, this, (ct.clone(), WHITE), None, false)?,
-            }
+            let cooldown = v.cooldown.clone().map(|cd| (cd, WHITE));
+            append_line(lua, this, (ct.clone(), WHITE), cooldown, false)?;
         }
         if let Some(req) = &v.requires_item {
             let color = if v.item_met { WHITE } else { RED };

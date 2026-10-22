@@ -143,14 +143,15 @@ fn collapse_all_tab_and_filter_dropdowns_work_end_to_end() {
             .unwrap(),
         "All Slots"
     );
-    // Chest (5) is bit 4, Legs (7) bit 6, the stone (0) the not-equippable slot.
+    // Chest (5) is bit 4, Legs (7) bit 6, the stone (0) the not-equippable slot, 3.3.5's
+    // `NONEQUIPSLOT`.
     assert_eq!(
         s.eval::<(String, String, String)>("return GetTradeSkillInvSlots()")
             .unwrap(),
         (
             "Chest".to_string(),
             "Legs".to_string(),
-            "Not equippable.".to_string()
+            "Created Items".to_string()
         )
     );
 
@@ -291,10 +292,10 @@ fn reagent_slots_carry_the_questitemtemplate_shape() {
             "{w}1 name is centred on the plate ({nc} vs {pc})"
         );
 
-        // The count sits on the icon's bottom-right corner (-4, +1).
+        // The count sits on the icon's bottom-right corner (`LargeItemButtonTemplate`'s -1, +1).
         assert_eq!(
             num(&format!("{w}1Count:GetRight()")) - num(&format!("{w}1IconTexture:GetRight()")),
-            -4.0,
+            -1.0,
             "{w}1 count x"
         );
         assert_eq!(
@@ -378,13 +379,13 @@ fn a_row_click_shows_the_selection_glow_and_a_row_hover_shows_nothing() {
         "control: a reagent slot has an OnEnter, so GetScript reports real handlers"
     );
     // The list row's hover is the trainer template's, which opens no tooltip.
-    s.run("GameTooltip:Hide() this = TradeSkillSkill2 TradeSkillSkill2:GetScript(\"OnEnter\")()")
+    s.run("GameTooltip:Hide() TradeSkillSkill2:GetScript(\"OnEnter\")(TradeSkillSkill2)")
         .unwrap();
     assert!(
         !s.eval::<bool>("return GameTooltip:IsShown()").unwrap(),
         "a list row's hover opens no tooltip — the reference's rows never tooltip"
     );
-    s.run("this = TradeSkillSkill2 TradeSkillSkill2:GetScript(\"OnLeave\")()")
+    s.run("TradeSkillSkill2:GetScript(\"OnLeave\")(TradeSkillSkill2)")
         .unwrap();
 }
 

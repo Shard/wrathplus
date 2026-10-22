@@ -274,8 +274,8 @@ pub struct WrathWorldSession {
     /// right after `SMSG_AUTH_RESPONSE` (`WorldSession::SendAddonsInfo`, `SendClientCacheVersion`)
     /// and the startup and roster loops would otherwise skip ([`crate::wrath_bootstrap`]).
     bootstrap: Vec<WrathServerPacket>,
-    /// Whether this session's `SMSG_ADDON_INFO` arrived; kept across re-logins on the session.
-    addon_reply: bool,
+    /// The addons this session's `SMSG_ADDON_INFO` hid, once it arrived; kept across re-logins.
+    addon_reply: Option<Vec<String>>,
 }
 
 impl WrathWorldSession {
@@ -338,7 +338,7 @@ impl WrathWorldSession {
             read_failed: false,
             write_failed: false,
             bootstrap: Vec::new(),
-            addon_reply: false,
+            addon_reply: None,
         };
         let mut queue_updates = 0usize;
         for _ in 0..MAX_STARTUP_PACKETS {
@@ -384,7 +384,7 @@ impl WrathWorldSession {
     fn keep_bootstrap(&mut self, packet: WrathServerPacket) {
         if crate::wrath_bootstrap::handles(packet.opcode) {
             if packet.opcode == crate::wrath_bootstrap::SMSG_ADDON_INFO {
-                self.addon_reply = true;
+                self.addon_reply = Some(crate::wrath_bootstrap::secure_addons(&packet.body));
             }
             self.bootstrap.push(packet);
         }
@@ -395,9 +395,9 @@ impl WrathWorldSession {
         std::mem::take(&mut self.bootstrap)
     }
 
-    /// Whether this session's `SMSG_ADDON_INFO` arrived (it answers the auth session's addon list).
-    pub fn addon_reply_received(&self) -> bool {
-        self.addon_reply
+    /// The addons this session's `SMSG_ADDON_INFO` marked secure; `None` if it never arrived.
+    pub fn addon_info(&self) -> Option<Vec<String>> {
+        self.addon_reply.clone()
     }
 
     /// Raw authenticated account expansion; not inferred from client build or character level.
@@ -856,10 +856,10 @@ fn world_proof(
     sha.finalize().into()
 }
 
-fn empty_addon_block() -> Result<Vec<u8>> {
-    // Wrath's uncompressed form is addon count followed by current time. A zero-size tail is not
-    // accepted by WorldSocket, while this is a valid list containing no stock/third-party addons.
-    let plain = [0u8; 8];
+/// The stock client's addon block, its 23 secure built-ins, which `SMSG_ADDON_INFO` answers record
+/// for record ([`crate::wrath_bootstrap`]); the banned-cache trailer is 0, as on a fresh install.
+fn stock_addon_block() -> Result<Vec<u8>> {
+    let plain = crate::types::addons::addon_block(&crate::types::STOCK_SECURE_ADDONS, 0);
     let mut encoder = ZlibEncoder::new(Vec::new(), flate2::Compression::default());
     encoder.write_all(&plain)?;
     let compressed = encoder.finish()?;
@@ -875,7 +875,7 @@ fn auth_session_body(
     client_seed: u32,
     proof: &[u8; 20],
 ) -> Result<Vec<u8>> {
-    let addons = empty_addon_block()?;
+    let addons = stock_addon_block()?;
     let mut body = Vec::with_capacity(64 + account.len() + addons.len());
     body.extend_from_slice(&WRATH_CLIENT_BUILD.to_le_bytes());
     body.extend_from_slice(&0u32.to_le_bytes()); // LoginServerID
@@ -1322,7 +1322,7 @@ mod tests {
                 read_failed: false,
                 write_failed: false,
                 bootstrap: Vec::new(),
-                addon_reply: false,
+                addon_reply: None,
             },
             server,
         )
@@ -1411,7 +1411,7 @@ mod tests {
     }
 
     #[test]
-    fn auth_session_has_exact_fixed_fields_and_valid_empty_addons() {
+    fn auth_session_has_exact_fixed_fields_and_the_stock_addons() {
         let proof = [0xabu8; 20];
         let body = auth_session_body("ACCOUNT", 7, 0x1122_3344, &proof).unwrap();
         assert_eq!(&body[0..4], &WRATH_CLIENT_BUILD.to_le_bytes());
@@ -1423,13 +1423,13 @@ mod tests {
         assert_eq!(&body[32..36], &7u32.to_le_bytes());
         assert_eq!(&body[36..44], &[0; 8]);
         assert_eq!(&body[44..64], &proof);
-        let plain_len = u32::from_le_bytes(body[64..68].try_into().unwrap());
-        assert_eq!(plain_len, 8);
+        let stock = crate::types::addons::addon_block(&crate::types::STOCK_SECURE_ADDONS, 0);
+        assert_eq!(&body[64..68], &(stock.len() as u32).to_le_bytes());
         let mut plain = Vec::new();
         ZlibDecoder::new(&body[68..])
             .read_to_end(&mut plain)
             .unwrap();
-        assert_eq!(plain, [0; 8]);
+        assert_eq!(plain, stock);
     }
 
     #[test]

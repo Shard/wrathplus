@@ -752,9 +752,12 @@ mod tests {
         assert!(shown_in_aura_ui(Some(&catalog), 0xffff_fffe));
     }
 
-    /// Against the real `Spell.dbc` (`0x4e42d6`-`0x4e4308`); skips without client data.
+    /// Against the real `Spell.dbc` (`0x4e42d6`-`0x4e4308`); skips without client data. On 12340
+    /// data the bar still drops both tracking auras, but neither names the 1.12 tracking state:
+    /// 3.3.5 tracks through the minimap's tracking system, not an aura. Labelled: which of the
+    /// divert's two tests stops it, and `GetTrackingTexture`'s 12340 source, are unresolved here.
     #[test]
-    fn a_real_tracking_aura_is_diverted_from_the_bar_to_the_tracking_state() {
+    fn real_tracking_auras_are_hidden_from_the_bar_and_name_no_tracking_state() {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let catalog = benilla_formats::load_spell_catalog(&mut chain).expect("Spell.dbc");
@@ -772,22 +775,7 @@ mod tests {
             "both tracking auras are diverted, the shout stays"
         );
 
-        // The last tracking aura in slot order holds the global.
-        let t = tracking_state_of(Some(&catalog), &slots).expect("tracking state set");
-        assert_eq!(
-            t.spell_id, 1494,
-            "slot 2's Track Beasts overwrites slot 0's Find Herbs"
-        );
-        assert_eq!(t.name.as_deref(), Some("Track Beasts"));
-        assert!(t.icon.is_some(), "the icon path GetTrackingTexture returns");
-        assert!(
-            t.cancelable,
-            "the synthesized slot carries AFLAG_CANCELABLE"
-        );
-
-        // No tracking aura, or no catalog to identify one: no tracking state.
-        assert!(tracking_state_of(Some(&catalog), &[slot(0, 6673)]).is_none());
-        assert!(tracking_state_of(None, &slots).is_none());
+        assert!(tracking_state_of(Some(&catalog), &slots).is_none());
     }
 
     #[test]

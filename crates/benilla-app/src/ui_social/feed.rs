@@ -21,11 +21,10 @@ const FRIEND_STATUS_RAF: u8 = 0x08;
 /// The chat-routed `/who` templates. FrameXML never names them: the engine prints these lines
 /// itself. None is a message-catalog row, so they go out through `Shown::unkeyed`, since
 /// `Shown::keyed` turns an unknown key's line red.
-const WHO_KEYS: [&str; 4] = [
+const WHO_KEYS: [&str; 3] = [
     "WHO_LIST_FORMAT",
     "WHO_LIST_GUILD_FORMAT",
     "WHO_NUM_RESULTS",
-    "WHO_NUM_RESULTS_P1",
 ];
 
 /// The most rows that print to chat when the Who frame does not claim an answer. `SMSG_WHO`'s
@@ -225,9 +224,8 @@ fn who_lines(rows: &[WhoInfo], total: u32, get: &dyn Fn(&str) -> Option<String>)
         args.push(Arg::S(&row.zone));
         lines.extend(chat(fill(&template, &args)));
     }
-    // `_P1` for any total but one, `GetText`'s plural rule, so zero reads "0 players total".
-    let total_key = if total == 1 { WHO_KEYS[2] } else { WHO_KEYS[3] };
-    if let Some(template) = get(total_key) {
+    // One key; its `|4player:players;` plural resolves at the text setter, off the count.
+    if let Some(template) = get(WHO_KEYS[2]) {
         lines.extend(chat(fill(&template, &[Arg::D(i64::from(total))])));
     }
     lines
@@ -580,7 +578,7 @@ mod tests {
             "wire order, not the chain's: {lines:?}"
         );
         assert!(lines[1].contains("Aaa"), "{lines:?}");
-        assert_eq!(lines[2], "2 players total", "the summary comes last");
+        assert_eq!(lines[2], "2 |4player:players; total");
     }
 
     /// The comparator ties on an unresolved name (`0x5adbb2`). The reference's `GetWhoInfo`

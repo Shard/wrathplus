@@ -6,10 +6,13 @@
 //! with the summoner and 0, dropping the latch), `DeclineInvite` (`0x410` with the channel), a refund purchase
 //! (`0x4B4` for the slot's item), `RespondInstanceLock` (`0x13F`) and the LFG boot vote (`0x36C`).
 //!
-//! The instance lock: `SMSG_INSTANCE_LOCK_WARNING_QUERY` (`0x147`) sets the lock (time left on
-//! the `GetTime` clock, the extend byte, the completed-encounter mask's count) and fires
-//! `INSTANCE_LOCK_START`; an answer clears it and fires `INSTANCE_LOCK_STOP`. Labelled: the
-//! encounter total (`DungeonEncounter.dbc` for the map) reads 0. The filled glyph sockets are the
+//! The instance lock, `00513b20` in wire order: `SMSG_INSTANCE_LOCK_WARNING_QUERY` (`0x147`)
+//! with a timeout sets it (time left on the `GetTime` clock, the extend byte, the completed
+//! mask) and fires `INSTANCE_LOCK_START`; one with none, or `SMSG_INSTANCE_SAVE_CREATED` flag 0,
+//! clears it and fires `INSTANCE_LOCK_STOP`. The answer only sends (`0x613ed0`). The encounter
+//! counts are `00553830`'s: the `DungeonEncounter.dbc` rows of the map and difficulty, and those
+//! whose bit the mask sets. Labelled: its map and difficulty (`0xbd088c`, `0xbd0894`) are read as
+//! the current map and the latest `SMSG_INSTANCE_DIFFICULTY`'s. The filled glyph sockets are the
 //! active talent group's non-zero glyphs.
 //!
 //! Also sent: `GMResponseResolve` (`0x4F0`), glyph removal (`0x48A`), friend notes (`0x6B`, by row
@@ -45,7 +48,7 @@ use bevy::prelude::*;
 
 use benilla_protocol::wrath_instance_control::Packet;
 use benilla_ui::script::ScriptValue as V;
-use benilla_ui::script::{UiScript, WrathInstanceLock, WrathPopupRequest, WrathPopupState};
+use benilla_ui::script::{UiScript, WrathPopupRequest, WrathPopupState};
 
 use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
 
@@ -85,50 +88,9 @@ pub(crate) struct InstanceLock {
     pub(crate) dynamic_difficulty: u32,
 }
 
-/// A pending instance lock: when it forces (`GetTime` seconds), whether accepting extends, and
-/// the completed-encounter mask.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct PendingLock {
-    expires_at: f64,
-    extending: bool,
-    completed_mask: u32,
-}
-
-impl PendingLock {
-    fn view(self) -> WrathInstanceLock {
-        WrathInstanceLock {
-            expires_at: self.expires_at,
-            extending: self.extending,
-            encounters_completed: self.completed_mask.count_ones(),
-            encounters_total: 0,
-            completed_mask: self.completed_mask,
-        }
-    }
-}
-
-/// Take the lock warnings out of the capture, newest wins; every other receipt stays, in order.
-pub(crate) fn take_lock_warning(
-    packets: &mut std::collections::VecDeque<Packet>,
-    now: f64,
-) -> Option<PendingLock> {
-    let mut lock = None;
-    packets.retain(|packet| match *packet {
-        Packet::LockWarning {
-            timeout_ms,
-            encounter_mask,
-            raw_flag,
-        } => {
-            lock = Some(PendingLock {
-                expires_at: now + f64::from(timeout_ms) / 1000.0,
-                extending: raw_flag != 0,
-                completed_mask: encounter_mask,
-            });
-            false
-        }
-        _ => true,
-    });
-    lock
-}
+#[path = "ui_static_popup_lock.rs"]
+mod lock;
+pub(crate) use lock::{lock_changes, PendingLock};
 
 /// `IsOutOfBounds` (`0x6123c0`): `PLAYER_FLAGS_IS_OUT_OF_BOUNDS`.
 const PLAYER_FLAGS_OUT_OF_BOUNDS: u32 = 0x4000;
@@ -391,6 +353,12 @@ pub(crate) struct PopupInputs<'w, 's> {
         Option<ResMut<'w, crate::ui_chat::ChatLog>>,
         Option<ResMut<'w, crate::sound::MessageSounds>>,
     ),
+    /// The lock's encounter rows and the map it counts them for.
+    instance: (
+        Option<Res<'w, crate::ui_lfg::catalog::Encounters>>,
+        Option<Res<'w, benilla_world::world_map::CurrentMap>>,
+        Option<ResMut<'w, crate::ui_instance::InstanceState>>,
+    ),
     memo: Local<'s, crate::ui_script::VmMemo<Memo>>,
 }
 
@@ -417,6 +385,7 @@ pub(crate) fn drive(
         lock,
         bank: (vault, bank_open),
         sink: (log, sounds),
+        instance: (encounters, current_map, instance_state),
         mut memo,
     } = inputs;
     let banker = bank_open.as_deref().and_then(|o| o.banker());
@@ -442,9 +411,15 @@ pub(crate) fn drive(
             _ => true,
         });
     }
-    if let Some(warning) = packets.and_then(|mut p| take_lock_warning(&mut p.0, script.now())) {
-        lock.lock = Some(warning);
-        script.fire_event("INSTANCE_LOCK_START", Vec::new());
+    let raw = instance_state.map_or_else(Vec::new, |mut s| s.take_lock_changes());
+    for change in lock_changes(raw, script.now()) {
+        let event = if change.is_some() {
+            "INSTANCE_LOCK_START"
+        } else {
+            "INSTANCE_LOCK_STOP"
+        };
+        lock.lock = change;
+        script.fire_event(event, Vec::new());
     }
 
     // `SMSG_PROPOSE_LEVEL_GRANT`: the newest granter is latched; every other receipt stays.
@@ -572,10 +547,6 @@ pub(crate) fn drive(
                 match request {
                     WrathPopupRequest::CancelSummon => summon.cancel(),
                     WrathPopupRequest::AcceptLevelGrant => lock.granter = None,
-                    WrathPopupRequest::RespondInstanceLock { .. } => {
-                        lock.lock = None;
-                        script.fire_event("INSTANCE_LOCK_STOP", Vec::new());
-                    }
                     _ => {}
                 }
             }
@@ -588,7 +559,13 @@ pub(crate) fn drive(
         out_of_bounds: store.is_some_and(|s| s.0.player_flags() & PLAYER_FLAGS_OUT_OF_BOUNDS != 0),
         can_teleport: store.is_none_or(|s| s.0.unit_flags() & TELEPORT_BLOCKERS == 0),
         controlling: controlling(units.iter().map(|(g, s)| (g.0, s))),
-        instance_lock: lock.lock.map(PendingLock::view),
+        instance_lock: lock.lock.map(|held| {
+            let rows = encounters.as_deref().map_or(&[][..], |e| e.0.as_slice());
+            let here = current_map
+                .as_deref()
+                .map(|m| (m.0, lock.difficulty.unwrap_or(0)));
+            held.view(rows, here)
+        }),
         filled_glyph_sockets: filled_glyph_sockets(progress.as_deref()),
         cannot_be_resurrected: cannot_be_resurrected(
             self_guid

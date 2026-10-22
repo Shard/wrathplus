@@ -56,10 +56,12 @@ pub struct DialRanges {
 pub struct CharCreateCatalog {
     /// race → (male displayId, female displayId), from ChrRaces cols 4/5.
     displays: HashMap<u8, (u32, u32)>,
-    /// race → ChrRaces fileString (col 15), the GlueStrings key stem (`RACE_INFO_<FILE>`).
+    /// race → ChrRaces clientFileString (col 11), the GlueStrings key stem (`RACE_INFO_<FILE>`).
     files: HashMap<u8, String>,
-    /// race → ([male, female] facial-hair token, cols 26/27; hair token, col 28).
+    /// race → ([male, female] facial-hair token, cols 65/66; hair token, col 67).
     custom_tokens: HashMap<u8, ([String; 2], String)>,
+    /// race → [male, female] display name: the gendered columns (48, 31), else the name (14).
+    names: HashMap<u8, [String; 2]>,
     combos: HashSet<(u8, u8)>,
     ranges: HashMap<(u8, u8), DialRanges>,
     /// (race, class, sex) → the worn starting-outfit items.
@@ -82,6 +84,11 @@ impl CharCreateCatalog {
     /// The ChrRaces fileString for a race (`"Human"`, `"Scourge"`), the GlueStrings key stem.
     pub fn race_file(&self, race: u8) -> Option<&str> {
         self.files.get(&race).map(String::as_str)
+    }
+
+    /// A race's display name for a sex (0 male, 1 female), as `GetAvailableRaces` lists it.
+    pub fn race_name(&self, race: u8, sex: u8) -> Option<&str> {
+        self.names.get(&race).map(|n| n[(sex as usize).min(1)].as_str())
     }
 
     /// A race's hair glue token (`"NORMAL"`, `"HORNS"`), keying `HAIR_<tok>_STYLE`/`_COLOR`.
@@ -126,7 +133,7 @@ impl CharCreateCatalog {
     /// run before `UNUSED_COMBOS` are stripped.
     pub fn load(chain: &mut Chain) -> Result<Self> {
         let profile = chain.profile().clone();
-        let (displays, files, custom_tokens) = load_races(chain, &profile)?;
+        let (displays, files, custom_tokens, names) = load_races(chain, &profile)?;
         let combos = load_combos(chain)?;
         let start_outfits = load_start_outfits(chain, &profile)?;
         let avail = load_available_sections(chain, &profile)?;
@@ -150,6 +157,7 @@ impl CharCreateCatalog {
             displays,
             files,
             custom_tokens,
+            names,
             combos,
             ranges,
             start_outfits,
@@ -192,9 +200,12 @@ impl CharCreateCatalog {
     }
 }
 
-/// ChrRaces (69 fields) → per playable race: displayIds (cols 4/5) and fileString (14); the
-/// customization tokens are all `NORMAL`. Other string columns are read as ignored `u32`s.
-#[allow(clippy::type_complexity)] // one pass over one DBC → the catalog's three race-keyed maps
+/// ChrRaces (69 fields) → per playable race: displayIds (cols 4/5), clientFileString (11), the
+/// display name (14, enUS; the female 31 and male 48 columns, empty on enUS, win when set, as
+/// `0x715970` picks) and the customization tokens: facial hair by sex (65 male, 66 female) and
+/// hair (67), which build 12340's `GetFacialHairCustomization`/`GetHairCustomization` read
+/// (`0x4e0970` `+0x44`, `0x4e0900` `+0x4c`). Other columns are read as ignored `u32`s.
+#[allow(clippy::type_complexity)] // one pass over one DBC → the catalog's race-keyed maps
 fn load_races(
     chain: &mut Chain,
     profile: &DataProfile,
@@ -202,6 +213,7 @@ fn load_races(
     HashMap<u8, (u32, u32)>,
     HashMap<u8, String>,
     HashMap<u8, ([String; 2], String)>,
+    HashMap<u8, [String; 2]>,
 )> {
     let bytes = chain
         .read_file(CHR_RACES)
@@ -210,7 +222,7 @@ fn load_races(
     let DataProfile::Wrath { .. } = profile;
     for i in 0..69 {
         let ty = match i {
-            14 => FieldType::String,
+            11 | 14 | 31 | 48 | 65 | 66 | 67 => FieldType::String,
             _ => FieldType::UInt32,
         };
         schema.add_field(SchemaField::new(format!("f{i}"), ty));
@@ -219,6 +231,8 @@ fn load_races(
     let mut displays = HashMap::new();
     let mut files = HashMap::new();
     let mut tokens = HashMap::new();
+    let mut names = HashMap::new();
+    let text = |r: &benilla_dbc::Record, col| str_at(&rs, r, col).filter(|s| !s.is_empty());
     for r in rs.records() {
         let Some(race) = u32_at(r, 0) else { continue };
         let race = race as u8;
@@ -228,16 +242,16 @@ fn load_races(
         if let (Some(male), Some(female)) = (u32_at(r, 4), u32_at(r, 5)) {
             displays.insert(race, (male, female));
         }
-        match profile {
-            DataProfile::Wrath { .. } => {
-                if let Some(file) = str_at(&rs, r, 14) {
-                    files.insert(race, file);
-                }
-                tokens.insert(race, (["NORMAL".into(), "NORMAL".into()], "NORMAL".into()));
-            }
+        if let Some(file) = text(r, 11) {
+            files.insert(race, file);
         }
+        let token = |col| text(r, col).unwrap_or_else(|| "NORMAL".into());
+        tokens.insert(race, ([token(65), token(66)], token(67)));
+        let name = text(r, 14).unwrap_or_default();
+        let gendered = |col| text(r, col).unwrap_or_else(|| name.clone());
+        names.insert(race, [gendered(48), gendered(31)]);
     }
-    Ok((displays, files, tokens))
+    Ok((displays, files, tokens, names))
 }
 
 /// CharBaseInfo → (race, class) pairs: two one-byte fields, parsed by hand off the record block.
@@ -442,51 +456,5 @@ fn derive_ranges(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn char_sections_fixture(profile: &DataProfile, flags: u32) -> benilla_dbc::RecordSet {
-        let mut fields = [0u32; 10];
-        fields[0] = 0x0102_0304;
-        fields[1] = 1;
-        fields[2] = 0;
-        let columns = crate::characters::char_section_columns(profile);
-        fields[columns.section_type] = 3;
-        fields[columns.variation] = 71;
-        fields[columns.color] = 9;
-        fields[columns.flags] = flags;
-        let mut bytes = Vec::new();
-        bytes.extend_from_slice(b"WDBC");
-        bytes.extend_from_slice(&1u32.to_le_bytes());
-        bytes.extend_from_slice(&10u32.to_le_bytes());
-        bytes.extend_from_slice(&40u32.to_le_bytes());
-        bytes.extend_from_slice(&1u32.to_le_bytes());
-        for field in fields {
-            bytes.extend_from_slice(&field.to_le_bytes());
-        }
-        bytes.push(0);
-        parse(
-            &bytes,
-            crate::characters::char_sections_schema(profile),
-            "synthetic CharSections",
-        )
-        .expect("parse synthetic CharSections")
-    }
-
-    #[test]
-    fn wrath_char_sections_require_the_player_flag() {
-        let wrath = DataProfile::Wrath {
-            locale: "enUS".to_string(),
-        };
-        let sentinel = (1, 0, 3, 71, 9);
-
-        assert!(
-            !available_sections_from_records(&char_sections_fixture(&wrath, 0), &wrath)
-                .contains(&sentinel)
-        );
-        assert!(
-            available_sections_from_records(&char_sections_fixture(&wrath, 1), &wrath)
-                .contains(&sentinel)
-        );
-    }
-}
+#[path = "customization_tests.rs"]
+mod tests;

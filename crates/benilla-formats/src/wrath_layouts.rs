@@ -29,7 +29,7 @@ pub(crate) fn columns(
         "PetPersonality" => (19, 24, |m| {
             m.same(0, 1).loc(1, 1).run(10, 18, 6);
         }),
-        "Spell" => (190, 234, spell),
+        "Spell" => (191, 234, spell),
         "SpellDispelType" => (12, 21, spell_dispel_type),
         "SkillLine" => (32, 56, skill_line),
         "TalentTab" => (16, 24, talent_tab),
@@ -58,7 +58,7 @@ pub(crate) fn columns(
         "SkillLineAbility" => (15, 14, |m| {
             m.same(0, 14);
         }),
-        "SpellRange" => (22, 40, spell_range),
+        "SpellRange" => (24, 40, spell_range),
         // Native 0x8a93e0 retains raw word order; fallback walker 0x717814 reads +0x14,
         // not +0x18 (the separate animation/variation lookup). Slot 5 is unused by our reader.
         "AnimationData" => (7, 8, |m| {
@@ -153,7 +153,8 @@ fn spell(m: &mut Map) {
         .run(186, 9, 1) // AttributesEx5
         .run(187, 11, 1) // AttributesEx7
         .run(188, 226, 1) // RuneCostID
-        .run(189, 228, 1); // PowerDisplayId
+        .run(189, 228, 1) // PowerDisplayId
+        .run(190, 10, 1); // AttributesEx6
 }
 
 /// `SpellDispelType.dbc` 12 → 21: id, name, then ImmunityPossible (the aura name gate), not DispelMask,
@@ -235,13 +236,15 @@ fn spell_item_enchantment(m: &mut Map) {
 }
 
 /// `SpellRange.dbc` 22 → 40: 3.3.5 splits min and max range into hostile and friendly columns;
-/// 1.12's single values read the hostile ones.
+/// 1.12's single values read the hostile ones, and slots 22-23 the friendly pair.
 fn spell_range(m: &mut Map) {
     m.run(0, 0, 2)
         .run(2, 3, 1)
         .run(3, 5, 1)
         .loc(4, 6)
-        .loc(13, 23);
+        .loc(13, 23)
+        .run(22, 2, 1)
+        .run(23, 4, 1);
 }
 
 /// `AreaTable.dbc` 25 → 36: liquid type grew to four columns.
@@ -289,7 +292,7 @@ mod tests {
         ("AreaPOI", 29, 54),
         ("CreatureModelData", 16, 28),
         ("PetPersonality", 19, 24),
-        ("Spell", 190, 234),
+        ("Spell", 191, 234),
         ("SpellDispelType", 12, 21),
         ("SkillLine", 32, 56),
         ("TalentTab", 16, 24),
@@ -306,7 +309,7 @@ mod tests {
         ("TaxiPathNode", 9, 11),
         ("Talent", 21, 23),
         ("SkillLineAbility", 15, 14),
-        ("SpellRange", 22, 40),
+        ("SpellRange", 24, 40),
         ("AnimationData", 7, 8),
         ("SoundEntries", 29, 30),
         ("Material", 3, 5),
@@ -325,7 +328,7 @@ mod tests {
                 assert!(seen.insert(*c), "{table}: column {c} mapped twice");
             }
         }
-        assert!(columns("Spell.dbc", 190, 234).is_some());
+        assert!(columns("Spell.dbc", 191, 234).is_some());
         assert!(
             columns("Spell.dbc", 173, 234).is_none(),
             "the 3.3.5-only slots are required"
@@ -388,7 +391,7 @@ mod tests {
 
     #[test]
     fn spell_columns_land_on_the_build_12340_fields() {
-        let m = columns("Spell", 190, 234).unwrap();
+        let m = columns("Spell", 191, 234).unwrap();
         for (vanilla, wrath) in [
             (18, 28),   // CastingTimeIndex
             (36, 46),   // rangeIndex

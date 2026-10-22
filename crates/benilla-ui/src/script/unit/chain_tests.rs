@@ -325,3 +325,19 @@ fn spell_can_target_unit_raises_as_the_resolver_and_the_gate_do() {
         assert!(err(chunk).contains("Unknown unit name"), "{chunk}");
     }
 }
+
+/// 3.3.5's quest frame reads the conversation NPC as `questnpc` (`QuestFrame.lua:63`), the
+/// snapshot the app pushes as `npc`.
+#[test]
+fn questnpc_reads_the_npc_snapshot() {
+    let mut s = UiScript::new().unwrap();
+    s.set_unit("npc", Some(state("Marshal McBride", MOB, 500)));
+    assert_eq!(
+        s.eval::<(String, String)>("return UnitName('questnpc'), UnitName('QuestNPC')")
+            .unwrap(),
+        ("Marshal McBride".into(), "Marshal McBride".into())
+    );
+    assert!(s
+        .eval::<bool>("return UnitExists('questnpc') == 1")
+        .unwrap());
+}

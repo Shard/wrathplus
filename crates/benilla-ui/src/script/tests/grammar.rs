@@ -45,3 +45,42 @@ fn a_chat_line_stores_the_plural_its_number_picks() {
         .unwrap();
     assert_eq!(got, "You have gained 2 talent points.");
 }
+
+#[test]
+fn a_button_label_resolves_and_takes_the_12340_nil_rule() {
+    let s = script();
+    let got = s
+        .eval::<(bool, String, bool)>(
+            r#"
+            local b = CreateFrame("Button")
+            -- No label yet: "" and nil create none (`0x96f860`).
+            b:SetText("")
+            b:SetText(nil)
+            local none = b:GetFontString() == nil
+            -- MailFrame.lua:195's expiry, through the setter's grammar pass.
+            b:SetText("|cff20ff20" .. format("%d |4Day:Days;", 29) .. " |r")
+            local text = b:GetText()
+            -- With a label, nil clears it.
+            b:SetText(nil)
+            return none, text, b:GetText() == nil
+        "#,
+        )
+        .unwrap();
+    assert_eq!(got, (true, "|cff20ff2029 Days |r".to_string(), true));
+}
+
+#[test]
+fn a_tooltip_line_resolves_its_plural() {
+    let s = script();
+    let got = s
+        .eval::<String>(
+            r#"
+            local tt = CreateFrame("GameTooltip", "PluralTip")
+            tt:SetOwner(UIParent or CreateFrame("Frame"), "ANCHOR_NONE")
+            tt:AddLine(format("Duration: %d |4day:days;", 1))
+            return PluralTipTextLeft1:GetText()
+        "#,
+        )
+        .unwrap();
+    assert_eq!(got, "Duration: 1 day");
+}

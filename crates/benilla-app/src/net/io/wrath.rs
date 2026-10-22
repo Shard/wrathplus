@@ -337,13 +337,10 @@ fn run(
                     }
                     Ok(CharRequest::Service(command)) => {
                         let reply = session.char_service_result(&command)?;
-                        // A change the server applied re-emits the roster before the result, as
-                        // create and delete do.
-                        if reply.changed_roster() {
+                        char_service::publish_char_service(reply, || {
                             characters = normalize_characters(session.char_enum().context("Wrath refreshed roster")?);
-                            send(events, SessionEvent::CharacterList { characters: characters.clone(), realm: realm_record.clone() })?;
-                        }
-                        send(events, SessionEvent::WrathCharServiceResult { reply })?;
+                            Ok(SessionEvent::CharacterList { characters: characters.clone(), realm: realm_record.clone() })
+                        }, |event| send(events, event))?;
                     }
                     Ok(CharRequest::Delete(guid)) => {
                         let code = session.delete_character_result(guid)?;
@@ -368,7 +365,7 @@ fn run(
         // queued packet through the Wrath adapter.
         session.begin_player_login(guid)?;
         // The auth bootstrap the select screen kept (`SMSG_ADDON_INFO`, `SMSG_CLIENTCACHE_VERSION`).
-        let addon_reply = session.addon_reply_received();
+        let addon_info = session.addon_info();
         let bootstrap = session.take_bootstrap_packets();
         let (mut reader, writer) = session.into_split()?;
         let session_clock = Arc::new(SessionClock::new());
@@ -410,9 +407,8 @@ fn run(
                 name,
                 billing_time_rested: 0,
                 tutorial_flags: None,
-                // Our auth session names no addon, so `SMSG_ADDON_INFO` hides none: an empty list
-                // once it arrived, `None` (nothing loads) if the server never answered.
-                addon_info: addon_reply.then(Vec::new),
+                // The stock addons `SMSG_ADDON_INFO` marked secure; `None` (nothing loads) if silent.
+                addon_info,
             },
         )?;
         for packet in bootstrap {
@@ -5238,6 +5234,8 @@ fn publish_character_action(
     publish(SessionEvent::WrathCharActionResult { action, code })
 }
 
+#[path = "wrath/char_service.rs"]
+mod char_service;
 #[cfg(test)]
 #[path = "wrath/character_tests.rs"]
 mod character_tests;

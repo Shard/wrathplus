@@ -20,7 +20,7 @@ fn setup() -> UiScript {
     s
 }
 
-/// Expiry runs OnCancel with "timeout", then hides the dialog (`StaticPopup.lua:1716`).
+/// Expiry runs OnCancel with "timeout", then hides the dialog (`StaticPopup.lua:3298`).
 #[test]
 fn timeout_expires_into_a_timeout_cancel() {
     benilla_formats::wow_data_or_skip!();
@@ -29,7 +29,7 @@ fn timeout_expires_into_a_timeout_cancel() {
         r#"reason = "unset"
            StaticPopupDialogs["TEST_TIMEOUT"] = {
                text = "expiring", button1 = "OK", timeout = 2,
-               OnCancel = function(data, r) reason = r or "none" end,
+               OnCancel = function(self, data, r) reason = r or "none" end,
            }
            StaticPopup_Show("TEST_TIMEOUT")"#,
     )
@@ -53,8 +53,8 @@ fn timeout_expires_into_a_timeout_cancel() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// StartDelay holds button1 disabled, then swaps the real text in (`StaticPopup.lua:1764`); only
-/// the kinds named at `StaticPopup.lua:1778`, RECOVER_CORPSE among them, render its countdown.
+/// StartDelay holds button1 disabled, then swaps the real text in (`StaticPopup.lua:3249`); only
+/// the kinds named at `StaticPopup.lua:3360`, RECOVER_CORPSE among them, render its countdown.
 #[test]
 fn start_delay_gates_button1_then_swaps_the_text_in() {
     benilla_formats::wow_data_or_skip!();
@@ -97,7 +97,7 @@ fn start_delay_gates_button1_then_swaps_the_text_in() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Showing a dialog cancels a visible `cancels` kind with "override" (`StaticPopup.lua:1475`).
+/// Showing a dialog cancels a visible `cancels` kind with "override" (`StaticPopup.lua:2967`).
 #[test]
 fn showing_a_dialog_cancels_its_named_victim_with_override() {
     benilla_formats::wow_data_or_skip!();
@@ -106,7 +106,7 @@ fn showing_a_dialog_cancels_its_named_victim_with_override() {
         r#"victim_reason = "unset"
            StaticPopupDialogs["TEST_VICTIM"] = {
                text = "victim", button1 = "OK", timeout = 0,
-               OnCancel = function(data, r) victim_reason = r or "none" end,
+               OnCancel = function(self, data, r) victim_reason = r or "none" end,
            }
            StaticPopupDialogs["TEST_CANCELLER"] = {
                text = "canceller", button1 = "OK", timeout = 0,
@@ -129,7 +129,7 @@ fn showing_a_dialog_cancels_its_named_victim_with_override() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Escape closes only `hideOnEscape` dialogs (`StaticPopup.lua:1879`).
+/// Escape closes only `hideOnEscape` dialogs (`StaticPopup.lua:3535`).
 #[test]
 fn escape_skips_dialogs_without_hide_on_escape() {
     benilla_formats::wow_data_or_skip!();
@@ -160,7 +160,7 @@ fn escape_skips_dialogs_without_hide_on_escape() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// DEATH's text re-renders every tick, in minutes from 60 s up (`StaticPopup.lua:1727`).
+/// DEATH's text re-renders every tick, in minutes from 60 s up (`StaticPopup.lua:3308`).
 #[test]
 fn the_death_countdown_text_rerenders_each_tick() {
     benilla_formats::wow_data_or_skip!();
@@ -194,8 +194,8 @@ fn the_death_countdown_text_rerenders_each_tick() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// `StaticPopup_FindVisible` matches data only for a `multiple` kind (`StaticPopup.lua:1421`);
-/// `StaticPopup_Hide` given data hides only the instance carrying it (`StaticPopup.lua:1706`).
+/// `StaticPopup_FindVisible` matches data only for a `multiple` kind (`StaticPopup.lua:2890`);
+/// `StaticPopup_Hide` given data hides only the instance carrying it (`StaticPopup.lua:3282`).
 #[test]
 fn hide_and_find_address_one_instance_by_data_only_for_a_multiple_dialog() {
     benilla_formats::wow_data_or_skip!();
@@ -239,34 +239,20 @@ fn hide_and_find_address_one_instance_by_data_only_for_a_multiple_dialog() {
         .eval::<bool>(r#"return StaticPopup_FindVisible("T_ONE", "wrong") == c"#)
         .unwrap());
 
-    // An unknown kind answers nil (`StaticPopup.lua:1416`).
+    // An unknown kind answers nil (`StaticPopup.lua:2885`).
     assert!(s
         .eval::<bool>(r#"return StaticPopup_FindVisible("T_NOPE") == nil"#)
         .unwrap());
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
 
-/// Five stock `UIParent.lua` event arms raise their dialogs, which call engine verbs.
+/// The stock `UIParent.lua` event arms raise their dialogs, which call engine verbs. 3.3.5 has no
+/// `CONFIRM_PET_UNLEARN` arm, only the string.
 #[test]
 fn the_verb_dialogs_open_from_their_events_and_call_their_verbs() {
     benilla_formats::wow_data_or_skip!();
-    use benilla_ui::script::ScriptValue;
     // `setup` carries UIParent.xml, whose `UIParent_OnEvent` holds the arms.
     let mut s = setup();
-    s.set_money(50_000);
-    s.fire_event("CONFIRM_PET_UNLEARN", vec![ScriptValue::Int(12_345)]);
-    s.tick(0.0);
-    assert_eq!(
-        s.eval::<String>("return StaticPopup1.which").unwrap(),
-        "CONFIRM_PET_UNLEARN"
-    );
-    assert_eq!(
-        s.eval::<f64>("return StaticPopup1MoneyFrame.staticMoney")
-            .unwrap(),
-        12_345.0
-    );
-    s.run("StaticPopup1Button1:Click()").unwrap();
-    assert_eq!(s.take_pet_unlearn_confirms(), 1);
     s.set_instance_boot_secs(30);
     s.fire_event("INSTANCE_BOOT_START", vec![]);
     s.tick(0.0);
@@ -284,7 +270,7 @@ fn the_verb_dialogs_open_from_their_events_and_call_their_verbs() {
     assert!(s
         .eval::<bool>("return StaticPopup_Visible(\"AREA_SPIRIT_HEAL\") ~= nil")
         .unwrap());
-    // The shipped dialog accepts on show and its one button cancels (`StaticPopup.lua:1224`).
+    // The shipped dialog accepts on show and its one button cancels (`StaticPopup.lua:2315`).
     assert!(
         s.take_area_spirit_accepts() >= 1,
         "showing the dialog IS the accept"

@@ -477,8 +477,6 @@ pub(crate) struct Model {
     pub(crate) wrath_chat_verbs: Vec<super::wrath_chat_verbs::WrathChatVerbRequest>,
     /// StaticPopup's dialog answers and the state its dialogs read.
     pub(crate) wrath_popup: super::wrath_static_popup::State,
-    /// The glue VM's login-slice state ([`super::glue`]).
-    pub(crate) glue: super::glue::GlueState,
     pub(crate) wrath_unit_popup: super::wrath_unit_popup::State,
     pub(crate) wrath_titles: super::wrath_titles::State,
     /// Socketed gems by `(bag, slot)`, [`super::cursor::EQUIPMENT_BAG`] for worn items.
@@ -684,8 +682,6 @@ pub(crate) struct Model {
     pub(crate) trainer_buys: Vec<u32>,
     pub(crate) trainer_selection: Option<u32>,
     pub(crate) trainer_close: bool,
-    /// Available, unavailable and used filters, all on by default; they hide services, not headers.
-    pub(crate) trainer_filter: [bool; 3],
     /// Collapsed skill-line ids, kept across a re-push and cleared when the trainer closes.
     pub(crate) trainer_collapsed: HashSet<u32>,
 
@@ -1104,11 +1100,14 @@ impl Model {
     /// (`_strnicmp`: `A`..`Z` only, never a byte of 0x80 or more), so `to_ascii_lowercase`, never
     /// `to_lowercase`.
     pub(crate) fn pushed_unit(&self, token: &str) -> Option<&UnitState> {
-        if token.bytes().any(|b| b.is_ascii_uppercase()) {
-            self.units_by_lower.get(&token.to_ascii_lowercase())
-        } else {
-            self.units_by_lower.get(token)
-        }
+        let folded = token
+            .bytes()
+            .any(|b| b.is_ascii_uppercase())
+            .then(|| token.to_ascii_lowercase());
+        let key = folded.as_deref().unwrap_or(token);
+        // Wrath's `questnpc` is the conversation NPC, which the app pushes as `npc`.
+        let wrath_npc = self.unit_guids.wrath && key == "questnpc";
+        self.units_by_lower.get(if wrath_npc { "npc" } else { key })
     }
 
     /// The unit a token with a `target` hop and no push of its own names: the resolver's guid
@@ -1317,7 +1316,6 @@ impl Model {
             wrath_combat_log: Default::default(),
             wrath_chat_verbs: Vec::new(),
             wrath_popup: Default::default(),
-            glue: Default::default(),
             wrath_unit_popup: Default::default(),
             wrath_titles: Default::default(),
             wrath_item_gems: Vec::new(),
@@ -1421,7 +1419,6 @@ impl Model {
             trainer_buys: Vec::new(),
             trainer_selection: None,
             trainer_close: false,
-            trainer_filter: [true; 3],
             trainer_collapsed: HashSet::new(),
             taxi: None,
             taxi_takes: Vec::new(),

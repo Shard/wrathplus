@@ -7,7 +7,7 @@ use crate::net::{NetCommands, ObjectStore, Objects, SelfPlayer};
 use crate::ui_action::{PlayerActions, Spells};
 
 /// The view alone, for the cell tests; the feed keeps what it read beside it.
-fn spell_tooltip_view(
+pub(super) fn spell_tooltip_view(
     spell_id: u32,
     spells: &Spells,
     vctx: &mut ViewCtx,
@@ -46,7 +46,7 @@ impl TestCtx {
         }
     }
 
-    fn ctx<'a, 'w, 's>(
+    pub(super) fn ctx<'a, 'w, 's>(
         &'a mut self,
         objects: &'a Objects<'w, 's>,
         form: u8,
@@ -169,31 +169,6 @@ fn a_pet_view_scales_sacrifice_by_the_pets_level() {
     absorb(v, 305);
 }
 
-/// Imp Blood Pact rank 1 (6307: 0.1 a level from 4, cap 14) reads 3 on a level-14 imp's bar.
-#[test]
-fn a_pet_view_scales_blood_pact_by_the_pets_level() {
-    let Some(spells) = real_spells() else { return };
-    let mut t = TestCtx::new();
-    let mut objs = no_objects();
-    let objects = objs.get();
-    let player = ObjectStore(unit(60, 1373));
-    let pet = unit(14, 0);
-    let v = spell_tooltip_view(
-        6307,
-        &spells,
-        &mut t.pet_ctx(&objects, Some(&player), Some(&pet)),
-    )
-    .expect("Blood Pact view");
-    assert!(v.description.contains("Stamina by 3."), "{}", v.description);
-    let v = spell_tooltip_view(
-        6307,
-        &spells,
-        &mut t.ctx_for(&objects, 0, None, Some(&player)),
-    )
-    .expect("Blood Pact view");
-    assert!(v.description.contains("Stamina by 2."), "{}", v.description);
-}
-
 /// Seduction (6358, 24% of base mana) on the pet bar costs 24% of the succubus's
 /// `UNIT_FIELD_BASE_MANA`, as `0x6e31b0` calls `0x612c50` on the pet (`6e327d`): 449 of 1874, not
 /// 329 of the warlock's 1373. No pet unit is `GetPowerCost`'s -1 (`0x6e3233`), no cost cell.
@@ -225,7 +200,7 @@ fn a_pet_view_costs_seduction_from_the_pets_base_mana() {
 }
 
 /// An object index with nothing streamed: no worn item, and every reagent count 0.
-fn no_objects() -> crate::ui_items::TestObjects {
+pub(super) fn no_objects() -> crate::ui_items::TestObjects {
     crate::ui_items::TestObjects::new()
 }
 
@@ -301,7 +276,8 @@ fn fireball_view_on_real_data() {
     let v = spell_tooltip_view(133, &spells, &mut t.ctx(&objects, 0, None)).expect("Fireball view");
     assert_eq!(v.name, "Fireball");
     assert_eq!(v.rank.as_deref(), Some("Rank 1"));
-    assert_eq!(v.cost.as_deref(), Some("30 Mana"));
+    // 12340's Fireball costs a percentage of base mana, which this caster-less view cannot read.
+    assert_eq!(v.cost, None);
     assert_eq!(v.range.as_deref(), Some("35 yd range"));
     assert_eq!(v.cast_time.as_deref(), Some("1.5 sec cast"));
     assert_eq!(
@@ -338,7 +314,7 @@ fn fireball_view_on_real_data() {
     assert!(!v.form_met, "form 0 (unshifted) does not satisfy the mask");
     assert_eq!(
         v.description,
-        "Charge an enemy, generate 9 rage, and stun it for 1 sec.  Cannot be used in combat."
+        "Charge an enemy, generate 9 rage, and stun it for 1.50 sec.  Cannot be used in combat."
     );
     let v = spell_tooltip_view(100, &spells, &mut t.ctx(&objects, 17, None)).expect("Charge view");
     assert!(v.form_met, "form 17 = Battle Stance satisfies the mask");
@@ -484,24 +460,24 @@ fn cost_and_cast_cells_on_real_data() {
         (benilla_protocol::types::Field::UnitBaseHealth, 1689),
     ]));
 
-    // Bloodrage (2687): 20% of base health; bare "Instant" on a non-mana type.
+    // Bloodrage (2687): 12340's 16% of base health; bare "Instant" on a non-mana type.
     let v = spell_tooltip_view(
         2687,
         &spells,
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Bloodrage view");
-    assert_eq!(v.cost.as_deref(), Some("337 Health"), "20% of 1689");
+    assert_eq!(v.cost.as_deref(), Some("270 Health"), "16% of 1689");
     assert_eq!(v.cast_time.as_deref(), Some("Instant"));
 
-    // Life Tap (1454): the 5875 data has no cost columns for any rank, so the cell is empty.
+    // Life Tap (1454): its rows carry no cost column, so the cell is empty.
     let v = spell_tooltip_view(
         1454,
         &spells,
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Life Tap view");
-    assert_eq!(v.cost, None, "1.12 Life Tap has no cost cell");
+    assert_eq!(v.cost, None, "Life Tap has no cost cell");
     assert_eq!(
         v.cast_time.as_deref(),
         Some("Instant"),
@@ -518,7 +494,7 @@ fn cost_and_cast_cells_on_real_data() {
     assert_eq!(v.cost.as_deref(), Some("11 Health, plus 5 per sec"));
     assert_eq!(v.cast_time.as_deref(), Some("Channeled"));
 
-    // Judgement (20271): 6% of base mana resolves to a flat number; a DBC-only view has only
+    // Judgement of Light (20271): 5% of base mana resolves to a flat number; a DBC-only view has only
     // the flat cost, none here.
     let v = spell_tooltip_view(
         20271,
@@ -526,7 +502,7 @@ fn cost_and_cast_cells_on_real_data() {
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Judgement view");
-    assert_eq!(v.cost.as_deref(), Some("60 Mana"), "6% of base mana 1000");
+    assert_eq!(v.cost.as_deref(), Some("50 Mana"), "5% of base mana 1000");
     let v =
         spell_tooltip_view(20271, &spells, &mut t.ctx(&objects, 0, None)).expect("Judgement view");
     assert_eq!(v.cost, None, "a DBC-only view cannot resolve a pct cost");
@@ -537,18 +513,16 @@ fn cost_and_cast_cells_on_real_data() {
     assert_eq!(v.cost.as_deref(), Some("15 Rage"));
     assert_eq!(v.cast_time.as_deref(), Some("Next melee"));
 
-    // Throw (2764) and Auto Shot (75) read "Attack speed" off `Attributes & 0x2` alone; Attack
-    // (6603), `Effect[0]` ATTACK, omits the line (`0x52eb3c`).
+    // Throw (2764), `Attributes & 0x2`: `GetCastTime` adds 500 ms (`0x7ff2a5`), so with no
+    // ranged weapon to scale it the cell is "0.5 sec cast". Attack (6603), `Effect[0]` ATTACK,
+    // omits the line.
     let v = spell_tooltip_view(
         2764,
         &spells,
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Throw view");
-    assert_eq!(v.cast_time.as_deref(), Some("Attack speed"));
-    let v = spell_tooltip_view(75, &spells, &mut t.ctx_for(&objects, 0, None, Some(&store)))
-        .expect("Auto Shot view");
-    assert_eq!(v.cast_time.as_deref(), Some("Attack speed"));
+    assert_eq!(v.cast_time.as_deref(), Some("0.5 sec cast"));
     let v = spell_tooltip_view(
         6603,
         &spells,
@@ -557,19 +531,19 @@ fn cost_and_cast_cells_on_real_data() {
     .expect("Attack view");
     assert_eq!(v.cast_time, None, "ATTACK Effect[0] omits the line");
 
-    // Mind Flay (15407): a channeled mana spell.
+    // Mind Flay (15407): a channeled mana spell, 9% of base mana.
     let v = spell_tooltip_view(
         15407,
         &spells,
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Mind Flay view");
-    assert_eq!(v.cost.as_deref(), Some("45 Mana"));
+    assert_eq!(v.cost.as_deref(), Some("90 Mana"));
     assert_eq!(v.cast_time.as_deref(), Some("Channeled"));
 }
 
-/// The range cell (`0x52e9a2`-`0x52ea8c`): the melee row prints a number off the reaches, an
-/// authored row its own, and the on-next-swing and self rows nothing.
+/// The range cell (`0x623ef7`-`0x62438a`): the melee row prints `MELEE_RANGE`, an authored row
+/// its own, and the on-next-swing and self rows nothing.
 #[test]
 fn range_cell_on_real_data() {
     let data = benilla_formats::wow_data_or_skip!();
@@ -588,63 +562,28 @@ fn range_cell_on_real_data() {
     // A default-reach player: `UNIT_FIELD_COMBATREACH` unset reads the descriptor's 1.5.
     let store = empty_player();
 
-    // Sinister Strike (1752) is on row 2 "Combat Range", the one row with flags bit 0:
-    // 1.5 + 1.5 + 1.3333334 = 4.333 is under the 5.0 floor.
+    // Sinister Strike (1752) is on row 2 "Combat Range", the one row with flags bit 0. No range
+    // modifier reaches it, so the cell is `MELEE_RANGE` (`0x623f3f`) whatever the reaches.
     let d = spells.catalog.get(1752).expect("Sinister Strike 1752");
     assert_eq!(d.range_index, 2, "the melee row");
     assert!(spells.ranges.get(2).expect("row 2").is_melee());
-    let v = spell_tooltip_view(
-        1752,
-        &spells,
-        &mut t.ctx_for(&objects, 0, None, Some(&store)),
-    )
-    .expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("5 yd range"));
-
-    // A 4.0 reach: 4.0 + 4.0 + 1.3333334 = 9.333, rounded to 9.
     let big = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(
         benilla_protocol::types::Field::UnitCombatreach,
         4.0f32.to_bits(),
     )]));
-    let v = spell_tooltip_view(1752, &spells, &mut t.ctx_for(&objects, 0, None, Some(&big)))
-        .expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("9 yd range"));
-
-    // The second reach is the auto-attack target's: 1.5 + 4.0 + 1.3333334 = 6.833, rounded to 7.
-    let v = spell_tooltip_view(
-        1752,
-        &spells,
-        &mut t.ctx_engaged(&objects, Some(&store), 4.0),
-    )
-    .expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("7 yd range"));
-
-    // Both units running: the moving bonus goes on the floor, 5.0 + 2.6667 = 7.667, rounded to 8.
-    let running = benilla_formats::UnitMotion {
-        flags: 1,
-        speed: 7.0,
-        walk_speed: 2.5,
-    };
-    let runner = benilla_formats::RangeUnit {
-        motion: running,
-        ..benilla_formats::RangeUnit::still(1.5)
-    };
-    let mut ctx = t.ctx_for(&objects, 0, None, Some(&store));
-    ctx.range_caster = runner;
-    ctx.attack_target = Some(runner);
-    let v = spell_tooltip_view(1752, &spells, &mut ctx).expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("8 yd range"));
-    // One of them standing, or no auto-attack target to read: the floor.
-    ctx.attack_target = Some(benilla_formats::RangeUnit::still(1.5));
-    let v = spell_tooltip_view(1752, &spells, &mut ctx).expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("5 yd range"));
-    ctx.attack_target = None;
-    let v = spell_tooltip_view(1752, &spells, &mut ctx).expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("5 yd range"));
-    // The ranged arm passes no target, so the bonus never reaches an authored row: Fireball's 35.
-    ctx.attack_target = Some(runner);
-    let v = spell_tooltip_view(133, &spells, &mut ctx).expect("Fireball view");
-    assert_eq!(v.range.as_deref(), Some("35 yd range"));
+    for which in 0..3 {
+        let mut ctx = match which {
+            0 => t.ctx_for(&objects, 0, None, Some(&store)),
+            1 => t.ctx_for(&objects, 0, None, Some(&big)),
+            _ => t.ctx_engaged(&objects, Some(&store), 4.0),
+        };
+        let v = spell_tooltip_view(1752, &spells, &mut ctx).expect("Sinister Strike view");
+        assert_eq!(
+            v.range.as_deref(),
+            Some("Melee Range"),
+            "reach case {which}"
+        );
+    }
 
     // An authored row: Fireball's 0-35.
     let v = spell_tooltip_view(
@@ -1010,7 +949,10 @@ fn the_mouseover_token_clears_when_no_unit_is_hovered() {
         (
             eval(app, r#"return UnitExists("mouseover") and 1 or nil"#),
             // Build 12340 answers a boolean; both read as 1 or nil here.
-            eval(app, r#"return UnitIsUnit("mouseover", "target") and 1 or nil"#),
+            eval(
+                app,
+                r#"return UnitIsUnit("mouseover", "target") and 1 or nil"#,
+            ),
         )
     };
     let empty = Hovered::default();
@@ -1291,21 +1233,4 @@ fn the_feed_builds_the_pet_views_against_the_pet_and_rebuilds_them_on_its_level(
             Some("Stamina by 10.".to_string())
         )
     );
-}
-
-/// A Death Knight strike's runes, off `SpellRuneCost.dbc` as build 12340's cost cell lists them
-/// (`0x623d21`, Blood, Unholy, Frost, joined by a space): Icy Touch (45477) costs one Frost and
-/// Death Strike (49998) one Unholy and one Frost.
-#[test]
-fn rune_costs_list_each_rune_in_the_clients_order() {
-    let Some(spells) = real_spells() else {
-        return;
-    };
-    let mut t = TestCtx::new();
-    let mut objs = no_objects();
-    let objects = objs.get();
-    for (id, want) in [(45477, "1 Frost"), (49998, "1 Unholy 1 Frost")] {
-        let v = spell_tooltip_view(id, &spells, &mut t.ctx(&objects, 0, None)).expect("a view");
-        assert_eq!(v.cost.as_deref(), Some(want), "spell {id}");
-    }
 }

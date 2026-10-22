@@ -14,6 +14,8 @@
 //! `SpellIcon.dbc` is `ID`, `TextureFilename` (no extension).
 
 mod cast_times;
+/// The cost cell's 3.3.5-only tables: `SpellRuneCost.dbc` and `PowerDisplay.dbc`.
+mod cost;
 mod dispel_types;
 mod display;
 mod duration;
@@ -24,6 +26,8 @@ mod soft_float;
 mod tokens;
 
 pub use cast_times::{load_spell_cast_times, SpellCastTime, SpellCastTimeCatalog};
+pub use cost::RuneCost;
+use cost::{load_power_displays, load_rune_costs};
 pub use dispel_types::{load_spell_dispel_types, SpellDispelTypes};
 pub use display::{FormRefusal, LearnAnnouncement, OpenLock, SpellDisplay};
 pub use duration::{load_spell_durations, SpellDuration, SpellDurationCatalog};
@@ -51,7 +55,7 @@ const SPELL: &str = "DBFilesClient\\Spell.dbc";
 
 /// The 1.12 record's 173 fields plus slots for the 3.3.5-only columns the build-12340 layout
 /// maps in (`wrath_layouts::spell`); a 1.12 file no longer parses.
-const SPELL_FIELDS: usize = 190;
+const SPELL_FIELDS: usize = 191;
 /// `SpellFamilyFlags[2]`, family bits 64-95 (3.3.5 column 211; AzerothCore `flag96
 /// SpellFamilyFlags`, 209-211).
 const COL_SPELL_FAMILY_FLAGS_2: usize = 173;
@@ -68,6 +72,9 @@ const COL_ATTRIBUTES_EX7: usize = 187;
 const COL_RUNE_COST_ID: usize = 188;
 /// `PowerDisplayId` (3.3.5 column 228): the `PowerDisplay.dbc` row naming a vehicle power.
 const COL_POWER_DISPLAY_ID: usize = 189;
+/// `AttributesEx6` (3.3.5 column 10, `+0x28`): bit `0x1` hides the tooltip's cooldown cell and
+/// `0x80000000` keeps spell-mod op 11 off the category recovery (`006238a0`, `007fef60`).
+const COL_ATTRIBUTES_EX6: usize = 190;
 /// `Category` (`+0x8`): the shared-cooldown `SpellCategory.dbc` id, such as potions 4.
 const COL_CATEGORY: usize = 2;
 const COL_CAST_UI: usize = 3;
@@ -313,15 +320,6 @@ pub struct SpellCatalog {
     power_displays: HashMap<u32, String>,
 }
 
-/// One `SpellRuneCost.dbc` row's runes, columns 1-3 as the 12340 tooltip reads them (`0x623d21`):
-/// Blood, then Unholy, then Frost.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct RuneCost {
-    pub blood: u32,
-    pub unholy: u32,
-    pub frost: u32,
-}
-
 impl SpellCatalog {
     /// A catalog from explicit displays, for tests: no learn-spell map and no dispel table, so
     /// [`Self::dispel_name`] is always `None`.
@@ -480,8 +478,9 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
     let icons = crate::dbc::load_spell_icon_map(chain)?;
     let dispel_types = load_spell_dispel_types(chain)?;
     // Categories whose `SpellCategory.dbc` flags carry `0x2` match every cooldown query
-    // (`GetCooldownInfo` `0x6e13e0`); only wand Shoot's 351 does.
-    let wildcard_categories: std::collections::HashSet<u32> = {
+    // (`GetCooldownInfo` `0x6e13e0`); only wand Shoot's 351 does. Flag `0x1` scales the category
+    // recovery by the main-hand weapon's delay (`007fef60`).
+    let (wildcard_categories, weapon_speed_categories) = {
         let bytes = chain
             .read_file("DBFilesClient\\SpellCategory.dbc")
             .context("reading SpellCategory.dbc")?;
@@ -495,11 +494,14 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
             benilla_dbc::FieldType::UInt32,
         ));
         let rs = parse(&bytes, s, "SpellCategory.dbc")?;
-        rs.records()
-            .iter()
-            .filter(|r| u32_at(r, 1).unwrap_or(0) & 0x2 != 0)
-            .filter_map(|r| u32_at(r, 0))
-            .collect()
+        let with = |bit: u32| -> std::collections::HashSet<u32> {
+            rs.records()
+                .iter()
+                .filter(|r| u32_at(r, 1).unwrap_or(0) & bit != 0)
+                .filter_map(|r| u32_at(r, 0))
+                .collect()
+        };
+        (with(0x2), with(0x1))
     };
 
     let spell_bytes = chain.read_file(SPELL).context("reading Spell.dbc")?;
@@ -577,6 +579,7 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 attributes_ex3: u32_at(r, COL_ATTRIBUTES_EX3).unwrap_or(0),
                 attributes_ex4: u32_at(r, COL_ATTRIBUTES_EX4).unwrap_or(0),
                 attributes_ex5: u32_at(r, COL_ATTRIBUTES_EX5).unwrap_or(0),
+                attributes_ex6: u32_at(r, COL_ATTRIBUTES_EX6).unwrap_or(0),
                 attributes_ex7: u32_at(r, COL_ATTRIBUTES_EX7).unwrap_or(0),
                 // Slot 1 is build 12340's `SchoolMask` (column 225, `+0x284`); `school` its lowest.
                 school_mask: u32_at(r, COL_SCHOOL).unwrap_or(0),
@@ -614,6 +617,8 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 // Resolved at load, read off the armed record (`0x6e1563`).
                 category_wildcard: u32_at(r, COL_CATEGORY)
                     .is_some_and(|c| wildcard_categories.contains(&c)),
+                category_weapon_speed: u32_at(r, COL_CATEGORY)
+                    .is_some_and(|c| weapon_speed_categories.contains(&c)),
                 recovery_ms: u32_at(r, COL_RECOVERY_TIME).unwrap_or(0),
                 interrupt_flags: u32_at(r, COL_INTERRUPT_FLAGS).unwrap_or(0),
                 aura_interrupt_flags: u32_at(r, COL_AURA_INTERRUPT_FLAGS).unwrap_or(0),
@@ -733,54 +738,6 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
         rune_costs: load_rune_costs(chain)?,
         power_displays: load_power_displays(chain)?,
     })
-}
-
-/// `SpellRuneCost.dbc`, 3.3.5-only: id, three rune counts, the runic power gain.
-fn load_rune_costs(chain: &mut Chain) -> Result<HashMap<u32, RuneCost>> {
-    let bytes = chain
-        .read_file("DBFilesClient\\SpellRuneCost.dbc")
-        .context("reading SpellRuneCost.dbc")?;
-    let mut s = Schema::new("SpellRuneCost");
-    for name in ["ID", "Blood", "Unholy", "Frost", "RunicPowerGain"] {
-        s.add_field(SchemaField::new(name, FieldType::UInt32));
-    }
-    let rs = parse(&bytes, s, "SpellRuneCost.dbc")?;
-    Ok(rs
-        .records()
-        .iter()
-        .filter_map(|r| {
-            let at = |i| u32_at(r, i).unwrap_or(0);
-            Some((
-                u32_at(r, 0)?,
-                RuneCost {
-                    blood: at(1),
-                    unholy: at(2),
-                    frost: at(3),
-                },
-            ))
-        })
-        .collect())
-}
-
-/// `PowerDisplay.dbc`, 3.3.5-only: id, the actual power type, the `GlobalStrings.lua` key, and
-/// the bar colour.
-fn load_power_displays(chain: &mut Chain) -> Result<HashMap<u32, String>> {
-    let bytes = chain
-        .read_file("DBFilesClient\\PowerDisplay.dbc")
-        .context("reading PowerDisplay.dbc")?;
-    let mut s = Schema::new("PowerDisplay");
-    s.add_field(SchemaField::new("ID", FieldType::UInt32));
-    s.add_field(SchemaField::new("ActualType", FieldType::UInt32));
-    s.add_field(SchemaField::new("GlobalStringBaseTag", FieldType::String));
-    for name in ["Red", "Green", "Blue"] {
-        s.add_field(SchemaField::new(name, FieldType::UInt32));
-    }
-    let rs = parse(&bytes, s, "PowerDisplay.dbc")?;
-    Ok(rs
-        .records()
-        .iter()
-        .filter_map(|r| Some((u32_at(r, 0)?, str_at(&rs, r, 2)?)))
-        .collect())
 }
 
 #[cfg(test)]

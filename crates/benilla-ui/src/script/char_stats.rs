@@ -263,7 +263,7 @@ const SLOT_INFO: [(&str, i64, &str); 36] = [
     ("Bag12", 75, "Bag"),
 ];
 
-/// The client's 12 durability-alert regions (`0x806eb8`) as live slot ids: stock's 11
+/// The client's 12 durability-alert regions (`0xa1ce4c`) as live slot ids: stock's 11
 /// `INVENTORY_ALERT_STATUS_SLOTS` (`DurabilityFrame.lua:2-12`), then low ammo, which the client
 /// table holds as slot -1 and we as the ammo view, slot 0.
 const ALERT_SLOTS: [usize; 12] = [1, 3, 5, 6, 7, 8, 9, 10, 16, 17, 18, 0];
@@ -277,30 +277,30 @@ fn slot_is_broken(v: &InvSlotView) -> bool {
     v.flags & 0x10 != 0 || matches!(v.durability, Some((0, max)) if max > 0)
 }
 
-/// One region's `GetInventoryAlertStatus` (`0x4c7ee0`): 4 when force-red or broken, 3 with 1..=5
-/// durability points left (an absolute count, not a percentage), else 0. Statuses 1 and 2, the
-/// temporary-enchant alerts, are not fed; stock gives them no color (`DurabilityFrame.lua:18-19`).
+/// One region's `GetInventoryAlertStatus`, 12340's `0x5e8fe0`: 2 force-red (`0x10`) or at 0 of a
+/// nonzero max, 1 with 1..=5 points left (absolute, not a percentage), else 0; wrapped (`0x08`)
+/// never alerts. Stock colours these two (`DurabilityFrame.lua:14-16`); sounds are not modelled.
 fn alert_status(slot: &Option<InvSlotView>) -> u8 {
     let Some(v) = slot.as_ref().filter(|v| v.item_id != 0) else {
         return 0;
     };
     if v.flags & 0x10 != 0 {
-        return 4;
+        return 2;
     }
     if v.flags & 0x08 != 0 {
         return 0;
     }
     match v.durability {
-        Some((0, max)) if max > 0 => 4,
-        Some((1..=5, max)) if max > 0 => 3,
+        Some((0, max)) if max > 0 => 2,
+        Some((1..=5, max)) if max > 0 => 1,
         _ => 0,
     }
 }
 
-/// The low-ammo region (`0x4c7ee0`'s slot -1 arm): 3 when the carried ammo is 20 or fewer, else 0.
+/// The low-ammo region (`0x5e8fe0`'s slot -1 arm): 1 when the carried ammo is 20 or fewer, else 0.
 fn ammo_alert_status(slot: &Option<InvSlotView>) -> u8 {
     match slot.as_ref().filter(|v| v.item_id != 0) {
-        Some(v) if v.count <= 20 => 3,
+        Some(v) if v.count <= 20 => 1,
         _ => 0,
     }
 }
@@ -323,7 +323,7 @@ impl super::UiScript {
             model.inventory_slots = slots;
             recompute_inventory_alerts(&mut model);
         }
-        // Every recompute fires it, never diffed against the last (`0x4c7ee0`); the app pushes
+        // Fired on every push; `0x5e90d0` fires it only when a status changed, and the app pushes
         // only on a real change.
         self.fire_event("UPDATE_INVENTORY_ALERTS", vec![]);
     }
@@ -349,7 +349,7 @@ impl super::UiScript {
     }
 }
 
-/// The 12 alert statuses off the doll snapshot (`0x4c7ee0`'s recompute), without the event.
+/// The 12 alert statuses off the doll snapshot (`0x5e90d0`'s recompute), without the event.
 pub(super) fn recompute_inventory_alerts(model: &mut Model) {
     let slots = &model.inventory_slots;
     let alerts: [u8; 12] = std::array::from_fn(|i| {

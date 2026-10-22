@@ -52,7 +52,7 @@ pub(crate) struct TrainerTooltipSubjects {
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct TrainerFeed;
 
-mod net;
+pub(crate) mod net;
 mod reeval;
 
 pub(crate) struct UiTrainerPlugin;
@@ -107,9 +107,9 @@ fn resolve_service(
     // The VM's own `GlobalStrings.lua`, for the group header labels.
     get: &dyn Fn(&str) -> Option<String>,
 ) -> TrainerService {
-    // `taught` feeds only the group key (`0x4d7c60`); the name and subtext are the wire wrapper's
-    // own columns (`0x4d8aa0`, `0x4d8b50`), which differ from the taught spell's on every
-    // profession-learn row. The wrapper stays the buy id.
+    // `taught` feeds only the group key (labelled in [`service_group`]); the name and subtext are
+    // the service spell's own columns (`00594e80`, `00594f60`), which differ from a taught spell's
+    // on a learn wrapper's row. The service spell stays the buy id.
     let taught = spells.learned_spell(wire.spell).unwrap_or(wire.spell);
     let display = spells.get(wire.spell);
     let cat = category(wire.state);
@@ -165,8 +165,9 @@ fn resolve_service(
         subtext: display.and_then(|d| d.rank.clone()),
         // Over the wire spell, like the name and subtext ([`service_icon`]).
         texture: service_icon(wire.spell, trainer_type, spells, icons, items, commands),
-        // Empty: the 1.12 `GetTrainerServiceDescription` returns `Spell.dbc`'s Description with
-        // its `$s1`/`$o1`/`$d`/`$a1` tokens substituted, and that substitution is not built.
+        // Empty, labelled: 12340's `GetTrainerServiceDescription` (`005959d0`) returns the service
+        // spell's expanded Description (`0057abc0`), else a creating trade spell's item
+        // description; neither is built here.
         description: String::new(),
         cost: wire.cost,
         prof_first_rank: wire.is_primary_prof_first_rank,
@@ -299,10 +300,10 @@ pub(crate) fn feed_trainer(
     let Some(skill_lines) = skill_lines.as_deref() else {
         return;
     };
-    // The per-list reset goes in before the snapshot, so `TRAINER_SHOW` finds it; the stock window
-    // re-applies its saved filter only on its own `ADDON_LOADED`.
+    // The per-list reset goes in before the snapshot, so `TRAINER_SHOW` finds it. The filter is the
+    // `serviceTypeFilter` CVar, which no list resets.
     if open.fresh_list {
-        script.reset_trainer_list_state(open.trainer_type);
+        script.reset_trainer_list_state();
         open.fresh_list = false;
     }
     // The player's money, level and skill triggers, read every frame so the reader never backs up.

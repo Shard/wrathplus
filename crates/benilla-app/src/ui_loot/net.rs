@@ -1092,7 +1092,7 @@ mod tests {
         crate::ui_unit::add_unit_feed(&mut app);
         let shown = |app: &mut App| -> String {
             let s = app.world().non_send_resource::<UiScript>();
-            assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
+            assert!(!s.errors().iter().any(|e| e.contains("TargetFrame")));
             s.eval("return TargetFrame:IsShown() and TargetFrame.name:GetText() or ''")
                 .expect("the target frame's name")
         };

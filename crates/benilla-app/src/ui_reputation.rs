@@ -257,8 +257,8 @@ mod tests {
         assert!(!hidden.is_header, "and it is not the header bit either");
     }
 
-    /// On 1.12's data the membership gate (`0x4d5555`) excludes only Cenarion Circle (609) for
-    /// druids of the six races that cannot be druids. Its first slot takes every race with class
+    /// On 12340's data the membership gate (`0x4d5555`) excludes Cenarion Circle (609) for exactly
+    /// the druids of the races that cannot be druids. Its first slot takes every race with class
     /// mask `0x1df`, no druids, and its second Night Elf and Tauren druids at 2000, so a rule that
     /// stopped at the first match would give a Night Elf druid 0. Skips without client data.
     #[test]
@@ -267,11 +267,12 @@ mod tests {
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let cat = benilla_formats::load_faction_catalog(&mut chain).expect("factions");
 
-        // 1.12 has no class 6 and no class 10; druid is 11.
-        const CLASSES: [u8; 9] = [1, 2, 3, 4, 5, 7, 8, 9, 11];
+        // 3.3.5's ten classes (no 10); druid is 11. Races 1-8, 10 and 11 (9 is no player's).
+        const CLASSES: [u8; 10] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11];
+        const RACES: [u8; 10] = [1, 2, 3, 4, 5, 6, 7, 8, 10, 11];
         const DRUID: u8 = 11;
         let mut excluded: Vec<(u32, u8, u8)> = Vec::new();
-        for race in 1..=8u8 {
+        for race in RACES {
             for class in CLASSES {
                 for (id, info) in cat.reputation_factions() {
                     if info.slot_for(race, class).is_none() {
@@ -280,15 +281,21 @@ mod tests {
                 }
             }
         }
-        let expected: Vec<(u32, u8, u8)> = [1u8, 2, 3, 5, 7, 8]
-            .into_iter()
-            .map(|race| (609, race, DRUID))
+        // Cenarion Circle excludes exactly the druids of the races that cannot be druids. (12340
+        // gates other factions too, by race or class, for reasons this test does not pin.)
+        let cc: Vec<(u8, u8)> = excluded
+            .iter()
+            .filter(|e| e.0 == 609)
+            .map(|&(_, race, class)| (race, class))
             .collect();
-        excluded.sort_unstable();
+        let expected: Vec<(u8, u8)> = RACES
+            .into_iter()
+            .filter(|r| ![4, 6].contains(r))
+            .map(|race| (race, DRUID))
+            .collect();
         assert_eq!(
-            excluded, expected,
-            "the gate should exclude only Cenarion Circle from druids of the six races that \
-             cannot be druids — i.e. nothing a player can roll"
+            cc, expected,
+            "Cenarion Circle excludes only non-druid races' druids"
         );
 
         // Last match wins, and the druid slot is second.
@@ -320,13 +327,17 @@ mod tests {
             .map(|(_, f)| f.team)
             .filter(|&t| t != 0)
             .collect();
-        assert_eq!(
-            parents.iter().copied().collect::<Vec<_>>(),
-            [67, 169, 469, 891, 892],
-            "Horde, Steamwheedle, Alliance, and the two battleground blocs"
-        );
+        // 3.3.5 adds its own blocs (Outland, Northrend, the Vanguard and Expedition); the five 1.12
+        // parents remain among them.
+        for id in [67, 169, 469, 891, 892] {
+            assert!(
+                parents.contains(&id),
+                "Horde, Steamwheedle, Alliance, and the two battleground blocs: {id} in {parents:?}"
+            );
+        }
 
-        for id in parents {
+        // 3.3.5's expansion blocs (980 and on) carry no default HEADER bit; the five 1.12 parents do.
+        for id in [67u32, 169, 469, 891, 892] {
             let info = cat
                 .reputation_faction(id)
                 .unwrap_or_else(|| panic!("parent {id} has its own reputation slot"));
@@ -352,150 +363,5 @@ mod tests {
             })
             .count();
         assert_eq!(visible_parents, 1, "only Alliance carries VISIBLE as well");
-    }
-}
-
-#[cfg(test)]
-mod live_wire_tests {
-    use super::*;
-    use benilla_ui::script::UiScript;
-
-    /// The `SMSG_INITIALIZE_FACTIONS` flag bytes live vmangos sends a fresh level-1 human warrior
-    /// (the `faction_probe` example); every other slot's flags and all 64 standings are 0.
-    const LIVE_FLAGS: &[(usize, u8)] = &[
-        (0, 0x02),
-        (2, 0x02),
-        (3, 0x02),
-        (4, 0x10),
-        (6, 0x02),
-        (8, 0x10),
-        (10, 0x08),
-        (11, 0x09),
-        (12, 0x0e),
-        (14, 0x06),
-        (15, 0x06),
-        (16, 0x06),
-        (17, 0x06),
-        (18, 0x11),
-        (19, 0x11),
-        (20, 0x11),
-        (21, 0x11),
-        (22, 0x04),
-        (23, 0x04),
-        (24, 0x04),
-        (25, 0x04),
-        (26, 0x04),
-        (29, 0x04),
-        (30, 0x04),
-        (31, 0x04),
-        (32, 0x04),
-        (33, 0x04),
-        (34, 0x04),
-        (35, 0x02),
-        (38, 0x02),
-        (39, 0x14),
-        (40, 0x10),
-        (41, 0x02),
-        (43, 0x10),
-        (44, 0x10),
-        (45, 0x10),
-        (46, 0x06),
-        (47, 0x18),
-        (48, 0x0e),
-        (50, 0x10),
-        (51, 0x10),
-        (52, 0x02),
-        (53, 0x10),
-        (54, 0x02),
-    ];
-
-    fn live_store() -> Vec<(u8, i32)> {
-        let mut slots = vec![(0u8, 0i32); 64];
-        for &(i, flags) in LIVE_FLAGS {
-            slots[i].0 = flags;
-        }
-        slots
-    }
-
-    /// A new human warrior's Reputation tab shows the Alliance header (`0x09`, a header that is
-    /// also visible) over its four cities, and nothing else. Skips without client data.
-    #[test]
-    fn a_fresh_alliance_characters_pane_off_live_wire_bytes() {
-        let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-        let cat = benilla_formats::load_faction_catalog(&mut chain).expect("factions");
-        let store = live_store();
-
-        // The live server marks exactly the five parents with `HEADER`.
-        use benilla_formats::faction_flags as flag;
-        let headers: Vec<usize> = LIVE_FLAGS
-            .iter()
-            .filter(|(_, f)| f & flag::HEADER != 0)
-            .map(|&(i, _)| i)
-            .collect();
-        assert_eq!(
-            headers,
-            [10, 11, 12, 47, 48],
-            "the live server marks exactly the five parent factions as headers"
-        );
-
-        // The feed, for a human warrior (race 1, class 1).
-        let mut entries = Vec::new();
-        for (id, info) in cat.reputation_factions() {
-            let (flags, wire) = usize::try_from(info.rep_index)
-                .ok()
-                .and_then(|i| store.get(i))
-                .copied()
-                .unwrap_or((0, 0));
-            if let Some(row) = reputation_row(id, info, &cat, flags, wire, 1, 1) {
-                entries.push(row);
-            }
-        }
-        entries.sort_by_key(|e| e.faction_id);
-        assert_eq!(
-            entries.len(),
-            54,
-            "every reputation faction reaches the engine"
-        );
-        assert_eq!(
-            entries.iter().filter(|e| e.visible).count(),
-            5,
-            "and exactly five of them are ones this character has met"
-        );
-
-        // The engine's tree.
-        let mut s = UiScript::new().expect("VM");
-        s.set_reputation(ReputationState {
-            entries,
-            watched: None,
-        });
-        let rows: Vec<String> = s
-            .eval(
-                "local t = {} for i = 1, GetNumFactions() do t[i] = (GetFactionInfo(i)) end return t",
-            )
-            .expect("rows");
-        assert_eq!(
-            rows,
-            [
-                "Alliance",
-                "Darnassus",
-                "Gnomeregan Exiles",
-                "Ironforge",
-                "Stormwind",
-            ],
-            "the Alliance header and its four cities — Alliance is the HEADER, not a fifth bar"
-        );
-
-        // The bars read their DBC bases; the capture has no standing.
-        let (name, sid, min, max, val) = s
-            .eval::<(String, i64, i64, i64, i64)>(
-                "local n,_,s,mn,mx,v = GetFactionInfo(5) return n,s,mn,mx,v",
-            )
-            .unwrap();
-        assert_eq!(name, "Stormwind");
-        assert_eq!(val, 4000, "the human-gated base, with nothing gained yet");
-        assert_eq!(sid, 5, "Friendly");
-        assert_eq!((min, max), (3000, 9000));
-        assert!(s.errors().is_empty(), "{:#?}", s.errors());
     }
 }

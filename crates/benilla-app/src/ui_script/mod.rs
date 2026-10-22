@@ -16,6 +16,7 @@ pub(crate) mod addons;
 mod content;
 pub(crate) mod extract;
 pub(crate) mod glue;
+pub(crate) mod glue_create;
 mod input;
 mod load_log;
 mod manifest;
@@ -251,16 +252,13 @@ impl Plugin for UiScriptPlugin {
             )
             // In the feed phase, so an `OnUpdate` reads this frame's `GetFramerate()`.
             .add_systems(Update, feed_framerate.in_set(UiFeed))
-            // The input pass hit-tests the rects the tick just resolved, and runs in-world only.
+            // The input pass hit-tests the rects the tick just resolved, in the world and on the
+            // stock glue screens.
             .init_resource::<UiPassState>()
             .init_resource::<PointerOverUiPanel>()
             .add_systems(
                 Update,
-                (
-                    extract::tick_script,
-                    // In the world, and on the login screen the stock glue hosts.
-                    input::feed_ui_input.run_if(ui_input_live),
-                )
+                (extract::tick_script, input::feed_ui_input.run_if(glue::ui_input_live))
                     .chain()
                     .in_set(UiInput)
                     // So a key a focused box consumed never also fires a binding.
@@ -292,13 +290,6 @@ impl Plugin for UiScriptPlugin {
                 .run_if(capture_ui_active),
         );
     }
-}
-
-/// UI input's run condition: the in-game UI in the world, or the stock glue's login screen.
-fn ui_input_live(state: Option<Res<State<crate::char_select::ClientState>>>) -> bool {
-    let state = state.map(|s| *s.get());
-    state == Some(crate::char_select::ClientState::InWorld)
-        || (glue::stock_glue_active() && state == Some(crate::char_select::ClientState::Login))
 }
 
 fn uses_native_wrath_route(profile: Option<&benilla_formats::DataProfile>) -> bool {
@@ -349,10 +340,8 @@ pub(crate) use lifecycle::{
 };
 // Test-only: other modules' tests consume these, and a plain re-export would warn unused.
 #[cfg(test)]
-pub(crate) use lifecycle::load_ingame_ui_on_world_entry;
+pub(crate) use lifecycle::{finish_ui_load, load_ingame_ui_on_world_entry};
 use lifecycle::shutdown_on_exit;
-#[cfg(test)]
-pub(crate) use lifecycle::finish_ui_load;
 
 /// `GetFramerate()`'s host half: FPS on `Time<Real>`, smoothed by a one-second pole; how the
 /// reference averages it is untraced.
@@ -599,27 +588,10 @@ impl benilla_ui::script::TextMeasure for FixedWidthFont {
 #[cfg(test)]
 pub(crate) mod test_ui;
 
-/// `PLAYER_LOGIN`, then the chat loader's two login events (`0x498a60`): `UPDATE_CHAT_WINDOWS`
-/// once, then `UPDATE_CHAT_COLOR` per registry entry.
 #[cfg(test)]
-pub(crate) fn fire_chat_login(s: &mut benilla_ui::script::UiScript) {
-    // `UIParent_OnEvent`'s PLAYER_LOGIN loads `Blizzard_CombatLog` (UIParent.lua:480-483), which
-    // the combat log window's tab and filters call into.
-    s.fire_event("PLAYER_LOGIN", vec![]);
-    s.fire_event("UPDATE_CHAT_WINDOWS", vec![]);
-    let renorm = |b: u8| f64::from(b as f32 * (1.0f32 / 255.0f32));
-    for entry in s.chat_colors() {
-        s.fire_event(
-            "UPDATE_CHAT_COLOR",
-            vec![
-                benilla_ui::script::ScriptValue::Str(entry.name),
-                benilla_ui::script::ScriptValue::Number(renorm(entry.rgb[0])),
-                benilla_ui::script::ScriptValue::Number(renorm(entry.rgb[1])),
-                benilla_ui::script::ScriptValue::Number(renorm(entry.rgb[2])),
-            ],
-        );
-    }
-}
+mod chat_login;
+#[cfg(test)]
+pub(crate) use chat_login::fire_chat_login;
 
 /// The `benilla_formats::TokenContext::printf` seam: `SStrPrintf` over the template filler.
 pub(crate) fn token_printf(template: &str, args: &[benilla_formats::TokenNumber]) -> String {

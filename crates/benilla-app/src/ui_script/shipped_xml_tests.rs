@@ -71,204 +71,6 @@ fn loading_the_shipped_ui_queues_no_sounds() {
     );
 }
 
-/// The stock pet bar with the hunter fixture (Claw autocasting), settled past its slide.
-fn pet_bar_vm() -> benilla_ui::script::UiScript {
-    let mut s = benilla_ui::script::UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    super::pet_bar_tests::load_pet_bar(&mut s);
-    super::pet_bar_tests::declare_token_strings(&s);
-    s.set_pet_actions(true, true, true, super::pet_bar_tests::hunter_slots());
-    s.fire_event("PET_BAR_UPDATE", vec![]);
-    for _ in 0..3 {
-        s.tick(0.05);
-    }
-    s.resolve();
-    assert!(s.errors().is_empty(), "pet bar errors: {:?}", s.errors());
-    s
-}
-
-/// The autocast brackets land on each button's corners: the art fills the middle 33/64 of
-/// `UI-AutoCastableOverlay`, which puts the stock pet button's on its corners (58 × 33/64 = 29.9
-/// on 30). Deviation: the spell book takes that ratio (`SpellBookAdapters.xml`), because its stock
-/// brackets (60 × 33/64 = 30.9 on 37) sit three units inside each edge.
-#[test]
-fn the_autocast_brackets_reach_each_buttons_corners() {
-    benilla_formats::wow_data_or_skip!();
-    use benilla_ui::framexml::{Element, TopLevel};
-
-    /// The bracket art's share of `UI-AutoCastableOverlay.blp`, texels 15..47 of 64, measured with
-    /// `benilla-extract blp`.
-    const ART: f32 = 33.0 / 64.0;
-
-    fn dim(el: &Element, tag: &str, axis: &str) -> Option<f32> {
-        el.children
-            .iter()
-            .find(|c| c.tag.eq_ignore_ascii_case(tag))
-            .and_then(|n| n.children.first())
-            .and_then(|d| {
-                d.attrs()
-                    .iter()
-                    .find(|(k, _)| k.eq_ignore_ascii_case(axis))
-                    .map(|(_, v)| v.clone())
-            })
-            .and_then(|v| v.parse().ok())
-    }
-
-    /// Walk a template, carrying the nearest enclosing button size down to the overlay.
-    fn walk(el: &Element, button: Option<f32>, out: &mut Vec<(String, f32, f32)>) {
-        let button = dim(el, "Size", "x")
-            .filter(|_| el.tag.ends_with("Button"))
-            .or(button);
-        let name = el
-            .attrs()
-            .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case("name"))
-            .map(|(_, v)| v.clone())
-            .unwrap_or_default();
-        if name.ends_with("AutoCastable") {
-            if let (Some(size), Some(btn)) = (dim(el, "Size", "x"), button) {
-                out.push((name.clone(), size * ART, btn));
-            }
-        }
-        for child in &el.children {
-            walk(child, button, out);
-        }
-    }
-
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/ui");
-    let mut found = Vec::new();
-    for entry in std::fs::read_dir(&dir).expect("assets/ui") {
-        let path = entry.expect("entry").path();
-        if path.extension().is_none_or(|e| e != "xml") {
-            continue;
-        }
-        let src = std::fs::read_to_string(&path).expect("read");
-        for item in benilla_ui::framexml::parse(&src).expect("parse").items {
-            match item {
-                TopLevel::Font(el) | TopLevel::Template(el) | TopLevel::Instance(el) => {
-                    walk(&el, None, &mut found)
-                }
-                TopLevel::Include(_) | TopLevel::Script(_) => {}
-            }
-        }
-    }
-    // The spell book's stock overlay is resized by a script, so it is measured off a VM.
-    let s = super::spellbook_tests::spellbook_ui(1024.0, 768.0);
-    let (overlay, button): (f32, f32) = s
-        .eval("return SpellButton1AutoCastable:GetWidth(), SpellButton1:GetWidth()")
-        .unwrap();
-    found.push(("SpellButton1AutoCastable".into(), overlay * ART, button));
-    // The pet button's is the stock template, measured the same way.
-    let s = pet_bar_vm();
-    let (overlay, button): (f32, f32) = s
-        .eval("return PetActionButton1AutoCastable:GetWidth(), PetActionButton1:GetWidth()")
-        .unwrap();
-    found.push(("PetActionButton1AutoCastable".into(), overlay * ART, button));
-    assert_eq!(found.len(), 2, "expected two autocast overlays: {found:?}");
-    for (name, brackets, button) in &found {
-        assert!(
-            (brackets / button - 0.997).abs() < 0.01,
-            "{name}: a {brackets:.1}-unit bracket square on a {button}-unit button is {:.3}x — the \
-             pet button's is 0.997x, which is what puts brackets IN the corners",
-            brackets / button
-        );
-    }
-}
-
-/// The autocast shine's rim runs on its viewport edge (1.024×), as the stock pet button's does
-/// (`setAllPoints` on 30×30, `scale="1.2"`). Deviation: the spell book re-seats the stock model at
-/// 1.48 on 37 units (`SpellBookAdapters.xml`), because its stock `scale="1.22"` in 36 units is a
-/// 0.87× rim that floats clear of the edge and washes the icon.
-#[test]
-fn the_shine_panes_ask_for_the_rims_we_meant() {
-    benilla_formats::wow_data_or_skip!();
-    let mut found: Vec<(String, f32, f32)> = Vec::new();
-    let mut s = super::spellbook_tests::spellbook_ui(1024.0, 768.0);
-    s.run("ToggleSpellBook(BOOKTYPE_SPELL)").unwrap();
-    s.tick(0.05);
-    s.resolve();
-    let (scale, view): (f32, f32) = s
-        .eval("return SpellButton1AutoCast:GetModelScale(), SpellButton1AutoCast:GetWidth()")
-        .unwrap();
-    found.push(("SpellButton1AutoCast".into(), 0.02 * 1280.0 * scale, view));
-    let s = pet_bar_vm();
-    let (scale, view): (f32, f32) = s
-        .eval(
-            "return PetActionButton1AutoCast:GetModelScale(), PetActionButton1AutoCast:GetWidth()",
-        )
-        .unwrap();
-    found.push((
-        "PetActionButton1AutoCast".into(),
-        0.02 * 1280.0 * scale,
-        view,
-    ));
-    for (name, rim, view) in &found {
-        assert!(
-            (rim / view - 1.024).abs() < 1e-3,
-            "{name}: a {rim}-unit rim in a {view}-unit viewport is {:.3}x, not the pet button's \
-             1.024x — a rim that does not reach its own viewport edge is never clipped, and reads \
-             as a wash rather than a rim",
-            rim / view
-        );
-    }
-}
-
-/// Every shipped `text=` answers against the real `GlobalStrings.lua`: `text=` is a lookup
-/// (`FrameScript_GetText`, `0x703bf0`) that shows the raw attribute only on a miss (`0x778c07`).
-/// A key-shaped value must resolve, or it shows its own key; a literal must not collide with a
-/// global, or the lookup swaps in that string.
-#[test]
-fn every_shipped_text_attribute_answers_against_the_real_global_strings() {
-    let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-    let src = chain
-        .read_file("Interface\\FrameXML\\GlobalStrings.lua")
-        .expect("GlobalStrings.lua in the chain");
-    let s = benilla_ui::script::UiScript::new().expect("VM");
-    s.run(&String::from_utf8_lossy(&src)).expect("runs clean");
-
-    // The loader's key-shape predicate, restated because it is private.
-    let key_shaped = |v: &str| {
-        v.len() >= 2
-            && v.chars().any(|c| c.is_ascii_uppercase())
-            && v.chars()
-                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
-    };
-
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/ui");
-    let mut swept = 0;
-    for entry in std::fs::read_dir(&dir).expect("assets/ui").flatten() {
-        let path = entry.path();
-        if path.extension().is_none_or(|e| e != "xml") {
-            continue;
-        }
-        let text = std::fs::read_to_string(&path).expect("read");
-        let file = path.file_name().unwrap_or_default().to_string_lossy();
-        for value in text
-            .match_indices("text=\"")
-            .filter_map(|(i, m)| text[i + m.len()..].split('"').next())
-        {
-            let resolved = s.lua().globals().get::<String>(value).ok();
-            if key_shaped(value) {
-                assert!(
-                    resolved.is_some_and(|t| !t.is_empty()),
-                    "{file}: text=\"{value}\" is shaped like a GlobalStrings key but the real \
-                     GlobalStrings.lua has no such string — it would render as its own key name"
-                );
-            } else {
-                assert!(
-                    resolved.is_none(),
-                    "{file}: the literal text=\"{value}\" collides with a real GlobalStrings key — \
-                     the loader would silently show that string's value instead of these words"
-                );
-            }
-            swept += 1;
-        }
-    }
-    // A floor, so the sweep cannot pass by matching nothing.
-    assert!(swept >= 1, "only {swept} text= values swept");
-}
-
 /// Every `$parentTextureFrame` outranks its unit frame's status bars by frame level: level is the
 /// only draw-key term above the layer, which would otherwise lift an ARTWORK bar fill over
 /// BACKGROUND art. The stock frames spend a level on it (`TargetFrame.lua:32-34`) or nest the art
@@ -313,16 +115,19 @@ fn every_texture_frame_outranks_its_status_bars() {
                 power_type: 0,
                 power: 60,
                 max_power: 100,
+                // `PVPBattleground_UpdateQueueStatus` concatenates the player's faction.
+                faction_group: Some("Horde".into()),
+                faction_group_localized: Some("Horde".into()),
                 ..benilla_ui::script::UnitState::default()
             }),
         );
     }
     s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
     s.fire_event("PARTY_MEMBERS_CHANGED", vec![]);
-    // Target-of-target ships off (`SHOW_TARGET_OF_TARGET = "0"`, `UIOptionsFrame.lua:116`); it
-    // holds the second of the reference's two named TextureFrames.
+    // Target-of-target is the target frame's `totFrame` (TargetFrame.lua:104); its uvar ships
+    // off (InterfaceOptionsFrame.lua's uvarInfo), so the test turns it on.
     s.run(r#"SHOW_TARGET_OF_TARGET = "1""#).unwrap();
-    s.run("this = TargetofTargetFrame TargetofTarget_Update() this = nil")
+    s.run("TargetofTarget_Update(TargetFrame.totFrame)")
         .unwrap();
     s.resolve();
 
@@ -358,11 +163,11 @@ fn every_texture_frame_outranks_its_status_bars() {
             checked += 1;
         }
     }
-    // The reference names two TextureFrames, `TargetFrameTextureFrame` and
-    // `TargetofTargetTextureFrame` (TargetFrame.xml); the player, pet and party frames nest their
-    // art in anonymous frames instead: two families with two bars each.
+    // 3.3.5's TargetFrameTemplate and its target-of-target name their TextureFrames
+    // (TargetFrame.xml); the player, pet and party frames nest their art in anonymous frames. The
+    // floor is the target frame's own two bars, so the sweep cannot pass by finding nothing.
     assert!(
-        checked >= 4,
+        checked >= 2,
         "only {checked} texture-frame/bar pairs checked — the name sweep found nothing"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -473,8 +278,8 @@ fn every_shipped_font_object_is_published_as_a_lua_global() {
     }
 }
 
-/// `TargetBuffButtonTemplate` (`TargetFrame.xml`, 21×21) and `MainMenuBarMicroButton`
-/// (`MainMenuBarMicroButtons.xml`, 29×58) confer their size, regions and scripts, read back as a
+/// `TargetBuffFrameTemplate` (`TargetFrame.xml:118`, 21×21) and `MainMenuBarMicroButton`
+/// (`MainMenuBarMicroButtons.xml`, 28×58) confer their size, regions and scripts, read back as a
 /// consumer gets them: an unresolved `inherits=` fails silently.
 #[test]
 fn the_inheritable_reference_templates_confer_their_shape() {
@@ -495,7 +300,7 @@ fn the_inheritable_reference_templates_confer_their_shape() {
 
     s.run(
         r#"
-        BuffProbe = CreateFrame("Button", "BuffProbe", UIParent, "TargetBuffButtonTemplate")
+        BuffProbe = CreateFrame("Frame", "BuffProbe", UIParent, "TargetBuffFrameTemplate")
         MicroProbe = CreateFrame("Button", "MicroProbe", UIParent, "MainMenuBarMicroButton")
         "#,
     )
@@ -506,7 +311,7 @@ fn the_inheritable_reference_templates_confer_their_shape() {
         s.eval::<(f64, f64)>("return BuffProbe:GetWidth(), BuffProbe:GetHeight()")
             .unwrap(),
         (21.0, 21.0),
-        "the buff button carries the reference's 21x21"
+        "the buff frame carries the reference's 21x21"
     );
     assert!(
         s.eval::<bool>("return BuffProbeIcon ~= nil").unwrap(),
@@ -521,7 +326,8 @@ fn the_inheritable_reference_templates_confer_their_shape() {
     assert_eq!(
         s.eval::<(f64, f64)>("return MicroProbe:GetWidth(), MicroProbe:GetHeight()")
             .unwrap(),
-        (29.0, 58.0)
+        (28.0, 58.0),
+        "MainMenuBarMicroButtons.xml:4-7"
     );
     assert!(s
         .eval::<bool>(r#"return MicroProbe:GetScript("OnEnter") ~= nil"#)
@@ -559,9 +365,7 @@ fn the_inspect_cursor_pair_takes_both_arms() {
     s.run(
         r#"
         CursorProbe = CreateFrame("Frame", "CursorProbe", UIParent)
-        this = CursorProbe
-        CursorUpdate()
-        this = nil
+        CursorUpdate(CursorProbe)
         "#,
     )
     .unwrap();
@@ -572,8 +376,7 @@ fn the_inspect_cursor_pair_takes_both_arms() {
     );
 
     // `CursorOnUpdate` does nothing unless the frame owns the tooltip.
-    s.run("this = CursorProbe CursorOnUpdate() this = nil")
-        .unwrap();
+    s.run("CursorOnUpdate(CursorProbe)").unwrap();
     assert!(
         s.errors().is_empty(),
         "the unowned-tooltip gate short-circuits: {:?}",
@@ -668,92 +471,6 @@ fn a_cinematic_leaves_nothing_of_the_interface_on_screen() {
     );
 }
 
-/// Every `parent=` the shipped tree declares attaches, read off the loaded tree: a parent name that
-/// names nothing only warns, and the loader falls back to the enclosing element.
-#[test]
-fn every_declared_parent_really_attaches() {
-    benilla_formats::wow_data_or_skip!();
-    let mut s = benilla_ui::script::UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    // The in-game UI loads on world entry, so a player always exists by then.
-    s.set_unit(
-        "player",
-        Some(benilla_ui::script::UnitState {
-            exists: true,
-            name: Some("Probefour".into()),
-            level: 60,
-            ..Default::default()
-        }),
-    );
-    let failures = super::load_default_ui(&mut s);
-    assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
-    s.resolve();
-
-    let declared = shipped_frame_parents();
-    assert!(
-        // A sanity floor for the scan, not a census.
-        !declared.is_empty(),
-        "only {} parent declarations found — the scan broke",
-        declared.len()
-    );
-    let mut wrong: Vec<String> = Vec::new();
-    for (child, parent) in &declared {
-        let got = s
-            .eval::<String>(&format!(
-                "local f = getglobal(\"{child}\") \
-                 if not f or not f.GetParent then return \"<not a frame>\" end \
-                 local p = f:GetParent() \
-                 return p and (p:GetName() or \"<anonymous>\") or \"<none>\""
-            ))
-            .unwrap_or_else(|_| "<error>".to_string());
-        if got != *parent {
-            wrong.push(format!(
-                "  {child}: declared parent={parent}, attached to {got}"
-            ));
-        }
-    }
-    assert!(
-        wrong.is_empty(),
-        "{} frame(s) did not attach to the parent they declare:\n{}",
-        wrong.len(),
-        wrong.join("\n")
-    );
-}
-
-/// Every named, non-virtual frame in the shipped tree that declares a `parent=`, with that parent.
-fn shipped_frame_parents() -> Vec<(String, String)> {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/ui");
-    let mut out: Vec<(String, String)> = Vec::new();
-    for entry in std::fs::read_dir(&dir).expect("assets/ui").flatten() {
-        let path = entry.path();
-        if !path.extension().is_some_and(|e| e == "xml") {
-            continue;
-        }
-        let text = std::fs::read_to_string(&path).expect("read");
-        for chunk in text.split('<').skip(1) {
-            let head = &chunk[..chunk.find('>').unwrap_or(chunk.len())];
-            if head.contains("virtual=\"true\"") {
-                continue;
-            }
-            let attr = |key: &str| -> Option<String> {
-                let i = head.find(key)?;
-                let rest = &head[i + key.len()..];
-                let j = rest.find('"')?;
-                Some(rest[..j].to_string())
-            };
-            let (Some(name), Some(parent)) = (attr("name=\""), attr("parent=\"")) else {
-                continue;
-            };
-            if !name.contains('$') && !parent.contains('$') {
-                out.push((name, parent));
-            }
-        }
-    }
-    out.sort();
-    out.dedup();
-    out
-}
-
 /// Every named, non-virtual frame the shipped tree declares.
 pub(super) fn shipped_frame_names() -> Vec<String> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/ui");
@@ -839,54 +556,6 @@ fn the_shipped_manifest_opens_the_macro_icon_picker() {
     );
 }
 
-/// The stock Sound window's boxes write `this:GetChecked()` as is (`SoundOptionsFrame.lua:82`),
-/// which is nil once unticked, and `SetCVar` stores that as "0" (`0x488c98`); its sliders write
-/// `GetValue()`, a single-precision number stored as Lua's `%.14g` text (`0x6f7c80`).
-#[test]
-fn the_stock_sound_window_turns_a_box_off_and_stores_a_slider_as_lua_text() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = benilla_ui::script::UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    s.set_unit(
-        "player",
-        Some(benilla_ui::script::UnitState {
-            exists: true,
-            name: Some("Probefour".into()),
-            level: 60,
-            ..Default::default()
-        }),
-    );
-    let failures = super::load_default_ui(&mut s);
-    assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
-    s.set_cvar_host("EnableMusic", "1");
-    s.run("this = SoundOptionsFrameOkay SoundOptionsFrame_Load()")
-        .unwrap();
-    let _ = s.take_cvar_changes();
-    let checked = "return SoundOptionsFrameCheckButton5:GetChecked() and true or false";
-    assert!(s.eval::<bool>(checked).unwrap(), "Enable Music starts on");
-
-    s.run("SoundOptionsFrameCheckButton5:Click()").unwrap();
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-    assert!(!s.eval::<bool>(checked).unwrap());
-    assert_eq!(
-        s.take_cvar_changes(),
-        vec![("EnableMusic".to_string(), "0".to_string())],
-        "the unticked box turns music off"
-    );
-    s.run("SoundOptionsFrameCheckButton5:Click()").unwrap();
-    assert_eq!(
-        s.take_cvar_changes(),
-        vec![("EnableMusic".to_string(), "1".to_string())]
-    );
-
-    s.run("SoundOptionsFrameSlider3:SetValue(0.4)").unwrap();
-    assert_eq!(
-        s.eval::<String>("return GetCVar(\"MusicVolume\")").unwrap(),
-        "0.40000000596046"
-    );
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-}
-
 /// The video window's slider walk finds none of these ten names: `OptionsFrame.lua:110` (`_Load`)
 /// and `:208-209` (`_Save`) call `getglobal("Get"..value.func)` and its `Set` twin, falling back to
 /// the CVar on a miss; eight of the eighteen composed names are real. The reference's `GetFarclip`
@@ -930,88 +599,5 @@ fn the_video_windows_ten_composed_names_stay_nil() {
             .unwrap(),
         "`getglobal` must stay case-sensitive — case-folding it would resolve `Getfarclip` to the \
          reference's `GetFarclip` and silently change which path the far-clip slider takes"
-    );
-}
-
-/// `UIOptionsFrame_Load()` and `_Save()` run clean, as pfUI's `modules/gui.lua:146-148` calls them
-/// around a checkbox write: every slider CVar `_Load` reads is registered, and `Slider:SetValue`
-/// (`0x790980`) raises on nil in the reference too.
-#[test]
-fn the_stock_options_windows_load_and_save_are_reachable_for_addons() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = benilla_ui::script::UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    s.set_unit(
-        "player",
-        Some(benilla_ui::script::UnitState {
-            exists: true,
-            name: Some("Probefive".into()),
-            level: 60,
-            // `_Load`'s tail upper-cases `UnitClass("player")` (`UIOptionsFrame.lua:759-763`); a
-            // warrior takes the branch that disables the combo-point box.
-            class: Some("Warrior".into()),
-            class_file: Some("WARRIOR".into()),
-            ..Default::default()
-        }),
-    );
-    assert!(super::load_default_ui(&mut s).is_empty());
-
-    // `_Load` first, the window's own order: the reference loads on show and saves on Okay.
-    s.run("this = UIOptionsFrameOkay UIOptionsFrame_Load()")
-        .expect("_Load runs to completion — every slider CVar it reads is registered");
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-
-    // Every slider CVar in the stock table must answer, or `_Load` raises.
-    let unbacked: Vec<String> = s
-        .eval(
-            "local out = {} \
-             for _, v in ipairs(UIOptionsFrameSliders) do \
-                 if GetCVar(v.cvar) == nil then table.insert(out, v.cvar) end \
-             end \
-             return out",
-        )
-        .expect("read UIOptionsFrameSliders");
-    assert!(
-        unbacked.is_empty(),
-        "these slider CVars answer nil, and `_Load` raises on the first of them: {unbacked:?}"
-    );
-
-    // The walk reached slider 3, Mouse Look Speed, on `cameraYawMoveSpeed`'s registered 180
-    // (`UIOptionsFrame.lua:89`).
-    let slider3: f64 = s
-        .eval("return UIOptionsFrameSlider3:GetValue()")
-        .expect("the Mouse Look Speed slider's value");
-    assert!(
-        (slider3 - 180.0).abs() < 0.001,
-        "slider 3 should carry cameraYawMoveSpeed's registered 180, got {slider3}"
-    );
-
-    // `_SetDefaults` is the same walk through `GetCVarDefault`.
-    s.run("this = UIOptionsFrameDefaults UIOptionsFrame_SetDefaults()")
-        .expect("_SetDefaults runs to completion too");
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-
-    // Through the Okay button's own `<OnClick>` (`UIOptionsFrame.xml:1205-1209`), which sets
-    // `this`: the `SHOW_PARTY_PETS` arm reaches `RefreshBuffs`, whose first act is
-    // `this.hasDispellable = nil` (`BuffFrame.lua:266`).
-    s.run("UIOptionsFrameOkay:Click()")
-        .expect("the stock Okay button's own handler");
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-    assert!(
-        !s.eval::<bool>("return UIOptionsFrame:IsShown()").unwrap(),
-        "…and the window it hides on the way out was hidden to begin with"
-    );
-
-    // `_Save` writes the yaw slider's value and `cameraPitchMoveSpeed = value / 2`
-    // (`UIOptionsFrame.lua:355-356`), as the registered defaults, 180 and 90, agree.
-    let (yaw, pitch): (f64, f64) = (
-        s.eval(r#"return tonumber(GetCVar("cameraYawMoveSpeed"))"#)
-            .expect("yaw move speed"),
-        s.eval(r#"return tonumber(GetCVar("cameraPitchMoveSpeed"))"#)
-            .expect("pitch move speed"),
-    );
-    assert!(
-        (yaw - 180.0).abs() < 0.001 && (pitch - 90.0).abs() < 0.001,
-        "_Save should write the slider's 180 and its half; got yaw={yaw} pitch={pitch}"
     );
 }

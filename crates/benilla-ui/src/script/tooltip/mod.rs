@@ -257,7 +257,7 @@ pub(super) fn write_cell(
     color: [f32; 4],
 ) {
     let d = model.region_data.entry(rh).or_default();
-    d.text = Some(text.to_string());
+    d.text = Some(crate::grammar::resolve_owned(text.to_string())); // `|4`, as `0x61c620` sets it
     d.vertex_color = Some(color);
     // The line's own colour, as if set by `SetTextColor`: a later
     // `GameTooltipText:SetTextColor` must not repaint it.

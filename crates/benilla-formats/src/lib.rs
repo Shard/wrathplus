@@ -364,7 +364,7 @@ mod text_filter_lists;
 pub use text_filter_lists::{load_chat_profanity, load_spam_messages, FilterPattern};
 mod race_sound;
 pub use race_sound::{load_exploration_sound_catalog, ExplorationSoundCatalog};
-
+pub mod name_gen;
 mod race_creature_type;
 pub use race_creature_type::load_race_creature_types;
 mod race_pvp_team;

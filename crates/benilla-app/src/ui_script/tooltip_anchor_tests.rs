@@ -111,8 +111,7 @@ fn unit_frame_hover_takes_the_default_corner_and_drops_on_leave() {
     s.set_unit("target", Some(wolf()));
     // `UnitFrame_OnEnter` takes no arguments and reads `this` (`UnitFrame.lua:47`), as the stock
     // `<OnEnter>` calls it (`TargetFrame.xml:505`).
-    s.run("this = TargetFrame UnitFrame_OnEnter() this = nil")
-        .unwrap();
+    s.run("UnitFrame_OnEnter(TargetFrame)").unwrap();
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
     s.resolve();
     let ok: bool = s
@@ -133,8 +132,7 @@ fn unit_frame_hover_takes_the_default_corner_and_drops_on_leave() {
             .contains("Wolf"),
         "a non-player target still gets the unit lines"
     );
-    s.run("this = TargetFrame UnitFrame_OnLeave() this = nil")
-        .unwrap();
+    s.run("UnitFrame_OnLeave(TargetFrame)").unwrap();
     let hidden: bool = s.eval("return not GameTooltip:IsShown()").unwrap();
     assert!(
         hidden,
@@ -207,8 +205,7 @@ fn your_own_portrait_explains_the_menu_instead_of_showing_your_health() {
     ]);
     s.set_unit("player", Some(wolf()));
 
-    s.run("this = PlayerFrame UnitFrame_OnEnter() this = nil")
-        .unwrap();
+    s.run("UnitFrame_OnEnter(PlayerFrame)").unwrap();
     assert_eq!(
         s.eval::<String>("return GameTooltipTextLeft1:GetText()")
             .unwrap(),
@@ -238,8 +235,7 @@ fn your_own_portrait_explains_the_menu_instead_of_showing_your_health() {
             ..wolf()
         }),
     );
-    s.run("this = TargetFrame UnitFrame_OnEnter() this = nil")
-        .unwrap();
+    s.run("UnitFrame_OnEnter(TargetFrame)").unwrap();
     assert_eq!(
         s.eval::<String>("return GameTooltipTextLeft1:GetText()")
             .unwrap(),
@@ -268,8 +264,7 @@ fn action_button_hover_takes_the_default_corner() {
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
     ]);
     s.register_cvars(crate::shipped_cvars::pairs());
-    s.run("this = ActionButton3 ActionButton_SetTooltip()")
-        .unwrap();
+    s.run("ActionButton_SetTooltip(ActionButton3)").unwrap();
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
     let ok: bool = s
         .eval(
@@ -320,8 +315,7 @@ fn ubertooltips_off_seats_action_bar_plates_beside_the_button() {
         .unwrap()
     };
 
-    s.run("this = ActionButton3 ActionButton_SetTooltip()")
-        .unwrap();
+    s.run("ActionButton_SetTooltip(ActionButton3)").unwrap();
     assert!(
         s.eval::<bool>("return GameTooltip.default == nil").unwrap(),
         "off: the main bar's plate is owner-anchored, not the default corner"
@@ -339,7 +333,7 @@ fn ubertooltips_off_seats_action_bar_plates_beside_the_button() {
 
     // The LEFT set is by parent frame, not visibility: the vertical bars are hidden here.
     for bar in ["MultiBarBottomRight", "MultiBarRight", "MultiBarLeft"] {
-        s.run(&format!("this = {bar}Button1 ActionButton_SetTooltip()"))
+        s.run(&format!("ActionButton_SetTooltip({bar}Button1)"))
             .unwrap();
         assert_eq!(
             seat(&s),
@@ -349,7 +343,7 @@ fn ubertooltips_off_seats_action_bar_plates_beside_the_button() {
     }
 
     s.set_cvar_engine("UberTooltips", "1");
-    s.run("this = MultiBarBottomRightButton1 ActionButton_SetTooltip()")
+    s.run("ActionButton_SetTooltip(MultiBarBottomRightButton1)")
         .unwrap();
     assert!(
         s.eval::<bool>("return GameTooltip.default ~= nil").unwrap(),
@@ -387,7 +381,7 @@ fn ubertooltips_off_seats_stance_plates_beside_the_button() {
     s.fire_event("UPDATE_SHAPESHIFT_FORMS", vec![]);
     s.resolve();
 
-    s.run("this = ShapeshiftButton1 ShapeshiftButton1:GetScript(\"OnEnter\")()")
+    s.run("ShapeshiftButton1:GetScript(\"OnEnter\")(ShapeshiftButton1)")
         .unwrap();
     assert!(
         s.eval::<bool>("return GameTooltip.default ~= nil").unwrap(),
@@ -395,7 +389,7 @@ fn ubertooltips_off_seats_stance_plates_beside_the_button() {
     );
 
     s.set_cvar_engine("UberTooltips", "0");
-    s.run("this = ShapeshiftButton1 ShapeshiftButton1:GetScript(\"OnEnter\")()")
+    s.run("ShapeshiftButton1:GetScript(\"OnEnter\")(ShapeshiftButton1)")
         .unwrap();
     assert_eq!(
         s.eval::<String>(
@@ -445,7 +439,7 @@ fn buff_hover_hangs_below_left_of_the_button() {
     s.resolve();
     // The template's inline `<OnEnter>`, called directly: the engine sets `this` only when it
     // fires a handler (`0x704d50`), so it is set by hand.
-    s.run("this = BuffButton0; BuffButton0:GetScript(\"OnEnter\")(BuffButton0)")
+    s.run("BuffButton0:GetScript(\"OnEnter\")(BuffButton0)")
         .unwrap();
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
     let ok: bool = s

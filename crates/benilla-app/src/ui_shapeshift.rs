@@ -5,12 +5,14 @@
 //! `AttributesEx2 & 0x10`; the bar sorts by `StanceBarOrder`, negative last, then spell id
 //! (`0x4b2bb0`).
 //!
-//! Only a change of membership or order fires `UPDATE_SHAPESHIFT_FORMS`, the reference's
-//! learn/unlearn edge (`0x4b28ff`, `0x4b2e43`), because the stock `ShapeshiftBar_Update` rebuilds
-//! the shelf on every fire. A castability change fires `SPELL_UPDATE_USABLE`, as `0x4b31c0` does.
-//! Active form, texture and cooldown push silently and repaint on `PLAYER_AURAS_CHANGED` (a form's
-//! aura holds a slot, warrior stances included) and `SPELL_UPDATE_COOLDOWN`, so the feed runs
-//! before both; a cooldown's expiry fires nothing.
+//! The edges are 12340's. Only a change of membership or order fires `UPDATE_SHAPESHIFT_FORMS`,
+//! the learn, unlearn and sort signals (`0x54252d`, `0x53fe44`, `0x542647`), because the stock
+//! `ShapeshiftBar_Update` rebuilds the shelf on every fire. A castability flip fires
+//! `UPDATE_SHAPESHIFT_USABLE` then `SPELL_UPDATE_USABLE` (`0x53d17f`, `0x53d19c`). A move of the
+//! active form fires `UPDATE_SHAPESHIFT_FORM` (`0x6da39a`, `0x6e806f`), as does a stance-bar aura
+//! without `MOD_SHAPESHIFT` going up or down (`0x72213f`, `0x727830`), which lights a paladin aura.
+//! A cooldown pushes silently: the cooldown flush fires `UPDATE_SHAPESHIFT_COOLDOWN` just ahead of
+//! `SPELL_UPDATE_COOLDOWN` (`0x53bac0`), so the feed runs before it; an expiry fires nothing.
 
 use std::time::Instant;
 
@@ -19,7 +21,8 @@ use bevy::prelude::*;
 use benilla_ui::script::{ShapeshiftFormView, UiScript};
 
 use crate::items::Items;
-use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, Reputations, SelfPlayer};
+use crate::net::wrath_auras::{PacketAuras, StampedAura};
+use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore, Objects, Reputations, SelfPlayer};
 use crate::spell::Cooldowns;
 use crate::spell::{usable, CastCommit};
 use crate::target::Selection;
@@ -33,18 +36,24 @@ const ATTR_EX2_STANCE_BAR_EXCLUDE: u32 = 0x2;
 /// Ironweave Battlesuit 27733.
 const ATTR_EX2_STANCE_BAR_FORCE: u32 = 0x10;
 
-/// `isActive` (`0x4b45c0`), forked on the form id (the first `MOD_SHAPESHIFT` misc value, else 0).
-/// A form spell matches the form byte (`4b46a0`). A force-admitted one with `ActiveIconID != 0`
-/// (`4b46f2`) needs its own aura live with the cancelable bit (`4b4739`), the action bar toggle's
-/// scan (`0x4e55f0`); a paladin aura lights only this way.
+/// The packet aura flag `0x802cb0` tests (`0x802e45`): `AFLAG_POSITIVE`.
+const AFLAG_POSITIVE: u8 = 0x10;
+
+/// `isActive`: 12340's `0x802cb0`, as `GetShapeshiftFormInfo` (`0x53de90`) calls it, forked on the
+/// form id (the first `MOD_SHAPESHIFT` misc value, else 0). A form spell matches the form byte (the
+/// spell-side arm, kept from 1.12's `4b46a0`). Any other stance-bar spell is active while the
+/// player carries its aura with [`AFLAG_POSITIVE`] (the aura loop, `0x802db0`-`0x802e49`), with no
+/// `ActiveIconID` or cancelable gate; a paladin aura lights this way.
 fn form_active(
     spell_id: u32,
     d: &benilla_formats::SpellDisplay,
     form_byte: u8,
-    store: Option<&ObjectStore>,
+    auras: &[StampedAura],
 ) -> bool {
     match d.shapeshift_form.unwrap_or(0) {
-        0 => store.is_some_and(|s| crate::ui_action::toggle::active_action_toggle(spell_id, d, s)),
+        0 => auras
+            .iter()
+            .any(|a| a.aura.spell_id == spell_id && a.aura.flags & AFLAG_POSITIVE != 0),
         form => form == u32::from(form_byte),
     }
 }
@@ -66,6 +75,8 @@ fn form_texture(d: &benilla_formats::SpellDisplay, active: bool) -> Option<Strin
 #[derive(Default)]
 pub(crate) struct StanceMemory {
     pushed: Option<Vec<ShapeshiftFormView>>,
+    /// The stance auras the last push saw ([`push_stance`]).
+    stance_auras: Vec<u32>,
 }
 
 /// The edge one push crossed, as [`push_forms`] announces it.
@@ -74,17 +85,33 @@ pub(crate) enum FormsEdge {
     Unchanged,
     /// Membership or order: `UPDATE_SHAPESHIFT_FORMS`.
     List,
-    /// Castability: `SPELL_UPDATE_USABLE`.
+    /// Castability: `UPDATE_SHAPESHIFT_USABLE` and `SPELL_UPDATE_USABLE`, then
+    /// `UPDATE_SHAPESHIFT_FORM` when the active form moved too.
     Usable,
-    /// Active form, texture or cooldown: pushed, announced by other feeds' events.
+    /// The active form, and with it the texture: `UPDATE_SHAPESHIFT_FORM`.
+    Form,
+    /// Cooldown only: pushed, announced by the cooldown flush.
     Silent,
 }
 
-/// Push the rebuilt list and announce its edge (module doc); callable without a Bevy world.
+/// Push the rebuilt list and announce its edge (module doc), leaving the stance auras standing;
+/// the tests' entry, callable without a Bevy world.
+#[cfg(test)]
 pub(crate) fn push_forms(
     script: &mut UiScript,
     memory: &mut StanceMemory,
     fresh: Vec<ShapeshiftFormView>,
+) -> FormsEdge {
+    push_stance(script, memory, fresh, None)
+}
+
+/// [`push_forms`] with the player's stance auras, sorted: the stance-bar spells without
+/// `MOD_SHAPESHIFT` whose aura the player carries, or `None` to leave the last set standing.
+pub(crate) fn push_stance(
+    script: &mut UiScript,
+    memory: &mut StanceMemory,
+    fresh: Vec<ShapeshiftFormView>,
+    stance_auras: Option<Vec<u32>>,
 ) -> FormsEdge {
     let old: &[ShapeshiftFormView] = memory.pushed.as_deref().unwrap_or(&[]);
     let edge = if old == fresh.as_slice() {
@@ -102,20 +129,54 @@ pub(crate) fn push_forms(
         .any(|(o, n)| o.castable != n.castable)
     {
         FormsEdge::Usable
+    } else if active_moved(old, &fresh) {
+        FormsEdge::Form
     } else {
         FormsEdge::Silent
     };
-    if edge == FormsEdge::Unchanged {
-        return edge;
+    let form_too = edge == FormsEdge::Usable && active_moved(old, &fresh);
+    if edge != FormsEdge::Unchanged {
+        memory.pushed = Some(fresh.clone());
+        script.set_shapeshift_forms(fresh);
     }
-    memory.pushed = Some(fresh.clone());
-    script.set_shapeshift_forms(fresh);
     match edge {
         FormsEdge::List => script.fire_event("UPDATE_SHAPESHIFT_FORMS", vec![]),
-        FormsEdge::Usable => script.fire_event("SPELL_UPDATE_USABLE", vec![]),
-        FormsEdge::Silent | FormsEdge::Unchanged => {}
+        FormsEdge::Usable => {
+            script.fire_event("UPDATE_SHAPESHIFT_USABLE", vec![]);
+            script.fire_event("SPELL_UPDATE_USABLE", vec![]);
+        }
+        FormsEdge::Form | FormsEdge::Silent | FormsEdge::Unchanged => {}
     }
-    edge
+    // The aura sites (`0x72213f` apply, `0x727830` remove) fire on their own edge, after the
+    // list's: a stance-bar spell without `MOD_SHAPESHIFT` whose aura came or went on the player.
+    let auras_moved = stance_auras.is_some_and(|a| {
+        let moved = a != memory.stance_auras;
+        memory.stance_auras = a;
+        moved
+    });
+    if edge == FormsEdge::Form || form_too || auras_moved {
+        script.fire_event("UPDATE_SHAPESHIFT_FORM", vec![]);
+    }
+    match edge {
+        FormsEdge::Unchanged | FormsEdge::Silent if auras_moved => FormsEdge::Form,
+        _ => edge,
+    }
+}
+
+/// `SPELL_UPDATE_COOLDOWN` as 12340's `0x53bac0` fires it: `UPDATE_SHAPESHIFT_COOLDOWN` just
+/// ahead while the stance bar has a form.
+pub(crate) fn fire_spell_update_cooldown(script: &mut UiScript) {
+    if script.num_shapeshift_forms() > 0 {
+        script.fire_event("UPDATE_SHAPESHIFT_COOLDOWN", vec![]);
+    }
+    script.fire_event("SPELL_UPDATE_COOLDOWN", vec![]);
+}
+
+/// Whether any form's active ring or texture moved, over lists of one membership.
+fn active_moved(old: &[ShapeshiftFormView], fresh: &[ShapeshiftFormView]) -> bool {
+    old.iter()
+        .zip(fresh)
+        .any(|(o, n)| o.active != n.active || o.texture != n.texture)
 }
 
 pub(crate) struct UiShapeshiftPlugin;
@@ -141,7 +202,7 @@ fn feed_shapeshift_bar(
     actions: Res<PlayerActions>,
     spells: Option<Res<Spells>>,
     cooldowns: Res<Cooldowns>,
-    self_q: Query<&ObjectStore, With<SelfPlayer>>,
+    self_q: Query<(&ObjectStore, &Guid), With<SelfPlayer>>,
     selection: Res<Selection>,
     // The selection's guid index, and the bag walk behind each form's reagent leg.
     objects: Objects,
@@ -151,10 +212,12 @@ fn feed_shapeshift_bar(
     items: Res<Items>,
     commands: Res<NetCommands>,
     clock: Res<crate::ui_script::UiClock>,
-    // One tuple for Bevy's 16-param ceiling: the talent modifiers and build 12340's combo points.
-    (spell_mods, combo): (
+    // One tuple for Bevy's 16-param ceiling: the talent modifiers, build 12340's combo points and
+    // the packet auras behind a force-admitted form's `isActive`.
+    (spell_mods, combo, packets): (
         Res<crate::spell::SpellModifiers>,
         Res<crate::net::wrath_combo_points::NativeComboPoints>,
+        Option<Res<PacketAuras>>,
     ),
     relations: crate::target::RelationInputs,
     mut memory: Local<crate::ui_script::VmMemo<StanceMemory>>,
@@ -166,8 +229,12 @@ fn feed_shapeshift_bar(
     let Some(spells) = spells else {
         return;
     };
-    let store = self_q.iter().next();
+    let me = self_q.iter().next();
+    let store = me.map(|(s, _)| s);
     let form_byte = store.map(|s| s.0.unit_shapeshift_form()).unwrap_or(0);
+    let auras: &[StampedAura] = me
+        .and_then(|(_, g)| packets.as_deref()?.by_guid.get(&g.0))
+        .map_or(&[], Vec::as_slice);
     let now = Instant::now();
     // The frame's clock pair: a local `Instant::now()` would wobble the derived start.
     let (anchor, ui_now) = (clock.anchor, clock.ui_now);
@@ -197,6 +264,15 @@ fn feed_shapeshift_bar(
         };
         (order, id)
     });
+    // The aura sites' membership (`0x53bd40`) and `MOD_SHAPESHIFT` (aura 0x24, `0x7fde50`) tests.
+    let mut stance_auras: Vec<u32> = rows
+        .iter()
+        .filter(|(id, d)| {
+            d.shapeshift_form.is_none() && auras.iter().any(|a| a.aura.spell_id == *id)
+        })
+        .map(|&(id, _)| id)
+        .collect();
+    stance_auras.sort_unstable();
 
     // The bags, walked once for every form's reagent leg.
     let carried = store
@@ -205,7 +281,7 @@ fn feed_shapeshift_bar(
     let fresh: Vec<ShapeshiftFormView> = rows
         .into_iter()
         .map(|(id, d)| {
-            let active = form_active(id, d, form_byte, store);
+            let active = form_active(id, d, form_byte, auras);
             // `isCastable`: true for the active form, else the `0x6e3d60` walk the action bar's
             // `IsUsableAction` runs.
             let castable = active
@@ -239,7 +315,7 @@ fn feed_shapeshift_bar(
         .collect();
 
     let count = fresh.len();
-    let edge = push_forms(&mut script, memory, fresh);
+    let edge = push_stance(&mut script, memory, fresh, Some(stance_auras));
     if edge != FormsEdge::Unchanged {
         debug!("ui_shapeshift: {count} form(s), active form byte {form_byte}, {edge:?} edge");
     }
@@ -286,90 +362,5 @@ pub(crate) fn cast_form(cast: &mut crate::spell::ScriptCast, spell_id: u32) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use benilla_formats::SpellDisplay;
-    use benilla_protocol::ObjectFields;
-
-    /// Our player under `spell_id`'s aura; 12340 descriptors carry no aura slots, so the store is
-    /// bare and the aura reaches the client by packet.
-    fn player_with_aura(_spell_id: u32) -> ObjectStore {
-        ObjectStore(ObjectFields::default())
-    }
-
-    /// Devotion Aura as the shipped `Spell.dbc` has it: `AttributesEx2 0x10`, no `MOD_SHAPESHIFT`
-    /// effect, `ActiveIconID` 122, `StanceBarOrder` 0.
-    fn devotion_aura() -> SpellDisplay {
-        SpellDisplay {
-            attributes_ex2: ATTR_EX2_STANCE_BAR_FORCE,
-            shapeshift_form: None,
-            active_icon_id: 122,
-            stance_bar_order: 0,
-            ..Default::default()
-        }
-    }
-
-    /// Both arms reach the block that elects `ActiveIconID` (`0x4b45c0`); the zero fallback
-    /// (`4b4763 je`) is reachable only on the form arm.
-    #[test]
-    fn the_active_icon_swap_reaches_both_arms() {
-        let shield = Some("Interface\\Icons\\Spell_Holy_DevotionAura".to_string());
-        let swirl = Some("Interface\\Icons\\Spell_Nature_WispSplode".to_string());
-
-        // Cat Form, the form arm.
-        let cat = SpellDisplay {
-            shapeshift_form: Some(1),
-            active_icon_id: 122,
-            active_icon: swirl.clone(),
-            icon: shield.clone(),
-            ..Default::default()
-        };
-        assert_eq!(form_texture(&cat, true), swirl);
-        assert_eq!(form_texture(&cat, false), shield);
-
-        // A paladin aura, the force-admit arm, elects the same column (`4b4754`).
-        let devotion = SpellDisplay {
-            active_icon: swirl.clone(),
-            icon: shield.clone(),
-            ..devotion_aura()
-        };
-        assert_eq!(
-            form_texture(&devotion, true),
-            swirl,
-            "the aura-scan hit falls through into the block that elects ActiveIconID"
-        );
-        assert_eq!(form_texture(&devotion, false), shield);
-
-        // `4b475c` sets `isActive` before `4b4763` tests the column: a warrior stance is active
-        // yet keeps `SpellIconID`.
-        let stance = SpellDisplay {
-            shapeshift_form: Some(17),
-            active_icon_id: 0,
-            active_icon: None,
-            icon: shield.clone(),
-            ..Default::default()
-        };
-        assert_eq!(
-            form_texture(&stance, true),
-            shield,
-            "active and unswapped are decided by different bytes and do not imply each other"
-        );
-    }
-
-    /// A form spell reads the form byte, never its aura; this pins the fork, not the data.
-    #[test]
-    fn a_shapeshift_form_still_latches_on_the_form_byte() {
-        let battle_stance = SpellDisplay {
-            shapeshift_form: Some(17),
-            active_icon_id: 0,
-            ..Default::default()
-        };
-        let no_auras = ObjectStore(ObjectFields::from_fields(&[]));
-        assert!(form_active(2457, &battle_stance, 17, Some(&no_auras)));
-        assert!(!form_active(2457, &battle_stance, 1, Some(&no_auras)));
-        assert!(
-            !form_active(2457, &battle_stance, 0, Some(&player_with_aura(2457))),
-            "out of the form: a live aura row is not what the MOD_SHAPESHIFT arm reads"
-        );
-    }
-}
+#[path = "ui_shapeshift_tests.rs"]
+mod tests;

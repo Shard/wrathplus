@@ -13,6 +13,8 @@ use bevy::prelude::*;
 
 use crate::ui_script::{UiFeed, UiInput};
 
+/// An unstreamed member's race, class and sex off the name cache.
+mod cached_traits;
 pub(crate) mod feed;
 pub(crate) mod net;
 mod pets;
