@@ -773,6 +773,25 @@ root and its `<root>-<layer>` siblings under any prefix.
    paths (strict again from then on), and update the gate crate lists (`scripts/gates.sh`,
    `check.sh`, CI, worker gate commands: `-p benilla-app` becomes the six crates).
 
+**Timed per-layer run** (505548ff, throwaway worktree, warm target, heavy slot; 2026-10-22):
+
+| Layer | Move | `widen-all.sh` | `cargo check` of the moved crates and the root |
+|---|---|---|---|
+| core | 9 s | 59 min (root 924 + 37 declarations, 3 passes) | 12.5 min, clean |
+| net, world, ui | 27 s, 55 s, 126 s | not reached: the manifests repeated each lower dependency (fixed after 505548ff) | |
+
+The all-layer run on ace77059 took about 1 min to move, 37 min for `widen-all.sh` (3 passes) and
+21 min for the six crates' tests. One layer at a time costs more because every layer widens and
+checks the root again: about 70 min for core alone. So the move is one run of every layer, then
+one widening, one check and one commit. A per-layer commit would not build on its own anyway.
+Budget about 1 h to move and widen, then the gates.
+
+**Warnings after the move** (all-layer run): world 141, ui 134 (lib), plus 3 to 11 elsewhere:
+109 functions, 57 constants and 15 methods never used, 87 unused imports, and 8 "more private
+than" warnings. Errors are clean, but the warnings ratchet is not. An unused-import pass and a
+dead-code pass (widen what another crate uses, delete what nothing uses) are still to write before
+the move.
+
 Not covered by the dry run: `cargo machete` pruning of each crate's dependency list (they start
 as benilla-app's), and the player build (`--no-default-features`), which forwards `dev` the same
 way and should be checked once on the move tree.

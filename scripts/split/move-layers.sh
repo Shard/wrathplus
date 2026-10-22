@@ -97,6 +97,9 @@ for l in $layers; do
     ROOTPKG="$P-app" CRATE="$crate" DEVF="$devf" TSF="${tsf%, }" DEPS="$deps" DEVDEPS="$devdeps" perl -0pe '
         s/^name = "\Q$ENV{ROOTPKG}\E"/name = "$ENV{CRATE}"/m;
         s/^description = [^\n]*\n//m;
+        # The root already depends on the layers an earlier run moved: start from its own list.
+        s/^\Q$ENV{ROOTPKG}\E-\w+ = [^\n]*\n//mg;
+        s/,?\s*"\Q$ENV{ROOTPKG}\E-\w+\/(?:dev|test-support)"//g;
         s/^(dev = \[[^\]]*)\]/$1$ENV{DEVF}]/m;
         s/^test-support = \[\]/test-support = [$ENV{TSF}]/m;
         s/^\[dependencies\]\n/[dependencies]\n$ENV{DEPS}/m;
@@ -158,7 +161,7 @@ for b in $new; do
 done
 DEVF="$devf" TSF="${tsf%, }" DEPS="$deps" DEVDEPS="$devdeps" perl -0pi -e '
     s/^(dev = \[[^\]]*)\]/$1$ENV{DEVF}]/m;
-    s/^test-support = \[\]/test-support = [$ENV{TSF}]/m;
+    s/^test-support = \[([^\]]*)\]/"test-support = [" . join(", ", grep { length } $1, $ENV{TSF}) . "]"/me;
     s/^\[dependencies\]\n/[dependencies]\n$ENV{DEPS}/m;
     s/^\[dev-dependencies\]\n/[dev-dependencies]\n$ENV{DEVDEPS}/m' $app/Cargo.toml
 
