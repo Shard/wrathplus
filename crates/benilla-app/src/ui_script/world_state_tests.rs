@@ -135,8 +135,8 @@ fn leaving_the_zone_clears_the_readout() {
     );
 }
 
-/// `Icon` and `DynamicIcon` (`0x4c5a70`) feed a 42x42 slot and a 32x32 button off the row's right;
-/// only state 2, flag taken, lights the button (`WorldStateFrame.lua:86`).
+/// `Icon` and `DynamicIcon` feed a 42x42 slot and a 32x32 button off the row's right; state 2
+/// shows the button flashing and state 3 shows it still (`WorldStateFrame.lua:166-172`).
 #[test]
 fn the_dynamic_icon_is_a_second_slot_lit_only_by_the_taken_state() {
     benilla_formats::wow_data_or_skip!();
@@ -160,7 +160,8 @@ fn the_dynamic_icon_is_a_second_slot_lit_only_by_the_taken_state() {
         !art.iter().any(|p| p.contains("UI-PVP-Alliance")),
         "state 0 — the row is not drawn at all: {art:?}"
     );
-    for quiet in [1, 3] {
+    {
+        let quiet = 1;
         push(&mut s, vec![flag_row(quiet)]);
         let art = textures(&mut s);
         assert!(
@@ -172,6 +173,14 @@ fn the_dynamic_icon_is_a_second_slot_lit_only_by_the_taken_state() {
             "state {quiet} is not the flag-taken state, so nothing lights: {art:?}"
         );
     }
+    // State 3 shows the button with its flash stopped.
+    push(&mut s, vec![flag_row(3)]);
+    let art = textures(&mut s);
+    assert!(
+        art.iter()
+            .any(|p| p == "Interface\\WorldStateFrame\\HordeFlag"),
+        "state 3 shows the dynamic button: {art:?}"
+    );
 
     push(&mut s, vec![flag_row(2)]);
     let art = textures(&mut s);
@@ -282,15 +291,17 @@ fn the_bindings_answer_the_reference_shape() {
     assert_eq!(s.eval::<i64>("return GetNumWorldStateUI()").unwrap(), 1);
     assert_eq!(
         s.eval::<String>(
-            "local a,b,c,d,e,f,g,h,i,j = GetWorldStateUIInfo(1)\n\
-             return a..'|'..b..'|'..c..'|'..d..'|'..e..'|'..f..'|'..g..'|'..h..'|'..i..'|'..j"
+            "local a,b,c,d,e,f,g,h,i,j,k = GetWorldStateUIInfo(1)\n\
+             return a..'|'..b..'|'..c..'|'..d..'|'..e..'|'..f..'|'..g..'|'..h..'|'..i..'|'..j..'|'..k"
         )
         .unwrap(),
-        "7|Towers Controlled: 3|Interface\\WorldStateFrame\\AllianceTower||\
+        "0|7|Towers Controlled: 3|Interface\\WorldStateFrame\\AllianceTower||\
          Alliance Towers Controlled|||1|2|3",
         "empty columns are empty strings, never nil"
     );
-    assert_eq!(s.arity("GetWorldStateUIInfo(1)").unwrap(), 10);
+    // 3.3.5's eleven: `uiType` first and the `extendedUI` name before its three states
+    // (WorldStateFrame.lua:121).
+    assert_eq!(s.arity("GetWorldStateUIInfo(1)").unwrap(), 11);
 
     assert_eq!(s.arity("GetWorldStateUIInfo(2)").unwrap(), 1);
     assert_eq!(s.eval::<i64>("return GetWorldStateUIInfo(2)").unwrap(), 0);
@@ -306,7 +317,8 @@ fn the_bindings_answer_the_reference_shape() {
     );
     // A numeric string coerces, as `lua_isnumber` does.
     assert_eq!(
-        s.eval::<i64>("return (GetWorldStateUIInfo('1'))").unwrap(),
+        s.eval::<i64>("return select(2, GetWorldStateUIInfo('1'))")
+            .unwrap(),
         7
     );
 }
