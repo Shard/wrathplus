@@ -89,7 +89,6 @@ mod chat_window;
 mod clip;
 mod colorselect;
 mod container;
-mod craft;
 mod cursor;
 mod death;
 pub mod diagnostics;
@@ -319,7 +318,6 @@ pub use container::{
     BagAutoStore, ContainerMove, ContainerSlot, ContainerState, EnchantView, PendingWrap,
     PetitionSlotView, RandomPropertyView, UiCursorMode,
 };
-pub use craft::{CraftReagent, CraftRecipe, CraftState, CraftTooltip};
 pub use cursor::money::coin_icon;
 pub use cursor::{
     CursorAction, CursorEquipmentSet, CursorGuildBankItem, CursorItem, CursorItemId, CursorMacro,
@@ -835,7 +833,6 @@ impl UiScript {
         dressup::install(&lua)?;
         tabard::install(&lua)?;
         tradeskill::install(&lua)?;
-        craft::install(&lua)?;
         reputation::install(&lua)?;
         skills::install(&lua)?;
         item_stats::install(&lua)?;

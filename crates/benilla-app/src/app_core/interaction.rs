@@ -8,7 +8,7 @@ use std::time::Instant;
 use benilla_formats::GuildEmblem;
 use benilla_protocol::types::{
     friend_result, friend_status, FriendEntry, FriendStatusUpdate, GossipOption, MailListEntry,
-    MeetingStoneNotice, NpcTextBlock, TrainerSpell, VendorItem,
+    NpcTextBlock, TrainerSpell, VendorItem,
 };
 use bevy::prelude::*;
 
@@ -401,51 +401,6 @@ impl AreaSpiritHealer {
         self.deadline
             .map(|d| d.saturating_duration_since(now).as_secs())
             .map_or(0, |s| u32::try_from(s).unwrap_or(u32::MAX))
-    }
-}
-
-/// The status text (`[0xb7203c]`): none until the server's `0x295` lands and after world leave,
-/// then a built line; localized at push time.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub(crate) enum StoneText {
-    #[default]
-    None,
-    Built(String),
-}
-
-/// The meeting-stone queue: the two globals and what the wire still owes the screen.
-#[derive(Resource, Default)]
-pub(crate) struct MeetingStone {
-    /// `[0xb72038]`, the queued area id, 0 for none.
-    pub(crate) area: u32,
-    pub(crate) text: StoneText,
-    /// `0x295` arrivals as `(previous area, status)`; the handler stores the new area before it
-    /// switches, so that one is already in `area`.
-    pub(crate) updates: Vec<(u32, u8)>,
-    pub(crate) notices: Vec<MeetingStoneNotice>,
-    /// `0x299` guids whose name has not resolved yet.
-    pub(crate) pending_members: Vec<u64>,
-    /// The VM's copy of the two globals is stale.
-    pub(crate) dirty: bool,
-}
-
-impl MeetingStone {
-    /// `SMSG 0x295` (`0x4ca230`): the area is stored at once; the line and event wait for the feed.
-    pub(crate) fn apply(&mut self, area: u32, status: u8) {
-        let old = self.area;
-        self.area = area;
-        self.updates.push((old, status));
-    }
-
-    /// One of the four display-only replies.
-    pub(crate) fn apply_notice(&mut self, notice: MeetingStoneNotice) {
-        self.notices.push(notice);
-    }
-
-    /// The leave-world sweep (`0x4c9f80`): the text goes, the area stays.
-    pub(crate) fn leave_world(&mut self) {
-        self.text = StoneText::None;
-        self.dirty = true;
     }
 }
 

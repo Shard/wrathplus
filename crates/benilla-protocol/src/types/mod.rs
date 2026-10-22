@@ -25,7 +25,6 @@ mod instance;
 mod items;
 mod loot;
 mod mail;
-mod meeting_stone;
 mod mirror_timer;
 mod movement;
 mod packet;
@@ -139,9 +138,6 @@ pub use mail::{
     mail_message_type, mail_take_money,
     MailAttachment, MailListEntry,
 };
-pub use meeting_stone::{
-    MeetingStoneNotice, MeetingStoneSetQueue,
-};
 pub use mirror_timer::{
     MirrorTimerKind,
     MirrorTimerStart,
@@ -152,7 +148,7 @@ pub use movement::{
 pub use packet::{CreatureQueryInfo, MonsterMoveFacing};
 pub use pet::{
     pet_action, pet_tame_failure_key, PetActionEntry, PetMode, PetSpellCooldown,
-    PetSpells, PetUnlearnConfirm, PET_ACTION_SLOTS, PET_ACT_COMMAND, PET_ACT_DISABLED,
+    PetSpells, PET_ACTION_SLOTS, PET_ACT_COMMAND, PET_ACT_DISABLED,
     PET_ACT_ENABLED, PET_ACT_PASSIVE, PET_ACT_REACTION, PET_AUTOCAST_ALLOWED, PET_AUTOCAST_ON,
     PET_COMMAND_ATTACK, PET_COMMAND_DISMISS, PET_COMMAND_FOLLOW, PET_COMMAND_STAY,
     PET_COOLDOWN_PERMANENT, PET_REACT_AGGRESSIVE, PET_REACT_DEFENSIVE, PET_REACT_PASSIVE,

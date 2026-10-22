@@ -520,20 +520,19 @@ fn net_entity_of(
 }
 
 /// What the GameObject gates read beside the object's store: the template cache (GENERIC's
-/// eligibility is its `data[1]`, MEETINGSTONE's its `data[2]`), the faction catalog, and the
-/// meeting-stone queue, the reference's `[0xb72038]`.
+/// eligibility is its `data[1]`, MEETINGSTONE's its `data[2]`) and the faction catalog.
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct GoGateInputs<'w> {
     pub(crate) templates: Res<'w, crate::go_templates::GameObjectTemplates>,
     pub(crate) factions: Option<Res<'w, super::ring::Factions>>,
-    /// Absent in a net-less build, read as the reference's zeroed `[0xb72038]`: not queued.
-    pub(crate) stone: Option<Res<'w, crate::ui_dialog_verbs::MeetingStone>>,
 }
 
 impl GoGateInputs<'_> {
-    /// `[0xb72038]`, the area we are queued at, or 0.
+    /// The meeting-stone queue's area, which 3.3.5 never sets: it has no queue protocol (its
+    /// 0x295 is `SMSG_TEST_DROP_RATE_RESULT`), so 1.12's term reads the unqueued 0. Labelled: build
+    /// 12340's own MEETINGSTONE highlight term is untraced.
     pub(crate) fn queued_area(&self) -> u32 {
-        self.stone.as_deref().map_or(0, |s| s.area)
+        0
     }
 }
 
