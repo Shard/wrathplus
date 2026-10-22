@@ -1,14 +1,17 @@
-//! The eight stock micro buttons, loaded behind `MainMenuBarArtFrame`, which they anchor to.
+//! The ten stock 3.3.5 micro buttons, loaded behind `MainMenuBarArtFrame`, which they anchor to.
+//! Below its level a button greys rather than hides, so the row never closes up.
 
 use benilla_ui::script::{QuadContent, ScriptValue, TexCoords, UiScript, UnitState};
 
-const ROW: [&str; 8] = [
+const ROW: [&str; 10] = [
     "CharacterMicroButton",
     "SpellbookMicroButton",
     "TalentMicroButton",
+    "AchievementMicroButton",
     "QuestLogMicroButton",
     "SocialsMicroButton",
-    "WorldMapMicroButton",
+    "PVPMicroButton",
+    "LFDMicroButton",
     "MainMenuMicroButton",
     "HelpMicroButton",
 ];
@@ -47,49 +50,37 @@ fn set_player_level(s: &mut UiScript, level: u32) {
         Some(UnitState {
             exists: true,
             level,
+            // 3.3.5's PVP window builds a faction texture path on world entry.
+            faction_group: Some("Alliance".into()),
             ..Default::default()
         }),
     );
     s.fire_event("UNIT_LEVEL", vec![ScriptValue::Str("player".into())]);
 }
 
-fn left_of(s: &UiScript, name: &str) -> f64 {
-    s.eval::<f64>(&format!("return {name}:GetLeft()"))
-        .unwrap_or_else(|e| panic!("{name}: {e}"))
-}
-
-/// `CharacterMicroButton` sits at the art frame's `BOTTOMLEFT` +(552, 2), each button 29x58,
-/// chained at -3 for a 26 px stride; `UpdateTalentButton` re-seats the quest log at -2
-/// (`MainMenuBarMicroButtons.lua:139`), so past its first pass at 10+ the tail sits 1 px right.
+/// `CharacterMicroButton` sits at the art frame's `BOTTOMLEFT` +(552, 2), each button 28x58
+/// (MainMenuBarMicroButtons.xml:4-7, :33-38), chained at -3 for a 25 px stride, at any level.
 #[test]
 fn the_micro_row_sits_where_the_reference_puts_it() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    s.resolve();
-
-    for (i, name) in ROW.iter().enumerate() {
-        let (left, bottom, w, h) = s
-            .eval::<(f64, f64, f64, f64)>(&format!(
-                "return {name}:GetLeft(), {name}:GetBottom(), {name}:GetWidth(), {name}:GetHeight()"
-            ))
-            .unwrap_or_else(|e| panic!("{name}: {e}"));
-        assert_eq!((w, h), (29.0, 58.0), "{name} size");
-        assert_eq!(
-            left,
-            552.0 + 26.0 * i as f64,
-            "{name} left edge, as declared"
-        );
-        assert_eq!(bottom, 2.0, "{name} sits 2 above the bar's bottom");
-    }
-
-    set_player_level(&mut s, 60);
-    s.resolve();
-    for (i, name) in ROW.iter().enumerate().skip(3) {
-        assert_eq!(
-            left_of(&s, name),
-            553.0 + 26.0 * i as f64,
-            "{name} after the talent gate's own −2"
-        );
+    for level in [9, 80] {
+        set_player_level(&mut s, level);
+        s.resolve();
+        for (i, name) in ROW.iter().enumerate() {
+            let (left, bottom, w, h) = s
+                .eval::<(f64, f64, f64, f64)>(&format!(
+                    "return {name}:GetLeft(), {name}:GetBottom(), {name}:GetWidth(), {name}:GetHeight()"
+                ))
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!((w, h), (28.0, 58.0), "{name} size");
+            assert_eq!(
+                left,
+                552.0 + 25.0 * i as f64,
+                "{name} left edge at level {level}"
+            );
+            assert_eq!(bottom, 2.0, "{name} sits 2 above the bar's bottom");
+        }
     }
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
@@ -121,11 +112,19 @@ fn the_transparent_top_of_a_micro_button_does_not_capture_the_mouse() {
 fn the_character_button_carries_the_player_portrait_through_the_reference_crop() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = harness();
+    // 3.3.5 seats the portrait on world entry (MainMenuBarMicroButtons.lua:145-146).
+    set_player_level(&mut s, 80);
+    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
     s.resolve();
 
+    // Only the micro button's own portrait: the seated session's unit frames draw portraits too.
     let window = |s: &mut UiScript| {
         s.extract()
             .into_iter()
+            .filter(|q| {
+                s.target_owner_name(q.target)
+                    .is_some_and(|n| n.contains("MicroButton"))
+            })
             .find_map(|q| match q.content {
                 QuadContent::Texture {
                     portrait_unit: Some(unit),
@@ -172,49 +171,57 @@ fn the_character_button_carries_the_player_portrait_through_the_reference_crop()
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Under level 10 `UpdateTalentButton` hides the talent button and seats the quest log on its
-/// anchor (`MainMenuBarMicroButtons.lua:133`).
+/// Below `SHOW_TALENT_LEVEL` (10) `UpdateMicroButtons` disables the talent button, which dims to 0.5
+/// and keeps its seat; its hover adds the red "available at" line
+/// (MainMenuBarMicroButtons.lua:36-46, .xml:12-20).
 #[test]
-fn the_talent_button_appears_at_level_ten_and_the_row_closes_up_below_it() {
+fn the_talent_button_greys_below_level_ten_and_says_when_it_comes() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = harness();
+    s.run("SHOW_NEWBIE_TIPS = \"1\"").unwrap();
 
     set_player_level(&mut s, 9);
     s.resolve();
-    assert!(
-        !s.eval::<bool>("return TalentMicroButton:IsVisible()")
-            .unwrap(),
-        "no talents before 10"
-    );
-    // The quest log takes the talent button's seat: slot 3, not 4.
-    assert_eq!(left_of(&s, "QuestLogMicroButton"), 552.0 + 26.0 * 2.0);
     assert_eq!(
-        left_of(&s, "HelpMicroButton"),
-        552.0 + 26.0 * 6.0,
-        "the whole tail moves up one slot with it"
+        s.eval::<(i64, f64)>("return TalentMicroButton:IsEnabled(), TalentMicroButton:GetAlpha()")
+            .unwrap(),
+        (0, 0.5),
+        "disabled and dimmed before 10"
     );
+    assert!(s
+        .eval::<bool>("return TalentMicroButton:IsVisible()")
+        .unwrap());
+    super::test_ui::hover(&mut s, "TalentMicroButton");
+    let last = s
+        .eval::<String>("return _G['GameTooltipTextLeft' .. GameTooltip:NumLines()]:GetText()")
+        .unwrap();
+    assert_eq!(
+        last,
+        s.eval::<String>("return format(FEATURE_BECOMES_AVAILABLE_AT_LEVEL, 10)")
+            .unwrap()
+    );
+    super::test_ui::unhover(&mut s);
 
     set_player_level(&mut s, 10);
     s.resolve();
-    assert!(
-        s.eval::<bool>("return TalentMicroButton:IsVisible()")
-            .unwrap(),
-        "the button returns at 10"
-    );
     assert_eq!(
-        left_of(&s, "QuestLogMicroButton"),
-        553.0 + 26.0 * 3.0,
-        "…and the tail goes back out, at the gate's own −2"
+        s.eval::<(i64, f64)>("return TalentMicroButton:IsEnabled(), TalentMicroButton:GetAlpha()")
+            .unwrap(),
+        (1, 1.0),
+        "the button comes up at 10"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// The template's `OnEnter` (`MainMenuBarMicroButtons.xml:12`) reads `this`, so the hover goes
-/// through the engine; a bound label gains its key on `UPDATE_BINDINGS`.
+/// The template's `OnEnter` (MainMenuBarMicroButtons.xml:12-20) writes the label, the newbie line
+/// and a blank line; the spellbook's own `OnEnter` (:104-107) omits the blank, and the main menu
+/// button's (:424-427) only arms its latency poll, whose plate `perf_bar_tests` covers. A bound
+/// label gains its key on `UPDATE_BINDINGS`.
 #[test]
 fn every_micro_button_hovers_with_its_reference_explanation() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = harness();
+    set_player_level(&mut s, 80);
     s.run("SHOW_NEWBIE_TIPS = \"1\"").unwrap();
     crate::ui_script::load_stock_bindings(&mut s);
     assert_eq!(
@@ -225,50 +232,58 @@ fn every_micro_button_hovers_with_its_reference_explanation() {
     s.fire_event("UPDATE_BINDINGS", vec![]);
     s.resolve();
 
-    for (button, label, newbie) in [
+    for (button, label, newbie, lines) in [
         (
             "CharacterMicroButton",
             "CHARACTER_BUTTON",
             "NEWBIE_TOOLTIP_CHARACTER",
+            3,
         ),
-        // The spellbook's own `OnEnter` (`MainMenuBarMicroButtons.xml:79`) picks its label.
         (
             "SpellbookMicroButton",
-            "PlayerHasSpells() and SPELLBOOK_ABILITIES_BUTTON or ABILITYBOOK_BUTTON",
+            "SPELLBOOK_ABILITIES_BUTTON",
             "NEWBIE_TOOLTIP_SPELLBOOK",
+            2,
         ),
         (
             "TalentMicroButton",
             "TALENTS_BUTTON",
             "NEWBIE_TOOLTIP_TALENTS",
+            3,
+        ),
+        (
+            "AchievementMicroButton",
+            "ACHIEVEMENT_BUTTON",
+            "NEWBIE_TOOLTIP_ACHIEVEMENT",
+            4, // no achievement yet: disabled, plus the red "available at" line (.lua:103-108)
         ),
         (
             "QuestLogMicroButton",
             "QUESTLOG_BUTTON",
             "NEWBIE_TOOLTIP_QUESTLOG",
+            3,
         ),
         (
             "SocialsMicroButton",
             "SOCIAL_BUTTON",
             "NEWBIE_TOOLTIP_SOCIAL",
+            3,
         ),
+        ("PVPMicroButton", "PLAYER_V_PLAYER", "NEWBIE_TOOLTIP_PVP", 3),
         (
-            "WorldMapMicroButton",
-            "WORLDMAP_BUTTON",
-            "NEWBIE_TOOLTIP_WORLDMAP",
+            "LFDMicroButton",
+            "DUNGEONS_BUTTON",
+            "NEWBIE_TOOLTIP_LFGPARENT",
+            3,
         ),
-        (
-            "MainMenuMicroButton",
-            "MAINMENU_BUTTON",
-            "NEWBIE_TOOLTIP_MAINMENU",
-        ),
-        ("HelpMicroButton", "HELP_BUTTON", "NEWBIE_TOOLTIP_HELP"),
+        ("HelpMicroButton", "HELP_BUTTON", "NEWBIE_TOOLTIP_HELP", 3),
     ] {
         super::test_ui::hover(&mut s, button);
         assert_eq!(
             s.eval::<i64>("return GameTooltip:NumLines()").unwrap(),
-            2,
-            "{button}: the label, then the explanation"
+            lines,
+            "{button}: the label, the explanation{}",
+            if lines >= 3 { ", the blank line" } else { "" }
         );
         let label = s.eval::<String>(&format!("return {label}")).unwrap();
         let line1 = s
@@ -284,20 +299,13 @@ fn every_micro_button_hovers_with_its_reference_explanation() {
             s.eval::<String>(&format!("return {newbie}")).unwrap(),
             "{button}: line 2 is the reference's {newbie}, verbatim"
         );
-        assert_eq!(
-            s.eval::<i64>("return GameTooltip.default").unwrap(),
-            1,
-            "{button}: the default-corner anchor, not ANCHOR_RIGHT off the button"
-        );
         super::test_ui::unhover(&mut s);
     }
 
     super::test_ui::hover(&mut s, "CharacterMicroButton");
-    let line1 = s
-        .eval::<String>("return GameTooltipTextLeft1:GetText()")
-        .unwrap();
     assert_eq!(
-        line1,
+        s.eval::<String>("return GameTooltipTextLeft1:GetText()")
+            .unwrap(),
         s.eval::<String>(
             "return CHARACTER_BUTTON .. \" \" .. NORMAL_FONT_COLOR_CODE .. \"(C)\" .. FONT_COLOR_CODE_CLOSE"
         )
@@ -307,82 +315,31 @@ fn every_micro_button_hovers_with_its_reference_explanation() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// The whole manifest, since `UpdateMicroButtons` reads every panel. A ding pulses the talent
-/// button for 60 s unless the character sheet is open (`MainMenuBarMicroButtons.lua:120`).
+/// `UpdateMicroButtons` holds a button down while its panel is open, and a ding pulses the talent
+/// button for 60 s unless the character sheet is open (MainMenuBarMicroButtons.lua:173-179,
+/// `SetButtonPulse`, UIParent.lua:2624-2631).
 #[test]
 fn a_micro_button_pushes_while_its_panel_is_open_and_the_talent_button_pulses_on_a_ding() {
     let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    // A player exists before the manifest loads; the sheet formats its race and class.
-    s.set_unit(
-        "player",
-        Some(UnitState {
-            exists: true,
-            name: Some("Probefour".into()),
-            level: 60,
-            race: Some("Night Elf".into()),
-            race_file: Some("NightElf".into()),
-            class: Some("Warrior".into()),
-            class_file: Some("WARRIOR".into()),
-            sex: 2,
-            is_player: true,
-            player_controlled: true,
-            ..Default::default()
-        }),
-    );
-    // The app runs GlobalStrings ahead of the manifest; the ding's chat lines format through it.
-    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
-    assert!(super::load_default_ui(&mut s).is_empty());
+    let mut s = harness();
+    set_player_level(&mut s, 60);
     s.resolve();
-
     let state = |s: &UiScript, button: &str| {
         s.eval::<String>(&format!("return {button}:GetButtonState()"))
             .unwrap()
     };
-    let face = |s: &UiScript| {
-        s.eval::<f64>("return MicroButtonPortrait:GetAlpha()")
-            .unwrap()
-    };
 
-    assert_eq!(state(&s, "CharacterMicroButton"), "NORMAL");
-    assert_eq!(face(&s), 1.0);
-    // The button's `OnClick` (`MainMenuBarMicroButtons.xml:49`); the sheet's `OnShow` calls back.
-    s.run("ToggleCharacter(\"PaperDollFrame\")").unwrap();
+    assert_eq!(state(&s, "SpellbookMicroButton"), "NORMAL");
+    s.run("ToggleSpellBook(BOOKTYPE_SPELL)").unwrap();
     assert_eq!(
-        state(&s, "CharacterMicroButton"),
+        state(&s, "SpellbookMicroButton"),
         "PUSHED",
-        "open sheet ⇒ button held down"
+        "open book ⇒ held down"
     );
-    assert_eq!(
-        face(&s),
-        0.5,
-        "…and the face dims (CharacterMicroButton_SetPushed)"
-    );
-    s.run("ToggleCharacter(\"PaperDollFrame\")").unwrap();
-    assert_eq!(state(&s, "CharacterMicroButton"), "NORMAL");
-    assert_eq!(face(&s), 1.0);
+    s.run("ToggleSpellBook(BOOKTYPE_SPELL)").unwrap();
+    assert_eq!(state(&s, "SpellbookMicroButton"), "NORMAL");
 
-    s.run("ToggleWorldMap()").unwrap();
-    assert_eq!(state(&s, "WorldMapMicroButton"), "PUSHED");
-    s.run("ToggleWorldMap()").unwrap();
-    assert_eq!(state(&s, "WorldMapMicroButton"), "NORMAL");
-
-    // The nine args `ui_unit` fires: level, health, power, talent points, five stats.
-    s.fire_event(
-        "PLAYER_LEVEL_UP",
-        vec![
-            ScriptValue::Int(61),
-            ScriptValue::Int(12),
-            ScriptValue::Int(0),
-            ScriptValue::Int(1),
-            ScriptValue::Int(1),
-            ScriptValue::Int(1),
-            ScriptValue::Int(1),
-            ScriptValue::Int(0),
-            ScriptValue::Int(0),
-        ],
-    );
+    s.fire_event("PLAYER_LEVEL_UP", vec![ScriptValue::Int(61)]);
     assert_eq!(
         s.eval::<f64>("return TalentMicroButton.pulseTimeLeft")
             .unwrap(),

@@ -1,4 +1,7 @@
-//! The stock tutorial alerts and window (`TutorialFrame.xml`), driven by `TUTORIAL_TRIGGER`.
+//! The stock 3.3.5 tutorial window (`TutorialFrame.xml`), driven by `TUTORIAL_TRIGGER`: one alert
+//! button over a queue, and out of combat a new tutorial opens the window at once
+//! (`TutorialFrame_NewTutorial`, TutorialFrame.lua:814-842). 1.12's numbered alert buttons, the
+//! window's "Display Tips" box (moved to the Interface Options) and its `CINEMATIC_STOP` arm are gone.
 
 use benilla_ui::script::{ScriptValue, UiScript};
 
@@ -7,22 +10,9 @@ use super::test_ui::load_ui as load_xml;
 fn session() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    s.run("function PlaySound() end").unwrap();
-    for f in [
-        "Interface\\FrameXML\\GlobalStrings.lua",
-        "Interface\\FrameXML\\Fonts.xml",
-        "Interface\\FrameXML\\Localization.xml",
-        "Interface\\FrameXML\\BasicControls.xml",
-        r"Interface\FrameXML\UIParent.xml",
-        r"Interface\FrameXML\MoneyFrame.lua",
-        r"Interface\FrameXML\MoneyFrame.xml",
-        "Interface\\FrameXML\\GameTooltip.xml",
-        r"Interface\FrameXML\UIPanelTemplates.lua",
-        r"Interface\FrameXML\UIPanelTemplates.xml",
-        "Interface\\FrameXML\\TutorialFrame.xml",
-    ] {
-        load_xml(&mut s, f);
-    }
+    load_xml(&mut s, "Interface\\FrameXML\\TutorialFrame.xml");
+    // A fresh character's completed bank: nothing flagged yet.
+    s.set_wrath_tutorial_banks(Some(vec![0; 8]), Some(vec![0; 8]));
     s.resolve();
     s
 }
@@ -32,98 +22,57 @@ fn visible(s: &UiScript, frame: &str) -> bool {
         .unwrap()
 }
 
-fn trigger(s: &mut UiScript, published: i64) {
-    s.fire_event("TUTORIAL_TRIGGER", vec![ScriptValue::Int(published)]);
+fn title(s: &UiScript) -> String {
+    s.eval::<String>("return TutorialFrameTitle:GetText()")
+        .unwrap()
 }
 
-/// The click's `FlagTutorial` takes the published id; the app drains it 0-based.
+fn trigger(s: &mut UiScript, id: i64) {
+    s.fire_event("TUTORIAL_TRIGGER", vec![ScriptValue::Int(id)]);
+}
+
+/// A trigger out of combat shows the alert and opens the window on it, which flags it
+/// (`TutorialFrame_Update`, TutorialFrame.lua:649-686); a second waits in the queue until Okay
+/// (`TutorialFrame_Hide`, :873-879) opens it.
 #[test]
-fn a_trigger_queues_an_alert_whose_click_opens_the_window_and_flags_it() {
+fn a_trigger_opens_the_window_and_a_second_waits_for_okay() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = session();
-    assert!(!visible(&s, "TutorialFrameAlertButton1"));
+    assert!(!visible(&s, "TutorialFrameAlertButton"));
     assert!(!visible(&s, "TutorialFrame"));
 
     trigger(&mut s, 41);
+    assert!(visible(&s, "TutorialFrameAlertButton"), "the alert shows");
     assert!(
-        visible(&s, "TutorialFrameAlertButton1"),
-        "the alert button shows"
+        visible(&s, "TutorialFrame"),
+        "out of combat it opens at once"
     );
-    assert_eq!(
-        s.eval::<String>("return TutorialFrameAlertButton1.tooltip")
-            .unwrap(),
-        "Elite Quests"
-    );
-    trigger(&mut s, 42);
-    assert!(
-        visible(&s, "TutorialFrameAlertButton2"),
-        "a second id takes the next button"
-    );
-
-    s.run("TutorialFrameAlertButton1:Click()").unwrap();
-    assert!(visible(&s, "TutorialFrame"), "the click opens the window");
-    assert_eq!(
-        s.eval::<String>("return TutorialFrameTitle:GetText()")
-            .unwrap(),
-        "Elite Quests"
-    );
+    assert_eq!(title(&s), "Elite Quests");
     assert!(s
         .eval::<String>("return TutorialFrameText:GetText()")
         .unwrap()
         .starts_with("You have accepted an elite quest"));
-    assert_eq!(
-        s.take_tutorial_flag_requests(),
-        vec![40],
-        "FlagTutorial(41) → the 0-based id"
-    );
     assert!(
-        !visible(&s, "TutorialFrameAlertButton1"),
-        "the clicked alert is spent; the other stays"
+        s.eval::<bool>("return IsTutorialFlagged(41) == 1").unwrap(),
+        "opening it flags it"
     );
-    assert!(visible(&s, "TutorialFrameAlertButton2"));
 
-    // Okay hides it; the checkbox is ticked, so nothing is cleared.
+    trigger(&mut s, 42);
+    assert_eq!(
+        title(&s),
+        "Elite Quests",
+        "the open window keeps its tutorial"
+    );
+    assert!(!s.eval::<bool>("return IsTutorialFlagged(42) == 1").unwrap());
+
     s.run("TutorialFrameOkayButton:Click()").unwrap();
-    assert!(!visible(&s, "TutorialFrame"));
-    assert_eq!(s.take_tutorial_clears(), 0);
-}
+    assert!(visible(&s, "TutorialFrame"), "Okay opens the queued one");
+    assert_eq!(title(&s), "Welcome to World of Warcraft!");
+    assert!(s.eval::<bool>("return IsTutorialFlagged(42) == 1").unwrap());
 
-/// Hiding with "Display Tips" unticked clears every tutorial (`TutorialFrame.lua:7`).
-#[test]
-fn an_unticked_checkbox_clears_the_tutorials_on_hide() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = session();
+    // A flagged tutorial never re-queues.
+    s.run("TutorialFrameOkayButton:Click()").unwrap();
     trigger(&mut s, 41);
-    trigger(&mut s, 42);
-    s.run("TutorialFrameAlertButton1:Click()").unwrap();
-    let _ = s.take_tutorial_flag_requests();
-    s.run("TutorialFrameCheckButton:SetChecked(nil) TutorialFrame:Hide()")
-        .unwrap();
-    assert_eq!(s.take_tutorial_clears(), 1, "ClearTutorials() on hide");
-    assert!(
-        !visible(&s, "TutorialFrameAlertButton2"),
-        "every alert dropped"
-    );
-}
-
-/// `CINEMATIC_STOP` clicks a queued Welcome alert, id 42, and centres the window
-/// (`TutorialFrame.lua:104`).
-#[test]
-fn cinematic_stop_opens_the_welcome_window() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = session();
-    trigger(&mut s, 42);
-    trigger(&mut s, 1);
-    s.fire_event("CINEMATIC_STOP", vec![]);
-    assert!(visible(&s, "TutorialFrame"));
-    assert_eq!(
-        s.eval::<String>("return TutorialFrameTitle:GetText()")
-            .unwrap(),
-        "Welcome to World of Warcraft!"
-    );
-    assert_eq!(s.take_tutorial_flag_requests(), vec![41]);
-    assert!(
-        visible(&s, "TutorialFrameAlertButton2"),
-        "the Questgivers alert stays queued"
-    );
+    assert!(!visible(&s, "TutorialFrame"), "41 is already flagged");
+    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }

@@ -1,5 +1,5 @@
-//! The stock screenshot status line (`WorldFrame.xml`'s `ScreenshotStatus`), which must never be
-//! in the picture it announces.
+//! The stock screenshot status line, 3.3.5's `ActionStatus` (`WorldFrame.xml:42-60`, 1.12's
+//! `ScreenshotStatus`), which must never be in the picture it announces.
 
 use benilla_ui::script::UiScript;
 
@@ -26,17 +26,16 @@ fn harness() -> UiScript {
 }
 
 fn shown(s: &UiScript) -> bool {
-    s.eval::<bool>("return ScreenshotStatus:IsVisible()")
-        .unwrap()
+    s.eval::<bool>("return ActionStatus:IsVisible()").unwrap()
 }
 
 fn text(s: &UiScript) -> String {
-    s.eval::<String>("return ScreenshotStatusText:GetText() or \"\"")
+    s.eval::<String>("return ActionStatusText:GetText() or \"\"")
         .unwrap()
 }
 
 fn alpha(s: &UiScript) -> f64 {
-    s.eval::<f64>("return ScreenshotStatus:GetAlpha()").unwrap()
+    s.eval::<f64>("return ActionStatus:GetAlpha()").unwrap()
 }
 
 /// The line appears only on the engine's answer, frames after the capture.
@@ -64,7 +63,7 @@ fn the_capture_is_asked_for_silently_and_only_the_answer_speaks() {
     assert_eq!(alpha(&s), 1.0);
 }
 
-/// `TakeScreenshot` hides a line still fading before it calls `Screenshot()` (`WorldFrame.lua:47`).
+/// `TakeScreenshot` hides a line still fading before it calls `Screenshot()` (`WorldFrame.lua:77-82`).
 #[test]
 fn a_second_press_inside_the_fade_clears_the_line_before_capturing() {
     benilla_formats::wow_data_or_skip!();
@@ -81,26 +80,26 @@ fn a_second_press_inside_the_fade_clears_the_line_before_capturing() {
     );
     assert_eq!(s.take_screenshot_asks(), 1);
 
-    // The new answer restarts at full alpha (`WorldFrame.lua:60`).
+    // The new answer restarts at full alpha (`ActionStatus_DisplayMessage`, `WorldFrame.lua:98-106`).
     s.fire_event("SCREENSHOT_SUCCEEDED", Vec::new());
     assert_eq!(alpha(&s), 1.0);
 }
 
-/// `SCREENSHOT_STATUS_FADETIME` is 1.5 s (`WorldFrame.lua:44`).
+/// `ACTION_STATUS_FADETIME` is 2.0 s (`WorldFrame.lua:75`, `:108-115`).
 #[test]
-fn the_line_fades_out_over_the_reference_s_second_and_a_half() {
+fn the_line_fades_out_over_the_references_two_seconds() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness();
     s.fire_event("SCREENSHOT_SUCCEEDED", Vec::new());
 
-    s.tick(0.75);
+    s.tick(1.0);
     let half = alpha(&s);
     assert!(
         (half - 0.5).abs() < 1e-3,
-        "halfway through 1.5 s the line is at half alpha, got {half}"
+        "halfway through 2 s the line is at half alpha, got {half}"
     );
 
-    s.tick(0.75);
+    s.tick(1.0);
     assert!(!shown(&s), "and it is gone at the end of the fade");
 }
 

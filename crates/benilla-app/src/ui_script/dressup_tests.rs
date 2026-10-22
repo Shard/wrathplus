@@ -1,16 +1,32 @@
 //! The dressing room and the chat-link insert through the real click paths: CTRL opens the room
 //! wearing the item, SHIFT posts its link into an open chat box, and at a bag slot SHIFT with chat
-//! closed still opens the stack splitter. The stock handlers read `this`, so these drive the mouse.
+//! closed still opens the stack splitter. 3.3.5's `DressUpItemLink` dresses only what
+//! `IsDressableItem` admits (DressUpFrame.lua:2-11), and each chat window has its own edit box.
 
 use benilla_ui::script::{
-    ContainerSlot, ContainerState, DressUpIntent, InvSlotView, InventorySlots, SoundRequest,
-    UiScript, UnitState,
+    ContainerSlot, ContainerState, DressUpIntent, InvSlotView, InventorySlots, ItemTemplateView,
+    SoundRequest, UiScript, UnitState,
 };
 
 use super::test_ui::{bag_slot_button, click, load_ui as load_xml, BAG_UI, CHARACTER_UI};
 
-/// A real 1.12 item link: Tough Jerky (117), quality white.
+/// A real 1.12 item link: Tough Jerky (117), quality white; it stacks, and it is not dressable.
 const JERKY_LINK: &str = "|cffffffff|Hitem:117|h[Tough Jerky]|h|r";
+/// A wearable item's link: Squire's Shirt (45), quality white.
+const SHIRT_LINK: &str = "|cffffffff|Hitem:45:0:0:0:0:0:0:0:80|h[Squire's Shirt]|h|r";
+
+/// The app's template push for a wearable item, which `IsDressableItem` reads.
+fn seat_wearable(s: &mut UiScript, item_id: u32, name: &str, icon: &str) {
+    s.set_item_template(
+        item_id,
+        ItemTemplateView {
+            name: name.into(),
+            quality: 1,
+            icon: Some(icon.into()),
+            ..Default::default()
+        },
+    );
+}
 
 /// The room's own files, in the production order; both loaders end with these.
 const ROOM_UI: &[&str] = &[
@@ -105,7 +121,8 @@ fn shown_paper_doll() -> UiScript {
     s
 }
 
-/// Opens a backpack holding 5 Tough Jerky in slot 1 and returns the name of that slot's button,
+/// Opens a backpack holding 5 Tough Jerky in slot 1 and a Squire's Shirt in slot 2, and returns
+/// the name of slot 1's button (`bag_slot_button(s, 0, 2)` names the shirt's),
 /// asked of the buttons: the stock windows are recycled and number their buttons backwards.
 fn backpack_with_jerky(s: &mut UiScript) -> String {
     s.set_money(0);
@@ -121,6 +138,24 @@ fn backpack_with_jerky(s: &mut UiScript) -> String {
             link: Some(JERKY_LINK.into()),
             ..Default::default()
         },
+    );
+    slots.insert(
+        2,
+        ContainerSlot {
+            bar_placeable: true,
+            texture: Some("Interface\\Icons\\INV_Shirt_Grey_01".into()),
+            count: 1,
+            quality: Some(1),
+            item_id: 45,
+            link: Some(SHIRT_LINK.into()),
+            ..Default::default()
+        },
+    );
+    seat_wearable(
+        s,
+        45,
+        "Squire's Shirt",
+        "Interface\\Icons\\INV_Shirt_Grey_01",
     );
     s.set_container(
         0,
@@ -144,7 +179,8 @@ fn ctrl_click_on_a_bag_item_opens_the_room_wearing_it() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_room_with_bags(&mut s);
-    let btn = backpack_with_jerky(&mut s);
+    let _ = backpack_with_jerky(&mut s);
+    let btn = bag_slot_button(&mut s, 0, 2);
     assert!(!s.eval::<bool>("return DressUpFrame:IsVisible()").unwrap());
 
     // Modifiers go in before the click, as the app's input pass sends them.
@@ -158,7 +194,7 @@ fn ctrl_click_on_a_bag_item_opens_the_room_wearing_it() {
     );
     assert_eq!(
         s.take_dressup_intents(),
-        vec![DressUpIntent::Dress, DressUpIntent::TryOn(117)],
+        vec![DressUpIntent::Dress, DressUpIntent::TryOn(45)],
         "re-dress first, then try the clicked item on"
     );
     assert!(
@@ -187,14 +223,15 @@ fn shift_click_posts_the_link_with_chat_open_and_splits_with_it_closed() {
     );
     s.run("StackSplitFrame:Hide()").unwrap();
 
-    assert!(s.focus_editbox("ChatFrameEditBox"));
+    // 3.3.5's `ChatEdit_InsertLink` writes to the active box `ChatFrame_OpenChat` seats.
+    s.run("ChatFrame_OpenChat('')").unwrap();
     s.set_modifiers(true, false, false);
     click(&mut s, &btn, "LeftButton");
     s.set_modifiers(false, false, false);
     assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
+        s.eval::<String>("return ChatFrame1EditBox:GetText()")
             .unwrap(),
-        JERKY_LINK,
+        format!(" {JERKY_LINK}"),
         "the item's full escaped link landed in the chat box"
     );
     assert!(
@@ -216,17 +253,23 @@ fn ctrl_clicking_a_chat_link_previews_it() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_room(&mut s);
+    seat_wearable(
+        &mut s,
+        45,
+        "Squire's Shirt",
+        "Interface\\Icons\\INV_Shirt_Grey_01",
+    );
 
     s.set_modifiers(false, true, false);
     s.run(&format!(
-        "SetItemRef(\"item:117\", \"{JERKY_LINK}\", \"LeftButton\")"
+        "SetItemRef(\"item:45\", \"{SHIRT_LINK}\", \"LeftButton\")"
     ))
     .unwrap();
     s.set_modifiers(false, false, false);
 
     assert_eq!(
         s.take_dressup_intents(),
-        vec![DressUpIntent::Dress, DressUpIntent::TryOn(117)],
+        vec![DressUpIntent::Dress, DressUpIntent::TryOn(45)],
         "a chat link's id reached TryOn through DressUpItemLink's own gsub"
     );
     assert!(
@@ -254,6 +297,7 @@ fn the_paper_doll_slots_preview_and_post_what_you_wear() {
         ..Default::default()
     });
     s.set_inventory_slots(slots);
+    seat_wearable(&mut s, 1234, "Test Helm", "Interface\\Icons\\INV_Helmet_01");
     assert_eq!(
         s.eval::<String>("return GetInventoryItemLink(\"player\", 1)")
             .unwrap(),
@@ -271,14 +315,15 @@ fn the_paper_doll_slots_preview_and_post_what_you_wear() {
         vec![DressUpIntent::Dress, DressUpIntent::TryOn(1234)]
     );
 
-    assert!(s.focus_editbox("ChatFrameEditBox"));
+    // 3.3.5's `ChatEdit_InsertLink` writes to the active box `ChatFrame_OpenChat` seats.
+    s.run("ChatFrame_OpenChat('')").unwrap();
     s.set_modifiers(true, false, false);
     click(&mut s, "CharacterHeadSlot", "LeftButton");
     s.set_modifiers(false, false, false);
     assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
+        s.eval::<String>("return ChatFrame1EditBox:GetText()")
             .unwrap(),
-        "|cff1eff00|Hitem:1234:0:0:0|h[Test Helm]|h|r"
+        " |cff1eff00|Hitem:1234:0:0:0|h[Test Helm]|h|r"
     );
     assert!(
         s.cursor_item().is_none(),
@@ -305,13 +350,14 @@ fn shift_clicking_an_unresolved_slot_posts_nothing_and_never_raises() {
     s.run(r#"ToggleCharacter("PaperDollFrame")"#).unwrap();
     let _ = s.take_dressup_intents();
     s.resolve();
-    assert!(s.focus_editbox("ChatFrameEditBox"));
+    // 3.3.5's `ChatEdit_InsertLink` writes to the active box `ChatFrame_OpenChat` seats.
+    s.run("ChatFrame_OpenChat('')").unwrap();
 
     s.set_modifiers(true, false, false);
     click(&mut s, "CharacterHeadSlot", "LeftButton");
     s.set_modifiers(false, false, false);
     assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
+        s.eval::<String>("return ChatFrame1EditBox:GetText()")
             .unwrap(),
         "",
         "nothing posts while the template is in flight"

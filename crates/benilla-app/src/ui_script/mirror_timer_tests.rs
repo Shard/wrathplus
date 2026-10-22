@@ -24,8 +24,19 @@ fn harness() -> UiScript {
     s
 }
 
-/// `MIRROR_TIMER_START` as `ui_mirror::feed_mirror_timers` fires it: the timer name, ms left,
-/// ms total, the signed rate, the paused flag, the caption.
+/// The 12340 slot a timer name keys (`EXHAUSTION` 0, `BREATH` 1, `FEIGNDEATH` 2).
+fn slot(name: &str) -> usize {
+    match name {
+        "EXHAUSTION" => 0,
+        "BREATH" => 1,
+        _ => 2,
+    }
+}
+
+/// `MIRROR_TIMER_START` as `ui_mirror::feed_mirror_timers` sends it: the slot table that
+/// `GetMirrorTimerInfo`/`GetMirrorTimerProgress` read (3.3.5's `MirrorTimerFrame_OnUpdate` polls
+/// the progress, MirrorTimer.lua:110-117), then the event with the timer name, ms left, ms total,
+/// the signed rate, the paused flag and the caption.
 fn start(
     s: &mut UiScript,
     name: &str,
@@ -34,6 +45,18 @@ fn start(
     scale: i64,
     label: &str,
 ) {
+    let started = s.now();
+    s.set_wrath_mirror_timer(
+        slot(name),
+        Some(benilla_ui::script::WrathMirrorTimer {
+            value: remaining_ms as i32,
+            max_value: duration_ms as i32,
+            scale: scale as i32,
+            paused: false,
+            label: label.into(),
+            started,
+        }),
+    );
     s.fire_event(
         "MIRROR_TIMER_START",
         vec![
@@ -77,11 +100,18 @@ fn caption(s: &UiScript, frame: &str) -> Option<String> {
         .unwrap()
 }
 
-/// One app tick in order (`tick_script`, then `paint_script`): OnUpdate, resolve, draw list.
+/// One app tick in order (`tick_script`, then `paint_script`): OnUpdate, resolve, draw list. Only
+/// the mirror timers' quads: the seated session's other bars share `UI-StatusBar`.
 fn frame(s: &mut UiScript, dt: f32) -> Vec<ExtractedQuad> {
     s.tick(dt);
     s.resolve();
     s.extract()
+        .into_iter()
+        .filter(|q| {
+            s.target_owner_name(q.target)
+                .is_some_and(|n| n.starts_with("MirrorTimer"))
+        })
+        .collect()
 }
 
 fn tex_quad<'a>(quads: &'a [ExtractedQuad], leaf: &str) -> Option<&'a ExtractedQuad> {
@@ -239,6 +269,8 @@ fn stop_hides_that_timer_and_frees_its_frame() {
     start(&mut s, "EXHAUSTION", 60_000, 60_000, -1, "Fatigue");
     start(&mut s, "BREATH", 45_000, 60_000, -1, "Breath");
 
+    s.set_wrath_mirror_timer(slot("EXHAUSTION"), None);
+
     s.fire_event(
         "MIRROR_TIMER_STOP",
         vec![ScriptValue::Str("EXHAUSTION".into())],
@@ -255,13 +287,18 @@ fn stop_hides_that_timer_and_frees_its_frame() {
     );
 }
 
+/// 3.3.5's world entry re-seats the bars from `GetMirrorTimerInfo` (MirrorTimer.lua:80-90): a
+/// running timer survives it, and with no timer running every bar hides.
 #[test]
-fn entering_the_world_clears_every_bar() {
+fn entering_the_world_restates_the_running_timers() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = harness();
-    start(&mut s, "EXHAUSTION", 60_000, 60_000, -1, "Fatigue");
     start(&mut s, "BREATH", 45_000, 60_000, -1, "Breath");
+    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
+    assert!(shown(&s, "MirrorTimer1"), "breath is still running");
+    assert_eq!(caption(&s, "MirrorTimer1").as_deref(), Some("Breath"));
 
+    s.set_wrath_mirror_timer(slot("BREATH"), None);
     s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
     for i in 1..=3 {
         assert!(!shown(&s, &format!("MirrorTimer{i}")), "MirrorTimer{i}");
@@ -273,6 +310,7 @@ fn a_stop_for_an_idle_timer_touches_nothing() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = harness();
     start(&mut s, "BREATH", 45_000, 60_000, -1, "Breath");
+    s.set_wrath_mirror_timer(slot("EXHAUSTION"), None);
     s.fire_event(
         "MIRROR_TIMER_STOP",
         vec![ScriptValue::Str("EXHAUSTION".into())],
@@ -316,6 +354,7 @@ fn a_stopped_timer_paints_nothing() {
     let mut s = harness();
     start(&mut s, "BREATH", 45_000, 60_000, -1, "Breath");
     frame(&mut s, 0.016);
+    s.set_wrath_mirror_timer(slot("BREATH"), None);
     s.fire_event("MIRROR_TIMER_STOP", vec![ScriptValue::Str("BREATH".into())]);
 
     let quads = frame(&mut s, 0.016);

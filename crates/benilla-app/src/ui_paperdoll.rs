@@ -7,8 +7,18 @@ use benilla_ui::script::{UiScript, WrathPaperDollStats, WrathStatConversions};
 use bevy::prelude::*;
 
 pub(crate) struct UiPaperDollPlugin;
+
+/// The two stat panes' selections (12340 `0x51ee5c`, `0x51ee7f`, default `""`): the stock sheet's
+/// `VARIABLES_LOADED` arm fills an empty one per class (PaperDollFrame.lua:161-175), and
+/// `PaperDollFrame_UpdateStats` reads both.
+pub(crate) const CVARS: &[crate::cvars::Registered] = &[
+    crate::cvars::same("playerStatLeftDropdown", ""),
+    crate::cvars::same("playerStatRightDropdown", ""),
+];
+
 impl Plugin for UiPaperDollPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.add_systems(Startup, load_tables.after(AssetSet::Open))
             .add_systems(Update, feed.in_set(crate::ui_unit::UnitFeed));
     }

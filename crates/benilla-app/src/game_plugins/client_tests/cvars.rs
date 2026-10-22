@@ -1113,7 +1113,8 @@ fn a_minimap_setzoom_reaches_the_knob_and_the_file() {
 
 /// The string-valued rows, a closed list, each default checked on its own terms: `realmName`
 /// (the reference's registered `""`, `0x882748`) and `gxApi` are empty until the session writes
-/// them; `gxResolution` and `realmList` pass their observers' parsers
+/// them, and the stat panes' `playerStat*Dropdown` (`""`) until the sheet's per-class fill;
+/// `gxResolution` and `realmList` pass their observers' parsers
 /// ([`crate::video::parse_resolution`], [`crate::realmlist::normalize`]).
 #[test]
 fn the_string_valued_cvars_are_the_realm_and_the_windowed_size() {
@@ -1123,15 +1124,8 @@ fn the_string_valued_cvars_are_the_realm_and_the_windowed_size() {
         .collect();
     strings.sort_unstable(); // the list is the claim, not where the rows sit in the table
     assert_eq!(
-        strings,
-        vec![
-            "gxApi",
-            "gxResolution",
-            "lfdCollapsedHeaders",
-            "lfdSelectedDungeons",
-            "realmList",
-            "realmName"
-        ]
+        strings.join(" "),
+        "gxApi gxResolution lfdCollapsedHeaders lfdSelectedDungeons playerStatLeftDropdown playerStatRightDropdown realmList realmName"
     );
     let default_of = |name: &str| {
         crate::shipped_cvars::rows()

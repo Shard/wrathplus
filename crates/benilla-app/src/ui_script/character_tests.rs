@@ -1,7 +1,7 @@
 //! The character window, engine-only: the reference's own `CharacterFrame.xml`,
 //! `PaperDollFrame.xml` and `PetPaperDollFrame.xml` off the player's patch chain, loaded through
-//! [`super::test_ui::CHARACTER_UI`]. Slot handlers are driven through the mouse: they read the
-//! frame from `this` (`PaperDollFrame.lua:647`), and only the engine sets `this`.
+//! [`super::test_ui::CHARACTER_UI`]. Slot handlers are driven through the mouse, as the engine
+//! dispatches them with the button as `self`.
 
 use benilla_ui::script::{
     ExtractedQuad, InvSlotView, InventorySlots, QuadContent, ScriptValue, SoundRequest, UiScript,
@@ -104,26 +104,35 @@ fn backpack_with_fitting_helm() -> benilla_ui::script::ContainerState {
     }
 }
 
-/// A frame count fingerprints the player's own file, not a target: it moves only when that does.
+/// The stock 3.3.5 character window, by its frames' names and kinds.
 #[test]
 fn shipped_character_frame_loads_clean() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    let mut counts = std::collections::HashMap::new();
     for f in super::test_ui::CHARACTER_UI {
-        counts.insert(*f, super::test_ui::load_ui_strict(&mut s, f));
+        super::test_ui::load_ui_strict(&mut s, f);
     }
     assert!(s.errors().is_empty(), "load errors: {:?}", s.errors());
-    assert_eq!(
-        counts.get("Interface\\FrameXML\\CharacterFrame.xml"),
-        Some(&8),
-        "the reference's own CharacterFrame.xml"
-    );
-    assert_eq!(
-        counts.get("Interface\\FrameXML\\PaperDollFrame.xml"),
-        Some(&75),
-        "the reference's own PaperDollFrame.xml"
-    );
+    // The kit seats the whole session, so the claim is the stock 3.3.5 names and kinds.
+    for (name, kind) in [
+        ("CharacterFrame", "Frame"),
+        ("CharacterFrameTab5", "Button"),
+        ("PaperDollFrame", "Frame"),
+        ("PlayerStatFrameLeft1", "Frame"),
+        ("PlayerStatFrameRight6", "Frame"),
+        ("PlayerStatFrameLeftDropDown", "Frame"),
+        ("CharacterHeadSlot", "Button"),
+        ("CharacterModelFrame", "PlayerModel"),
+        ("PetPaperDollFrame", "Frame"),
+    ] {
+        assert_eq!(
+            s.eval::<Option<String>>(&format!("return {name} and {name}:GetObjectType()"))
+                .unwrap()
+                .as_deref(),
+            Some(kind),
+            "{name}"
+        );
+    }
 }
 
 /// Opens with `ToggleCharacter`, the `C` binding's entry point, reads the snapshot lines, hovers,
@@ -142,6 +151,13 @@ fn shipped_character_frame_drives_end_to_end() {
     s.set_unit("player", Some(player_unit()));
     s.set_player_combat_stats(Some(combat_stats()));
     s.set_inventory_slots(inventory_with_head_item());
+    // A warrior's saved pane choices, as the sheet's `VARIABLES_LOADED` arm writes them on a first
+    // login (PaperDollFrame.lua:161-175): base stats left, melee right.
+    s.run(
+        "SetCVar('playerStatLeftDropdown', 'PLAYERSTAT_BASE_STATS') \
+         SetCVar('playerStatRightDropdown', 'PLAYERSTAT_MELEE_COMBAT')",
+    )
+    .unwrap();
 
     assert!(
         s.take_sounds().is_empty(),
@@ -168,29 +184,32 @@ fn shipped_character_frame_drives_end_to_end() {
             .unwrap(),
         "Level 12 Night Elf Warrior"
     );
-    // `PaperDollFrame_SetStats` colours a buffed stat green.
+    // `PaperDollFrame_SetStat` colours a buffed stat green (PaperDollFrame.lua:226-265), in 3.3.5's
+    // left pane (`UpdatePaperdollStats`, :1605).
     assert_eq!(
-        s.eval::<String>("return CharacterStatFrame1StatText:GetText()")
+        s.eval::<String>("return PlayerStatFrameLeft1StatText:GetText()")
             .unwrap(),
         "|cff20ff2015|r"
     );
-    // Labels are the template's `$parentLabel`, set in Lua (`PaperDollFrame.lua:7-13`, `:140`).
+    // Labels are the template's `$parentLabel`, set in Lua (`STAT_FORMAT`, PaperDollFrame.lua:235).
     assert_eq!(
-        s.eval::<String>("return CharacterStatFrame1Label:GetText()")
+        s.eval::<String>("return PlayerStatFrameLeft1Label:GetText()")
             .unwrap(),
         "Strength:"
     );
+    // The melee pane leads with damage (`PaperDollFrame_SetDamage`).
     assert_eq!(
-        s.eval::<String>("return CharacterAttackFrameLabel:GetText()")
+        s.eval::<String>("return PlayerStatFrameRight1Label:GetText()")
             .unwrap(),
-        "Melee Attack"
+        s.eval::<String>("return format(STAT_FORMAT, DAMAGE)")
+            .unwrap()
     );
     // GetLeft is nil until the first resolve.
     s.resolve();
     assert_eq!(
-        s.eval::<f32>("return CharacterStatFrame1Label:GetLeft()")
+        s.eval::<f32>("return PlayerStatFrameLeft1Label:GetLeft()")
             .unwrap(),
-        s.eval::<f32>("return CharacterStatFrame1:GetLeft()")
+        s.eval::<f32>("return PlayerStatFrameLeft1:GetLeft()")
             .unwrap(),
     );
     // One region, in GameFontNormalSmall: 10 px, 1.0/0.82/0 (`Fonts.xml:97-102`).
@@ -221,7 +240,7 @@ fn shipped_character_frame_drives_end_to_end() {
         "gold NORMAL_FONT_COLOR, got {c:?}"
     );
     assert_eq!(
-        s.eval::<String>("return CharacterArmorFrameStatText:GetText()")
+        s.eval::<String>("return PlayerStatFrameLeft6StatText:GetText()")
             .unwrap(),
         "120"
     );
@@ -229,12 +248,6 @@ fn shipped_character_frame_drives_end_to_end() {
     assert_eq!(
         s.eval::<String>("return MagicResText1:GetText()").unwrap(),
         "3"
-    );
-    // No ranged weapon: `PaperDollFrame_SetRangedAttack` shows N/A.
-    assert_eq!(
-        s.eval::<String>("return CharacterRangedAttackFrameStatText:GetText()")
-            .unwrap(),
-        "N/A"
     );
 
     // The app follows a snapshot push with this event; the slots repaint on the event.
@@ -896,12 +909,13 @@ fn a_keybind_page_switch_moves_the_tab_row_with_it() {
     // `ToggleCharacter` selects the tab by the page's id, so each page's id is the tab that shows
     // it (`CharacterFrame.lua:35-48`). `CHARACTERFRAME_SUBFRAMES` is a set, not the tab order:
     // Skills is its third entry and tab 4 (`CharacterFrame.lua:1`, `CharacterFrame.xml:79-168`).
-    let row: [(i64, &str); 5] = [
+    // Tab 5 is 3.3.5's Currency page, `TokenFrame` (id 5), which loads on demand with
+    // `Blizzard_TokenUI`; 1.12's Honor page is gone.
+    let row: [(i64, &str); 4] = [
         (1, "PaperDollFrame"),
         (2, "PetPaperDollFrame"),
         (3, "ReputationFrame"),
         (4, "SkillFrame"),
-        (5, "HonorFrame"),
     ];
     for (id, page) in row {
         assert_eq!(
@@ -917,8 +931,8 @@ fn a_keybind_page_switch_moves_the_tab_row_with_it() {
         // In the list `CharacterFrame_ShowSubFrame` sweeps (`CharacterFrame.lua:25-33`).
         assert!(
             s.eval::<bool>(&format!(
-                "for _, v in CHARACTERFRAME_SUBFRAMES do if v == \"{page}\" then return true end \
-                 end return false"
+                "for _, v in ipairs(CHARACTERFRAME_SUBFRAMES) do if v == \"{page}\" then return true \
+                 end end return false"
             ))
             .unwrap(),
             "{page} must be in CHARACTERFRAME_SUBFRAMES"
@@ -991,9 +1005,8 @@ fn a_keybind_page_switch_moves_the_tab_row_with_it() {
     assert!(s.errors().is_empty(), "no handler errors: {:?}", s.errors());
 }
 
-/// The template's `<OnShow>` fits a tab once with `PanelTemplates_TabResize(0)`: its text width
-/// plus the two end slices (`CharacterFrameTemplates.xml:78`, `UIPanelTemplates.lua:31-88`), from
-/// an authored 115.
+/// The template's `<OnShow>` fits the row with `PanelTemplates_TabResize(0)`: each tab's text
+/// width plus the two end slices (`CharacterFrameTemplates.xml:77-80`, `UIPanelTemplates.lua`).
 #[test]
 fn the_five_tabs_fit_their_labels_on_the_first_show() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -1021,63 +1034,40 @@ fn the_five_tabs_fit_their_labels_on_the_first_show() {
             })
             .collect()
     };
-    // `PetTab_Update` hides the pet tab without a pet (`PetPaperDollFrame.lua:189-197`), and a
-    // hidden tab gets no OnShow, so it keeps its authored width.
+    // 3.3.5's tab `OnShow` runs `CharacterFrame_TabBoundsCheck` (CharacterFrame.lua:129-160,
+    // CharacterFrameTemplates.xml:77-80), which fits all five tabs, hidden ones too; it trims the
+    // widest only while both the pet and the currency tabs show, and here the currency tab is hidden.
     assert!(
-        !s.eval::<bool>("return CharacterFrameTab2:IsVisible()")
+        !s.eval::<bool>("return CharacterFrameTab5:IsShown()")
             .unwrap(),
-        "the pet tab is off with no pet — the rest of this test rests on it"
+        "no currency yet: tab 5 starts hidden (CharacterFrame.xml:141)"
     );
-
     let first = widths(&mut s);
-    let fitted = |label: f64| label + SIDES;
-    for i in [0, 2, 3, 4] {
-        let (label, width) = first[i];
-        assert!(label > 0.0, "tab {} measured its label", i + 1);
+    for (i, (label, width)) in first.iter().enumerate() {
+        assert!(*label > 0.0, "tab {} measured its label", i + 1);
         assert_eq!(
-            width,
-            fitted(label),
-            "tab {} is its text plus the two end slices, from OnShow alone",
-            i + 1
-        );
-        assert_ne!(
-            width,
-            115.0,
-            "tab {} is still at the template's authored pre-fit",
+            *width,
+            label + SIDES,
+            "tab {} is its text plus the two end slices",
             i + 1
         );
     }
-    assert_eq!(
-        first[1].1, 115.0,
-        "…and the hidden pet tab is not yet fitted"
-    );
-
-    // Shown as a pet shows it, it fits on its own first show.
-    s.run("CharacterFrameTab2:Show()").unwrap();
-    s.resolve();
-    let (pet_label, pet_width) = widths(&mut s)[1];
-    assert_eq!(
-        pet_width,
-        fitted(pet_label),
-        "the pet tab fits when it is first shown"
-    );
 
     for _ in 0..3 {
         s.tick(0.016);
     }
     s.resolve();
-    let settled = widths(&mut s);
     assert_eq!(
-        settled[0], first[0],
-        "the fit is once, in OnShow — nothing re-fits per frame"
+        widths(&mut s),
+        first,
+        "the fit is in OnShow — nothing re-fits per frame"
     );
-    assert_eq!(&settled[2..], &first[2..], "…for the whole row");
     assert!(s.errors().is_empty(), "no handler errors: {:?}", s.errors());
 }
 
-/// `PanelTemplates_Tab_OnClick(frame)` selects `this:GetID()` on `frame`
-/// (`UIPanelTemplates.lua:2-4`): `this` is the clicked tab and the owner an argument, as an addon
-/// calls it from a tab's `<OnClick>` on a row of its own.
+/// 3.3.5's `PanelTemplates_Tab_OnClick(self, frame)` selects `self:GetID()` on `frame`
+/// (UIPanelTemplates.lua): the clicked tab first and the owner second, as an addon calls it from a
+/// tab's `<OnClick>` on a row of its own.
 #[test]
 fn an_addons_tab_click_selects_through_the_generic_entry_point() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -1116,12 +1106,12 @@ fn an_addons_tab_click_selects_through_the_generic_entry_point() {
     };
     assert_eq!(selected(&mut s), 1);
 
-    s.run("this = TabKitFrameTab2; PanelTemplates_Tab_OnClick(TabKitFrame); this = nil")
+    s.run("PanelTemplates_Tab_OnClick(TabKitFrameTab2, TabKitFrame)")
         .unwrap();
     assert_eq!(
         selected(&mut s),
         2,
-        "the kit takes the tab's OWN id from `this`, not from the frame it was handed"
+        "3.3.5's kit takes the tab's OWN id from `self`, not from the frame it was handed"
     );
     // The row repaints, not just the number.
     assert!(

@@ -135,7 +135,8 @@ fn a_summoner_whose_name_is_still_resolving_fills_in_on_a_later_tick() {
     );
 }
 
-/// OnUpdate disables Accept in combat but leaves the dialog up (`StaticPopup.lua:2547-2553`).
+/// OnUpdate disables Accept in combat, or while `PlayerCanTeleport()` is false, but leaves the
+/// dialog up (`StaticPopup.lua:2547-2553`).
 #[test]
 fn combat_locks_accept_without_taking_the_dialog_down() {
     benilla_formats::wow_data_or_skip!();
