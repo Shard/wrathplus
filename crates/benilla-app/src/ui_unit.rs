@@ -16,7 +16,7 @@ use crate::net::{
     FieldChanged, FieldEdges, Guid, NetCommands, NetHandlerApp, ObjectStore, Reputations,
     SelfPlayer,
 };
-use crate::target::{ring_reaction, Factions, Selection};
+use crate::target::{Factions, Selection};
 use crate::ui_script::{gate, UiInput};
 
 pub(crate) mod held;
@@ -711,16 +711,17 @@ impl SnapshotTables<'_> {
     }
 }
 
-/// `UnitReaction(unit, "player")` (`0x5167e0`): [`ring_reaction`] plus one (`0x51683e`), so
-/// `1..=7`, Hated to Revered, and Exalted reads 7 too (`0x606439`). Stock `UnitReactionColor`
-/// has seven entries (`TargetFrame.lua:6-14`), one per value.
+/// `UnitReaction(unit, "player")`: the unit's reaction toward us on `ctx`'s live inputs
+/// ([`crate::target::ring::ring_reaction_in`]) plus one, so `1..=8`, Hated to Exalted: 12340's
+/// standing rank is uncapped (`005d0600`).
 pub(crate) fn unit_reaction(
     factions: Option<&Factions>,
     reputations: &Reputations,
     store: &ObjectStore,
     self_store: Option<&ObjectStore>,
+    ctx: crate::target::RelationContext,
 ) -> u8 {
-    ring_reaction(factions, reputations, Some(store), self_store) + 1
+    crate::target::ring::ring_reaction_in(factions, reputations, Some(store), self_store, ctx) + 1
 }
 
 /// Build a unit snapshot from a streamed descriptor, its guid, its cached name and its

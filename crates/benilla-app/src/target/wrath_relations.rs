@@ -84,6 +84,9 @@ pub(crate) struct RelationInputs<'w, 's> {
     index: Option<Res<'w, GuidIndex>>,
     stores: Query<'w, 's, &'static ObjectStore>,
     world: WorldInputs<'w>,
+    /// The faction tables and standings the reaction reads beside the context.
+    factions: Option<Res<'w, super::Factions>>,
+    reputations: Option<Res<'w, crate::net::Reputations>>,
 }
 
 impl StoreLookup for RelationInputs<'_, '_> {
@@ -99,6 +102,31 @@ impl StoreLookup for RelationInputs<'_, '_> {
 impl RelationInputs<'_, '_> {
     pub(crate) fn context(&self) -> Context<'_> {
         Context::new(self.names.as_deref(), self)
+    }
+
+    /// [`super::ring::ring_reaction_in`] on these live inputs: `target`'s reaction toward `me`.
+    pub(crate) fn ring_reaction(
+        &self,
+        target: Option<&ObjectStore>,
+        me: Option<&ObjectStore>,
+    ) -> u8 {
+        let (factions, reps) = (self.factions.as_deref(), self.reputations());
+        super::ring::ring_reaction_in(factions, reps, target, me, self.context())
+    }
+
+    /// [`super::ring::can_interact_from_player`] on these live inputs.
+    pub(crate) fn can_interact(
+        &self,
+        target: Option<&ObjectStore>,
+        me: Option<&ObjectStore>,
+    ) -> bool {
+        let (factions, reps) = (self.factions.as_deref(), self.reputations());
+        super::ring::can_interact_from_player(factions, reps, target, me, self.context())
+    }
+
+    fn reputations(&self) -> &crate::net::Reputations {
+        static NONE: crate::net::Reputations = crate::net::Reputations(Vec::new());
+        self.reputations.as_deref().unwrap_or(&NONE)
     }
 }
 

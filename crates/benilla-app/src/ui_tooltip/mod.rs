@@ -124,6 +124,8 @@ fn drive_mouseover_tooltip(
     // `ChrClasses.dbc` field 16, `UnitHasRelicSlot`'s input, and the form table the creature type
     // reads.
     tables: SnapshotTables,
+    // `UnitReaction`'s live inputs: the group roster, forced reactions and owner lookup.
+    relations: crate::target::RelationInputs,
 ) {
     let Some(mut script) = script else {
         return;
@@ -141,7 +143,13 @@ fn drive_mouseover_tooltip(
         let name = names
             .resolve_unit(guid, Some(store), &commands)
             .map(str::to_string);
-        let reaction = unit_reaction(rx.factions.as_deref(), &rx.reputations, store, self_store);
+        let reaction = unit_reaction(
+            rx.factions.as_deref(),
+            &rx.reputations,
+            store,
+            self_store,
+            relations.context(),
+        );
         // The hovered guid, the pair `0x492890` writes to `0xb4e2c8`/`0xb4e2cc` and the token
         // resolver `0x515970` reads for `"mouseover"`, so `UnitIsUnit` can match it.
         let mut s = snapshot(store, guid, name, reaction, chr, types);

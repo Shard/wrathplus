@@ -32,7 +32,7 @@ use benilla_ui::script::{unit_is_grey, PlateGeometry, PlateState};
 use crate::entities::{overhead_anchor, BoneAttach, OverheadFallback};
 use crate::names::NameCache;
 use crate::net::{Guid, NetCommands, NetEntity, ObjectStore, Reputations, SelfPlayer};
-use crate::target::{ring_reaction, Factions, Hovered, Selection, TargetUpdate};
+use crate::target::{Factions, Hovered, Selection, TargetUpdate};
 use benilla_world::view::WorldCamera;
 
 /// The plate border, sharp-resampled so its 128x32 art stays crisp when magnified.
@@ -494,12 +494,7 @@ fn drive_vplates(
         // The category is `CanAttack` from the player (a rep faction answers by its at-war bit);
         // the bar colour is the unit's reaction toward us (by standing). A not-at-war neutral NPC
         // is a friendly plate with a yellow bar.
-        let rank = ring_reaction(
-            world.factions.as_deref(),
-            &world.reputations,
-            store,
-            self_store,
-        );
+        let rank = world.relations.ring_reaction(store, self_store);
         let friendly = crate::target::ring::plate_is_friendly(
             world.factions.as_deref(),
             &world.reputations,
