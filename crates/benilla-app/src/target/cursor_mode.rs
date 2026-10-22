@@ -708,12 +708,7 @@ pub(super) fn classify(
 
         // `CanInteract 0x6067f0`, asked at `0x482310` through `CanInteractNow 0x606880`, picks
         // the ladder; it is not a reaction threshold.
-        if super::can_interact(
-            Some(store),
-            factions.as_deref(),
-            reputations,
-            Some(self_store),
-        ) {
+        if relations.can_interact(Some(store), Some(self_store)) {
             let status = hovered
                 .guid
                 .and_then(|g| quest.wrath_statuses().get(&g).copied());

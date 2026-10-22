@@ -170,8 +170,6 @@ pub(super) fn load_factions(mut commands: Commands, world_assets: Option<Res<Wor
 #[allow(clippy::type_complexity)]
 pub(crate) fn update_ring(
     mut selection: ResMut<Selection>,
-    factions: Option<Res<Factions>>,
-    reputations: Res<Reputations>,
     flash: Res<CombatFlash>,
     mut state: ResMut<RingState>,
     camera: Query<&GlobalTransform, With<WorldCamera>>,
@@ -205,6 +203,7 @@ pub(crate) fn update_ring(
     self_store: Query<&ObjectStore, With<SelfPlayer>>,
     // Our auto-attack; both clear paths end it, as the reference's death and teardown edges do.
     engaged: Query<(), (With<Engaged>, With<SelfPlayer>)>,
+    relations: super::RelationInputs,
 ) {
     let state = &mut *state;
     let hide = match selection.target {
@@ -239,12 +238,7 @@ pub(crate) fn update_ring(
                         *fade_angle
                     })
                 };
-                let rank = ring_reaction(
-                    factions.as_deref(),
-                    &reputations,
-                    store,
-                    self_store.single().ok(),
-                );
+                let rank = relations.ring_reaction(store, self_store.single().ok());
                 let is_player = net.is_some_and(|n| n.kind == EntityKind::Player);
                 // The unit's own PvP state (Wrath `UNIT_FIELD_BYTES_2` byte 1 `0x01`, Vanilla
                 // `UNIT_FLAGS 0x1000`); the reference reads its charmer's or summoner's when it
@@ -389,9 +383,28 @@ pub(super) fn push_ring(
 }
 
 /// The target's reaction toward our player, `UnitReaction 007251c0` with the unit as `this`
-/// ([`super::wrath_relations::reaction::unit_reaction`]), the direction every NPC colour uses. Detached: no
-/// group roster, forced reactions or owner lookup (a pet's controller misses); a caller holding a
-/// [`super::wrath_relations::Context`] asks [`reaction_between`].
+/// ([`super::wrath_relations::reaction::unit_reaction`]), the direction every NPC colour uses, on
+/// `ctx`'s live inputs. [`ring_reaction`] is the detached form, for a caller holding no
+/// [`super::wrath_relations::Context`] (no group roster, forced reactions or owner lookup): the
+/// aura gate, the combat log, the quest markers, the vendor discount and the debug panel.
+pub(crate) fn ring_reaction_in(
+    factions: Option<&Factions>,
+    reputations: &Reputations,
+    target_store: Option<&ObjectStore>,
+    self_store: Option<&ObjectStore>,
+    ctx: super::wrath_relations::Context,
+) -> u8 {
+    reaction_between(
+        factions,
+        reputations,
+        target_store,
+        self_store,
+        self_store,
+        ctx,
+    )
+}
+
+/// [`ring_reaction_in`], detached.
 pub(crate) fn ring_reaction(
     factions: Option<&Factions>,
     reputations: &Reputations,
@@ -399,14 +412,7 @@ pub(crate) fn ring_reaction(
     self_store: Option<&ObjectStore>,
 ) -> u8 {
     let none = super::wrath_relations::Context::none();
-    reaction_between(
-        factions,
-        reputations,
-        target_store,
-        self_store,
-        self_store,
-        none,
-    )
+    ring_reaction_in(factions, reputations, target_store, self_store, none)
 }
 
 /// `UnitReaction 007251c0`, `from` toward `to`, with `me` the active player: neutral (3) until both
@@ -437,23 +443,23 @@ pub(crate) fn reaction_between(
 /// (`0x606217`, `0x60622f`), and `CanAttack` picks its reaction arm by it (`0x606a13`).
 const UNIT_FLAG_PVP_ATTACKABLE: u32 = 1 << 3;
 
-/// The local player's reaction toward a unit, `007251c0` with the player as `this`: a reputation
-/// faction answers by its at-war bit, never the standing, so a not-at-war neutral NPC is friendly
-/// here and neutral to [`ring_reaction`]. Detached, as [`ring_reaction`] is.
-pub(crate) fn reaction_from_player(
+/// The local player's reaction toward a unit, `007251c0` with the player as `this`, on `ctx`'s
+/// live inputs: a reputation faction answers by its at-war bit, never the standing, so a
+/// not-at-war neutral NPC is friendly here and neutral to [`ring_reaction_in`].
+pub(crate) fn reaction_from_player_in(
     factions: Option<&Factions>,
     reputations: &Reputations,
     target_store: Option<&ObjectStore>,
     self_store: Option<&ObjectStore>,
+    ctx: super::wrath_relations::Context,
 ) -> u8 {
-    let none = super::wrath_relations::Context::none();
     reaction_between(
         factions,
         reputations,
         self_store,
         target_store,
         self_store,
-        none,
+        ctx,
     )
 }
 
@@ -477,7 +483,7 @@ pub(crate) fn at_war_with(
 /// `CanInteract` from the local player (`0x6067f0`), the world cursor's service gate at
 /// `0x482310`: bit 25 of `UNIT_FIELD_FLAGS` clear (`0x606835`), some `UNIT_NPC_FLAGS`
 /// (`0x60683d`), and both reactions at least neutral, [`ring_reaction`] (`0x606847`) and
-/// [`reaction_from_player`] (`0x606854`). Not applied, each only ever making a unit less
+/// [`reaction_from_player_in`] (`0x606854`). Not applied, each only ever making a unit less
 /// interactable: the `CanInteractNow 0x606880` wrapper's gates (`0x606893`, charm, alive,
 /// shapeshift `0x60e9f0`, `0x613230`, `0x60ecd0`) and the ghost leg `0x605f70`.
 pub(crate) fn can_interact_from_player(
@@ -485,6 +491,7 @@ pub(crate) fn can_interact_from_player(
     reputations: &Reputations,
     target_store: Option<&ObjectStore>,
     self_store: Option<&ObjectStore>,
+    ctx: super::wrath_relations::Context,
 ) -> bool {
     let Some(target) = target_store else {
         return false; // fields not streamed yet
@@ -494,8 +501,8 @@ pub(crate) fn can_interact_from_player(
         return false;
     }
     const NEUTRAL: u8 = Reaction::Neutral as u8;
-    ring_reaction(factions, reputations, target_store, self_store) >= NEUTRAL
-        && reaction_from_player(factions, reputations, target_store, self_store) >= NEUTRAL
+    ring_reaction_in(factions, reputations, target_store, self_store, ctx) >= NEUTRAL
+        && reaction_from_player_in(factions, reputations, target_store, self_store, ctx) >= NEUTRAL
 }
 
 /// `CanAttack 00729740` from the local player (12340, [`super::wrath_relations::attack`]); the
@@ -699,7 +706,13 @@ pub(crate) mod tests {
                 expected
             );
             assert_eq!(
-                super::reaction_from_player(None, &reps, Some(&target), Some(&own)),
+                super::reaction_from_player_in(
+                    None,
+                    &reps,
+                    Some(&target),
+                    Some(&own),
+                    RelationContext::none()
+                ),
                 expected
             );
         }
@@ -906,7 +919,13 @@ pub(crate) mod tests {
             )
         };
         let interactable = |u: &ObjectStore, r: &Reputations| {
-            crate::target::ring::can_interact_from_player(Some(&factions), r, Some(u), Some(&me))
+            crate::target::ring::can_interact_from_player(
+                Some(&factions),
+                r,
+                Some(u),
+                Some(&me),
+                RelationContext::none(),
+            )
         };
 
         // Template 996, faction 609, with no service bit.

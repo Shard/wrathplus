@@ -41,8 +41,9 @@ pub(crate) fn can_interact(
     factions: Option<&Factions>,
     reputations: &Reputations,
     self_store: Option<&ObjectStore>,
+    ctx: Context,
 ) -> bool {
-    super::ring::can_interact_from_player(factions, reputations, store, self_store)
+    super::ring::can_interact_from_player(factions, reputations, store, self_store, ctx)
 }
 
 /// `UNIT_FLAG_NOT_SELECTABLE`, bit 25 (vmangos `UnitDefines.h:570`): `CanAssist`'s first refusal

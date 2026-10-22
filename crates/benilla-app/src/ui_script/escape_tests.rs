@@ -87,7 +87,7 @@ fn escape_closes_bag_and_panel_releases_loot_and_keeps_the_held_item() {
     assert!(s.cursor_item().is_some(), "cursor holds the picked item");
     assert!(bag_open(&s, 0), "bag is open before ESC");
     assert!(
-        s.eval::<bool>("return GetLeftFrame():GetName() == \"LootFrame\"")
+        s.eval::<bool>("return GetUIPanel('left'):GetName() == \"LootFrame\"")
             .unwrap(),
         "loot holds the left panel slot before ESC"
     );
@@ -102,7 +102,7 @@ fn escape_closes_bag_and_panel_releases_loot_and_keeps_the_held_item() {
 
     assert!(!bag_open(&s, 0), "ESC closed the bag");
     assert!(
-        s.eval::<bool>("return GetLeftFrame() == nil").unwrap(),
+        s.eval::<bool>("return GetUIPanel('left') == nil").unwrap(),
         "ESC vacated the panel slot"
     );
     assert!(
@@ -151,7 +151,7 @@ fn escape_is_consumed_by_a_focused_editbox_and_leaves_windows_open() {
 
     s.run("MainMenuBarBackpackButton:Click()").unwrap();
     assert!(
-        s.focus_editbox("ChatFrameEditBox"),
+        s.focus_editbox("ChatFrame1EditBox"),
         "the chat edit box focuses"
     );
     assert!(s.has_keyboard_focus());
@@ -183,7 +183,7 @@ fn escape_closes_an_open_stack_split_frame() {
             "Interface\\FrameXML\\UIPanelTemplates.xml",
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\StackSplitFrame.xml",
-            "Interface\\FrameXML\\ChatFrame.xml", // ChatFrameEditBox, for the shift fork
+            "Interface\\FrameXML\\ChatFrame.xml", // ChatFrame1EditBox, for the shift fork
             "Interface\\FrameXML\\FloatingChatFrame.xml",
             "Interface\\FrameXML\\MerchantFrame.xml", // read by the stock bag-slot click
         ],
