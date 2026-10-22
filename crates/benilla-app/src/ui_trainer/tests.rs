@@ -79,8 +79,9 @@ fn snap(open: &TrainerOpen, spells: &SpellCatalog) -> Option<TrainerState> {
     )
 }
 
-/// Wrapper 100 teaches 200 by a slot-0 `LEARN_SPELL`, 200 creates item 777, and 777's display 5
-/// has the item art; every icon is distinct, so a wrong arm is named by the assertion.
+/// Wrapper 100 teaches 200 by a slot-0 `LEARN_SPELL`; 200 is the recipe itself (`Effect[0]` 24
+/// creating 777), and 777's display 5 has the item art. Every icon is distinct, so a wrong arm is
+/// named by the assertion.
 fn icon_catalog() -> SpellCatalog {
     let wrapper = SpellDisplay {
         name: "Copper Shortsword".into(),
@@ -89,15 +90,15 @@ fn icon_catalog() -> SpellCatalog {
         effect_trigger_spell: [200, 0, 0],
         ..Default::default()
     };
-    let taught = SpellDisplay {
+    let recipe = SpellDisplay {
         name: "Copper Shortsword".into(),
         icon: Some("TAUGHT".into()),
+        effects: [SPELL_EFFECT_CREATE_ITEM, 0, 0],
         effect_item_type: [777, 0, 0],
         ..Default::default()
     };
-    SpellCatalog::from_displays(HashMap::from([(100, wrapper), (200, taught)]))
+    SpellCatalog::from_displays(HashMap::from([(100, wrapper), (200, recipe)]))
 }
-
 /// The product item's template and `ItemDisplayInfo` row, landed.
 fn landed_item(deps: &mut Deps) -> ItemDisplays {
     let mut t = crate::items::test_template("Copper Shortsword");
@@ -130,71 +131,40 @@ fn icon_of(
     )
 }
 
+/// `00595150`: the service spell's own `Effect[0]` item at a tradeskill trainer, no learn hop.
 #[test]
-fn trainer_icon_substitutes_the_product_only_at_a_tradeskill_trainer() {
+fn trainer_icon_is_the_service_spells_item_only_at_a_tradeskill_trainer() {
     let spells = icon_catalog();
-
-    // All three gates pass and the template landed: the created item's icon.
-    assert_eq!(
-        icon_of(&spells, TRAINER_TYPE_TRADESKILL, 100, true).as_deref(),
-        Some("ITEM")
-    );
-
-    // Gate 1 fails (a class trainer): the wire spell's own icon, never the taught spell's.
-    assert_eq!(
-        icon_of(&spells, 0, 100, true).as_deref(),
-        Some("WRAPPER"),
-        "a class trainer serves the wrapper's own icon, not the taught spell's"
-    );
-
-    // Gate 2 fails: 200 creates an item but has no learn effect, so its own icon.
     assert_eq!(
         icon_of(&spells, TRAINER_TYPE_TRADESKILL, 200, true).as_deref(),
-        Some("TAUGHT"),
-        "200 IS the wire spell here, so its own icon is the right answer"
+        Some("ITEM")
     );
-
-    // A spell with no record: nil, where every failure ends (`0x4d911c`).
+    assert_eq!(
+        icon_of(&spells, 0, 200, true).as_deref(),
+        Some("TAUGHT"),
+        "a class trainer"
+    );
+    assert_eq!(
+        icon_of(&spells, TRAINER_TYPE_TRADESKILL, 100, true).as_deref(),
+        Some("WRAPPER"),
+        "a learn wrapper is never followed"
+    );
     assert_eq!(icon_of(&spells, TRAINER_TYPE_TRADESKILL, 999, true), None);
 }
 
+/// Only `Effect[0]` counts; a create effect in another slot keeps the spell's icon.
 #[test]
-fn trainer_icon_falls_back_when_the_taught_spell_makes_no_item() {
-    let wrapper = SpellDisplay {
-        icon: Some("WRAPPER".into()),
-        effects: [SPELL_EFFECT_LEARN_SPELL, 0, 0],
-        effect_trigger_spell: [200, 0, 0],
-        ..Default::default()
-    };
-    let taught = SpellDisplay {
+fn trainer_icon_reads_effect_zero_alone() {
+    let later = SpellDisplay {
         icon: Some("TAUGHT".into()),
-        ..Default::default() // effect_item_type all zero
-    };
-    let spells = SpellCatalog::from_displays(HashMap::from([(100, wrapper), (200, taught)]));
-    assert_eq!(
-        icon_of(&spells, TRAINER_TYPE_TRADESKILL, 100, true).as_deref(),
-        Some("WRAPPER")
-    );
-}
-
-/// `LEARN_PET_SPELL` (57) counts like `LEARN_SPELL` (36), in any slot (`0x4d8ff5`/`0x4d8ffa`).
-#[test]
-fn trainer_icon_scans_every_effect_slot_for_either_learn_effect() {
-    let wrapper = SpellDisplay {
-        icon: Some("WRAPPER".into()),
-        effects: [0, SPELL_EFFECT_LEARN_PET_SPELL, 0],
-        effect_trigger_spell: [0, 200, 0],
+        effects: [0, SPELL_EFFECT_CREATE_ITEM, 0],
+        effect_item_type: [777, 777, 0],
         ..Default::default()
     };
-    let taught = SpellDisplay {
-        effect_item_type: [777, 0, 0],
-        ..Default::default()
-    };
-    let spells = SpellCatalog::from_displays(HashMap::from([(100, wrapper), (200, taught)]));
+    let spells = SpellCatalog::from_displays(HashMap::from([(200, later)]));
     assert_eq!(
-        icon_of(&spells, TRAINER_TYPE_TRADESKILL, 100, true).as_deref(),
-        Some("ITEM"),
-        "a pet-learn effect in slot 1 substitutes just the same"
+        icon_of(&spells, TRAINER_TYPE_TRADESKILL, 200, true).as_deref(),
+        Some("TAUGHT")
     );
 }
 
@@ -206,14 +176,14 @@ fn trainer_icon_is_nil_until_the_product_template_lands_and_asks_once() {
     let icons = ItemDisplays::icons_for_tests(ItemDisplayCatalog::from_displays(HashMap::new()));
 
     let first = service_icon(
-        100,
+        200,
         TRAINER_TYPE_TRADESKILL,
         &spells,
         Some(&icons),
         &deps.items,
         &deps.commands,
     );
-    assert_eq!(first, None, "no template yet → nil, not the wrapper's icon");
+    assert_eq!(first, None, "no template yet → nil, not the spell's icon");
     assert_eq!(
         deps.queried_entries(),
         vec![777],
@@ -221,7 +191,7 @@ fn trainer_icon_is_nil_until_the_product_template_lands_and_asks_once() {
     );
 
     let _ = service_icon(
-        100,
+        200,
         TRAINER_TYPE_TRADESKILL,
         &spells,
         Some(&icons),
@@ -498,11 +468,10 @@ fn tooltip_scan_advances_past_an_unresolvable_trigger() {
     );
 }
 
-/// `Attributes & 0x20` alone picks the item arm (`0x52e610`'s redirect at `0x52e6d2`);
-/// `Effect[0] == 24` picks the matched slot, otherwise slot 0.
+/// `0062e900`: the item arm needs the trade-spell bit, a creating `Effect[0]` and a nonzero
+/// `EffectItemType[0]`; whichever slot the learn effect sits in, the item is slot 0's.
 #[test]
-fn tooltip_item_slot_follows_the_effect_gate_not_the_attribute_gate() {
-    // The learn effect in slot 1, slot 0 empty. Built per use: SpellDisplay is not Clone.
+fn tooltip_item_arm_needs_the_bit_the_create_effect_and_an_item() {
     let slot1_wrapper = || {
         let mut w = wrapper(SPELL_EFFECT_LEARN_SPELL, 1, 200);
         w.effects[0] = 0;
@@ -512,20 +481,26 @@ fn tooltip_item_slot_follows_the_effect_gate_not_the_attribute_gate() {
         (100, slot1_wrapper()),
         (200, taught_recipe()),
     ]));
-    assert_eq!(
-        service_tooltip(100, &spells),
-        TrainerTooltip::Item(3333),
-        "Effect[0]==CREATE_ITEM -> EffectItemType[matched slot]"
-    );
-
-    // The bit without Effect[0]==24: still the item arm, off slot 0.
+    assert_eq!(service_tooltip(100, &spells), TrainerTooltip::Item(2847));
+    let as_spell = TrainerTooltip::Spell {
+        spell_id: 200,
+        alt_caster: false,
+    };
     let mut odd = taught_recipe();
     odd.effects[0] = 6;
     let spells = SpellCatalog::from_displays(HashMap::from([(100, slot1_wrapper()), (200, odd)]));
     assert_eq!(
         service_tooltip(100, &spells),
-        TrainerTooltip::Item(2847),
-        "the bit alone still routes to the item builder, from slot 0"
+        as_spell,
+        "the bit alone is the spell"
+    );
+    let mut empty = taught_recipe();
+    empty.effect_item_type[0] = 0;
+    let spells = SpellCatalog::from_displays(HashMap::from([(100, slot1_wrapper()), (200, empty)]));
+    assert_eq!(
+        service_tooltip(100, &spells),
+        as_spell,
+        "no item is the spell"
     );
 }
 

@@ -46,6 +46,7 @@ mod target_ring;
 mod ui_arena_team_tests;
 mod ui_chat_feed;
 mod ui_guild_wrath_tests;
+mod ui_instance_native_tests;
 mod ui_items_currency_tests;
 mod ui_items_feed_descriptor_tests;
 mod ui_merchant;
