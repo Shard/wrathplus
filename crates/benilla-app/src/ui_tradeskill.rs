@@ -257,7 +257,7 @@ fn skill_rank(store: &ObjectStore, skill_id: u32) -> (u32, u32) {
 }
 
 /// The difficulty band (`0x4fcbfc`), with a zero `trivialLow` read as `trivialHigh - 25`; the
-/// TradeSkill window passes the raw rank, the Craft window the rank with bonuses.
+/// TradeSkill window passes the raw rank.
 pub(crate) fn difficulty(rank: u32, low: u32, high: u32) -> TradeSkillDifficulty {
     let low = if low == 0 {
         high.saturating_sub(25)
@@ -277,8 +277,8 @@ pub(crate) fn difficulty(rank: u32, low: u32, high: u32) -> TradeSkillDifficulty
 
 /// The row icon, `GetTradeSkillIcon` (`0x4fdae0`): `EffectItemType[0]` as an item id with no
 /// `Effect[0]` check, and nil on any miss (a zero id, a template in flight), never the spell's
-/// icon; the reference repaints when the item callback fires `TRADE_SKILL_UPDATE`. The Craft
-/// window and the trainer resolve icons by other laws; the reference shares no resolver.
+/// icon; the reference repaints when the item callback fires `TRADE_SKILL_UPDATE`. The trainer
+/// resolves icons by another law; the reference shares no resolver.
 fn recipe_icon(
     d: &benilla_formats::SpellDisplay,
     icons: Option<&ItemDisplays>,

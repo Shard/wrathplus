@@ -98,7 +98,8 @@ fn the_default_text_height_is_derived_from_button1_not_a_literal() {
     );
 }
 
-/// `UIDropDownMenuButtonTemplate` gives its label `GameFontHighlightSmall` through `<NormalFont>`.
+/// 3.3.5's `UIDropDownMenuButtonTemplate` gives its label `GameFontHighlightSmallLeft` through
+/// `<NormalFont>` (`UIDropDownMenuTemplates.xml:179`).
 #[test]
 fn a_button_label_reports_the_font_object_its_button_set() {
     benilla_formats::wow_data_or_skip!();
@@ -108,7 +109,7 @@ fn a_button_label_reports_the_font_object_its_button_set() {
     let (object_height, label_height, label_face): (Option<f64>, Option<f64>, Option<String>) = s
         .eval(
             r#"
-            local _, objectHeight = GameFontHighlightSmall:GetFont();
+            local _, objectHeight = GameFontHighlightSmallLeft:GetFont();
             local face, height = DropDownList1Button1NormalText:GetFont();
             return objectHeight, height, face
         "#,
@@ -117,7 +118,7 @@ fn a_button_label_reports_the_font_object_its_button_set() {
 
     assert_eq!(
         label_height, object_height,
-        "the row label must report GameFontHighlightSmall's height, not nil"
+        "the row label must report GameFontHighlightSmallLeft's height, not nil"
     );
     assert!(
         label_face.is_some_and(|f| f.ends_with(".TTF")),
@@ -125,7 +126,7 @@ fn a_button_label_reports_the_font_object_its_button_set() {
     );
     assert!(
         s.eval::<bool>(
-            "return DropDownList1Button1NormalText:GetFontObject() == GameFontHighlightSmall"
+            "return DropDownList1Button1NormalText:GetFontObject() == GameFontHighlightSmallLeft"
         )
         .unwrap(),
         "the label must hand back the font OBJECT, which is what the corpus indexes immediately"
