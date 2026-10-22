@@ -81,11 +81,27 @@ fn chord_matches(chord: &str, held: (bool, bool, bool), last_button: Option<&str
             None => key = Some(part),
         }
     }
-    want == held
-        && match key {
-            None => true,
-            Some(k) => last_button.and_then(button_key) == Some(k),
+    // 12340's `0x55d6b0`: any one of the chord's modifiers held passes, and its button is checked
+    // only while a click dispatches (the click's own button, `[0xb499a8+0x1234]`), so a hovered
+    // `CTRL-BUTTON1` matches on Ctrl alone.
+    let any = (want.0 && held.0) || (want.1 && held.1) || (want.2 && held.2);
+    (any || (want == (false, false, false) && key.is_some()))
+        && match (key, last_button) {
+            (Some(k), Some(b)) => button_key(b) == Some(k),
+            _ => true,
         }
+}
+
+impl super::UiScript {
+    /// A mouse button press or release at `(x, y)`; `button` is the WoW name (`"LeftButton"`, …).
+    /// The button is the click's own for the length of its dispatch, what `IsModifiedClick` and
+    /// the macro `[button]` option read, and no click's afterwards.
+    pub fn mouse_button(&mut self, x: f32, y: f32, button: &str, down: bool) -> bool {
+        self.model_mut().last_mouse_button = Some(button.to_string());
+        let consumed = self.mouse_dispatch(x, y, button, down);
+        self.model_mut().last_mouse_button = None;
+        consumed
+    }
 }
 
 fn is_modified_click(model: &Model, arg: Option<&str>) -> bool {
@@ -212,7 +228,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 mod tests {
     use super::*;
     use crate::bindings_xml::{parse_modified_clicks, ModifiedClick};
-    
+
     fn vm() -> UiScript {
         let s = UiScript::new().unwrap();
         s.register_modified_clicks(
@@ -260,29 +276,34 @@ mod tests {
     #[test]
     fn an_action_matches_its_chord_and_its_button() {
         let mut s = vm();
+        // 12340's `0x55d6b0`: outside a click the button part is not read, so a held SHIFT
+        // matches both SHIFT-BUTTON1 and SHIFT-BUTTON2.
         s.set_modifiers(true, false, false);
-        s.mouse_button(-100.0, -100.0, "RightButton", true);
+        assert!(s
+            .eval::<bool>(
+                "return IsModifiedClick('SOCKETITEM') == 1 and IsModifiedClick('CHATLINK') == 1 \
+                 and IsModifiedClick('SHIFT') == 1 and IsModifiedClick() == 1"
+            )
+            .unwrap());
+        // Inside a right click the button decides.
+        s.run(
+            "local b = CreateFrame('Button', 'ChordProbe', UIParent) b:SetWidth(40) b:SetHeight(40) \
+             b:SetPoint('CENTER') b:RegisterForClicks('AnyUp') b:SetScript('OnClick', function() \
+             SEEN = tostring(IsModifiedClick('SOCKETITEM')) .. tostring(IsModifiedClick('CHATLINK')) end)",
+        )
+        .unwrap();
+        s.resolve();
+        let (x, y) = s
+            .eval::<(f32, f32)>("return ChordProbe:GetCenter()")
+            .unwrap();
+        s.mouse_button(x, y, "RightButton", true);
+        s.mouse_button(x, y, "RightButton", false);
+        assert_eq!(s.eval::<String>("return SEEN").unwrap(), "1nil");
+        // Any one of the chord's modifiers held passes; an extra one does not reject.
+        s.set_modifiers(true, true, false);
         assert!(s
             .eval::<bool>("return IsModifiedClick('SOCKETITEM') == 1")
             .unwrap());
-        assert!(s
-            .eval::<bool>("return IsModifiedClick('CHATLINK') == nil")
-            .unwrap());
-        assert!(s
-            .eval::<bool>("return IsModifiedClick('SHIFT') == 1")
-            .unwrap());
-        assert!(s.eval::<bool>("return IsModifiedClick() == 1").unwrap());
-        s.set_modifiers(true, true, false);
-        assert!(
-            s.eval::<bool>("return IsModifiedClick('SOCKETITEM') == nil")
-                .unwrap(),
-            "a chord's modifiers are exact"
-        );
-        assert!(
-            s.eval::<bool>("return IsModifiedClick('SHIFT') == 1")
-                .unwrap(),
-            "a modifier argument needs only its own"
-        );
         s.set_modifiers(false, false, false);
         assert!(s
             .eval::<bool>("return IsModifiedClick('FOCUSCAST') == nil")
