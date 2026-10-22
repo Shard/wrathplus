@@ -40,6 +40,11 @@ pub(crate) fn apply_script_calls(
         Option<Res<crate::net::wrath_notices::WrathProgress>>,
         Option<Res<crate::net::SelfGuid>>,
     ),
+    // `InteractUnit`'s object lookup and the world's interact on it.
+    mut interact: (
+        MessageWriter<crate::target::Interact>,
+        Option<Res<crate::net::GuidIndex>>,
+    ),
 ) {
     let (auras, progress, self_guid) = wrath;
     // Native Wrath defaults use the existing ordered application seam, not a second system
@@ -145,6 +150,14 @@ pub(crate) fn apply_script_calls(
                 crate::ui_macro::run_macro(script, index);
             }
             ScriptCall::RunMacroText { text } => crate::ui_macro::run_macro_text(script, &text),
+            // `InteractUnit(unit)` (`0x5277b0`): the object's own interact, as a right-click on it
+            // runs it, read by the target chain's interact leg next frame. Labelled: the
+            // reference interacts inside the call; a guid not streamed does nothing.
+            ScriptCall::InteractUnit { guid } => {
+                if let Some(&entity) = interact.1.as_ref().and_then(|index| index.0.get(&guid)) {
+                    interact.0.write(crate::target::Interact(entity));
+                }
+            }
             // `CastSpellByID` at a unit token other than the selection or the player needs a
             // cast context bound to that unit, which the cast tail does not build: capture-only.
             other @ ScriptCall::CastSpellAt { .. } => {

@@ -335,10 +335,11 @@ fn xp_loss_cancel_then_reconfirm_reshows_with_the_alert_dress() {
         320.0,
         "a non-alert Show resets the width"
     );
+    // 3.3.5 clears the icon's texture rather than hiding it (`StaticPopup.lua:3077-3083`).
     assert!(
-        !s.eval::<bool>("return StaticPopup1AlertIcon:IsShown()")
+        s.eval::<bool>("return StaticPopup1AlertIcon:GetTexture() == nil")
             .unwrap(),
-        "a non-alert Show hides the icon"
+        "a non-alert Show clears the icon"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
