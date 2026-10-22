@@ -5,6 +5,7 @@ import collections
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -45,6 +46,58 @@ def loc(paths):
             count = len(Path(path).read_bytes().splitlines())
             if count > max(500, baseline.get(path, 500)):
                 failures.append(f'{path}: {count} > {max(500, baseline.get(path, 500))}')
+    if failures:
+        raise ValueError('\n'.join(failures))
+
+
+# WS2's gate (docs/WRATH-NATIVE-PLAN.md): production code in these crates names descriptor fields
+# through `Field`, never a raw index. The descriptor names come off the generated layout.
+WS2_ROOTS = ('crates/benilla-app/src/', 'crates/benilla-world/src/')
+WS2_LAYOUT = 'crates/benilla-protocol/src/types/update_object/fields/layout_generated.rs'
+WS2_TYPES = ('CONTAINER', 'CORPSE', 'DYNAMICOBJECT', 'GAMEOBJECT', 'ITEM', 'OBJECT', 'PLAYER', 'UNIT')
+
+
+def ws2_names():
+    """Every `Field` variant as the 1.12 constants spelled it, `UNIT_HEALTH` and `UNIT_FIELD_HEALTH`."""
+    text = Path(WS2_LAYOUT).read_text()
+    body = text.split('pub enum Field {', 1)[1].split('}', 1)[0]
+    names = set()
+    for variant in re.findall(r'^\s*([A-Z][A-Za-z0-9]*),', body, re.M):
+        snake = re.sub(r'(?<!^)(?=[A-Z])', '_', variant).upper()
+        names.add(snake)
+        head, _, tail = snake.partition('_')
+        if head in WS2_TYPES and tail:
+            names.add(f'{head}_FIELD_{tail}')
+    return names
+
+
+def ws2_production(path, text):
+    """The file's production code: test files skipped, a file cut at its first test module."""
+    leaf = path.rsplit('/', 1)[-1]
+    if '/tests/' in path or '_tests/' in path or 'test' in leaf or 'fixture' in leaf:
+        return ''
+    cut = re.search(r'^#\[cfg\(test\)\]\s*\n\s*(?:#\[path[^\n]*\n\s*)?(?:pub(?:\([^)]*\))? )?mod ', text, re.M)
+    return text[:cut.start()] if cut else text
+
+
+def ws2(paths):
+    names = ws2_names()
+    const = re.compile(r'\bconst ([A-Z][A-Z0-9_]*): u16 = (?:0x[0-9a-fA-F_]+|[0-9][0-9_]*);')
+    failures = []
+    for path in paths:
+        if not path.endswith('.rs') or not path.startswith(WS2_ROOTS) or not Path(path).is_file():
+            continue
+        code = ws2_production(path, Path(path).read_text())
+        for number, line in enumerate(code.splitlines(), 1):
+            if line.lstrip().startswith('//'):
+                continue
+            for name in const.findall(line):
+                if any(name == n or name.endswith('_' + n) for n in names):
+                    failures.append(f'{path}:{number}: raw descriptor const {name}')
+            if re.search(r'\bFIELD_[A-Z0-9_]+\b', line):
+                failures.append(f'{path}:{number}: FIELD_* name; read the `Field` instead')
+            if re.search(r'from_pairs\(&\[\s*\(\s*(?:0x[0-9a-fA-F_]+|[0-9][0-9_]*)\s*,', line):
+                failures.append(f'{path}:{number}: literal from_pairs key; use `Field::X.index()`')
     if failures:
         raise ValueError('\n'.join(failures))
 
@@ -121,7 +174,7 @@ def clippy(report):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('check', choices=['loc', 'fmt', 'crap-report', 'clippy-report', 'fast'])
+    parser.add_argument('check', choices=['loc', 'fmt', 'ws2', 'crap-report', 'clippy-report', 'fast'])
     parser.add_argument('paths', nargs='*')
     args = parser.parse_args()
     if args.check.endswith('-report'):
@@ -134,6 +187,8 @@ def main():
             loc(paths)
         if args.check in ('fmt', 'fast'):
             fmt(paths)
+        if args.check == 'ws2':
+            ws2(paths)
     print(f'quality: {args.check} passed')
 
 

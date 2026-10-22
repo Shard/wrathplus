@@ -336,7 +336,7 @@ mod mount_error_tests {
         }
         assert_eq!(
             g("ERR_MOUNT_ALREADYMOUNTED").unwrap(),
-            "You're already mounted!"
+            "You're already mounted."
         );
         assert_eq!(g("ERR_DISMOUNT_NOTMOUNTED").unwrap(), "You're not mounted!");
     }

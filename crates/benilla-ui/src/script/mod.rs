@@ -44,6 +44,7 @@ mod wrath_combat_log;
 mod wrath_chat_verbs;
 mod wrath_static_popup;
 pub mod glue;
+pub mod glue_create;
 mod wrath_friends_frame;
 mod wrath_guild_bank;
 mod wrath_macro_icons;
@@ -489,7 +490,6 @@ pub(crate) const TEXTURE_ONLY_METHODS: [&str; 12] = [
 ];
 
 /// FontString-only: the font, text, justify and shadow block and the string metrics.
-/// `GetStringHeight` is 12340's (`0x48df00`); `SetFormattedText` and `SetSize` are Lua shims.
 pub(crate) const FONTSTRING_ONLY_METHODS: [&str; 22] = [
     "SetFont",
     "GetFont",

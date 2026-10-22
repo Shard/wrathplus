@@ -55,10 +55,11 @@ impl<'a> CreatureTypeSources<'a> {
     }
 }
 
-/// `ChrRaces.dbc` column 9 by race id: Humanoid on all nine shipped rows, and 0 where the table
-/// has no row (`0x6055b3`-`0x6055d1`).
+/// `ChrRaces.dbc`'s creature type by race id (3.3.5 column 8): Humanoid on all 21 shipped 12340
+/// rows, Blood Elf (10) and Draenei (11) included, and 0 where the table has no row
+/// (`0x6055b3`-`0x6055d1`).
 fn race_creature_type(race: u8) -> u32 {
-    if (1..=9).contains(&race) {
+    if (1..=21).contains(&race) {
         CREATURE_TYPE_HUMANOID
     } else {
         0
@@ -187,7 +188,8 @@ mod tests {
         };
         assert_eq!(sources.of(&store(69, 0, 0)), 0, "no template, race 0");
         assert_eq!(sources.of(&store(69, 0, 99)), 0, "no form row either");
-        assert_eq!(sources.of(&store(0, 10, 0)), 0, "race 10 has no row");
+        assert_eq!(sources.of(&store(0, 10, 0)), 7, "a Blood Elf is Humanoid");
+        assert_eq!(sources.of(&store(0, 22, 0)), 0, "race 22 has no row");
         assert_eq!(CreatureTypeSources::default().of(&store(0, 1, 1)), 7);
         assert_eq!(CreatureTypeSources::default().of(&store(69, 0, 1)), 0);
     }
@@ -209,8 +211,10 @@ mod tests {
             assert_eq!(forms[&id].creature_type, 1, "form {id} is type 1");
             assert_eq!(sources.of(&store(0, 1, id)), 1, "form {id}");
         }
-        // Tree of Life and Battle Stance carry -1: the human race's type answers.
-        for id in [2, 17] {
+        // 12340's Tree of Life is an Elemental (4).
+        assert_eq!(sources.of(&store(0, 1, 2)), 4, "Tree of Life Form");
+        // Battle Stance and Shadowform carry -1: the human race's type answers.
+        for id in [17, 28] {
             assert!(forms[&id].creature_type <= 0, "form {id} carries no type");
             assert_eq!(sources.of(&store(0, 1, id)), 7, "form {id}");
         }
@@ -260,7 +264,7 @@ mod tests {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let rows = benilla_formats::load_race_creature_types(&mut chain).expect("ChrRaces walk");
-        assert_eq!(rows.len(), 9, "ChrRaces.dbc row count");
+        assert_eq!(rows.len(), 21, "ChrRaces.dbc row count");
         for race in 0..=u8::MAX {
             assert_eq!(
                 race_creature_type(race),

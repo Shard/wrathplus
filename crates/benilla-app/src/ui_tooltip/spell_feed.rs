@@ -289,7 +289,10 @@ pub(crate) fn build_view(
         deps.borrow_mut().form = true;
     }
     let form_met = matches!(caster, ViewCaster::Pet(None))
-        || (form != 0 && d.stances & (1u32 << (u32::from(form) - 1)) != 0);
+        || (form != 0
+            && 1u32
+                .checked_shl(u32::from(form) - 1)
+                .is_some_and(|bit| d.stances & bit != 0));
     // The required-item line (`0x52eea7`-`0x52f10a`): a mask is named whole by
     // `ItemSubClassMask.dbc` before its subclasses are joined; an empty mask or class < 0 skips it.
     let requires_item = (d.targets & TARGET_ITEM == 0 && d.equipped_item_class >= 0)

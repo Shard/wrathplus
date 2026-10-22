@@ -827,7 +827,7 @@ mod tests {
             (
                 0x33,
                 "Your pet must be behind its target.",
-                "You must be behind your target",
+                "You must be behind your target.",
             ),
             (0x59, "Your pet is out of range.", "Out of range."),
             (
@@ -912,7 +912,7 @@ mod tests {
             cast_fail_text(Caster::Player, 0x5D, None, args(1657), &g)
                 .unwrap()
                 .text,
-            "You need to be in Darnassus"
+            "You need to be in Darnassus."
         );
         // An unnamed id and an absent word both decline to the stem.
         assert_eq!(

@@ -412,8 +412,8 @@ mod tests {
         assert!((v - 1.0).abs() < 1e-6, "v divides by the Y-span (got {v})");
     }
 
-    /// Every node on maps 0 and 1 but id 3 (Programmer Isle, a debug row with no `TaxiPath` edge)
-    /// projects inside the map, Ironforge above Stormwind and Menethil Harbor west of Lakeshire.
+    /// Every node on maps 0 and 1 but id 3 (Programmer Isle, no `TaxiPath` edge) and 12340's scripted
+    /// "Quest - " flights projects inside the map, Ironforge above Stormwind, Menethil west.
     #[test]
     fn real_taxi_projection_matches_geography() {
         let data = benilla_formats::wow_data_or_skip!();
@@ -424,8 +424,8 @@ mod tests {
         for map_id in [0u32, 1u32] {
             let cont = continents.get(map_id).expect("continent row");
             for n in nodes.rows().filter(|n| n.map_id == map_id) {
-                if n.id == 3 {
-                    continue; // Programmer Isle
+                if n.id == 3 || n.name.starts_with("Quest - ") {
+                    continue; // Programmer Isle, and the scripted quest flights
                 }
                 let (x, y) = project(cont, n.pos[0], n.pos[1]);
                 assert!(

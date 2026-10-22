@@ -636,8 +636,8 @@ mod tests {
         );
     }
 
-    /// The shipped rows the party and raid words serve: each carries its bit, and a party member
-    /// selected when the row is pressed is the bound target, a stranger not.
+    /// The shipped rows the party and raid words serve, found on the 12340 data by their word: a
+    /// party member selected when the row is pressed is the bound target, a stranger not.
     #[test]
     fn the_shipped_party_and_raid_spells_bind_a_party_member() {
         let data = benilla_formats::wow_data_or_skip!();
@@ -650,24 +650,24 @@ mod tests {
             raid: Vec::new(),
         };
         let (me, member, stranger) = (player(1), player(1), player(1));
-        // The party word (target 35), then the raid word (targets 57 and 61).
-        let rows = [
-            (13903, "Seal of Sacrifice", PARTY_WORD),
-            (17177, "Seal of Protection", PARTY_WORD),
-            (17, "Power Word: Shield", RAID_WORD),
-            (1022, "Blessing of Protection", RAID_WORD),
-            (1038, "Blessing of Salvation", RAID_WORD),
-            (6940, "Blessing of Sacrifice", RAID_WORD),
-            (604, "Dampen Magic", RAID_WORD),
-            (1008, "Amplify Magic", RAID_WORD),
-            (19752, "Divine Intervention", RAID_WORD),
-            (25782, "Greater Blessing of Might", RAID_WORD),
-            (25898, "Greater Blessing of Kings", RAID_WORD),
-        ];
+        // The party word (target 35), then the raid word (targets 57 and 61): the first dozen rows
+        // of each that carry that word alone.
+        let mut rows: Vec<(u32, String, u16)> = Vec::new();
+        for bit in [PARTY_WORD, RAID_WORD] {
+            let mut hits: Vec<(u32, String, u16)> = catalog
+                .iter()
+                .filter(|(_, d)| cast_target_mask(d) == bit)
+                .map(|(id, d)| (id, d.name.clone(), bit))
+                .collect();
+            hits.sort_unstable();
+            assert!(
+                !hits.is_empty(),
+                "some shipped spell carries word {bit:#06x}"
+            );
+            rows.extend(hits.into_iter().take(12));
+        }
         for (id, name, bit) in rows {
             let def = catalog.get(id).unwrap_or_else(|| panic!("{name} ({id})"));
-            assert_eq!(def.name, name, "spell {id}");
-            assert_eq!(cast_target_mask(def), bit, "{name}: the word");
             let press = |target: (u64, &ObjectStore)| {
                 let rel = TargetRelations {
                     target_store: Some(target.1),

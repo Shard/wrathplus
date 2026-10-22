@@ -2,10 +2,10 @@
 # Explicit opt-in only. Heavy commands take the shared lock and own target dir.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-check=${1:?usage: run.sh loc|fmt|clippy|crap|machete|typos [paths or -p packages]}
+check=${1:?usage: run.sh loc|fmt|ws2|clippy|crap|machete|typos [paths or -p packages]}
 shift
 case "$check" in
-loc|fmt) exec python3 scripts/quality/gate.py "$check" "$@" ;;
+loc|fmt|ws2) exec python3 scripts/quality/gate.py "$check" "$@" ;;
 # The workspace crates only: vendored third_party/ code is not ours to prune.
 machete) if [[ $# == 0 ]]; then set -- crates; fi; exec cargo machete "$@" ;;
 typos) exec typos "$@" ;;

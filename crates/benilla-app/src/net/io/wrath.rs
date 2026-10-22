@@ -337,13 +337,10 @@ fn run(
                     }
                     Ok(CharRequest::Service(command)) => {
                         let reply = session.char_service_result(&command)?;
-                        // A change the server applied re-emits the roster before the result, as
-                        // create and delete do.
-                        if reply.changed_roster() {
+                        char_service::publish_char_service(reply, || {
                             characters = normalize_characters(session.char_enum().context("Wrath refreshed roster")?);
-                            send(events, SessionEvent::CharacterList { characters: characters.clone(), realm: realm_record.clone() })?;
-                        }
-                        send(events, SessionEvent::WrathCharServiceResult { reply })?;
+                            Ok(SessionEvent::CharacterList { characters: characters.clone(), realm: realm_record.clone() })
+                        }, |event| send(events, event))?;
                     }
                     Ok(CharRequest::Delete(guid)) => {
                         let code = session.delete_character_result(guid)?;
@@ -5237,6 +5234,8 @@ fn publish_character_action(
     publish(SessionEvent::WrathCharActionResult { action, code })
 }
 
+#[path = "wrath/char_service.rs"]
+mod char_service;
 #[cfg(test)]
 #[path = "wrath/character_tests.rs"]
 mod character_tests;

@@ -161,7 +161,10 @@ fn native_status_packets_emit_a_wrath_question_mark_quad() {
                     scale: 1.0,
                 },
                 GlobalTransform::IDENTITY,
-                ObjectStore(ObjectFields::from_pairs(&[(24, 100)]).into_created(ObjectType::Unit)),
+                ObjectStore(
+                    ObjectFields::from_fields(&[(benilla_protocol::types::Field::UnitHealth, 100)])
+                        .into_created(ObjectType::Unit),
+                ),
             ));
             let ctx = BlipCtx {
                 center: Vec2::splat(100.0),
