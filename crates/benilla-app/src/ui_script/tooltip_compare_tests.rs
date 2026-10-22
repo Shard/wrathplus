@@ -317,7 +317,8 @@ fn repair_mode_hover_shows_the_items_repair_cost() {
         )
         .unwrap()
         .then(|| {
-            s.eval::<String>("return GameTooltipMoneyFrameCopperButton:GetText()")
+            // 3.3.5 builds the money frame on demand (`SetTooltipMoney`, `GameTooltip.lua:106`).
+            s.eval::<String>("return GameTooltipMoneyFrame1CopperButton:GetText()")
                 .unwrap()
         })
     };

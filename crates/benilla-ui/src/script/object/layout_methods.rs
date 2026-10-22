@@ -234,6 +234,33 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
             }))
         })?;
     }
+
+    // IsMouseOver([top, bottom, left, right]) (12340 `0x49e100`, the Frame table alone): each
+    // offset a number or 0, independently, ADDED to its edge in the frame's own units; the cursor
+    // must be strictly inside (`0x488570`). A boolean, false before the first resolve.
+    m.set(
+        "IsMouseOver",
+        lua.create_function(|lua, (this, args): (Table, mlua::Variadic<Value>)| {
+            let h = frame_handle_of(lua, &this)?;
+            let off = |i: usize| {
+                args.get(i)
+                    .cloned()
+                    .and_then(|v| lua.coerce_number(v).ok().flatten())
+                    .map_or(0.0, |n| n as f32)
+            };
+            let (top, bottom, left, right) = (off(0), off(1), off(2), off(3));
+            settle(lua);
+            let model = lua.app_data_ref::<Model>().expect("model");
+            let inv = 1.0 / eff_scale(&model, h);
+            let (x, y) = (model.cursor_pos.0 * inv, model.cursor_pos.1 * inv);
+            Ok(model.resolved.get(&h).is_some_and(|r| {
+                r.left * inv + left < x
+                    && x < r.right * inv + right
+                    && r.bottom * inv + bottom < y
+                    && y < r.top * inv + top
+            }))
+        })?,
+    )?;
     Ok(())
 }
 

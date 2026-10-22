@@ -43,8 +43,7 @@ impl TradeSkillDifficulty {
         }
     }
 
-    /// The tier byte recipes sort by, ascending (`0x4fd380`). The Craft window's comparators key on
-    /// the same order (`row[+0xc]`, shifted by one for a "none" tier), so it shares this.
+    /// The tier byte recipes sort by, ascending (`0x4fd380`).
     pub(crate) fn tier(self) -> u8 {
         match self {
             TradeSkillDifficulty::Optimal => 0,
