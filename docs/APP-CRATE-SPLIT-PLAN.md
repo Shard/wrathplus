@@ -730,17 +730,33 @@ What only separate crates report, as the dry run counted it:
 | `include_dir!`/`CARGO_MANIFEST_DIR` assets | `assets/ui` | `move-layers.sh` moves it with `ui_script` and points `run_mode::dev_source_dir` there |
 | `embedded://` shader paths | 5 | fixed ahead (71212f59: served from `CARGO_CRATE_NAME`) |
 | Whole-tree source scans | 7 unit tests | fixed ahead (71212f59: `app_core::source_tree`) |
+| Tests that name a crate or its folder | the dry run's 7 failures | fixed ahead (Wire B's last pre-move unit, below) |
 
-**Still to fix before the move** (the seven failures; all crate-agnostic rewrites that pass today):
-`the_movement_kinds_other_handlers_are_pinned` and `the_cvar_hooks_register_in_plugin_order`
-compare `type_name` strings, which gain the crate prefix (compare with it stripped);
-`ui_session`'s portrait test anchors on `pub(crate) fn feed_interact_npc` (anchor on
-`fn feed_interact_npc(`); `tests/cover_input_wall.rs`, `message_keys.rs`, `ui_script_wall.rs` and
-`world_api_wall.rs` read `crates/benilla-app/src` (read every `crates/benilla-app*/src`).
+**Fixed ahead, the seven failures**: `the_movement_kinds_other_handlers_are_pinned` and
+`the_cvar_hooks_register_in_plugin_order` compare `type_name` strings by module path, with the
+crate prefix dropped; `ui_session`'s portrait test anchors on `fn feed_interact_npc(`, which the
+widening to `pub` keeps; `tests/cover_input_wall.rs`, `message_keys.rs`, `ui_script_wall.rs` and
+`world_api_wall.rs` read every app crate's `src/` through `tests/app_sources`, which finds the
+root and its `<root>-<layer>` siblings under any prefix.
+
+**The rename goes first.** `scripts/rename-wrathplus.sh` renames a fixed crate list, guarded with
+`(?![\w-])` and `(?!\w)`, so after the move it would miss `benilla-app-<layer>` and every
+`benilla_app_<layer>` token. The split scripts take the prefix from the root that exists
+(`crates/wrathplus-app`, else `crates/benilla-app`), so the moved crates are born
+`wrathplus-app-<layer>`. The tests above name no prefix either.
 
 **The move, one commit per layer during a worker pause** (`scripts/split/`):
 
-1. Merge wrath-hud; gates green; `git status` clean.
+1. Merge wrath-hud; gates green; `git status` clean. `move-layers.sh` refuses to start with
+   uncommitted or untracked changes or a `MERGE_HEAD`: a half-moved layer's crate directory would
+   count as already moved on a re-run. After a failed layer, back to the last good commit (the
+   previous layer's, or the pre-move head) and run that layer again; committed layers stay:
+
+   ```sh
+   git reset --hard <last good commit>
+   git clean -fd crates/
+   scripts/split/move-layers.sh --layers <the failed layer> --test-support
+   ```
 2. `scripts/split/move-layers.sh --layers core --test-support` (later commits: `net`, `world`,
    `ui`, `tools`; a layer already moved counts as lower, and the root gains only the new crate).
    It runs `canonical-paths.py --apply`, `git mv`s the modules with their `#[path]` siblings,
@@ -756,6 +772,25 @@ compare `type_name` strings, which gain the crate prefix (compare with it stripp
 6. After the last layer: regenerate `scripts/quality/loc-baseline.json` once against the new
    paths (strict again from then on), and update the gate crate lists (`scripts/gates.sh`,
    `check.sh`, CI, worker gate commands: `-p benilla-app` becomes the six crates).
+
+**Timed per-layer run** (505548ff, throwaway worktree, warm target, heavy slot; 2026-10-22):
+
+| Layer | Move | `widen-all.sh` | `cargo check` of the moved crates and the root |
+|---|---|---|---|
+| core | 9 s | 59 min (root 924 + 37 declarations, 3 passes) | 12.5 min, clean |
+| net, world, ui | 27 s, 55 s, 126 s | not reached: the manifests repeated each lower dependency (fixed after 505548ff) | |
+
+The all-layer run on ace77059 took about 1 min to move, 37 min for `widen-all.sh` (3 passes) and
+21 min for the six crates' tests. One layer at a time costs more because every layer widens and
+checks the root again: about 70 min for core alone. So the move is one run of every layer, then
+one widening, one check and one commit. A per-layer commit would not build on its own anyway.
+Budget about 1 h to move and widen, then the gates.
+
+**Warnings after the move** (all-layer run): world 141, ui 134 (lib), plus 3 to 11 elsewhere:
+109 functions, 57 constants and 15 methods never used, 87 unused imports, and 8 "more private
+than" warnings. Errors are clean, but the warnings ratchet is not. An unused-import pass and a
+dead-code pass (widen what another crate uses, delete what nothing uses) are still to write before
+the move.
 
 Not covered by the dry run: `cargo machete` pruning of each crate's dependency list (they start
 as benilla-app's), and the player build (`--no-default-features`), which forwards `dev` the same

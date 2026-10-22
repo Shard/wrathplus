@@ -9,6 +9,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+mod app_sources;
+
 /// The engine's module set when the world lives inside `benilla-app`: an engine module missing
 /// here hides its leaks. Unused once `crates/benilla-world` exists, which the scan checks.
 const ENGINE_ROOTS: &[&str] = &[
@@ -472,28 +474,24 @@ fn the_engine_names_nothing_of_the_game() {
 
 /// Every distinct engine item named by non-engine code, and the files that name it.
 fn measure() -> BTreeMap<String, BTreeSet<String>> {
-    let app = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let split = app
+    let split = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .is_some_and(|c| c.join("benilla-world").is_dir());
 
     let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    let src = app.join("src");
-    let tests = test_module_files(&src);
-    for file in rs_files(&src) {
-        let rel = file
-            .strip_prefix(&src)
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
-        // Without the world crate the file's module decides its side; with it, every file here
-        // is on the game side.
-        if (!split && is_engine(&rel)) || tests.contains(&rel) {
-            continue;
-        }
-        let text = std::fs::read_to_string(&file).unwrap();
-        for (path, _) in paths_in(&text, split, true) {
-            out.entry(path).or_default().insert(rel.clone());
+    for src in app_sources::src_dirs() {
+        let tests = test_module_files(&src);
+        for file in rs_files(&src) {
+            let rel = file.strip_prefix(&src).unwrap().display().to_string();
+            // Without the world crate the file's module decides its side; with it, every file
+            // here is on the game side.
+            if (!split && is_engine(&rel)) || tests.contains(&rel) {
+                continue;
+            }
+            let text = std::fs::read_to_string(&file).unwrap();
+            for (path, _) in paths_in(&text, split, true) {
+                out.entry(path).or_default().insert(rel.clone());
+            }
         }
     }
     drop_module_paths(out)
