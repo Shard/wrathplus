@@ -52,10 +52,26 @@ pub(crate) struct UiClock {
     pub(crate) ui_now: f64,
 }
 
+/// The pre-boot pair, replaced by `ui_script::lifecycle::seed_vm_clock` at the first VM.
+impl Default for UiClock {
+    fn default() -> Self {
+        Self {
+            anchor: std::time::Instant::now(),
+            ui_now: 0.0,
+        }
+    }
+}
+
 /// The reference's `uiScale` CVar: the VM's screen is `768/uiScale` units tall, so
 /// `uiScale = 768/screenH` is pixel-perfect. Tests pin the `Default` 1.0.
 #[derive(Resource)]
 pub(crate) struct UiScaleCvar(pub(crate) f32);
+
+impl Default for UiScaleCvar {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
 
 /// The world-entry UI load still owed: armed at `OnEnter(InWorld)`, run by
 /// [`run_pending_entry_load`] once the loading cover is on screen. `OnEnter(InWorld)` runs on the

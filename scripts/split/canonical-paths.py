@@ -34,8 +34,12 @@ import os
 import re
 import sys
 
+CRATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "crates")
+# The root crate: `wrathplus-app` once scripts/rename-wrathplus.sh has run.
 ROOT = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "..", "crates", "benilla-app", "src"
+    CRATES,
+    "wrathplus-app" if os.path.isdir(os.path.join(CRATES, "wrathplus-app")) else "benilla-app",
+    "src",
 )
 
 IDENT = r"[A-Za-z_][A-Za-z0-9_]*"

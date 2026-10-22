@@ -294,37 +294,21 @@ mod tests {
         // `#[cfg(feature = "dev")]` belongs only in this module, `dev.rs` and `lib.rs`.
         let cfg_needle = format!("feature = {}dev{}", '"', '"');
 
-        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut offenders = Vec::new();
-        let mut stack = vec![src.clone()];
-        while let Some(dir) = stack.pop() {
-            for entry in std::fs::read_dir(&dir).expect("src is readable") {
-                let path = entry.expect("dir entry").path();
-                if path.is_dir() {
-                    stack.push(path);
+        // The whole app, every layer crate after the split.
+        for (rel, path) in crate::app_core::source_tree::rust_files() {
+            if DEV_ROOTS.iter().any(|r| rel.starts_with(r)) {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("source is readable");
+            for (n, line) in text.lines().enumerate() {
+                // Doc comments name the function constantly; only real calls matter.
+                let t = line.trim();
+                if t.starts_with("//") {
                     continue;
                 }
-                if path.extension().is_none_or(|e| e != "rs") {
-                    continue;
-                }
-                let rel = path
-                    .strip_prefix(&src)
-                    .expect("under src")
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                if DEV_ROOTS.iter().any(|r| rel.starts_with(r)) {
-                    continue;
-                }
-                let text = std::fs::read_to_string(&path).expect("source is readable");
-                for (n, line) in text.lines().enumerate() {
-                    // Doc comments name the function constantly; only real calls matter.
-                    let t = line.trim();
-                    if t.starts_with("//") {
-                        continue;
-                    }
-                    if t.contains(&needle) || t.contains(&cfg_needle) {
-                        offenders.push(format!("{rel}:{}  {t}", n + 1));
-                    }
+                if t.contains(&needle) || t.contains(&cfg_needle) {
+                    offenders.push(format!("{rel}:{}  {t}", n + 1));
                 }
             }
         }

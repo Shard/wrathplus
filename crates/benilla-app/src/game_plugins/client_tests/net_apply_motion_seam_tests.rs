@@ -195,10 +195,7 @@ fn the_movement_kinds_other_handlers_are_pinned() {
         .census();
     use SessionEventKind as K;
     for (kind, others) in [
-        (
-            K::ObjectCreate,
-            vec!["benilla_app::net::wrath_auras::on_auras"],
-        ),
+        (K::ObjectCreate, vec!["net::wrath_auras::on_auras"]),
         (K::ObjectMove, vec![]),
         (K::MoveTimeSkipped, vec![]),
         (K::UnitMove, vec![]),
@@ -214,9 +211,11 @@ fn the_movement_kinds_other_handlers_are_pinned() {
                 .is_some_and(|n| n.contains("::net::objects::") || n.contains("::motion::")),
             "{kind:?}: {names:?}"
         );
+        // By module path: the crate prefix names whichever layer crate the handler lives in.
         let rest: Vec<&str> = names
             .into_iter()
             .filter(|n| !n.contains("::net::objects::") && !n.contains("::motion::"))
+            .map(|n| n.split_once("::").map_or(n, |(_, path)| path))
             .collect();
         assert_eq!(rest, others, "{kind:?}");
     }
@@ -312,7 +311,13 @@ fn poses(world: &World) -> Vec<String> {
 /// decode routes and the real drain, one drain per 60 Hz frame of record time, and writes every
 /// indexed object's movement state after each frame. No movement system runs, so nothing reads the
 /// wall clock: two runs on one tree write the same file, and a run before and after a refactor of
-/// the apply diff to nothing. Captures hold private gameplay data; the output stays local.
+/// the apply diff to nothing. Each frame is its number and its objects in guid order ([`poses`]);
+/// how many events it carried goes to stderr, not the file, so a newly decoded opcode that changes
+/// no object moves nothing. Captures hold private gameplay data; the output stays local.
+///
+/// Accepted baseline for capture 144407 (`target/azb-live/144407/packets.cap`): sha256
+/// `16bc666b3ef442c2…`, 201,656 lines (wrath-hud b00e901a; the same object state as the earlier
+/// `dd066b6e`/`75e998a3` dumps, which also wrote each frame's event count).
 ///
 /// `WOW_REPLAY_CAPTURE=<capture> WOW_REPLAY_POSES=<file> cargo test -p benilla-app --lib
 /// replay_capture_poses -- --ignored`
@@ -358,6 +363,7 @@ fn replay_capture_poses() {
     app.insert_resource(NetEvents(rx));
     let mut lines = Vec::new();
     let mut frame = 0u64;
+    let mut total = 0usize;
     let mut events = timed.into_iter().peekable();
     while events.peek().is_some() {
         let frame_end = (frame + 1) * 16_667;
@@ -369,11 +375,12 @@ fn replay_capture_poses() {
         if sent > 0 {
             let world = app.world_mut();
             crate::net::apply::apply_net_updates(world);
-            lines.push(format!("frame {frame} events {sent}"));
+            total += sent;
+            lines.push(format!("frame {frame}"));
             lines.extend(poses(world));
         }
         frame += 1;
     }
     std::fs::write(&out, lines.join("\n") + "\n").expect("write the pose dump");
-    eprintln!("replay: {} lines to {out}", lines.len());
+    eprintln!("replay: {total} events, {} lines to {out}", lines.len());
 }

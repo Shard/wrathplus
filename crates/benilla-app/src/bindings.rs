@@ -1806,17 +1806,19 @@ mod tests {
             .map(|b| collapse(&b.body))
             .collect();
         assert!(bodies.len() > 200);
+        // This module's own crate (it moves with the crate split), and the UI crate beside it.
+        let own = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let mut files = vec![
-            root.join("benilla-app/src/bindings.rs"),
+            own.join("bindings.rs"),
             root.join("benilla-ui/src/script/keybind.rs"),
             root.join("benilla-ui/src/bindings_xml.rs"),
         ];
-        for e in std::fs::read_dir(root.join("benilla-app/src/bindings")).unwrap() {
+        for e in std::fs::read_dir(own.join("bindings")).unwrap() {
             files.push(e.unwrap().path());
         }
         assert!(
-            !root.join("benilla-app/src/bindings/commands.rs").exists(),
+            !own.join("bindings/commands.rs").exists(),
             "the retyped registry is gone"
         );
         for path in files {

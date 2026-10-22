@@ -1411,20 +1411,20 @@ fn every_registered_row_has_a_reader_in_the_source() {
         ("gxFixLag", "OptionsFrame.lua's Fix Input Lag box"),
         ("gxRefresh", "OptionsFrame.lua's refresh-rate dropdown"),
     ];
-    let app_src = crate::test_support::src_dir();
-    let ui_src = app_src
+    let ui_src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .and_then(std::path::Path::parent)
         .expect("crates/")
         .join("benilla-ui")
         .join("src");
     let mut code = String::new();
-    for file in crate::test_support::rust_files(&app_src)
+    // The whole app (every layer crate after the split) but the registry, then the UI crate.
+    let app_files = crate::app_core::source_tree::rust_files()
         .into_iter()
-        .chain(crate::test_support::rust_files(&ui_src))
-    {
+        .filter(|(rel, _)| !rel.starts_with("cvars/"))
+        .map(|(_, path)| path);
+    for file in app_files.chain(crate::test_support::rust_files(&ui_src)) {
         let rel = file.to_string_lossy().replace('\\', "/");
-        if rel.contains("benilla-app/src/cvars/") || rel.contains("tests") {
+        if rel.contains("tests") {
             continue;
         }
         let text = std::fs::read_to_string(&file).expect("source is readable");

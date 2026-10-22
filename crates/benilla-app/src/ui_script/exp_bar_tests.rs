@@ -2,6 +2,17 @@
 
 use benilla_ui::script::{QuadContent, ScriptValue, UiScript, UnitState};
 
+/// Login as the live client orders it: the XP values (`PLAYER_XP_UPDATE`, whose
+/// `MainMenuExpBar_Update` sets the bar's range), then the faction list (`UPDATE_FACTION`, whose
+/// watch-bar arm, `ReputationWatchBar_Update`, shows the XP bar or the max-level rail,
+/// ReputationFrame.xml:911-918 and ReputationFrame.lua:396-407), then world entry. The update's
+/// `TextStatusBar_UpdateTextString` hides a bar whose range is still 0 (TextStatusBar.lua:76-82).
+fn enter_world(s: &mut UiScript) {
+    s.fire_event("PLAYER_XP_UPDATE", vec![ScriptValue::Str("player".into())]);
+    s.fire_event("UPDATE_FACTION", vec![]);
+    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
+}
+
 fn exp_bar_harness() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
@@ -28,6 +39,9 @@ fn exp_bar_harness() -> UiScript {
     ] {
         super::test_ui::load_ui(&mut s, file);
     }
+    // A level 60 player's XP (3.3.5 caps at 80), then world entry.
+    s.set_player_xp(0, 494_900);
+    enter_world(&mut s);
     // The stock default, detailed tips on (`UIOptionsFrame.lua:100`); no options file loads here.
     s.run("SHOW_NEWBIE_TIPS = \"1\"").unwrap();
     s
@@ -89,7 +103,7 @@ fn the_exhaustion_tick_marks_where_rested_runs_out() {
 
     s.set_player_xp(1000, 10000);
     s.set_rest_state(1, 700, true);
-    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
+    enter_world(&mut s);
     s.resolve();
 
     // The three bindings under the bar (`0x48d350`, `0x48d3f0`, `0x516ea0`).
@@ -190,7 +204,7 @@ fn the_exhaustion_tick_marks_where_rested_runs_out() {
 /// `ReputationWatchBar_Update` swaps in the rail at `MAX_PLAYER_LEVEL`, read from
 /// `PLAYER_LEVEL_UP`'s arg1; the tick's handler runs first by load order, so the rail's hides it.
 #[test]
-fn the_max_level_rail_replaces_the_xp_bar_at_60() {
+fn the_max_level_rail_replaces_the_xp_bar_at_80() {
     benilla_formats::wow_data_or_skip!();
     let mut s = exp_bar_harness();
     s.set_player_xp(1000, 10000);
@@ -199,11 +213,11 @@ fn the_max_level_rail_replaces_the_xp_bar_at_60() {
         "player",
         Some(UnitState {
             exists: true,
-            level: 59,
+            level: 79,
             ..UnitState::default()
         }),
     );
-    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
+    enter_world(&mut s);
     s.resolve();
 
     let ok: bool = s
@@ -216,10 +230,10 @@ fn the_max_level_rail_replaces_the_xp_bar_at_60() {
         .unwrap();
     assert!(
         ok,
-        "below 60 the strip and tick show, the rail stays hidden"
+        "below 80 the strip and tick show, the rail stays hidden"
     );
 
-    s.fire_event("PLAYER_LEVEL_UP", vec![ScriptValue::Int(60)]);
+    s.fire_event("PLAYER_LEVEL_UP", vec![ScriptValue::Int(80)]);
     let ok: bool = s
         .eval(
             r#"
@@ -230,7 +244,7 @@ fn the_max_level_rail_replaces_the_xp_bar_at_60() {
         .unwrap();
     assert!(
         ok,
-        "at 60 the rail replaces the strip and the tick goes with it"
+        "at 80, 3.3.5's MAX_PLAYER_LEVEL_TABLE[2], the rail replaces the strip and the tick goes with it"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
@@ -242,7 +256,7 @@ fn the_gryphons_outrank_the_bars_across_hide_show_cycles() {
     benilla_formats::wow_data_or_skip!();
     let mut s = exp_bar_harness();
     s.set_player_xp(300, 400);
-    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
+    enter_world(&mut s);
     // The strip hidden then re-shown, and the rail, born hidden, shown: both re-stamp.
     s.run("MainMenuExpBar:Hide() MainMenuExpBar:Show()")
         .unwrap();
@@ -270,27 +284,26 @@ fn the_gryphons_outrank_the_bars_across_hide_show_cycles() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// `TextStatusBar.lua`'s `lockShow` count shows the numerals on hover; `statusBarText` is off.
+/// `TextStatusBar.lua`'s `lockShow` count shows the numerals on hover; `statusBarText` is off. The
+/// bar's `alwaysPrefix` (`MainMenuBar.xml`) prefixes `XP` (TextStatusBar.lua:64-65).
 #[test]
 fn the_xp_bar_numerals_show_on_hover() {
     benilla_formats::wow_data_or_skip!();
     let mut s = exp_bar_harness();
     s.set_player_xp(1234, 5678);
-    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
+    enter_world(&mut s);
 
     s.run("MainMenuExpBar:GetScript(\"OnEnter\")(MainMenuExpBar)")
         .unwrap();
     assert_eq!(
         s.eval::<String>("return MainMenuBarExpText:GetText()")
             .unwrap(),
-        "1234 / 5678"
+        "XP 1234 / 5678"
     );
     assert!(s
         .eval::<bool>("return MainMenuBarExpText:IsShown()")
         .unwrap());
 
-    // `HideTextStatusBarText` reads `this.isZero` where it means `bar` (`TextStatusBar.lua:95`);
-    // the engine always binds `this` during dispatch, so the test does too.
     s.run("MainMenuExpBar:GetScript(\"OnLeave\")(MainMenuExpBar)")
         .unwrap();
     assert!(
@@ -307,7 +320,7 @@ fn the_rest_state_line_joins_the_held_open_tooltip() {
     let mut s = exp_bar_harness();
     s.set_player_xp(1000, 10000);
     s.set_rest_state(1, 700, true);
-    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
+    enter_world(&mut s);
 
     s.run("SHOW_NEWBIE_TIPS = \"1\"").unwrap();
     s.run("MainMenuExpBar:GetScript(\"OnEnter\")(MainMenuExpBar)")
@@ -320,7 +333,8 @@ fn the_rest_state_line_joins_the_held_open_tooltip() {
 
     // Three 0.6 s ticks take the timer from 1 to below 0, the `< 0` edge.
     for _ in 0..3 {
-        s.run("ExhaustionTick_OnUpdate(0.6)").unwrap();
+        s.run("ExhaustionTick_OnUpdate(ExhaustionTick, 0.6)")
+            .unwrap();
     }
     let appended: String = s.eval("return GameTooltipTextLeft3:GetText()").unwrap();
     assert!(

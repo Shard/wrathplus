@@ -60,7 +60,8 @@ fn a_built_client_registers_exactly_the_shipped_cvar_rows() {
 }
 
 /// The `on_cvar` observers, in the order their plugins registered them: each feature attaches
-/// its own, and a registration-order change would reorder the hooks a change fires.
+/// its own, and a registration-order change would reorder the hooks a change fires. Compared by
+/// module path: the crate prefix names whichever layer crate the hook lives in.
 #[test]
 fn the_cvar_hooks_register_in_plugin_order() {
     let mut app = crate::game_plugins::schedule_tests::headless_client();
@@ -74,7 +75,7 @@ fn the_cvar_hooks_register_in_plugin_order() {
     hooks.sort();
     let names: Vec<&str> = hooks
         .iter()
-        .map(|(_, n)| n.trim_start_matches("benilla_app::"))
+        .map(|(_, n)| n.split_once("::").map_or(n.as_str(), |(_, path)| path))
         .collect();
     assert_eq!(
         names, HOOK_ORDER,

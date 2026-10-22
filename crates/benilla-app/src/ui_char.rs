@@ -973,20 +973,19 @@ pub(crate) fn feed_char(
         sub_classes.as_deref(),
     );
     // Both bands push under one `UNIT_INVENTORY_CHANGED`: one wire update, one event.
-    // `PLAYERBANKSLOTS_CHANGED`'s two producers, planned off the old memo: `false` is the
-    // descriptor watcher (`0x5ddd6e`: a bag arrived, left or was swapped), `true` the item-object
-    // path (`0x4c728d`: the same bag's own fields changed).
+    // `PLAYERBANKSLOTS_CHANGED(slot)`, bank slots 29-35, planned off the old memo: 12340's guid
+    // watcher (`0x6dedd0`: a bag arrived, left or was swapped) and item path (`0x5e84c0`: the same
+    // bag's own fields changed) both fire the 1-based bank slot.
     let bank_bag_guids: [u64; BANK_BAG_SLOT_COUNT] =
         std::array::from_fn(|i| store.0.player_bank_bag_slot(i as u8).unwrap_or(0));
-    let repainted: Vec<bool> = (0..BANK_BAG_SLOT_COUNT)
-        .filter_map(|i| {
-            if bank_bag_guids[i] != memo.last_bank_bag_guids[i] {
-                Some(false)
-            } else {
-                let was = memo.last_bank_bags.as_ref().and_then(|b| b[i].as_ref());
-                (!same_item(was, bank_bags[i].as_ref())).then_some(true)
-            }
+    let repainted: Vec<i64> = (0..BANK_BAG_SLOT_COUNT)
+        .filter(|&i| {
+            let was = memo.last_bank_bags.as_ref().and_then(|b| b[i].as_ref());
+            bank_bag_guids[i] != memo.last_bank_bag_guids[i]
+                || !same_item(was, bank_bags[i].as_ref())
         })
+        // 28 item slots, then the bag slots from 29.
+        .map(|i| 29 + i as i64)
         .collect();
     memo.last_bank_bag_guids = bank_bag_guids;
     if memo.last_inv.as_ref() != Some(&inv) || memo.last_bank_bags.as_ref() != Some(&bank_bags) {
@@ -997,10 +996,8 @@ pub(crate) fn feed_char(
             "UNIT_INVENTORY_CHANGED",
             vec![ScriptValue::Str("player".to_string())],
         );
-        // The bank bag buttons repaint only on this and `BANKFRAME_OPENED`
-        // (`BankFrame.lua:206-208`). One event per changed slot: the descriptor watcher signals
-        // through `0x703e50` with no arguments, the item path through `SignalEvent2` with
-        // `"player"`.
+        // The bank bag buttons repaint only on `PLAYERBANKSLOTS_CHANGED` (`BankFrame.lua:166-171`)
+        // and `BANKFRAME_OPENED`: one event per changed slot, below.
         memo.last_inv = Some(inv);
         memo.last_bank_bags = Some(bank_bags);
     }
@@ -1008,13 +1005,8 @@ pub(crate) fn feed_char(
     if !repainted.is_empty() {
         gate.audit("feed_char", "a bank bag slot transition");
     }
-    for same_bag in repainted {
-        let args = if same_bag {
-            vec![ScriptValue::Str("player".to_string())]
-        } else {
-            Vec::new()
-        };
-        script.fire_event("PLAYERBANKSLOTS_CHANGED", args);
+    for slot in repainted {
+        script.fire_event("PLAYERBANKSLOTS_CHANGED", vec![ScriptValue::Int(slot)]);
     }
 }
 
@@ -1240,9 +1232,9 @@ mod tests {
         app.world_mut().run_system_once(feed_char).unwrap();
         let events = seen(&mut app);
         assert!(
-            events.contains(&"PLAYERBANKSLOTS_CHANGED nil".to_string()),
-            "the repaint event, and it carries NO argument — `0x703e50` pushes none, and the \
-             recorder stringifies the absent arg1 as nil. Got {events:?}"
+            events.contains(&"PLAYERBANKSLOTS_CHANGED 29".to_string()),
+            "the repaint event, for bank slot 29, the first bag slot after the 28 item slots \
+             (`0x6dedd0`'s `%d`). Got {events:?}"
         );
         assert!(
             events.contains(&"UNIT_INVENTORY_CHANGED player".to_string()),
@@ -1250,12 +1242,12 @@ mod tests {
         );
     }
 
-    /// A bag's own field moving is the item-object path (`0x4c7180`), which pushes `"player"`.
+    /// A bag's own field moving is the item-object path (`0x5e84c0`), which fires the slot too.
     #[test]
     fn a_bank_bags_own_field_moving_fires_the_item_object_producer() {
         let mut app = world_with_bank_bag(Some(BAG));
         app.world_mut().run_system_once(feed_char).unwrap();
-        assert!(seen(&mut app).contains(&"PLAYERBANKSLOTS_CHANGED nil".to_string()));
+        assert!(seen(&mut app).contains(&"PLAYERBANKSLOTS_CHANGED 29".to_string()));
 
         // The same bag guid, restacked: only the item object moved.
         restream(
@@ -1266,8 +1258,8 @@ mod tests {
         app.world_mut().run_system_once(feed_char).unwrap();
         let events = seen(&mut app);
         assert!(
-            events.contains(&"PLAYERBANKSLOTS_CHANGED player".to_string()),
-            "the item path pushes the token, got {events:?}"
+            events.contains(&"PLAYERBANKSLOTS_CHANGED 29".to_string()),
+            "the item path fires the same slot, got {events:?}"
         );
     }
 
@@ -1304,13 +1296,10 @@ mod tests {
         set_slots(&mut app, BAG2, BAG);
         app.world_mut().run_system_once(feed_char).unwrap();
         let events = seen(&mut app);
-        assert_eq!(
-            events
-                .iter()
-                .filter(|e| *e == "PLAYERBANKSLOTS_CHANGED nil")
-                .count(),
-            2,
-            "one argless event per slot whose guid moved, got {events:?}"
+        assert!(
+            events.contains(&"PLAYERBANKSLOTS_CHANGED 29".to_string())
+                && events.contains(&"PLAYERBANKSLOTS_CHANGED 30".to_string()),
+            "one event per slot whose guid moved, got {events:?}"
         );
     }
 

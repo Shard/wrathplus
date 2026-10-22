@@ -443,29 +443,15 @@ mod tests {
         );
     }
 
-    /// Every `.rs` under this crate's `src/`, as `(path under src/, text)`.
+    /// Every `.rs` of the app (every layer crate after the split), as `(path under src/, text)`.
     fn crate_sources() -> Vec<(String, String)> {
-        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let mut out = Vec::new();
-        let mut stack = vec![src.clone()];
-        while let Some(dir) = stack.pop() {
-            for entry in std::fs::read_dir(&dir).expect("crate source dir is readable") {
-                let path = entry.expect("dir entry").path();
-                if path.is_dir() {
-                    stack.push(path);
-                } else if path.extension().is_some_and(|e| e == "rs") {
-                    let rel = path
-                        .strip_prefix(&src)
-                        .expect("under src")
-                        .to_string_lossy()
-                        .replace('\\', "/");
-                    let text = std::fs::read_to_string(&path).expect("source is readable");
-                    out.push((rel, text));
-                }
-            }
-        }
-        out.sort();
-        out
+        crate::app_core::source_tree::rust_files()
+            .into_iter()
+            .map(|(rel, path)| {
+                let text = std::fs::read_to_string(&path).expect("source is readable");
+                (rel, text)
+            })
+            .collect()
     }
 
     /// The source with every comment line dropped: a comment quoting a variable is not a read.

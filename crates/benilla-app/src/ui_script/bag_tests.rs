@@ -497,7 +497,8 @@ fn hovered_bag_tooltip_fills_itself_when_the_stats_land() {
     );
     assert_eq!(s.take_item_stat_asks(), vec![25], "the miss asks the app");
 
-    // The template lands; the next frame's `OnUpdate` repaints the open tooltip.
+    // The template lands; the tooltip's next `TOOLTIP_UPDATE_TIME` (0.2 s) refresh repaints it
+    // through the owner's `UpdateTooltip` (`GameTooltip.lua:185-197`).
     s.set_item_template(
         25,
         ItemTemplateView {
@@ -511,7 +512,7 @@ fn hovered_bag_tooltip_fills_itself_when_the_stats_land() {
             ..Default::default()
         },
     );
-    s.tick(0.016);
+    s.tick(0.25);
     assert!(
         s.eval::<i64>("return GameTooltip:NumLines()").unwrap() > 1,
         "the stats landing repainted the open tooltip"
@@ -644,8 +645,8 @@ fn vendor_bag_hover_shows_sell_price_and_arms_the_pouch_cursor() {
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
     assert!(s
         .eval::<bool>(
-            "return GameTooltipMoneyFrame:IsShown() \
-             and GameTooltipMoneyFrameCopperButton:GetText() == '52'",
+            "return GameTooltipMoneyFrame1:IsShown() \
+             and GameTooltipMoneyFrame1CopperButton:GetText() == '52'",
         )
         .unwrap());
     assert_eq!(
@@ -657,7 +658,7 @@ fn vendor_bag_hover_shows_sell_price_and_arms_the_pouch_cursor() {
     unhover(&mut s);
     assert_eq!(s.ui_cursor(), None, "ResetCursor on leave");
     assert!(s
-        .eval::<bool>("return not GameTooltipMoneyFrame:IsShown()")
+        .eval::<bool>("return not GameTooltipMoneyFrame1:IsShown()")
         .unwrap());
 
     hover(&mut s, &b2);
@@ -671,7 +672,7 @@ fn vendor_bag_hover_shows_sell_price_and_arms_the_pouch_cursor() {
         .unwrap();
     assert!(has_line, "SellPrice 0 shows the ITEM_UNSELLABLE line");
     assert!(s
-        .eval::<bool>("return not GameTooltipMoneyFrame:IsShown()")
+        .eval::<bool>("return not GameTooltipMoneyFrame1:IsShown()")
         .unwrap());
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
@@ -1411,7 +1412,9 @@ fn the_bar_bag_buttons_name_themselves_on_hover() {
         enchants: Vec::new(),
     });
     s.set_inventory_slots(inv);
-    hover(&mut s, "CharacterBag0Slot");
+    // Still hovered: 3.3.5's `GameTooltip_OnUpdate` re-runs the slot's `UpdateTooltip`
+    // (`BagSlotButton_OnEnter`, `MainMenuBarBagButtons.xml:35`) every `TOOLTIP_UPDATE_TIME`.
+    s.tick(0.25);
     let line = s
         .eval::<String>("return GameTooltipTextLeft1:GetText()")
         .unwrap();
@@ -1491,9 +1494,8 @@ fn keyring_surface(s: &mut UiScript) {
     }
 }
 
-/// The first key shows the keyring button, swaps the bar's two right-hand strips to the keyring
-/// plate and slides the performance meter from -227 to -235 (`MainMenuBar_UpdateKeyRing`,
-/// `MainMenuBar.lua:174-183`).
+/// The first key shows the keyring button and swaps the bar's two right-hand strips to the
+/// keyring plate (`MainMenuBar_UpdateKeyRing`, `MainMenuBar.lua:471-479`).
 #[test]
 fn the_first_key_puts_the_keyring_on_the_bar() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -1541,29 +1543,18 @@ fn the_first_key_puts_the_keyring_on_the_bar() {
             "{strip} keeps the reference's own band — got {t}..{b}, want {top}..{bottom}"
         );
     }
-    // The stock bar puts `KeyRingButton`'s left edge 234 from the bar's right (backpack at -6,
-    // 37-wide buttons, -5 gaps), into the socket painted on the keyring plate.
+    // `KeyRingButton` sits 6 left of `CharacterBag3Slot` (`MainMenuBarBagButtons.xml:167-174`):
+    // the backpack 6 in and 37 wide, four 30-wide bags at -5/-4 gaps, then 6 and its own 18.
     let bar_right = s.eval::<f64>("return MainMenuBar:GetRight()").unwrap();
     let button_left = s.eval::<f64>("return KeyRingButton:GetLeft()").unwrap();
     assert!(
-        (bar_right - button_left - 235.0).abs() < 1.5,
-        "the keyring button must land in the plate's painted socket — the ref's own -234, got {}",
+        (bar_right - button_left - 204.0).abs() < 1.5,
+        "the keyring button 204 in from the bar's right, got {}",
         bar_right - button_left
     );
 
-    // The performance meter clears the new socket (`MainMenuBar.lua:180`: -227 to -235).
-    let perf_right = s
-        .eval::<f64>("return MainMenuBarPerformanceBarFrame:GetRight()")
-        .unwrap();
-    let bar_right = s.eval::<f64>("return MainMenuBar:GetRight()").unwrap();
-    assert!(
-        (bar_right - perf_right - 235.0).abs() < 0.01,
-        "the meter slid to -235 with the keyring up (got {})",
-        bar_right - perf_right
-    );
-
-    // The latch is one-way: `MainMenuBar_UpdateKeyRing` only ever shows the button, and
-    // `SHOW_KEYRING` is a saved variable (`MainMenuBar.lua:174-183`, `MainMenuBar.xml:323-336`).
+    // The latch is one-way: `MainMenuBar_UpdateKeyRing` only ever shows the button, gated on the
+    // `showKeyring` CVar (`MainMenuBar.lua:471-479`).
     s.set_has_key(false);
     s.fire_event("BAG_UPDATE", vec![benilla_ui::script::ScriptValue::Int(-2)]);
     assert!(
@@ -1614,7 +1605,10 @@ fn the_keyring_button_opens_a_keyring_window() {
              if getglobal('{w}Item' .. i):IsShown() then n = n + 1 end end return n"
         ))
         .unwrap();
-    assert_eq!(shown, 8, "only the level-unlocked keyring slots are drawn");
+    assert_eq!(
+        shown, 4,
+        "GetKeyRingSize rounds the highest filled slot up to a row of 4 (ContainerFrame.lua:877)"
+    );
     assert_eq!(
         s.eval::<i64>(
             "local _, _, id = string.find(GetContainerItemLink(KEYRING_CONTAINER, 1), 'item:(%d+)') \
@@ -1666,8 +1660,8 @@ fn a_hovered_key_shows_its_tooltip_through_its_inventory_slot() {
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
     assert_eq!(
         s.eval::<Option<String>>("return ASKED").unwrap().as_deref(),
-        Some("player:82"),
-        "the stock arm asks for key 1's inventory slot"
+        Some("player:87"),
+        "the stock arm asks for key 1's inventory slot, 3.3.5's 87 (keyring from slot 86)"
     );
     assert!(s.eval::<bool>("return GameTooltip:IsVisible()").unwrap());
     assert_eq!(
