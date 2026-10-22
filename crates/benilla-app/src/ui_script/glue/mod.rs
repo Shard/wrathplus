@@ -50,6 +50,11 @@ pub(crate) fn stock_glue_active() -> bool {
     *ON
 }
 
+/// The run condition of a native glue screen's systems: the stock screens are off.
+pub(crate) fn native_glue() -> bool {
+    !stock_glue_active()
+}
+
 /// UI input's run condition: the in-game UI in the world, or a screen the stock glue hosts.
 pub(crate) fn ui_input_live(state: Option<Res<State<crate::char_select::ClientState>>>) -> bool {
     use crate::char_select::ClientState;

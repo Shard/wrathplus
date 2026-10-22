@@ -267,15 +267,13 @@ impl Plugin for UiScriptPlugin {
             )
             // In the feed phase, so an `OnUpdate` reads this frame's `GetFramerate()`.
             .add_systems(Update, feed_framerate.in_set(UiFeed))
-            // The input pass hit-tests the rects the tick just resolved, and runs in-world only.
+            // The input pass hit-tests the rects the tick just resolved, in the world and on the
+            // stock glue screens.
             .init_resource::<UiPassState>()
             .init_resource::<PointerOverUiPanel>()
             .add_systems(
                 Update,
-                (
-                    extract::tick_script,
-                    input::feed_ui_input.run_if(glue::ui_input_live),
-                )
+                (extract::tick_script, input::feed_ui_input.run_if(glue::ui_input_live))
                     .chain()
                     .in_set(UiInput)
                     // So a key a focused box consumed never also fires a binding.

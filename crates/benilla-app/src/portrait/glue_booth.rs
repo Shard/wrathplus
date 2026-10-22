@@ -11,6 +11,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::Extent3d;
 use bevy::window::PrimaryWindow;
 
+use super::glue_stage::{glue_stage, glue_stage_model_path};
 use crate::entities::Creatures;
 use benilla_assets::m2_url;
 use benilla_assets::materials::WowModelMaterial;
@@ -235,37 +236,6 @@ fn scene_token(scene: GlueScene) -> &'static str {
         GlueScene::Race { race, class } => glue_stage(race, class),
         GlueScene::Stage(name) => name,
     }
-}
-
-/// The `UI_<name>` stage a character stands on at select and create, build 12340's
-/// `GetSelectBackgroundModel` (`0x4e3620`): a Death Knight (class 6) stands on its class's
-/// `ChrClasses` file name, `DeathKnight`, whatever its race; a Gnome (7) borrows Dwarf's (3) and a
-/// Troll (8) Orc's (2) stage; every other race stands on its own `ChrRaces` file name. The names
-/// are the shipped models' spelling; the archive is case-insensitive.
-///
-/// Deviation: a race outside the ten playable ones stands on Human's, where the reference names a
-/// `UI_<file>` that does not ship and shows no stage. Unresolved, labelled: the trial-build arm
-/// (`0x422140`, `"CharacterSelect"`) is not modelled, and the create screen's own getter was not
-/// pinned; stock `CharacterCreate.lua` swaps to the Death Knight stage by class the same way.
-pub(crate) fn glue_stage(race: u8, class: u8) -> &'static str {
-    if class == 6 {
-        return "DeathKnight";
-    }
-    match race {
-        2 | 8 => "Orc",
-        3 | 7 => "Dwarf",
-        4 => "NightElf",
-        5 => "Scourge",
-        6 => "Tauren",
-        10 => "BloodElf",
-        11 => "Draenei",
-        _ => "Human",
-    }
-}
-
-/// A stage's model, as stock `GlueParent.lua`'s `SetBackgroundModel` builds it from the name.
-pub(crate) fn glue_stage_model_path(stage: &str) -> String {
-    format!("Interface\\Glues\\Models\\UI_{stage}\\UI_{stage}.m2")
 }
 
 /// Whether the stage may swap this frame: nothing coherent is `standing`, both the requested art
@@ -1588,34 +1558,17 @@ mod tests {
     use benilla_assets::ModelLight;
     use benilla_formats::M2Light;
 
-    /// Build 12340's `GetSelectBackgroundModel` (`0x4e3620`): the Death Knight's class stage wins
-    /// over any race, Gnome and Troll borrow, and the two Burning Crusade races stand on their own.
+    /// A race scene stands on [`glue_stage`]'s stage; the menu and a named stage stand on theirs.
     #[test]
-    fn the_stage_follows_the_12340_race_and_class_rule() {
-        for (race, class, want) in [
-            (1, 1, "Human"),
-            (2, 1, "Orc"),
-            (3, 1, "Dwarf"),
-            (4, 1, "NightElf"),
-            (5, 1, "Scourge"),
-            (6, 1, "Tauren"),
-            (7, 1, "Dwarf"),
-            (8, 1, "Orc"),
-            (10, 2, "BloodElf"),
-            (11, 2, "Draenei"),
-            (1, 6, "DeathKnight"),
-            (10, 6, "DeathKnight"),
-            (6, 6, "DeathKnight"),
-        ] {
-            assert_eq!(glue_stage(race, class), want, "race {race} class {class}");
-            assert_eq!(scene_token(GlueScene::Race { race, class }), want);
+    fn the_scene_token_is_the_stage_it_stands_on() {
+        for (race, class) in [(1, 1), (7, 1), (10, 6)] {
+            assert_eq!(
+                scene_token(GlueScene::Race { race, class }),
+                glue_stage(race, class)
+            );
         }
         assert_eq!(scene_token(GlueScene::MainMenu), "MainMenu_Northrend");
         assert_eq!(scene_token(GlueScene::Stage("BloodElf")), "BloodElf");
-        assert_eq!(
-            glue_stage_model_path("DeathKnight"),
-            "Interface\\Glues\\Models\\UI_DeathKnight\\UI_DeathKnight.m2"
-        );
     }
 
     /// `CharModelFogInfo` has no Blood Elf, Draenei or Death Knight row, so `SetLighting` clears
