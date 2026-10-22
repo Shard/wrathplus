@@ -513,16 +513,16 @@ fn cost_and_cast_cells_on_real_data() {
     assert_eq!(v.cost.as_deref(), Some("15 Rage"));
     assert_eq!(v.cast_time.as_deref(), Some("Next melee"));
 
-    // Throw (2764) reads "Attack speed" off `Attributes & 0x2` alone; Attack (6603), `Effect[0]`
-    // ATTACK, omits the line (`0x52eb3c`). Labelled: 12340's Auto Shot (75) reads "Instant cast"
-    // under this law; what the 12340 cast cell prints for it is unresolved (the law is 1.12's).
+    // Throw (2764), `Attributes & 0x2`: `GetCastTime` adds 500 ms (`0x7ff2a5`), so with no
+    // ranged weapon to scale it the cell is "0.5 sec cast". Attack (6603), `Effect[0]` ATTACK,
+    // omits the line.
     let v = spell_tooltip_view(
         2764,
         &spells,
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Throw view");
-    assert_eq!(v.cast_time.as_deref(), Some("Attack speed"));
+    assert_eq!(v.cast_time.as_deref(), Some("0.5 sec cast"));
     let v = spell_tooltip_view(
         6603,
         &spells,
@@ -542,8 +542,8 @@ fn cost_and_cast_cells_on_real_data() {
     assert_eq!(v.cast_time.as_deref(), Some("Channeled"));
 }
 
-/// The range cell (`0x52e9a2`-`0x52ea8c`): the melee row prints a number off the reaches, an
-/// authored row its own, and the on-next-swing and self rows nothing.
+/// The range cell (`0x623ef7`-`0x62438a`): the melee row prints `MELEE_RANGE`, an authored row
+/// its own, and the on-next-swing and self rows nothing.
 #[test]
 fn range_cell_on_real_data() {
     let data = benilla_formats::wow_data_or_skip!();
@@ -562,63 +562,28 @@ fn range_cell_on_real_data() {
     // A default-reach player: `UNIT_FIELD_COMBATREACH` unset reads the descriptor's 1.5.
     let store = empty_player();
 
-    // Sinister Strike (1752) is on row 2 "Combat Range", the one row with flags bit 0:
-    // 1.5 + 1.5 + 1.3333334 = 4.333 is under the 5.0 floor.
+    // Sinister Strike (1752) is on row 2 "Combat Range", the one row with flags bit 0. No range
+    // modifier reaches it, so the cell is `MELEE_RANGE` (`0x623f3f`) whatever the reaches.
     let d = spells.catalog.get(1752).expect("Sinister Strike 1752");
     assert_eq!(d.range_index, 2, "the melee row");
     assert!(spells.ranges.get(2).expect("row 2").is_melee());
-    let v = spell_tooltip_view(
-        1752,
-        &spells,
-        &mut t.ctx_for(&objects, 0, None, Some(&store)),
-    )
-    .expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("5 yd range"));
-
-    // A 4.0 reach: 4.0 + 4.0 + 1.3333334 = 9.333, rounded to 9.
     let big = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(
         benilla_protocol::types::Field::UnitCombatreach,
         4.0f32.to_bits(),
     )]));
-    let v = spell_tooltip_view(1752, &spells, &mut t.ctx_for(&objects, 0, None, Some(&big)))
-        .expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("9 yd range"));
-
-    // The second reach is the auto-attack target's: 1.5 + 4.0 + 1.3333334 = 6.833, rounded to 7.
-    let v = spell_tooltip_view(
-        1752,
-        &spells,
-        &mut t.ctx_engaged(&objects, Some(&store), 4.0),
-    )
-    .expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("7 yd range"));
-
-    // Both units running: the moving bonus goes on the floor, 5.0 + 2.6667 = 7.667, rounded to 8.
-    let running = benilla_formats::UnitMotion {
-        flags: 1,
-        speed: 7.0,
-        walk_speed: 2.5,
-    };
-    let runner = benilla_formats::RangeUnit {
-        motion: running,
-        ..benilla_formats::RangeUnit::still(1.5)
-    };
-    let mut ctx = t.ctx_for(&objects, 0, None, Some(&store));
-    ctx.range_caster = runner;
-    ctx.attack_target = Some(runner);
-    let v = spell_tooltip_view(1752, &spells, &mut ctx).expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("8 yd range"));
-    // One of them standing, or no auto-attack target to read: the floor.
-    ctx.attack_target = Some(benilla_formats::RangeUnit::still(1.5));
-    let v = spell_tooltip_view(1752, &spells, &mut ctx).expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("5 yd range"));
-    ctx.attack_target = None;
-    let v = spell_tooltip_view(1752, &spells, &mut ctx).expect("Sinister Strike view");
-    assert_eq!(v.range.as_deref(), Some("5 yd range"));
-    // The ranged arm passes no target, so the bonus never reaches an authored row: Fireball's 35.
-    ctx.attack_target = Some(runner);
-    let v = spell_tooltip_view(133, &spells, &mut ctx).expect("Fireball view");
-    assert_eq!(v.range.as_deref(), Some("35 yd range"));
+    for which in 0..3 {
+        let mut ctx = match which {
+            0 => t.ctx_for(&objects, 0, None, Some(&store)),
+            1 => t.ctx_for(&objects, 0, None, Some(&big)),
+            _ => t.ctx_engaged(&objects, Some(&store), 4.0),
+        };
+        let v = spell_tooltip_view(1752, &spells, &mut ctx).expect("Sinister Strike view");
+        assert_eq!(
+            v.range.as_deref(),
+            Some("Melee Range"),
+            "reach case {which}"
+        );
+    }
 
     // An authored row: Fireball's 0-35.
     let v = spell_tooltip_view(
@@ -984,7 +949,10 @@ fn the_mouseover_token_clears_when_no_unit_is_hovered() {
         (
             eval(app, r#"return UnitExists("mouseover") and 1 or nil"#),
             // Build 12340 answers a boolean; both read as 1 or nil here.
-            eval(app, r#"return UnitIsUnit("mouseover", "target") and 1 or nil"#),
+            eval(
+                app,
+                r#"return UnitIsUnit("mouseover", "target") and 1 or nil"#,
+            ),
         )
     };
     let empty = Hovered::default();
