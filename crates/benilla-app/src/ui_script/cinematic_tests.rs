@@ -66,6 +66,9 @@ fn a_playing_cinematic_swallows_the_movement_keys() {
 fn escape_is_consumed_and_acted_on_rather_than_falling_through() {
     benilla_formats::wow_data_or_skip!();
     let mut s = ui_with_the_cinematic_frame();
+    // The handler's arm is `GetBindingFromClick(key) == "TOGGLEGAMEMENU"` (`UIParent.lua:3113`,
+    // FrameXML's own, over `GetBindingAction`), so ESCAPE needs its default seat.
+    crate::ui_script::load_stock_bindings(&mut s);
     start_cinematic(&mut s);
 
     assert!(

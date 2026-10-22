@@ -223,3 +223,44 @@ fn justify_v_defaults_middle_and_overrides() {
         .expect("a text quad");
     assert_eq!(fresh, JustifyV::Top);
 }
+
+/// `Texture:SetRotation` (12340 `0x48c860`) writes `SetTexCoord`'s eight values for a unit square
+/// turned about (0.5, 0.5): unturned it reads -0.207..1.207, the native zoomed-out square.
+#[test]
+fn set_rotation_writes_the_turned_corners() {
+    let s = script();
+    s.run(
+        r#"
+        f = CreateFrame("Frame", "RotF")
+        t = f:CreateTexture("RotTex", "ARTWORK")
+        t:SetRotation(0)
+    "#,
+    )
+    .unwrap();
+    let got: Vec<f32> = s
+        .eval::<mlua::Variadic<f32>>("return t:GetTexCoord()")
+        .unwrap()
+        .to_vec();
+    let (lo, hi) = (0.5 - 0.5f32.sqrt(), 0.5 + 0.5f32.sqrt());
+    // UL, LL, UR, LR.
+    let want = [lo, lo, lo, hi, hi, lo, hi, hi];
+    for (g, w) in got.iter().zip(want) {
+        assert!((g - w).abs() < 1e-5, "got {got:?}, want {want:?}");
+    }
+    // A quarter turn about (0, 0); a lone cx keeps the default centre.
+    s.run("t:SetRotation(math.pi / 2, 0, 0)").unwrap();
+    let got: Vec<f32> = s
+        .eval::<mlua::Variadic<f32>>("return t:GetTexCoord()")
+        .unwrap()
+        .to_vec();
+    let r = 0.5f32.sqrt();
+    let want = [r, -r, -r, -r, r, r, -r, r];
+    for (g, w) in got.iter().zip(want) {
+        assert!((g - w).abs() < 1e-5, "got {got:?}, want {want:?}");
+    }
+    let err = s.run("t:SetRotation()").unwrap_err().to_string();
+    assert!(
+        err.contains("Usage: RotTex:SetRotation(angle, [cx, cy])"),
+        "{err}"
+    );
+}

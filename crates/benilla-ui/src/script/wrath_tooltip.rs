@@ -17,7 +17,10 @@ fn tooltip_name(lua: &Lua, this: &Table) -> mlua::Result<String> {
 /// item object (`0x754cd0`/`0x754a20`), this the item id.
 fn equipped(m: &Model, item_id: u32) -> bool {
     item_id != 0
-        && (1..=19).any(|slot| m.inv_slot("player", slot).is_some_and(|s| s.item_id == item_id))
+        && (1..=19).any(|slot| {
+            m.inv_slot("player", slot)
+                .is_some_and(|s| s.item_id == item_id)
+        })
 }
 
 fn flag(on: bool) -> Value {
@@ -42,21 +45,23 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // with the offsets, keeping its content; an unowned one keeps its mode.
     m.set(
         "SetAnchorType",
-        lua.create_function(|lua, (this, anchor, x, y): (Table, Value, Option<f32>, Option<f32>)| {
-            let Value::String(anchor) = anchor else {
-                return Err(mlua::Error::runtime(format!(
-                    "Usage: {}:SetAnchorType( anchorType [,Xoffset] [,Yoffset] )",
-                    tooltip_name(lua, &this)?
-                )));
-            };
-            let anchor = anchor.to_string_lossy();
-            let h = frame_handle_of(lua, &this)?;
-            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            if let Some(owner) = tip_mut(&mut model, h).ok().and_then(|t| t.owner) {
-                super::tooltip::place(&mut model, h, owner, Some(&anchor), x, y)?;
-            }
-            Ok(())
-        })?,
+        lua.create_function(
+            |lua, (this, anchor, x, y): (Table, Value, Option<f32>, Option<f32>)| {
+                let Value::String(anchor) = anchor else {
+                    return Err(mlua::Error::runtime(format!(
+                        "Usage: {}:SetAnchorType( anchorType [,Xoffset] [,Yoffset] )",
+                        tooltip_name(lua, &this)?
+                    )));
+                };
+                let anchor = anchor.to_string_lossy();
+                let h = frame_handle_of(lua, &this)?;
+                let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+                if let Some(owner) = tip_mut(&mut model, h).ok().and_then(|t| t.owner) {
+                    super::tooltip::place(&mut model, h, owner, Some(&anchor), x, y)?;
+                }
+                Ok(())
+            },
+        )?,
     )?;
     // GetItem() (`0x61ef10`) → name, link of the shown item; nothing without one.
     m.set(
@@ -81,7 +86,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, this: Table| {
             let h = frame_handle_of(lua, &this)?;
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            let id = tip_mut(&mut model, h).ok().and_then(|t| t.item.as_ref().map(|i| i.0));
+            let id = tip_mut(&mut model, h)
+                .ok()
+                .and_then(|t| t.item.as_ref().map(|i| i.0));
             Ok(flag(id.is_some_and(|id| equipped(&model, id))))
         })?,
     )?;
@@ -181,15 +188,23 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "SetMerchantCostItem",
         lua.create_function(|lua, (this, slot, n): (Table, Value, Value)| {
             let (Some(slot), Some(n)) = (lua.coerce_number(slot)?, lua.coerce_number(n)?) else {
-                return Err(mlua::Error::runtime("Invalid merchant slot in SetMerchantCostItem"));
+                return Err(mlua::Error::runtime(
+                    "Invalid merchant slot in SetMerchantCostItem",
+                ));
             };
             let item = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                let (slot, n) = ((slot - 1.0).round_ties_even() as i64, (n - 1.0).round_ties_even() as i64);
-                usize::try_from(slot).ok().zip(usize::try_from(n).ok()).and_then(|(s, n)| {
-                    let row = model.merchant.as_ref()?.items.get(s)?;
-                    row.extended_cost.as_ref()?.items.get(n).map(|c| c.item_id)
-                })
+                let (slot, n) = (
+                    (slot - 1.0).round_ties_even() as i64,
+                    (n - 1.0).round_ties_even() as i64,
+                );
+                usize::try_from(slot)
+                    .ok()
+                    .zip(usize::try_from(n).ok())
+                    .and_then(|(s, n)| {
+                        let row = model.merchant.as_ref()?.items.get(s)?;
+                        row.extended_cost.as_ref()?.items.get(n).map(|c| c.item_id)
+                    })
             };
             match item {
                 Some(id) => super::tooltip_item::render_by_id(lua, &this, id, None, None),
@@ -205,9 +220,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "SetHyperlinkCompareItem",
         lua.create_function(|lua, (this, link, offset): (Table, Value, Value)| {
             let Some(link) = (match &link {
-                Value::String(_) | Value::Integer(_) | Value::Number(_) => {
-                    lua.coerce_string(link.clone())?.map(|s| s.to_string_lossy())
-                }
+                Value::String(_) | Value::Integer(_) | Value::Number(_) => lua
+                    .coerce_string(link.clone())?
+                    .map(|s| s.to_string_lossy()),
                 _ => None,
             }) else {
                 return Err(mlua::Error::runtime(format!(
@@ -231,13 +246,24 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                             .iter()
                             .copied()
                             .filter(|&s| {
-                                model.inv_slot("player", s as usize).is_some_and(|i| i.item_id != 0)
+                                model
+                                    .inv_slot("player", s as usize)
+                                    .is_some_and(|i| i.item_id != 0)
                             })
                             .nth(offset)
                     })
             };
             match slot {
                 Some(slot) => {
+                    // A compare binding renders with the gray `CURRENTLY_EQUIPPED` head (p5 of the
+                    // builder, `tooltip_item::render::BuilderFlags`).
+                    let h = super::object::frame_handle_of(lua, &this)?;
+                    if let Ok(t) = super::tooltip::tip_mut(
+                        &mut lua.app_data_mut::<Model>().expect("model app_data"),
+                        h,
+                    ) {
+                        t.equipped_header_armed = true;
+                    }
                     this.call_method::<()>("SetInventoryItem", ("player", slot))?;
                     Ok(Value::Integer(1))
                 }
@@ -272,7 +298,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     m.set("SetTracking", tracking)?;
     // FontString:GetFieldSize() (`0x48bc70`): the text buffer's fixed size, 8191 (`0x9ead70`).
     let fontstrings: Table = lua.named_registry_value(super::REG_FONTSTRING_METHODS)?;
-    fontstrings.set("GetFieldSize", lua.create_function(|_, _this: Table| Ok(8191.0))?)?;
+    fontstrings.set(
+        "GetFieldSize",
+        lua.create_function(|_, _this: Table| Ok(8191.0))?,
+    )?;
 
     // IsEquippedItem(itemID | "name" | "link") (`0x51c690`) → 1 when the player wears it.
     lua.globals().set(
@@ -310,18 +339,37 @@ mod tests {
 
     fn vm() -> UiScript {
         let mut s = UiScript::new().unwrap();
-        s.set_unit("player", Some(UnitState { guid: 1, exists: true, ..Default::default() }));
+        s.set_unit(
+            "player",
+            Some(UnitState {
+                guid: 1,
+                exists: true,
+                ..Default::default()
+            }),
+        );
         s.model_mut().unit_guids.player = 1;
         s.set_item_template(
             19019,
-            ItemTemplateView { name: "Thunderfury".into(), quality: 5, inventory_type: 13, ..Default::default() },
+            ItemTemplateView {
+                name: "Thunderfury".into(),
+                quality: 5,
+                inventory_type: 13,
+                ..Default::default()
+            },
         );
         s.set_item_template(
             2589,
-            ItemTemplateView { name: "Linen Cloth".into(), quality: 1, ..Default::default() },
+            ItemTemplateView {
+                name: "Linen Cloth".into(),
+                quality: 1,
+                ..Default::default()
+            },
         );
         let mut slots: crate::script::InventorySlots = Default::default();
-        slots[16] = Some(InvSlotView { item_id: 19019, ..Default::default() });
+        slots[16] = Some(InvSlotView {
+            item_id: 19019,
+            ..Default::default()
+        });
         s.set_inventory_slots(slots);
         s.run("TIP_OWNER = CreateFrame('Frame') TIP = CreateFrame('GameTooltip', 'Tip', TIP_OWNER) TIP:SetOwner(TIP_OWNER, 'ANCHOR_NONE')").unwrap();
         s
@@ -339,16 +387,22 @@ mod tests {
         s.run("TIP:SetHyperlink('item:19019:0:0:0')").unwrap();
         assert!(s.eval::<bool>("local n, l = TIP:GetItem() return n == 'Thunderfury' and l:find('item:19019') ~= nil and TIP:IsEquippedItem() == 1").unwrap());
         s.run("TIP:SetHyperlink('item:2589:0:0:0')").unwrap();
-        assert!(s.eval::<bool>("return TIP:GetItem() == 'Linen Cloth' and TIP:IsEquippedItem() == nil").unwrap());
+        assert!(s
+            .eval::<bool>("return TIP:GetItem() == 'Linen Cloth' and TIP:IsEquippedItem() == nil")
+            .unwrap());
         s.run("TIP:ClearLines()").unwrap();
-        assert!(s.eval::<bool>("return TIP:IsUnit('player') == nil").unwrap());
+        assert!(s
+            .eval::<bool>("return TIP:IsUnit('player') == nil")
+            .unwrap());
         assert!(s.run("TIP:IsUnit()").is_err());
     }
 
     #[test]
     fn spell_aura_merchant_and_compare_shapes() {
         let s = vm();
-        assert!(s.eval::<bool>("return TIP:SetSpellByID(133) == nil").unwrap());
+        assert!(s
+            .eval::<bool>("return TIP:SetSpellByID(133) == nil")
+            .unwrap());
         assert!(s.run("TIP:SetSpellByID(-1)").is_err() && s.run("TIP:SetSpellByID()").is_err());
         s.run("TIP:SetUnitAura('player', 1) TIP:SetUnitAura('player', 'Arcane Intellect', 'Rank 1', 'HARMFUL')").unwrap();
         assert!(s.run("TIP:SetUnitAura()").is_err());
@@ -376,7 +430,10 @@ mod widget_tests {
             "A:GetRegionParent() == P",
             "T.SetTracking == T.SetTrackingSpell",
         ] {
-            assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
+            assert!(
+                s.eval::<bool>(&format!("return {check}")).unwrap(),
+                "{check}"
+            );
         }
         assert!(s.run("T:SetAnchorType()").is_err());
         s.run("E:SetFocus()").unwrap();
