@@ -899,13 +899,12 @@ fn flagged_friendly_player_plate_is_green() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// An NPC of a faction we are Exalted with reads as Revered: `0x606439` caps the rank at 6 and the
-/// binding adds one (`0x51683e`), so `UnitReaction` answers 7 and stock `TargetFrame_CheckFaction`
-/// finds the last of `UnitReactionColor`'s seven entries (`TargetFrame.lua:6-14`, `:183`).
+/// Revered and Exalted NPC targets: 12340's reaction (`007251c0`/`005d0600`) is uncapped, so
+/// `UnitReaction` answers 7 at Revered and 8 at Exalted, and the plate stays green.
 #[test]
-fn an_exalted_npc_target_reads_revered_and_its_plate_is_green() {
+fn revered_and_exalted_npc_targets_read_their_ranks_and_plates_are_green() {
     use crate::net::ObjectStore;
-    use crate::target::{stormwind_fixture, HUMAN_WARRIOR};
+    use crate::target::stormwind_fixture;
     const FIELD_UNIT_FACTIONTEMPLATE: u16 =
         benilla_protocol::types::Field::UnitFactionTemplate.index();
     use benilla_protocol::ObjectFields;
@@ -915,10 +914,7 @@ fn an_exalted_npc_target_reads_revered_and_its_plate_is_green() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&mut s);
-    let me = ObjectStore(ObjectFields::from_fields(&[(
-        benilla_protocol::types::Field::UnitBytes0,
-        HUMAN_WARRIOR,
-    )]));
+    let me = ObjectStore(crate::target::human_warrior_player(&[]));
 
     for total in [21_000, 42_000] {
         let (factions, template, reps) = stormwind_fixture(&mut chain, total);
@@ -949,7 +945,7 @@ fn an_exalted_npc_target_reads_revered_and_its_plate_is_green() {
         assert_eq!(
             s.eval::<i64>(r#"return UnitReaction("target", "player")"#)
                 .unwrap(),
-            7,
+            if total == 42_000 { 8 } else { 7 },
             "standing {total}"
         );
         let green = plate_color(&mut s);

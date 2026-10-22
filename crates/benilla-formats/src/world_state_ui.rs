@@ -2,8 +2,9 @@
 //! columns (`GetNumWorldStateUI`, `GetWorldStateUIInfo` `0x4c5a70`). It is client-only: vmangos
 //! sends only world-state values, and which are shown, where and with what label is this table's.
 //!
-//! Layout: 39 fields of 156 bytes (the loader asserts both, `0x553a9e`, `0x553ad6`), each
-//! localized string nine dwords; field 22 (`+0x58`) is loaded and never read, so not carried.
+//! The schema is 1.12's 39 fields (each localized string nine dwords; field 22 loaded and never
+//! read); [`crate::wrath_layouts`] maps it onto the 3.3.5 file's 63 columns, with their
+//! `PhaseShift` (not carried: the phase mask is not modelled) and 17-dword locale blocks.
 
 use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};

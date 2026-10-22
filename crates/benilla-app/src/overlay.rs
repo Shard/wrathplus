@@ -262,11 +262,11 @@ impl UiQuadMaterial {
 impl Material2d for UiQuadMaterial {
     /// Our own vertex stage, which unpacks the run's tint from the instance tag (`ui_pass::tint_tag`).
     fn vertex_shader() -> ShaderRef {
-        "embedded://benilla_app/shaders/ui_quad.wgsl".into()
+        crate::shaders::UI_QUAD.into()
     }
 
     fn fragment_shader() -> ShaderRef {
-        "embedded://benilla_app/shaders/ui_quad.wgsl".into()
+        crate::shaders::UI_QUAD.into()
     }
 
     fn alpha_mode(&self) -> bevy::sprite_render::AlphaMode2d {

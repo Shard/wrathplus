@@ -18,6 +18,8 @@ pub(crate) mod movement;
 pub(crate) mod player;
 pub(crate) mod schedule;
 pub(crate) mod session;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod source_tree;
 pub(crate) mod state;
 pub(crate) mod tutorial;
 pub(crate) mod ui_state;

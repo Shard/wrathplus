@@ -292,7 +292,9 @@ mod tests {
         assert_eq!(resolve(&r, &states).extended_ui_state, [42, 7, 0]);
     }
 
-    /// Against the install's table: Warsong Gulch's always-up rows, and no scoreboard column.
+    /// Against the install's table: Warsong Gulch's always-up rows, and no scoreboard column. The
+    /// 3.3.5 rows carry `AreaID` 3277 (the map's own area, which AzerothCore's init sends as the
+    /// zone); its area-0 rows are the scoreboard's `Type` 2 columns.
     #[test]
     fn the_real_table_builds_the_warsong_gulch_readout() {
         let data = benilla_formats::wow_data_or_skip!();
@@ -301,7 +303,7 @@ mod tests {
         let catalog =
             benilla_formats::load_world_state_ui_catalog(&mut chain).expect("WorldStateUI");
         let mut wsg = WorldStates::default();
-        wsg.init_scope(489, 0);
+        wsg.init_scope(489, 3277);
         wsg.write(&[(1581, 2), (1582, 1)]);
         let rows = build(&catalog, &wsg);
         assert!(rows.len() >= 2, "{} rows", rows.len());

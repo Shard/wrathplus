@@ -4,8 +4,21 @@
 
 use bevy::prelude::*;
 
-/// Register the five shaders under `embedded://benilla_app/shaders/…`; added after `DefaultPlugins`
-/// creates the registry it fills.
+/// The served paths, `embedded://<this crate>/shaders/…`. The crate is the compiler's name for the
+/// one this file is built in, so moving it to another crate (the crate split) keeps every path right.
+macro_rules! served {
+    ($file:literal) => {
+        concat!("embedded://", env!("CARGO_CRATE_NAME"), "/shaders/", $file)
+    };
+}
+pub(crate) const UI_QUAD: &str = served!("ui_quad.wgsl");
+pub(crate) const UI_ADD: &str = served!("ui_add.wgsl");
+pub(crate) const UI_GAMMA: &str = served!("ui_gamma.wgsl");
+pub(crate) const UI_NODE_GAMMA: &str = served!("ui_node_gamma.wgsl");
+pub(crate) const UI_SLICE_GAMMA: &str = served!("ui_slice_gamma.wgsl");
+
+/// Register the five shaders at their served paths; added after `DefaultPlugins` creates the
+/// registry it fills.
 pub(crate) fn plugin(app: &mut App) {
     bevy::asset::embedded_asset!(app, "shaders/ui_quad.wgsl");
     bevy::asset::embedded_asset!(app, "shaders/ui_add.wgsl");
@@ -36,7 +49,7 @@ mod tests {
                 continue;
             }
             found += 1;
-            let path = format!("benilla_app/shaders/{name}");
+            let path = format!("{}/shaders/{name}", env!("CARGO_CRATE_NAME"));
             let read = bevy::tasks::block_on(async {
                 source.reader().read(std::path::Path::new(&path)).await
             });
@@ -47,5 +60,19 @@ mod tests {
             );
         }
         assert_eq!(found, 5, "the game's shader set changed size");
+        // The paths the materials and pipelines load resolve too.
+        for served in [
+            super::UI_QUAD,
+            super::UI_ADD,
+            super::UI_GAMMA,
+            super::UI_NODE_GAMMA,
+            super::UI_SLICE_GAMMA,
+        ] {
+            let path = served.strip_prefix("embedded://").unwrap();
+            let read = bevy::tasks::block_on(async {
+                source.reader().read(std::path::Path::new(path)).await
+            });
+            assert!(read.is_ok(), "{served} does not resolve");
+        }
     }
 }

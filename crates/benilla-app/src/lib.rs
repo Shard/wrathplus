@@ -186,7 +186,7 @@ mod ui_companions;
 mod ui_totems;
 mod ui_glyphs;
 mod ui_raid_vehicles;
-mod wrath_vehicle_seats;
+pub(crate) mod wrath_vehicle_seats;
 mod ui_unit_popup;
 mod ui_runes;
 mod ui_pet_stats;
@@ -402,7 +402,7 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     }
 
     // No `game://` source: the five UI shaders are compiled in by `crate::shaders`
-    // (`embedded://benilla_app/shaders/…`), so no build-machine path reaches the binary.
+    // (`embedded://<its crate>/shaders/…`), so no build-machine path reaches the binary.
 
     app.add_plugins(benilla_world::boot::tuned_default_plugins(Window {
         title: "benilla".into(),

@@ -1100,7 +1100,10 @@ impl Model {
     /// (`_strnicmp`: `A`..`Z` only, never a byte of 0x80 or more), so `to_ascii_lowercase`, never
     /// `to_lowercase`.
     pub(crate) fn pushed_unit(&self, token: &str) -> Option<&UnitState> {
-        let folded = token.bytes().any(|b| b.is_ascii_uppercase()).then(|| token.to_ascii_lowercase());
+        let folded = token
+            .bytes()
+            .any(|b| b.is_ascii_uppercase())
+            .then(|| token.to_ascii_lowercase());
         let key = folded.as_deref().unwrap_or(token);
         // Wrath's `questnpc` is the conversation NPC, which the app pushes as `npc`.
         let wrath_npc = self.unit_guids.wrath && key == "questnpc";
