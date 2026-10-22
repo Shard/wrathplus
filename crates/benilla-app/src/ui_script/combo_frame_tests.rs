@@ -55,10 +55,23 @@ fn play_as(s: &mut UiScript, class_id: u32, target: u64) {
     );
 }
 
-/// Run 2 s of fades, past the 0.4 + 0.3 + 0.4 s highlight and shine chain (`ComboFrame.lua:3`).
+/// Run 2 s of fades, past the 0.4 + 0.3 + 0.4 s highlight and shine chain (`ComboFrame.lua:3`),
+/// through 3.3.5's fade manager (`UIFrameFade_OnUpdate`, `UIParent.lua:2456`).
 fn settle(s: &mut UiScript) {
-    s.eval::<()>("for i = 1, 40 do UIFrameFadeUpdate(0.05) end")
+    s.eval::<()>(
+        r#"local manager = CreateFrame("Frame")
+           for i = 1, 40 do UIFrameFade_OnUpdate(manager, 0.05) end"#,
+    )
         .unwrap();
+}
+
+/// 3.3.5's combo event, `UNIT_COMBO_POINTS` for the player, which `ComboFrame_OnEvent` matches
+/// against `PlayerFrame.unit`.
+fn combo_event(s: &mut UiScript) {
+    s.fire_event(
+        "UNIT_COMBO_POINTS",
+        vec![benilla_ui::script::ScriptValue::Str("player".into())],
+    );
 }
 
 fn shown(s: &mut UiScript) -> bool {
@@ -77,11 +90,11 @@ fn combo_frame_follows_the_point_count() {
     let mut s = load_combo_frame();
     play_as(&mut s, 4, MOB_A); // rogue
 
-    s.fire_event("PLAYER_COMBO_POINTS", vec![]);
+    combo_event(&mut s);
     assert!(!shown(&mut s), "no points ⇒ hidden");
 
     s.set_combo_points(1, MOB_A);
-    s.fire_event("PLAYER_COMBO_POINTS", vec![]);
+    combo_event(&mut s);
     assert!(shown(&mut s), "one point ⇒ shown");
 
     settle(&mut s);
@@ -94,7 +107,7 @@ fn combo_frame_follows_the_point_count() {
     );
 
     s.set_combo_points(5, MOB_A);
-    s.fire_event("PLAYER_COMBO_POINTS", vec![]);
+    combo_event(&mut s);
     settle(&mut s);
     let all_lit: bool = s
         .eval(
@@ -112,7 +125,7 @@ fn combo_frame_follows_the_point_count() {
 
     // The server clears the count on spend or expiry; that falling edge alone takes the dots down.
     s.set_combo_points(0, 0);
-    s.fire_event("PLAYER_COMBO_POINTS", vec![]);
+    combo_event(&mut s);
     assert!(!shown(&mut s), "zero points ⇒ hidden again");
 }
 
@@ -123,7 +136,7 @@ fn a_repaint_at_the_same_count_does_not_re_flare() {
     let mut s = load_combo_frame();
     play_as(&mut s, 4, MOB_A);
     s.set_combo_points(2, MOB_A);
-    s.fire_event("PLAYER_COMBO_POINTS", vec![]);
+    combo_event(&mut s);
     settle(&mut s);
 
     let shine: f64 = s.eval("return ComboPoint2Shine:GetAlpha()").unwrap();
@@ -148,13 +161,13 @@ fn a_warriors_overpower_point_lights_no_dot() {
     let mut s = load_combo_frame();
     play_as(&mut s, 1, MOB_A); // warrior
     s.set_combo_points(1, MOB_A);
-    s.fire_event("PLAYER_COMBO_POINTS", vec![]);
+    combo_event(&mut s);
     assert!(!shown(&mut s), "a warrior's banked point shows no dots");
     let points: i64 = s.eval("return GetComboPoints()").unwrap();
     assert_eq!(points, 0, "and the binding itself reports zero");
 
     play_as(&mut s, 11, MOB_A);
-    s.fire_event("PLAYER_COMBO_POINTS", vec![]);
+    combo_event(&mut s);
     assert!(shown(&mut s), "a druid sees the same banked point");
 }
 
@@ -166,7 +179,7 @@ fn re_targeting_empties_the_dots_without_the_count_moving() {
     let mut s = load_combo_frame();
     play_as(&mut s, 4, MOB_A);
     s.set_combo_points(3, MOB_A);
-    s.fire_event("PLAYER_COMBO_POINTS", vec![]);
+    combo_event(&mut s);
     settle(&mut s);
     assert!(shown(&mut s), "three points on the selected mob ⇒ shown");
 
