@@ -70,47 +70,46 @@ fn minimap_zoom_buttons_resync_when_switching_inside_and_outside() {
     assert!(enabled(&s, "MinimapZoomOut"));
 }
 
-/// Stock `MiniMapTrackingFrame` (`Minimap.xml:109-174`) follows `GetTrackingTexture()` on
-/// `PLAYER_AURAS_CHANGED`, which the aura feed fires beside `UNIT_AURA`.
+/// 3.3.5's tracking button (`MiniMapTracking`, Minimap.xml:479-482) shows `GetTrackingTexture()`
+/// in `MiniMapTrackingIcon` on `MINIMAP_UPDATE_TRACKING` (`MiniMapTracking_Update`,
+/// Minimap.lua:408-414); 1.12's `MiniMapTrackingFrame` and its `PLAYER_AURAS_CHANGED` are gone.
 #[test]
-fn tracking_frame_follows_get_tracking_texture_across_player_auras_changed() {
+fn the_tracking_icon_follows_get_tracking_texture_on_minimap_update_tracking() {
     let _data = benilla_formats::wow_data_or_skip!();
     use benilla_ui::script::TrackingState;
 
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    s.run("function GetMinimapZoneText() return '' end")
-        .unwrap();
-    s.run("function PlaySound() end").unwrap();
-    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\BattlefieldFrame.xml");
     load_xml(&mut s, "Interface\\FrameXML\\Minimap.xml");
-
-    let vis = |s: &UiScript| {
-        s.eval::<bool>("return MiniMapTrackingFrame:IsVisible()")
+    let icon = |s: &UiScript| {
+        s.eval::<Option<String>>("return MiniMapTrackingIcon:GetTexture()")
             .unwrap()
+            .unwrap_or_default()
     };
-    assert!(!vis(&s), "no tracking at load — the frame starts hidden");
+    assert!(s.eval::<bool>("return MiniMapTracking:IsShown()").unwrap());
 
     // A tracking aura: Find Minerals, spell 2580.
     s.set_tracking(Some(TrackingState {
         spell_id: 2580,
         name: Some("Find Minerals".into()),
-        icon: Some("Interface\\Icons\\Trade_Mining".into()),
+        icon: Some("Interface\\Icons\\Spell_Nature_Earthquake".into()),
         cancelable: true,
     }));
-    s.fire_event("PLAYER_AURAS_CHANGED", vec![]);
-    assert!(vis(&s), "a live tracking texture shows the icon");
+    s.fire_event("MINIMAP_UPDATE_TRACKING", vec![]);
+    assert!(
+        icon(&s).contains("Spell_Nature_Earthquake"),
+        "the icon is the tracking texture: {}",
+        icon(&s)
+    );
 
     s.set_tracking(None);
-    s.fire_event("PLAYER_AURAS_CHANGED", vec![]);
-    assert!(!vis(&s), "no tracking texture hides the frame again");
+    s.fire_event("MINIMAP_UPDATE_TRACKING", vec![]);
+    assert!(
+        !icon(&s).contains("Spell_Nature_Earthquake"),
+        "no tracking clears it: {}",
+        icon(&s)
+    );
+    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
 /// The cluster and the stock `GameTime.xml`, the clock at `hour:minute` as the app pushes it.
@@ -246,15 +245,15 @@ fn a_click_on_the_minimap_parks_a_centre_relative_ping_request() {
 
     assert_eq!(s.take_minimap_ping_request(), None);
 
-    // 20 right and 12 up, inside the 70-unit disc; stock `Minimap_OnClick` first adds
-    // `CURSOR_OFFSET_X/Y`, -7 and -9 (`Minimap.lua:3-4`, `:133-134`).
+    // 20 right and 12 up, inside the 70-unit disc; 3.3.5's `Minimap_OnClick` pings the cursor's
+    // offset from the centre as is (Minimap.lua:177-188), with no 1.12 `CURSOR_OFFSET` shift.
     s.mouse_button(cx + 20.0, cy + 12.0, "LeftButton", true);
     s.mouse_button(cx + 20.0, cy + 12.0, "LeftButton", false);
     let (dx, dy) = s
         .take_minimap_ping_request()
         .expect("OnMouseUp → Minimap_OnClick → PingLocation");
-    assert!((dx - 13.0).abs() < 0.01, "x right of centre, less 7: {dx}");
-    assert!((dy - 3.0).abs() < 0.01, "y UP from centre, less 9: {dy}");
+    assert!((dx - 20.0).abs() < 0.01, "x right of centre: {dx}");
+    assert!((dy - 12.0).abs() < 0.01, "y UP from centre: {dy}");
     assert_eq!(s.take_minimap_ping_request(), None);
 
     s.mouse_button(10.0, 10.0, "LeftButton", true);
@@ -262,24 +261,14 @@ fn a_click_on_the_minimap_parks_a_centre_relative_ping_request() {
     assert_eq!(s.take_minimap_ping_request(), None, "off-widget is no ping");
 }
 
-/// The reference answers from statics nothing clears (`0x4eefd0`), and stock `Minimap_OnUpdate`
-/// uses the pair with no nil test; here it is the app's last publish, `(0, 0)` before any.
+/// `Minimap:GetPingPosition` answers two numbers, `(0, 0)` before any publish. `MINIMAP_PING`
+/// seats 3.3.5's texture ping (`MinimapPing`) at the normalized offset times the minimap's size
+/// (Minimap.lua:83-90, :129-142).
 #[test]
-fn get_ping_position_answers_two_numbers_always() {
+fn get_ping_position_answers_two_numbers_and_a_ping_seats_the_frame() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    s.run("function GetMinimapZoneText() return '' end")
-        .unwrap();
-    s.run("function PlaySound() end").unwrap();
-    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\BattlefieldFrame.xml");
     load_xml(&mut s, "Interface\\FrameXML\\Minimap.xml");
 
     assert_eq!(s.arity("Minimap:GetPingPosition()").unwrap(), 2);
@@ -289,23 +278,16 @@ fn get_ping_position_answers_two_numbers_always() {
         "before any ping: a number, not nil"
     );
     s.set_minimap_ping((0.25, -0.125));
-    let x = s
-        .eval::<f32>("local x = Minimap:GetPingPosition(); return x")
-        .unwrap();
-    let y = s
-        .eval::<f32>("local _, y = Minimap:GetPingPosition(); return y")
+    let (x, y) = s
+        .eval::<(f32, f32)>("return Minimap:GetPingPosition()")
         .unwrap();
     assert!(
         (x - 0.25).abs() < 1e-6 && (y + 0.125).abs() < 1e-6,
         "{x} {y}"
     );
 
-    // `MINIMAP_PING` shows the frame for 5 s, re-seated from `GetPingPosition` each frame, then
-    // fades over 0.5 s (`Minimap.lua:1-2`, `:68-82`).
-    assert!(
-        !s.eval::<bool>("return MiniMapPing:IsVisible()").unwrap(),
-        "hidden until a ping"
-    );
+    let shown = |s: &UiScript| s.eval::<bool>("return MinimapPing:IsVisible()").unwrap();
+    assert!(!shown(&s), "hidden until a ping");
     s.fire_event(
         "MINIMAP_PING",
         vec![
@@ -314,290 +296,49 @@ fn get_ping_position_answers_two_numbers_always() {
             benilla_ui::script::ScriptValue::Number(-0.125),
         ],
     );
-    assert!(s.eval::<bool>("return MiniMapPing:IsVisible()").unwrap());
-    s.tick(1.0);
-    assert!(
-        s.eval::<bool>("return MiniMapPing:IsVisible()").unwrap(),
-        "held at 1 s"
-    );
-    let cx = s
-        .eval::<f32>(
-            "local x = MiniMapPing:GetCenter(); local mx = Minimap:GetCenter(); return x - mx",
-        )
-        .unwrap();
-    assert!(
-        (cx - 0.25 * 140.0).abs() < 0.5,
-        "re-seated at the normalized offset times the width: {cx}"
-    );
-    s.tick(4.2);
-    s.tick(0.6);
-    assert!(
-        !s.eval::<bool>("return MiniMapPing:IsVisible()").unwrap(),
-        "5 s hold + 0.5 s fade, then hidden"
-    );
-}
-
-/// Stock `MiniMapMeetingStoneFrame` follows `IsInMeetingStoneQueue()` on `MEETINGSTONE_CHANGED`.
-#[test]
-fn the_meeting_stone_icon_follows_the_queue_across_meetingstone_changed() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    s.run("function GetMinimapZoneText() return '' end")
-        .unwrap();
-    s.run("function PlaySound() end").unwrap();
-    for f in [
-        "Interface\\FrameXML\\GlobalStrings.lua",
-        "Interface\\FrameXML\\Fonts.xml",
-        "Interface\\FrameXML\\Localization.xml",
-        "Interface\\FrameXML\\BasicControls.xml",
-        r"Interface\FrameXML\UIParent.xml",
-        r"Interface\FrameXML\MoneyFrame.lua",
-        r"Interface\FrameXML\MoneyFrame.xml",
-        "Interface\\FrameXML\\GameTooltip.xml",
-        "Interface\\FrameXML\\UIDropDownMenu.xml",
-        r"Interface\FrameXML\UIPanelTemplates.lua",
-        r"Interface\FrameXML\UIPanelTemplates.xml",
-        "Interface\\FrameXML\\StaticPopup.xml",
-        "Interface\\FrameXML\\BattlefieldFrame.xml",
-        "Interface\\FrameXML\\Minimap.xml",
-    ] {
-        load_xml(&mut s, f);
-    }
+    assert!(shown(&s));
     s.resolve();
-    let vis = |s: &UiScript| {
-        s.eval::<bool>("return MiniMapMeetingStoneFrame:IsVisible()")
-            .unwrap()
-    };
-    assert!(!vis(&s), "hidden at load");
-
-    s.set_meeting_stone(1519, Some("Looking for more for Stormwind City".into()));
-    s.fire_event("MEETINGSTONE_CHANGED", vec![]);
-    assert!(vis(&s), "a queued area shows the icon");
-    s.run("MiniMapMeetingStoneFrame:GetScript('OnEnter')(MiniMapMeetingStoneFrame)")
+    let (dx, w) = s
+        .eval::<(f32, f32)>(
+            "local x = MinimapPing:GetCenter() local mx = Minimap:GetCenter() \
+             return x - mx, Minimap:GetWidth()",
+        )
         .unwrap();
-    assert_eq!(
-        s.eval::<String>("return GameTooltipTextLeft1:GetText()")
-            .unwrap(),
-        "Looking for more for Stormwind City"
-    );
-    s.run("MiniMapMeetingStoneFrame:Click()").unwrap();
     assert!(
-        s.eval::<bool>("return StaticPopup1:IsVisible()").unwrap(),
-        "a click asks CONFIRM_LEAVE_QUEUE"
+        (dx - 0.25 * w).abs() < 0.5,
+        "seated at x times the width: {dx} of {w}"
     );
-    s.run("StaticPopup1Button1:Click()").unwrap();
-    assert_eq!(
-        s.take_meeting_stone_cancels(),
-        1,
-        "Accept is CancelMeetingStoneRequest()"
-    );
-
-    s.set_meeting_stone(0, Some("Looking for more for Unknown".into()));
-    s.fire_event("MEETINGSTONE_CHANGED", vec![]);
-    assert!(!vis(&s), "area 0 hides it again");
+    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// A shown ping pane publishes one tile request and no quad; once the renderer hands back a cell,
-/// the cell draws every frame in the overlay lane, even when nothing in the interface moves.
+/// `MinimapPing_OnUpdate` holds the ping `MINIMAPPING_TIMER` (5.5 s), fading the last 0.5
+/// (Minimap.lua:100-125); it turns the spinner with `Texture:SetRotation`, which the engine lacks.
 #[test]
-fn a_shown_ping_pane_asks_for_a_tile_and_draws_its_cell() {
-    use bevy::prelude::*;
-    use bevy::window::PrimaryWindow;
-
-    use benilla_ui::widget::{ModelFileFacts, SequenceFacts};
-
-    use crate::ui_models::{Cell, UiModelTiles};
-    use crate::ui_pass::UiQuads;
-
+#[ignore = "pending Texture:SetRotation (Native UI): MinimapPing_OnUpdate raises before its fade"]
+fn the_ping_holds_then_fades_on_its_timer() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    s.run("function GetMinimapZoneText() return '' end")
-        .unwrap();
-    s.run("function PlaySound() end").unwrap();
-    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\BattlefieldFrame.xml");
     load_xml(&mut s, "Interface\\FrameXML\\Minimap.xml");
+    let shown = |s: &UiScript| s.eval::<bool>("return MinimapPing:IsVisible()").unwrap();
+    s.fire_event(
+        "MINIMAP_PING",
+        vec![
+            benilla_ui::script::ScriptValue::Str("player".into()),
+            benilla_ui::script::ScriptValue::Number(0.25),
+            benilla_ui::script::ScriptValue::Number(-0.125),
+        ],
+    );
+    assert!(shown(&s));
 
-    // The file's facts, as `benilla-extract m2seq` reads them; the `OnLoad`'s `SetSequence(0)`
-    // waited for them and replays now.
-    const PING: &str = r"Interface\MiniMap\Ping\MinimapPing.mdx";
-    let seq = |anim_id, duration_ms, looping| SequenceFacts {
-        anim_id,
-        duration_ms,
-        looping,
-    };
-    s.set_model_facts(
-        PING,
-        ModelFileFacts {
-            sequences: vec![seq(127, 1333, false), seq(0, 833, true), seq(1, 333, false)],
-            bbox: ([0.0; 3], [0.0; 3]),
-            cameras: 0,
-        },
-    );
-    assert!(
-        s.visible_model_panes().is_empty(),
-        "hidden until a ping: nothing to paint"
-    );
-    let ping_at = |s: &mut UiScript, nx: f64, ny: f64| {
-        s.fire_event(
-            "MINIMAP_PING",
-            vec![
-                benilla_ui::script::ScriptValue::Str("player".into()),
-                benilla_ui::script::ScriptValue::Number(nx),
-                benilla_ui::script::ScriptValue::Number(ny),
-            ],
-        );
-    };
-    ping_at(&mut s, 0.25, -0.125);
-    let panes = s.visible_model_panes();
-    assert_eq!(panes.len(), 1, "the ping pane is on the paint list");
-    let pane = panes[0];
-    assert_eq!(
-        pane.play.map(|p| (p.anim_id, p.cursor_ms)),
-        Some((0, 0)),
-        "the OnLoad's SetSequence(0) replayed over the seed: Stand, at 0"
-    );
-
-    let mut app = App::new();
-    app.insert_non_send_resource(s);
-    app.init_resource::<UiQuads>();
-    // The pass's handover: the tick half writes it, the paint half reads it.
-    app.init_resource::<crate::ui_script::UiPassState>();
-    app.init_resource::<Assets<Image>>();
-    app.init_resource::<crate::portrait::PortraitImages>();
-    app.init_resource::<crate::portrait::BoothPanes>();
-    app.init_resource::<UiModelTiles>();
-    app.init_resource::<crate::minimap::MinimapWidget>();
-    app.init_resource::<crate::ui_script::UiFrameCost>();
-    app.init_resource::<crate::ui_script::UiCostWanted>();
-    app.init_resource::<Time>();
-    app.init_resource::<Time<Real>>();
-    app.init_resource::<crate::ui_script::UiClock>();
-    app.init_resource::<crate::ui_script::UiScaleCvar>();
-    app.world_mut().spawn((
-        Window {
-            resolution: UVec2::new(1024, 768).into(),
-            ..default()
-        },
-        PrimaryWindow,
-    ));
-    // The app's order: extract, then compose after `sync_tiles`, whose cells this harness hands
-    // over by hand; the lane is cleared between frames, as `clear_ui_overlays` does.
-    app.add_systems(
-        Update,
-        (
-            (super::extract::tick_script, super::extract::paint_script).chain(),
-            crate::ui_models::compose_tiles,
-        )
-            .chain(),
-    );
-    app.update();
-
-    let premultiplied = |app: &App| {
-        let quads = app.world().resource::<UiQuads>();
-        assert!(
-            quads.quads.iter().all(|q| !q.premultiplied),
-            "the base lane never carries a tile: the composite is not the extract's"
-        );
-        quads
-            .overlays
-            .iter()
-            .filter(|q| q.premultiplied)
-            .cloned()
-            .collect::<Vec<_>>()
-    };
-    let next_frame = |app: &mut App| {
-        app.world_mut().resource_mut::<UiQuads>().overlays.clear();
-        app.update();
-    };
-    {
-        let tiles = app.world().resource::<UiModelTiles>();
-        let req = tiles
-            .requests
-            .get(&pane.handle)
-            .expect("one request for the ping pane");
-        assert_eq!(req.path, PING);
-        // `<Size>50×50</Size>` at s = 1 (768-tall window), DPI 1: 50 device px a side.
-        assert_eq!(req.size_px, UVec2::new(50, 50));
-        // `scale="0.4"`: 1280 * 0.4 = 512 px per model unit.
-        assert!(
-            (req.px_per_unit - 512.0).abs() < 1e-3,
-            "{}",
-            req.px_per_unit
-        );
-        // A layout unit, and a particle's unit: 768 · √((4/3)² + 1) = 1280 at 4:3.
-        assert!(
-            (req.pos_px_per_unit - 1280.0).abs() < 0.1,
-            "{}",
-            req.pos_px_per_unit
-        );
-        assert!(
-            (req.star_px_per_unit - 1280.0).abs() < 0.1,
-            "{}",
-            req.star_px_per_unit
-        );
-        assert_eq!(req.icon, None);
-        // The pane's rect in the quad pass's space (y-down window px), and its own alpha.
-        assert!(
-            (req.rect.width() - 50.0).abs() < 1e-3 && (req.rect.height() - 50.0).abs() < 1e-3,
-            "{:?}",
-            req.rect
-        );
-        assert!((req.alpha - 1.0).abs() < 1e-6);
-        assert!(premultiplied(&app).is_empty(), "no cell yet: nothing drawn");
+    // 0.1 s frames: still up through the hold, gone once the fade ends.
+    for _ in 0..49 {
+        s.tick(0.1);
     }
-
-    // The renderer hands a cell back and nothing else changes; the next frame still draws it.
-    {
-        let atlas = app
-            .world_mut()
-            .resource_mut::<Assets<Image>>()
-            .add(Image::default());
-        let mut tiles = app.world_mut().resource_mut::<UiModelTiles>();
-        tiles.atlas = Some(atlas);
-        tiles.atlas_size = UVec2::splat(512);
-        tiles.cells.insert(
-            pane.handle,
-            Cell {
-                origin: UVec2::new(2, 2),
-                size: UVec2::new(50, 50),
-            },
-        );
+    assert!(shown(&s), "held at 4.9 s");
+    for _ in 0..8 {
+        s.tick(0.1);
     }
-    next_frame(&mut app);
-    let drawn = premultiplied(&app);
-    assert_eq!(drawn.len(), 1, "the cell, once, on a quiet frame");
-    let q = &drawn[0];
-    assert!((q.rect.width() - 50.0).abs() < 1e-3 && (q.rect.height() - 50.0).abs() < 1e-3);
-    let [tl, _, br, _] = q.uv.corners;
-    assert!((tl[0] - 2.0 / 512.0).abs() < 1e-6 && (tl[1] - 2.0 / 512.0).abs() < 1e-6);
-    assert!((br[0] - 52.0 / 512.0).abs() < 1e-6 && (br[1] - 52.0 / 512.0).abs() < 1e-6);
-    assert_eq!(q.color, [1.0, 1.0, 1.0, 1.0], "the frame's own alpha");
-    assert!(q.texture.is_some());
-    // The lane is re-emitted every frame, not on change.
-    next_frame(&mut app);
-    assert_eq!(
-        premultiplied(&app).len(),
-        1,
-        "still drawn on the frame after"
-    );
-
-    {
-        let mut script = app.world_mut().non_send_resource_mut::<UiScript>();
-        // `Minimap_OnUpdate` re-seats the frame from `GetPingPosition()` (`Minimap.lua:74`).
-        script.set_minimap_ping((-0.125, 0.25));
-        ping_at(&mut script, -0.125, 0.25);
-    }
-    next_frame(&mut app);
-    let moved = premultiplied(&app);
-    assert_eq!(moved.len(), 1, "one quad after the pane moved");
-    assert_ne!(moved[0].rect, q.rect, "the composite followed the pane");
+    assert!(!shown(&s), "5.5 s hold, the last 0.5 fading, then hidden");
+    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }

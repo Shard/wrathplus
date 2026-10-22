@@ -225,16 +225,26 @@ fn an_unknown_money_type_leaves_the_frame_on_the_one_it_had() {
     );
 }
 
-/// `SetMoneyFrameColor` sets the three buttons' text colour only (`MoneyFrame.lua:348`).
+/// 3.3.5's `SetMoneyFrameColor(frameName, color)` takes a colour name and swaps the three buttons'
+/// font object, `NumberFontNormalRightRed` on a small frame (MoneyFrame.lua:503-534); the coin art
+/// is untouched.
 #[test]
 fn set_money_frame_color_recolours_the_digits_and_not_the_icons() {
     benilla_formats::wow_data_or_skip!();
     let mut s = harness(12_345); // 1g 23s 45c: three distinct digit strings
-    s.run("SetMoneyFrameColor(\"TestPurse\", 1.0, 0.1, 0.1)")
-        .unwrap();
+    s.run("SetMoneyFrameColor(\"TestPurse\", \"red\")").unwrap();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     s.resolve();
-    let quads = s.extract();
+    // The kit seats the whole session, whose own money frames show the purse too; only the two
+    // test frames count.
+    let quads: Vec<_> = s
+        .extract()
+        .into_iter()
+        .filter(|q| {
+            s.target_owner_name(q.target)
+                .is_some_and(|n| n.starts_with("TestPurse") || n.starts_with("TestBigPurse"))
+        })
+        .collect();
 
     // Both frames show the purse, so six digit quads; only the named frame's three turn red.
     let digit_colors: Vec<[f32; 4]> = quads
@@ -249,8 +259,11 @@ fn set_money_frame_color_recolours_the_digits_and_not_the_icons() {
         })
         .collect();
     assert_eq!(digit_colors.len(), 6, "two frames * three denominations");
+    let (r, g, b) = s
+        .eval::<(f32, f32, f32)>("return NumberFontNormalRightRed:GetTextColor()")
+        .unwrap();
     let reddened = |c: &[f32; 4]| {
-        (c[0] - 1.0).abs() < 0.01 && (c[1] - 0.1).abs() < 0.01 && (c[2] - 0.1).abs() < 0.01
+        (c[0] - r).abs() < 0.01 && (c[1] - g).abs() < 0.01 && (c[2] - b).abs() < 0.01
     };
     assert_eq!(
         digit_colors.iter().filter(|c| reddened(c)).count(),

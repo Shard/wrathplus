@@ -150,7 +150,7 @@ fn delete_item_confirm_shows_the_real_strings_and_yes_deletes() {
 }
 
 /// No runs `OnCancel` (`ClearCursor()`) and destroys nothing; only the clear's `ITEM_LOCK_CHANGED`
-/// can repaint the open bag, un-darkening the slot (`ContainerFrame.lua:39-42`, `:246`).
+/// can repaint the open bag, un-darkening the slot (`ContainerFrame.lua:39-43`).
 #[test]
 fn delete_item_confirm_no_clears_without_destroying() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -167,12 +167,12 @@ fn delete_item_confirm_no_clears_without_destroying() {
         "held on the cursor, the source slot draws dark (ref SetItemButtonDesaturated(_, locked))"
     );
 
-    // Count repaints. The 1.12 client's Lua 5.0 has no `...` as a value: forward `arg` by `unpack`.
+    // Count lock repaints: 3.3.5's `ITEM_LOCK_CHANGED` arm repaints the one slot it names.
     s.run(
         "repaints = 0\n\
-         local real = ContainerFrame_Update\n\
-         ContainerFrame_Update = function(...) repaints = repaints + 1; \
-         return real(unpack(arg, 1, arg.n)) end",
+         local real = ContainerFrame_UpdateLockedItem\n\
+         ContainerFrame_UpdateLockedItem = function(...) repaints = repaints + 1; \
+         return real(...) end",
     )
     .unwrap();
 
@@ -414,10 +414,10 @@ fn no_on_the_typed_confirm_clears_and_leaves_the_box_empty_for_next_time() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// Stock `DELETE_GOOD_ITEM` has no `EditBoxOnEscapePressed`, so ESC in its box does nothing
-/// (`StaticPopup.lua:1817-1822`).
+/// 3.3.5's `DELETE_GOOD_ITEM` gives its box an `EditBoxOnEscapePressed` that hides the dialog and
+/// clears the cursor (`StaticPopup.lua:1642-1645`): ESC cancels the delete, destroying nothing.
 #[test]
-fn escape_in_the_typed_confirms_box_is_swallowed_as_the_reference_leaves_it() {
+fn escape_in_the_typed_confirms_box_cancels_the_delete() {
     benilla_formats::wow_data_or_skip!();
     let mut s = setup();
     drop_in_world(&mut s, 871, "Flurry Axe", 4);
@@ -428,15 +428,10 @@ fn escape_in_the_typed_confirms_box_is_swallowed_as_the_reference_leaves_it() {
 
     assert!(s.key_input("ESCAPE"), "the focused box consumes ESCAPE");
     assert!(
-        s.eval::<bool>("return StaticPopup1:IsVisible()").unwrap(),
-        "the dialog stays: the entry names no escape handler"
+        !s.eval::<bool>("return StaticPopup1:IsVisible()").unwrap(),
+        "the dialog closes"
     );
-    assert_eq!(
-        s.focused_editbox_name().as_deref(),
-        Some("StaticPopup1EditBox"),
-        "and the box keeps focus"
-    );
-    assert!(s.cursor_item().is_some(), "the item is still on the cursor");
+    assert!(s.cursor_item().is_none(), "and the item leaves the cursor");
     assert!(s.take_container_destroys().is_empty(), "ESC never destroys");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }

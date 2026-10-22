@@ -45,7 +45,13 @@ impl HeldUnits<'_> {
             .names
             .resolve_unit(guid, Some(store), self.commands)
             .map(str::to_string);
-        let reaction = unit_reaction(self.factions, self.reputations, store, self.self_store);
+        let reaction = unit_reaction(
+            self.factions,
+            self.reputations,
+            store,
+            self.self_store,
+            self.relations,
+        );
         let mut s = snapshot(store, guid, name, reaction, self.classes, self.types);
         s.raid_target = self.group.raid_target_index(guid);
         s.faction_group = faction_group(store, self.factions);

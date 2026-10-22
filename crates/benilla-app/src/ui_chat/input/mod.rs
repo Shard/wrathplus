@@ -381,22 +381,21 @@ pub(super) fn drain_chat_input(
                 ));
                 lines.push(describe("target", target_store));
                 lines.push(describe("self  ", own_store));
-                match (target_store, own_store) {
+                lines.push(match (target_store, own_store) {
                     (Some(t), Some(o)) => {
-                        lines.push(format!(
+                        format!(
                             "reaction: duel rung {:?}",
                             crate::target::duel_rung(&t.0, &o.0)
-                        ));
+                        )
                     }
-                    _ => {
-                        lines.push("reaction: duel rung not evaluated (a store is missing)".into())
-                    }
-                }
-                let rank = crate::target::ring_reaction(
+                    _ => "reaction: duel rung not evaluated (a store is missing)".into(),
+                });
+                let rank = crate::target::ring::ring_reaction_in(
                     factions.as_deref(),
                     reputations,
                     target_store,
                     own_store,
+                    relations,
                 );
                 lines.push(format!(
                     "reaction: RANK {rank} → can_attack {}",
@@ -443,6 +442,7 @@ pub(super) fn drain_chat_input(
                     factions.as_deref(),
                     reputations,
                     own_store,
+                    relations,
                 );
                 let attackable = crate::target::can_attack(
                     target_store,

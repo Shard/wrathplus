@@ -123,12 +123,18 @@ def find_reexported(root, d):
     return None
 
 
+def app_prefix(root):
+    """The root crate's name, the layer crates' prefix: `wrathplus-app` once the rename has run."""
+    renamed = os.path.isdir(os.path.join(root, "crates", "wrathplus-app"))
+    return "wrathplus-app" if renamed else "benilla-app"
+
+
 def find_type(root, name):
     """A crate-private type a public signature names (`type 'X' is private`), by name in the layer
     crates."""
     decl = re.compile(r"^\s*pub\s*\([^)]*\)\s+(?:struct|enum|type|trait|union)\s+" + re.escape(name) + r"\b")
     for base in sorted(os.listdir(os.path.join(root, "crates"))):
-        if not base.startswith("benilla-app"):
+        if not base.startswith(app_prefix(root)):
             continue
         for dp, _, fs in os.walk(os.path.join(root, "crates", base, "src")):
             for f in sorted(fs):
@@ -144,7 +150,7 @@ def find_field(root, struct, field):
     """`field`'s declaration line inside `struct`'s body, searched in the layer crates."""
     pat = re.compile(r"\b(?:struct|enum|union)\s+" + re.escape(struct) + r"\b")
     for base in sorted(os.listdir(os.path.join(root, "crates"))):
-        if not base.startswith("benilla-app"):
+        if not base.startswith(app_prefix(root)):
             continue
         for dp, _, fs in os.walk(os.path.join(root, "crates", base, "src")):
             for f in fs:

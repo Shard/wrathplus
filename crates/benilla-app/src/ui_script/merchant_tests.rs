@@ -1,8 +1,8 @@
 //! The stock merchant window (`MerchantFrame.xml`), engine-only, fed a synthetic stock and purse.
 
 use benilla_ui::script::{
-    ContainerState, CursorPayload, DressUpIntent, ExtractedQuad, ItemStatsHead, MerchantItem,
-    MerchantState, QuadContent, ScriptValue, SoundRequest, UiScript,
+    ContainerState, ExtractedQuad, ItemStatsHead, MerchantItem, MerchantState, QuadContent,
+    ScriptValue, SoundRequest, UiScript,
 };
 
 use super::test_ui::{bag_open, load_ui as load_xml, BAG_UI};
@@ -40,18 +40,18 @@ fn shipped_merchant_frame_drives_end_to_end() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    // The census: every row is a container plus an `ItemButtonTemplate` button, and every price a
-    // `SmallMoneyFrameTemplate` (`MerchantFrame.xml:4-115`).
     const MERCHANT: &str = "Interface\\FrameXML\\MerchantFrame.xml";
-    assert_eq!(
-        super::test_ui::load_kit_counting(
-            &mut s,
-            &[super::test_ui::MERCHANT_UI, &[MERCHANT]],
-            MERCHANT
-        ),
-        90,
-        "the stock file's own shape — see the census note above"
-    );
+    for f in super::test_ui::production_order(&[super::test_ui::MERCHANT_UI, &[MERCHANT]]) {
+        load_xml(&mut s, f);
+    }
+    // The stock file's own shape, by name: every row a container plus an `ItemButtonTemplate`
+    // button and a `SmallMoneyFrameTemplate` price; the whole session loads, so no frame count.
+    assert!(s
+        .eval::<bool>(
+            "return MerchantItem12ItemButton:GetObjectType() == 'Button' \
+             and MerchantItem12MoneyFrame ~= nil and MerchantBuyBackItemItemButton ~= nil"
+        )
+        .unwrap());
 
     s.resolve();
     let has_icon = |quads: &[ExtractedQuad], needle: &str| {
@@ -289,7 +289,7 @@ fn shipped_merchant_frame_drives_end_to_end() {
         "MERCHANT_CLOSED hides the window"
     );
     assert!(
-        s.eval::<bool>("return GetLeftFrame() == nil").unwrap(),
+        s.eval::<bool>("return GetUIPanel('left') == nil").unwrap(),
         "HideUIPanel vacated the left slot"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -422,9 +422,8 @@ fn vendor_leaves_an_already_open_backpack_alone() {
 }
 
 /// A centre panel opened over a vendor keeps a backpack the player had open before it: the stock
-/// `ShowUIPanel` calls `CloseAllBags` (`UIParent.lua:699-702`), whose `CloseBackpack()` honours
-/// the was-open memory (`ContainerFrame.lua:702-707`, `:210-218`), and then closes bags 1 and up,
-/// the ones the vendor opened included.
+/// `ShowUIPanel` calls `CloseAllBags` (`UIParent.lua:1383`), whose `CloseBackpack()` honours the
+/// was-open memory, and then closes bags 1 and up (`ContainerFrame.lua:835-840`).
 #[test]
 fn a_centre_panel_over_a_vendor_keeps_the_backpack_the_player_had_open() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -449,11 +448,12 @@ fn a_centre_panel_over_a_vendor_keeps_the_backpack_the_player_had_open() {
         bag_open(&s, 0),
         "fixture: the player's own backpack is up first"
     );
+    s.run("ToggleBag(1) ToggleBag(4)").unwrap();
     s.set_merchant(Some(MerchantState::default()));
     s.fire_event("MERCHANT_SHOW", vec![]);
     assert!(
         bag_open(&s, 1) && bag_open(&s, 4),
-        "fixture: the vendor opens the equipped bags"
+        "fixture: the player's own bags are up too"
     );
 
     // A centre-area panel, as the Help micro button's `HelpFrame` is (`UIParent.lua:35`).
@@ -474,17 +474,13 @@ fn a_centre_panel_over_a_vendor_keeps_the_backpack_the_player_had_open() {
         bag_open(&s, 0),
         "the backpack the player had open before the vendor stays open"
     );
-    assert!(
-        !bag_open(&s, 1) && !bag_open(&s, 4),
-        "bags 1-4 close, the vendor's included"
-    );
+    assert!(!bag_open(&s, 1) && !bag_open(&s, 4), "bags 1-4 close");
 }
 
-/// Deviation: the vendor opens every equipped bag, not only the backpack as the stock
-/// `OpenBackpack` does, so every bag is up to sell from. `ContainerFrameAdapters.xml` replaces the
-/// verb after the stock file loads; with the stock body live, bag 2 would not open.
+/// The vendor opens the backpack alone, stock `OpenBackpack` (`MerchantFrame.lua:40`), and closes
+/// what it opened.
 #[test]
-fn vendor_opens_and_closes_all_equipped_bags() {
+fn vendor_opens_and_closes_the_backpack() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
@@ -505,17 +501,16 @@ fn vendor_opens_and_closes_all_equipped_bags() {
     s.fire_event("MERCHANT_SHOW", vec![]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert!(bag_open(&s, 0), "backpack opens");
-    assert!(bag_open(&s, 2), "the equipped bag opens with the vendor");
     assert!(
-        !bag_open(&s, 1) && !bag_open(&s, 3) && !bag_open(&s, 4),
-        "an unequipped slot has no container, so nothing opens for it"
+        !bag_open(&s, 1) && !bag_open(&s, 2) && !bag_open(&s, 3) && !bag_open(&s, 4),
+        "the other bags, equipped or not, stay as they were"
     );
 
     s.fire_event("MERCHANT_CLOSED", vec![]);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert!(
         !bag_open(&s, 0) && !bag_open(&s, 2),
-        "every bag the vendor opened closes with it"
+        "the backpack the vendor opened closes with it"
     );
 }
 
@@ -755,7 +750,8 @@ fn shipped_merchant_hover_scopes_highlight_and_anchors_item_tooltip() {
     assert!(!has_text(&quads, "Shield"), "the head carries no type word");
     assert!(!has_text(&quads, "Main Hand"), "row 1's tooltip cleared");
 
-    s.mouse_move(600.0, 500.0); // off every frame: 3.3.5's corner holds the backpack button
+    // Clear of everything: the bottom-right corner is the bag bar, whose buttons light too.
+    s.mouse_move(700.0, 450.0);
     s.resolve();
     let quads = s.extract();
     assert!(!has_text(&quads, "Off Hand"), "tooltip hidden on leave");
@@ -1149,15 +1145,16 @@ fn ctrl_and_shift_on_a_vendor_row_preview_and_post_without_buying() {
         "a ctrl-held right-click must not buy (ref l.332-333)"
     );
 
-    assert!(s.focus_editbox("ChatFrameEditBox"));
+    // `ChatEdit_InsertLink` writes into the open box with a leading space (ChatFrame.lua:3490-3493).
+    s.run(r#"ChatFrame_OpenChat("")"#).unwrap();
     s.set_modifiers(true, false, false);
     s.mouse_button(x, y, "LeftButton", true);
     s.mouse_button(x, y, "LeftButton", false);
     s.set_modifiers(false, false, false);
     assert_eq!(
-        s.eval::<String>("return ChatFrameEditBox:GetText()")
+        s.eval::<String>("return ChatEdit_GetActiveWindow():GetText()")
             .unwrap(),
-        WATER_LINK,
+        format!(" {WATER_LINK}"),
         "the vendor row's full escaped link landed in the chat box"
     );
     assert!(
@@ -1165,16 +1162,13 @@ fn ctrl_and_shift_on_a_vendor_row_preview_and_post_without_buying() {
         "a shift-click must not also buy"
     );
 
-    // Ctrl last: the dressing room takes a UIPanel slot and can move the vendor window.
+    // Ctrl: `DressUpItemLink` dresses only an item with a display (DressUpFrame.lua:2-3); water has
+    // none, so nothing opens, and nothing is bought either.
     s.set_modifiers(false, true, false);
     s.mouse_button(x, y, "LeftButton", true);
     s.mouse_button(x, y, "LeftButton", false);
     s.set_modifiers(false, false, false);
-    assert_eq!(
-        s.take_dressup_intents(),
-        vec![DressUpIntent::Dress, DressUpIntent::TryOn(159)],
-        "re-dress first, then try the vendor's item on"
-    );
+    assert!(s.take_dressup_intents().is_empty(), "not dressable");
     assert!(
         s.take_merchant_buys().is_empty(),
         "a ctrl-click must not also buy"
@@ -1183,7 +1177,7 @@ fn ctrl_and_shift_on_a_vendor_row_preview_and_post_without_buying() {
 }
 
 #[test]
-fn shift_click_takes_one_bundle_and_splits_a_single() {
+fn shift_click_splits_a_single_row_and_not_a_bundle() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
@@ -1236,33 +1230,24 @@ fn shift_click_takes_one_bundle_and_splits_a_single() {
     };
     let split_shown = |s: &UiScript| s.eval::<bool>("return StackSplitFrame:IsShown()").unwrap();
 
-    shift_click(&mut s, 1, "LeftButton");
-    assert!(!split_shown(&s), "a bundle row opens no split");
-    assert!(
-        matches!(s.cursor_payload(), Some(CursorPayload::Merchant(m)) if m.item_id == 159),
-        "the left arm picks one bundle up: {:?}",
-        s.cursor_payload()
-    );
-    s.run("ClearCursor()").unwrap();
-
-    shift_click(&mut s, 1, "RightButton");
-    assert!(!split_shown(&s), "a bundle row opens no split");
-    assert_eq!(
-        s.take_merchant_buys(),
-        vec![(1, 1)],
-        "the right arm buys one bundle"
-    );
-
-    shift_click(&mut s, 2, "RightButton");
-    assert!(split_shown(&s), "a single row opens the split");
-    assert_eq!(
-        s.eval::<i64>("return StackSplitFrame.maxStack").unwrap(),
-        20,
-        "the split spans the stack size, under what the purse affords"
-    );
-    assert!(
-        s.take_merchant_buys().is_empty(),
-        "the split buys nothing until it is chosen"
-    );
+    // SHIFT is `SPLITSTACK` (`Bindings.xml:1333`): a row whose `GetMerchantItemMaxStack` exceeds 1
+    // opens the split for either button, capped at what the purse affords, and buys nothing until
+    // a count is chosen (`MerchantFrame.lua:418-429`); a bundle row's is 1, so it opens nothing.
+    for button in ["LeftButton", "RightButton"] {
+        shift_click(&mut s, 1, button);
+        assert!(!split_shown(&s), "a bundle row opens no split");
+        shift_click(&mut s, 2, button);
+        assert!(split_shown(&s), "a single row opens the split");
+        assert_eq!(
+            s.eval::<i64>("return StackSplitFrame.maxStack").unwrap(),
+            20
+        );
+        assert!(
+            s.take_merchant_buys().is_empty(),
+            "the split buys nothing yet"
+        );
+        s.run("StackSplitFrame:Hide()").unwrap();
+    }
+    assert!(s.cursor_payload().is_none(), "nothing was picked up");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }

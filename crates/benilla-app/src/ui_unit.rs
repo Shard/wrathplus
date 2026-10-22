@@ -16,7 +16,7 @@ use crate::net::{
     FieldChanged, FieldEdges, Guid, NetCommands, NetHandlerApp, ObjectStore, Reputations,
     SelfPlayer,
 };
-use crate::target::{ring_reaction, Factions, Selection};
+use crate::target::{Factions, Selection};
 use crate::ui_script::{gate, UiInput};
 
 pub(crate) mod held;
@@ -711,16 +711,17 @@ impl SnapshotTables<'_> {
     }
 }
 
-/// `UnitReaction(unit, "player")` (`0x5167e0`): [`ring_reaction`] plus one (`0x51683e`), so
-/// `1..=7`, Hated to Revered, and Exalted reads 7 too (`0x606439`). Stock `UnitReactionColor`
-/// has seven entries (`TargetFrame.lua:6-14`), one per value.
+/// `UnitReaction(unit, "player")`: the unit's reaction toward us on `ctx`'s live inputs
+/// ([`crate::target::ring::ring_reaction_in`]) plus one, so `1..=8`, Hated to Exalted: 12340's
+/// standing rank is uncapped (`005d0600`).
 pub(crate) fn unit_reaction(
     factions: Option<&Factions>,
     reputations: &Reputations,
     store: &ObjectStore,
     self_store: Option<&ObjectStore>,
+    ctx: crate::target::RelationContext,
 ) -> u8 {
-    ring_reaction(factions, reputations, Some(store), self_store) + 1
+    crate::target::ring::ring_reaction_in(factions, reputations, Some(store), self_store, ctx) + 1
 }
 
 /// Build a unit snapshot from a streamed descriptor, its guid, its cached name and its
@@ -1566,7 +1567,8 @@ fn feed_units(
     }
 
     // The combo count and its banked target, pushed as a pair since `GetComboPoints` reads both;
-    // only the count fires `PLAYER_COMBO_POINTS` (`0x5ddff0`).
+    // only the count fires 3.3.5's `UNIT_COMBO_POINTS` for `"player"`, which stock
+    // `ComboFrame_OnEvent` matches against `PlayerFrame.unit`. Labelled: the vehicle unit arm.
     if self_q.iter().next().is_some() {
         let banked = crate::net::wrath_combo_points::banked(
             &stores.combo.as_deref().copied().unwrap_or_default(),
@@ -1576,13 +1578,14 @@ fn feed_units(
             memo.last_combo = Some(banked);
             script.set_combo_points(banked.0, banked.1);
             if fire {
-                script.fire_event("PLAYER_COMBO_POINTS", vec![]);
+                let unit = benilla_ui::script::ScriptValue::Str("player".into());
+                script.fire_event("UNIT_COMBO_POINTS", vec![unit]);
             }
         }
     }
 }
 
-/// The combo feed's edge: `None` when nothing moved, else whether `PLAYER_COMBO_POINTS` fires.
+/// The combo feed's edge: `None` when nothing moved, else whether `UNIT_COMBO_POINTS` fires.
 /// Event 202 is a one-byte watch on the count (`+0x1029`, registered at `0x5dd9d9`) with no value
 /// test, so the drop to zero fires; the target has no watch, so a same-count re-bank is silent.
 fn combo_edge(last: Option<(u8, u64)>, now: (u8, u64)) -> Option<bool> {
