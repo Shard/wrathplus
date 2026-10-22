@@ -28,6 +28,11 @@ fn setup() -> UiScript {
     load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
     load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
     load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
+    // 3.3.5's `CONFIRM_SUMMON` also gates Accept on `PlayerCanTeleport()` (`StaticPopup.lua:2548`).
+    s.set_wrath_popup_state(benilla_ui::script::WrathPopupState {
+        can_teleport: true,
+        ..Default::default()
+    });
     s.set_summon_confirm(SummonConfirmUiState {
         summoner: "Twomage".into(),
         area: "Stormwind City".into(),
@@ -130,7 +135,7 @@ fn a_summoner_whose_name_is_still_resolving_fills_in_on_a_later_tick() {
     );
 }
 
-/// OnUpdate disables Accept in combat but leaves the dialog up (`StaticPopup.lua:1346`).
+/// OnUpdate disables Accept in combat but leaves the dialog up (`StaticPopup.lua:2547-2553`).
 #[test]
 fn combat_locks_accept_without_taking_the_dialog_down() {
     benilla_formats::wow_data_or_skip!();

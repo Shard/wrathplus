@@ -121,6 +121,7 @@ pub use handler_prof::HandlerRow;
 mod surface;
 pub use surface::widget_method_census;
 mod input_verbs;
+mod wrath_input_verbs;
 mod inspect;
 mod inventory_verbs;
 mod item_stats;
