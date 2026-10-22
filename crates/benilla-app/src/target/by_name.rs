@@ -186,8 +186,7 @@ pub(crate) struct ByNameScan<'w, 's> {
     /// reference.
     names: Res<'w, NameCache>,
     /// The reaction inputs behind `CanAssist`, for [`Filter::AssistableAlive`] and the follow gate.
-    factions: Option<Res<'w, super::Factions>>,
-    reputations: Res<'w, crate::net::Reputations>,
+    relations: super::RelationInputs<'w, 's>,
 }
 
 /// The per-candidate filter, the mode argument the reference hands `0x493e40`.
@@ -215,12 +214,7 @@ impl ByNameScan<'_, '_> {
             return false;
         }
         let self_store = self.self_q.single().ok().and_then(|(_, _, _, s)| s);
-        super::ring_reaction(
-            self.factions.as_deref(),
-            &self.reputations,
-            store,
-            self_store,
-        ) >= 4
+        self.relations.ring_reaction(store, self_store) >= 4
     }
 
     /// The follow start gate ([`follow_refusal_key`], entered at `0x60ff59`): the key of the first
@@ -234,12 +228,7 @@ impl ByNameScan<'_, '_> {
         let self_store = self.self_q.single().ok().and_then(|(_, _, _, s)| s);
         follow_refusal_key(
             guid::is_player(followee),
-            super::ring_reaction(
-                self.factions.as_deref(),
-                &self.reputations,
-                followee_store,
-                self_store,
-            ) >= 4,
+            self.relations.ring_reaction(followee_store, self_store) >= 4,
             self_store.is_some_and(|s| s.0.unit_is_dead()),
             self_store.is_some_and(|s| s.0.unit_flags() & crate::player::UNIT_FLAG_STUNNED != 0),
             casting,
