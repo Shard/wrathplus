@@ -484,7 +484,7 @@ fn pick_unit_token(a: &Option<String>, b: &Option<String>) -> Option<String> {
     }
 }
 
-use resolve::token_recognised;
+pub(crate) use resolve::token_recognised;
 
 /// The resolver's token check: an unrecognised token raises `Unknown unit name`, as `0x515970`
 /// ends in `luaL_error`; `""`, an absent token and a recognised one naming nothing pass. Whether
