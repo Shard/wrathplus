@@ -16,6 +16,7 @@ pub(crate) mod addons;
 mod content;
 pub(crate) mod extract;
 pub(crate) mod glue;
+pub(crate) mod glue_create;
 mod input;
 mod load_log;
 mod manifest;
@@ -355,10 +356,8 @@ pub(crate) use lifecycle::{
 };
 // Test-only: other modules' tests consume these, and a plain re-export would warn unused.
 #[cfg(test)]
-pub(crate) use lifecycle::load_ingame_ui_on_world_entry;
+pub(crate) use lifecycle::{finish_ui_load, load_ingame_ui_on_world_entry};
 use lifecycle::shutdown_on_exit;
-#[cfg(test)]
-pub(crate) use lifecycle::finish_ui_load;
 
 /// `GetFramerate()`'s host half: FPS on `Time<Real>`, smoothed by a one-second pole; how the
 /// reference averages it is untraced.

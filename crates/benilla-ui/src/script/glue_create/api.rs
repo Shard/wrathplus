@@ -41,7 +41,7 @@ fn values(v: Vec<Value>) -> mlua::Result<MultiValue> {
     Ok(MultiValue::from_vec(v))
 }
 
-pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
     // GetAvailableRaces() (`0x4e1880`): (name, fileString, enabled) per create-list race, the
     // names in the selected sex.
     set(lua, "GetAvailableRaces", |lua, _| {
@@ -259,6 +259,21 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     set(lua, "ResetCharCustomize", |lua, _| {
         state(lua, GlueCreateState::reset);
         values(vec![])
+    })?;
+
+    // GetCreateBackgroundModel(): the `UI_<name>` stage `CharacterCreate.lua` hands
+    // `SetBackgroundModel`. Inferred: its binding was not found; App seeds 12340's select-screen
+    // rule (`GetSelectBackgroundModel` `0x4e3620`), the race file with no entry.
+    set(lua, "GetCreateBackgroundModel", |lua, _| {
+        let name = state(lua, |s| {
+            let key = (s.selection.race, s.selection.class);
+            s.catalog
+                .backgrounds
+                .get(&key)
+                .cloned()
+                .or_else(|| s.race_row().map(|r| r.file.clone()))
+        });
+        values(vec![name.map_or(Ok(Value::Nil), |n| str_value(lua, &n))?])
     })?;
 
     // GetHairCustomization() / GetFacialHairCustomization() (`0x4e0900`, `0x4e0970`): the race's

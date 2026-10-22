@@ -159,7 +159,8 @@ impl super::UiScript {
     /// Install the glue API on this VM: the glue host's VM only.
     pub fn install_glue_api(&self) -> mlua::Result<()> {
         self.lua().set_app_data(GlueState::default());
-        api::install(self.lua())
+        api::install(self.lua())?;
+        super::glue_create::install(self.lua())
     }
 
     /// The glue VM's state; the glue API must be installed.
