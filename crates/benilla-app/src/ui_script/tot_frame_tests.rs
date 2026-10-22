@@ -1,7 +1,7 @@
 //! The stock target-of-target frame (`TargetFrame.xml:515-680`) over synthetic `"targettarget"`
 //! snapshots. Nothing on it answers a unit event: its bars' `UNIT_HEALTH`/`UNIT_MANA`
 //! registrations reach no handler that uses them (`TargetFrame.xml:593-625`) and
-//! `UnitFrame_OnEvent` ignores `UNIT_AURA` (`UnitFrame.lua:31-45`). `TargetofTarget_OnUpdate` is
+//! `UnitFrame_OnEvent` ignores `UNIT_AURA` (`UnitFrame.lua:31-45`). `TargetofTarget_Update` is
 //! the only driver, so most steps here are a `tick`.
 
 use benilla_ui::script::{
@@ -69,12 +69,12 @@ fn load_tot() -> UiScript {
 
 /// Turn the frame on as the option row does: the write, then its `applyFunc`.
 fn switch_on(s: &mut UiScript) {
-    s.run(r#"SHOW_TARGET_OF_TARGET = "1" this = TargetofTargetFrame TargetofTarget_Update() this = nil"#)
+    s.run(r#"SHOW_TARGET_OF_TARGET = "1" TargetofTarget_Update(TargetFrameToT)"#)
         .unwrap();
 }
 
 fn shown(s: &mut UiScript) -> bool {
-    s.eval::<bool>("return TargetofTargetFrame:IsShown() and true or false")
+    s.eval::<bool>("return TargetFrameToT:IsShown() and true or false")
         .unwrap()
 }
 
@@ -164,32 +164,27 @@ fn the_four_unit_gates_each_take_the_frame_down() {
     assert!(shown(&mut s));
 
     s.set_unit("targettarget", None);
-    s.run("this = TargetofTargetFrame TargetofTarget_Update() this = nil")
-        .unwrap();
+    s.run("TargetofTarget_Update(TargetFrameToT)").unwrap();
     assert!(!shown(&mut s), "nothing to show");
     s.set_unit("targettarget", Some(unit("Tri", 0x100, 100)));
 
     s.set_unit("target", None);
-    s.run("this = TargetofTargetFrame TargetofTarget_Update() this = nil")
-        .unwrap();
+    s.run("TargetofTarget_Update(TargetFrameToT)").unwrap();
     assert!(!shown(&mut s), "no target, no target's target");
     s.set_unit("target", Some(unit("Kobold Miner", 0x200, 80)));
 
     // The target is the player (same guid).
     s.set_unit("target", Some(unit("Tri", 0x100, 100)));
-    s.run("this = TargetofTargetFrame TargetofTarget_Update() this = nil")
-        .unwrap();
+    s.run("TargetofTarget_Update(TargetFrameToT)").unwrap();
     assert!(!shown(&mut s), "self-target: nothing to add");
     s.set_unit("target", Some(unit("Kobold Miner", 0x200, 80)));
 
     s.set_unit("target", Some(unit("Kobold Miner", 0x200, 0)));
-    s.run("this = TargetofTargetFrame TargetofTarget_Update() this = nil")
-        .unwrap();
+    s.run("TargetofTarget_Update(TargetFrameToT)").unwrap();
     assert!(!shown(&mut s), "a corpse is fighting nobody");
 
     s.set_unit("target", Some(unit("Kobold Miner", 0x200, 80)));
-    s.run("this = TargetofTargetFrame TargetofTarget_Update() this = nil")
-        .unwrap();
+    s.run("TargetofTarget_Update(TargetFrameToT)").unwrap();
     assert!(shown(&mut s), "and back");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
@@ -219,7 +214,7 @@ fn the_five_modes_answer_solo_party_and_raid() {
         for (i, (label, state)) in states.iter().enumerate() {
             s.set_party(state.clone());
             s.run(&format!(
-                r#"SHOW_TARGET_OF_TARGET_STATE = "{mode}" this = TargetofTargetFrame TargetofTarget_Update() this = nil"#
+                r#"SHOW_TARGET_OF_TARGET_STATE = "{mode}" TargetofTarget_Update(TargetFrameToT)"#
             ))
             .unwrap();
             assert_eq!(
@@ -233,27 +228,27 @@ fn the_five_modes_answer_solo_party_and_raid() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// In a raid the mode-3 arm reaches neither `Show` nor `Hide` (`TargetFrame.lua:513-520`), though
-/// `TargetofTarget_OnUpdate` re-asks every frame (`TargetFrame.lua:494-501`), so the frame stays.
+/// Solo mode in a raid: no arm sets `show`, so `TargetofTarget_Update`, the frame's own `OnUpdate`,
+/// hides it on the next frame (`TargetFrame.lua:728-760`).
 #[test]
-fn the_solo_mode_keeps_the_frame_when_a_raid_forms() {
+fn the_solo_mode_drops_the_frame_when_a_raid_forms() {
     benilla_formats::wow_data_or_skip!();
     let mut s = load_tot();
     switch_on(&mut s);
-    s.run(r#"SHOW_TARGET_OF_TARGET_STATE = "3" this = TargetofTargetFrame TargetofTarget_Update() this = nil"#)
+    s.run(r#"SHOW_TARGET_OF_TARGET_STATE = "3" TargetofTarget_Update(TargetFrameToT)"#)
         .unwrap();
     assert!(shown(&mut s), "solo, in solo mode");
 
     s.set_party(raid(10));
     s.tick(0.016);
     assert!(
-        shown(&mut s),
-        "the raid forms and the reference's solo arm never fires — the frame stays"
+        !shown(&mut s),
+        "the raid forms and the solo arm lets the frame go"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// The name is set only by `TargetofTarget_OnUpdate`'s `CURRENT_TARGETTARGET` compare
+/// The name is set only by `TargetofTarget_Update`'s `CURRENT_TARGETTARGET` compare
 /// (`TargetFrame.lua:494-501`), so it waits for a tick. A powerless unit keeps a 0/0 rail:
 /// `UnitFrameManaBar_Update` never hides the bar (`UnitFrame.lua:203-224`).
 #[test]
@@ -264,19 +259,19 @@ fn the_frame_paints_its_unit() {
     s.tick(0.016);
 
     assert_eq!(
-        s.eval::<String>("return TargetofTargetName:GetText()")
+        s.eval::<String>("return TargetFrameToTTextureFrameName:GetText()")
             .unwrap(),
         "Tri"
     );
     let (value, max) = s
         .eval::<(f64, f64)>(
-            "local _, m = TargetofTargetHealthBar:GetMinMaxValues() \
-             return TargetofTargetHealthBar:GetValue(), m",
+            "local _, m = TargetFrameToTHealthBar:GetMinMaxValues() \
+             return TargetFrameToTHealthBar:GetValue(), m",
         )
         .unwrap();
     assert_eq!((value, max), (100.0, 100.0));
     assert!(
-        s.eval::<bool>("return TargetofTargetManaBar:IsShown() and true or false")
+        s.eval::<bool>("return TargetFrameToTManaBar:IsShown() and true or false")
             .unwrap(),
         "a unit with mana shows its rail"
     );
@@ -286,14 +281,14 @@ fn the_frame_paints_its_unit() {
     s.set_unit("targettarget", Some(powerless));
     s.tick(0.016);
     assert!(
-        s.eval::<bool>("return TargetofTargetManaBar:IsShown() and true or false")
+        s.eval::<bool>("return TargetFrameToTManaBar:IsShown() and true or false")
             .unwrap(),
         "no power, and the rail is STILL drawn — the reference has no hide leg"
     );
     assert_eq!(
         s.eval::<(f64, f64)>(
-            "local _, m = TargetofTargetManaBar:GetMinMaxValues() \
-             return TargetofTargetManaBar:GetValue(), m",
+            "local _, m = TargetFrameToTManaBar:GetMinMaxValues() \
+             return TargetFrameToTManaBar:GetValue(), m",
         )
         .unwrap(),
         (0.0, 0.0),
@@ -311,7 +306,7 @@ fn the_dead_word_needs_a_connected_corpse() {
     switch_on(&mut s);
     s.tick(0.016);
     assert!(
-        !s.eval::<bool>("return TargetofTargetDeadText:IsShown() and true or false")
+        !s.eval::<bool>("return TargetFrameToTTextureFrameDeadText:IsShown() and true or false")
             .unwrap(),
         "alive: no word"
     );
@@ -321,7 +316,7 @@ fn the_dead_word_needs_a_connected_corpse() {
     s.set_unit("targettarget", Some(corpse.clone()));
     s.tick(0.016);
     assert!(
-        s.eval::<bool>("return TargetofTargetDeadText:IsShown() and true or false")
+        s.eval::<bool>("return TargetFrameToTTextureFrameDeadText:IsShown() and true or false")
             .unwrap(),
         "dead: the word"
     );
@@ -331,7 +326,7 @@ fn the_dead_word_needs_a_connected_corpse() {
     s.set_unit("targettarget", Some(linkdead));
     s.tick(0.016);
     assert!(
-        !s.eval::<bool>("return TargetofTargetDeadText:IsShown() and true or false")
+        !s.eval::<bool>("return TargetFrameToTTextureFrameDeadText:IsShown() and true or false")
             .unwrap(),
         "disconnected, not dead"
     );
@@ -352,7 +347,7 @@ fn the_portrait_tints_with_a_players_state_and_never_a_creatures() {
     s.set_unit("targettarget", Some(hurt));
     s.tick(0.016);
     let (r, g, b) = s
-        .eval::<(f64, f64, f64)>("return TargetofTargetPortrait:GetVertexColor()")
+        .eval::<(f64, f64, f64)>("return TargetFrameToTPortrait:GetVertexColor()")
         .unwrap();
     assert_eq!((r, g, b), (1.0, 0.0, 0.0), "a player under a fifth: red");
 
@@ -361,7 +356,7 @@ fn the_portrait_tints_with_a_players_state_and_never_a_creatures() {
     s.set_unit("targettarget", Some(healthy));
     s.tick(0.016);
     let (r, g, b) = s
-        .eval::<(f64, f64, f64)>("return TargetofTargetPortrait:GetVertexColor()")
+        .eval::<(f64, f64, f64)>("return TargetFrameToTPortrait:GetVertexColor()")
         .unwrap();
     assert_eq!((r, g, b), (1.0, 1.0, 1.0), "and white again");
 
@@ -369,7 +364,7 @@ fn the_portrait_tints_with_a_players_state_and_never_a_creatures() {
     s.set_unit("targettarget", Some(unit("Kobold", 0x500, 15)));
     s.tick(0.016);
     let (r, g, b) = s
-        .eval::<(f64, f64, f64)>("return TargetofTargetPortrait:GetVertexColor()")
+        .eval::<(f64, f64, f64)>("return TargetFrameToTPortrait:GetVertexColor()")
         .unwrap();
     assert_eq!((r, g, b), (1.0, 1.0, 1.0), "creatures carry no reading");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -380,14 +375,14 @@ fn the_left_click_targets_the_unit() {
     benilla_formats::wow_data_or_skip!();
     let mut s = load_tot();
     switch_on(&mut s);
-    s.run(r#"TargetofTarget_OnClick("LeftButton")"#).unwrap();
+    s.run(r#"TargetFrameToT:Click("LeftButton")"#).unwrap();
     assert_eq!(
         s.take_selection_requests(),
         vec![SelectionRequest::Unit("targettarget".into())]
     );
 
-    // A right click opens no menu here (`TargetFrame.lua:543-557`).
-    s.run(r#"TargetofTarget_OnClick("RightButton")"#).unwrap();
+    // A secure unit button with no menu function (`TargetFrame.lua:720`): no menu, no target.
+    s.run(r#"TargetFrameToT:Click("RightButton")"#).unwrap();
     assert!(s.take_selection_requests().is_empty());
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
@@ -421,23 +416,25 @@ fn the_debuff_row_draws_what_the_unit_carries() {
         "and the second"
     );
     assert!(
-        !s.eval::<bool>("return TargetofTargetFrameDebuff3:IsShown() and true or false")
+        !s.eval::<bool>("return TargetFrameToTDebuff3:IsShown() and true or false")
             .unwrap(),
         "the empty slots stay down"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// While this frame shows, the target's own aura rows wrap at 5 instead of 6
-/// (`TargetDebuffButton_Update`, `TargetFrame.lua:312-338`, `:370-385`). They re-lay only on the
-/// way in: the call sits inside `if ( TargetofTargetFrame:IsShown() )` (`TargetFrame.lua:532-539`).
+/// While this frame shows, the target's debuff rows are 101 px wide instead of 122
+/// (`TOT_AURA_ROW_WIDTH`, `TargetFrame.lua:12-13,481`): six 17 px debuffs at 4 px fit one row
+/// without it and five with it. The rows re-lay on this frame's show and hide
+/// (`TargetFrame.xml:614-617`; `TargetofTarget_OnHide`, `TargetFrame.lua:722-724`).
 #[test]
 fn the_target_rows_wrap_short_while_the_frame_stands_beside_them() {
     benilla_formats::wow_data_or_skip!();
     let mut s = load_tot();
-    // A hostile target, so the debuffs lead and the buffs hang off them.
+    s.run(r#"SHOW_CASTABLE_DEBUFFS = "0""#).unwrap();
     s.set_unit_guids(&unit_guids());
-    s.set_unit_auras(TARGET, Some(vec![debuff(2000, "Sunder", None)]));
+    let seven = (0..7).map(|i| debuff(2000 + i, "Sunder", None)).collect();
+    s.set_unit_auras(TARGET, Some(seven));
     s.fire_event("UNIT_AURA", vec![ScriptValue::Str("target".into())]);
 
     let anchor = |s: &mut UiScript, frame: &str| -> String {
@@ -447,32 +444,29 @@ fn the_target_rows_wrap_short_while_the_frame_stands_beside_them() {
         .unwrap()
     };
     assert_eq!(
-        anchor(&mut s, "TargetFrameBuff1"),
-        "TargetFrameDebuff7",
-        "hidden: the sixth icon closes the first row"
+        anchor(&mut s, "TargetFrameDebuff6"),
+        "TargetFrameDebuff5",
+        "six to a row"
+    );
+    assert_eq!(
+        anchor(&mut s, "TargetFrameDebuff7"),
+        "TargetFrameDebuff1",
+        "the seventh wraps"
     );
 
     switch_on(&mut s);
     assert!(shown(&mut s));
     assert_eq!(
-        anchor(&mut s, "TargetFrameBuff1"),
-        "TargetFrameDebuff6",
-        "shown: the row wraps a slot early"
-    );
-    assert_eq!(
         anchor(&mut s, "TargetFrameDebuff6"),
         "TargetFrameDebuff1",
-        "and the sixth icon starts the second row"
+        "shown: the row wraps a slot early"
     );
 
-    // Back off: the rows stay wrapped short until the next target change or `UNIT_AURA`.
-    s.run(r#"SHOW_TARGET_OF_TARGET = "0" this = TargetofTargetFrame TargetofTarget_Update() this = nil"#)
+    // Off: the hide re-lays the rows back to full width.
+    s.run(r#"SHOW_TARGET_OF_TARGET = "0" TargetofTarget_Update(TargetFrameToT)"#)
         .unwrap();
-    assert_eq!(
-        anchor(&mut s, "TargetFrameBuff1"),
-        "TargetFrameDebuff6",
-        "the frame goes and the rows are left wrapped short behind it"
-    );
+    assert!(!shown(&mut s));
+    assert_eq!(anchor(&mut s, "TargetFrameDebuff6"), "TargetFrameDebuff5");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 

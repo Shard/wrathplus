@@ -1,5 +1,7 @@
-//! The stock timed-quest window (`QuestTimerFrame.lua`): one `SecondsToTime` row per timed quest,
-//! height `45 + 16 * n`, hidden at zero timers, each row mapped back to its quest.
+//! The timed quests on 3.3.5's objective tracker (`WatchFrame_DisplayQuestTimers`,
+//! `WatchFrame.lua:477-512`): a `QUEST_TIMERS` header line, then one ` - SecondsToTime` line per
+//! timed quest, none at zero timers, each line mapped back to its quest. 3.3.5 has no
+//! `QuestTimerFrame`.
 
 use benilla_ui::script::{
     QuestLogEntryView, QuestLogObjectiveView, QuestLogState, ScriptValue, UiScript,
@@ -27,7 +29,7 @@ fn harness() -> UiScript {
     load_xml(&mut s, "Interface\\FrameXML\\ItemButtonTemplate.xml");
     load_xml(&mut s, "Interface\\FrameXML\\QuestFrame.xml");
     load_xml(&mut s, "Interface\\FrameXML\\QuestLogFrame.xml");
-    load_xml(&mut s, "Interface\\FrameXML\\QuestTimerFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\WatchFrame.xml");
     s
 }
 
@@ -57,15 +59,16 @@ fn log(entries: Vec<QuestLogEntryView>) -> QuestLogState {
     }
 }
 
-fn shown(s: &UiScript, frame: &str) -> bool {
-    s.eval::<bool>(&format!("return {frame}:IsShown()"))
-        .unwrap()
+/// The shown timer lines' texts, header first.
+fn timer_lines(s: &UiScript) -> Vec<String> {
+    s.eval(
+        "local t = {} for _, l in ipairs(WATCHFRAME_TIMERLINES) do \
+         if l:IsShown() then t[#t + 1] = l.text:GetText() end end return t",
+    )
+    .unwrap()
 }
 
-fn row_text(s: &UiScript, i: u32) -> String {
-    s.eval::<String>(&format!("return QuestTimer{i}Text:GetText()"))
-        .unwrap()
-}
+const HEADER: &str = "|cffffd200Quest Timers";
 
 #[test]
 fn the_window_follows_the_timed_quests() {
@@ -75,7 +78,8 @@ fn the_window_follows_the_timed_quests() {
     s.set_quest_log(log(vec![quest(783, "A Threat Within", 0)]));
     s.set_server_unix_time(1_000_000.0);
     s.fire_event("QUEST_LOG_UPDATE", vec![]);
-    assert!(!shown(&s, "QuestTimerFrame"), "no timed quest, no window");
+    s.tick(0.1);
+    assert!(timer_lines(&s).is_empty(), "no timed quest, no timer lines");
 
     // Two timed quests around an untimed one, 860 s and 45 s out.
     s.set_quest_log(log(vec![
@@ -84,29 +88,21 @@ fn the_window_follows_the_timed_quests() {
         quest(3, "Escort the Caravan", 1_000_045),
     ]));
     s.fire_event("QUEST_LOG_UPDATE", vec![]);
-
-    assert!(shown(&s, "QuestTimerFrame"));
-    assert!(shown(&s, "QuestTimer1") && shown(&s, "QuestTimer2"));
-    assert!(!shown(&s, "QuestTimer3"), "only two timers are live");
-    // The reference's timers read 1 s short, formatted by `SecondsToTime` (`UIParent.lua:1004`).
-    assert_eq!(row_text(&s, 1), "14 Mins 19 Secs ");
-    assert_eq!(row_text(&s, 2), "44 Secs ");
-    assert_eq!(
-        s.eval::<f64>("return QuestTimerFrame:GetHeight()").unwrap(),
-        45.0 + 16.0 * 2.0
-    );
-
-    // Row 2 maps to the third log entry, past the untimed one.
+    s.tick(0.1);
+    // The reference's timers read 1 s short, formatted by `SecondsToTime`.
+    assert_eq!(timer_lines(&s), [HEADER, " - 14 Min 19 Sec", " - 44 Sec"]);
+    // Line 2 maps to the third log entry, past the untimed one.
     assert_eq!(s.eval::<i64>("return GetQuestIndexForTimer(2)").unwrap(), 3);
 
-    // The clock alone moves; OnUpdate repaints with no QUEST_LOG_UPDATE (`QuestTimerFrame.lua:35`).
+    // The clock alone moves; the tracker's update function repaints with no event.
     s.set_server_unix_time(1_000_030.0);
-    s.tick(0.2);
-    assert_eq!(row_text(&s, 2), "14 Secs ");
+    s.tick(1.0);
+    assert_eq!(timer_lines(&s)[2], " - 14 Sec");
 
     s.set_quest_log(log(vec![quest(2, "A Threat Within", 0)]));
     s.fire_event("QUEST_LOG_UPDATE", vec![]);
-    assert!(!shown(&s, "QuestTimerFrame"));
+    s.tick(0.1);
+    assert!(timer_lines(&s).is_empty());
 }
 
 #[test]
@@ -116,7 +112,7 @@ fn the_countdown_reaches_the_draw_list() {
     s.set_quest_log(log(vec![quest(1, "Deliver the Message", 1_000_860)]));
     s.set_server_unix_time(1_000_000.0);
     s.fire_event("QUEST_LOG_UPDATE", vec![]);
-    s.tick(0.0);
+    s.tick(0.1);
 
     let quads = s.extract();
     let text: Vec<String> = quads
@@ -128,16 +124,16 @@ fn the_countdown_reaches_the_draw_list() {
         .flatten()
         .collect();
     assert!(
-        text.iter().any(|t| t.contains("14 Mins")),
+        text.iter().any(|t| t == " - 14 Min 19 Sec"),
         "the countdown never reached the draw list: {text:?}"
     );
     assert!(
-        text.iter().any(|t| t == "Quest Timers"),
-        "the QUEST_TIMERS title never reached the draw list: {text:?}"
+        text.iter().any(|t| t == HEADER),
+        "the QUEST_TIMERS header never reached the draw list: {text:?}"
     );
 }
 
-/// The window also repaints on `PLAYER_ENTERING_WORLD` (`QuestTimerFrame.lua:3`).
+/// The tracker also lays out on `PLAYER_ENTERING_WORLD`.
 #[test]
 fn a_world_entry_paints_a_quest_already_running() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -145,7 +141,7 @@ fn a_world_entry_paints_a_quest_already_running() {
     s.set_quest_log(log(vec![quest(1, "Deliver the Message", 1_000_090)]));
     s.set_server_unix_time(1_000_000.0);
     s.fire_event("PLAYER_ENTERING_WORLD", vec![ScriptValue::Bool(true)]);
-    assert!(shown(&s, "QuestTimerFrame"));
-    // One minute takes the singular `MINUTES_ABBR`, not its `_P1` plural; 90 s reads 89.
-    assert_eq!(row_text(&s, 1), "1 Min 29 Secs ");
+    s.tick(0.1);
+    // One minute takes the singular, not its plural; 90 s reads 89.
+    assert_eq!(timer_lines(&s), [HEADER, " - 1 Min 29 Sec"]);
 }

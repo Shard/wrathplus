@@ -220,19 +220,6 @@ pub(crate) fn production_order<'a>(parts: &[&[&'a str]]) -> Vec<&'a str> {
     keyed.into_iter().map(|(_, _, file)| file).collect()
 }
 
-/// Loads `parts` in the production order ([`production_order`]) and returns the frames `counted`
-/// built.
-pub(crate) fn load_kit_counting(s: &mut UiScript, parts: &[&[&str]], counted: &str) -> usize {
-    let mut built = 0;
-    for file in production_order(parts) {
-        let frames = load_ui(s, file);
-        if file == counted {
-            built = frames;
-        }
-    }
-    built
-}
-
 /// One file's bytes, off the chain for a path or from this crate's `assets/ui` for a bare name;
 /// also the loader's `<Include>`/`<Script file=>` provider.
 pub(super) fn read(req: &str) -> Option<Vec<u8>> {

@@ -147,7 +147,7 @@ fn player_guid(m: &Model) -> u64 {
 }
 
 /// A unit token's GUID, else a party or raid member's by name (`0x60abf0`).
-pub(super) fn guid_of(m: &Model, name: &str) -> u64 {
+pub(in crate::script) fn guid_of(m: &Model, name: &str) -> u64 {
     if let Some(u) = m.unit(name).filter(|u| u.exists) {
         return u.guid;
     }

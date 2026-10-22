@@ -1352,7 +1352,7 @@ pub(super) fn replay_morph_kit(
             spell_id,
             &kit,
             KitPlay::DISCRETE,
-            play_seq.next(),
+            play_seq.advance(),
             &visuals.0,
             &mut out,
         );

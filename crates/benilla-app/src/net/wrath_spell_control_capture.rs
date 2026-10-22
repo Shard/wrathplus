@@ -54,7 +54,7 @@ fn receive(
                     out.kits.write(crate::app_core::movement::KitPush {
                         entity,
                         kit_id,
-                        seq: seq.next(),
+                        seq: seq.advance(),
                     });
                 }
             }
