@@ -381,7 +381,7 @@ pub(super) fn feed_action_state(
     // The events in the reference's flush order, the `ACTIONBAR_*` one first.
     if gen_changed {
         script.fire_event("ACTIONBAR_UPDATE_COOLDOWN", vec![]);
-        script.fire_event("SPELL_UPDATE_COOLDOWN", vec![]);
+        crate::ui_shapeshift::fire_spell_update_cooldown(&mut script);
         script.fire_event("BAG_UPDATE_COOLDOWN", vec![]);
     }
     if usable_changed {

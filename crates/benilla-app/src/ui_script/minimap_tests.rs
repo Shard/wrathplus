@@ -374,7 +374,7 @@ fn the_meeting_stone_icon_follows_the_queue_across_meetingstone_changed() {
     s.set_meeting_stone(1519, Some("Looking for more for Stormwind City".into()));
     s.fire_event("MEETINGSTONE_CHANGED", vec![]);
     assert!(vis(&s), "a queued area shows the icon");
-    s.run("this = MiniMapMeetingStoneFrame; MiniMapMeetingStoneFrame:GetScript('OnEnter')()")
+    s.run("MiniMapMeetingStoneFrame:GetScript('OnEnter')(MiniMapMeetingStoneFrame)")
         .unwrap();
     assert_eq!(
         s.eval::<String>("return GameTooltipTextLeft1:GetText()")

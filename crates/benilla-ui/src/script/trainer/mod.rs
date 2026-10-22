@@ -9,6 +9,9 @@ use mlua::{Lua, MultiValue, Value};
 use super::binding_abi;
 use super::Model;
 
+mod filter;
+mod selection;
+
 /// A service's state (the wire's `TrainerSpellState`): green learnable, red gated, gray known.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TrainerServiceCategory {
@@ -173,24 +176,19 @@ impl super::UiScript {
                 let live: std::collections::HashSet<u32> = s.groups.iter().map(|g| g.key).collect();
                 model.trainer_collapsed.retain(|sl| live.contains(sl));
                 model.trainer = Some(s);
+                if model.trainer_selection.is_none() {
+                    selection::seat_first(&mut model);
+                }
             }
         }
     }
 
-    /// Reset what each `SMSG_TRAINER_LIST` resets in the reference (`0x4d7560`): the filter to mask
-    /// 3, or 5 at a mount trainer (`0x4d75d9`), the collapse set and the selection. Call it per
-    /// packet, never per snapshot: the repaint path `0x4d7d40` touches none of the three.
-    ///
-    /// Deviation: the selection clears to 0, because the header the reference re-selects
-    /// (`0x4d7b42`, reading 1) has no spell id; the stock window's `> 1` test treats 0 and 1 alike.
-    pub fn reset_trainer_list_state(&mut self, trainer_type: u32) {
+    /// Reset what each `SMSG_TRAINER_LIST` resets: the collapse set and the selection. The filter
+    /// is a CVar no list packet writes in 12340 ([`filter`]); the collapse reset is 1.12's
+    /// (`0x4d7560`), untraced in 12340. Call it per packet, never per snapshot: the next snapshot
+    /// re-seats the selection ([`selection`]).
+    pub fn reset_trainer_list_state(&mut self) {
         let mut model = self.model_mut();
-        // Mask 5 at a mount trainer shows available and known services, so the known group shows.
-        model.trainer_filter = if trainer_type == TRAINER_TYPE_MOUNT {
-            [true, false, true]
-        } else {
-            [true, true, false]
-        };
         model.trainer_collapsed.clear();
         model.trainer_selection = None;
     }
@@ -325,7 +323,7 @@ fn rows(model: &Model) -> (Vec<Row>, usize) {
             .services
             .iter()
             .copied()
-            .partition(|&si| model.trainer_filter[t.services[si].category.filter_slot()]);
+            .partition(|&si| filter::shows(model, t.services[si].category));
         if passes.is_empty() {
             // The filter hid every service, so the header goes too.
             tail.push(Row::Header(gi));
@@ -361,11 +359,9 @@ fn num_services(model: &Model) -> usize {
     rows(model).1
 }
 
-/// `GetTrainerSelectionIndex`: the selected service's 1-based row, past the visible count while it
-/// is hidden; `None` when nothing is selected or it left the list. The selection is the record's
-/// spell id (`0x4d8e60` stores it at `ds:0xb73a0c`, `0x4d8f10` scans for it at `0x4d7543`), so no
-/// filter, collapse or update moves it to another service. After a purchase hides the service,
-/// the stock window blanks its detail pane and highlights nothing, as the reference does.
+/// `GetTrainerSelectionIndex` (12340 `0x594430` → `0x594170`): the selected record's 1-based row,
+/// past the visible count while it is hidden; nil when nothing is selected or it left the list.
+/// The selection is the record id (`0xc0e49c`), so no filter, collapse or update moves it.
 fn selected_row(model: &Model) -> Option<usize> {
     let want = model.trainer_selection?;
     let t = model.trainer.as_ref()?;
@@ -380,9 +376,10 @@ fn selected_row(model: &Model) -> Option<usize> {
 }
 
 /// Queue `TRAINER_UPDATE`, which the reference fires from its mask commits, not from Lua:
-/// `0x4d8c90` writes the filter mask, re-runs the finalizer and fires event `0x136`, and the
-/// skill-line and expand-mask commits (`0x4d8cb0`, `0x4d8cd0`, the collapse verbs') do the same.
-/// The stock window's filter click (`Blizzard_TrainerUI.lua:524`) does not repaint.
+/// the filter commit (12340 `0x594fe0`) writes the CVar, re-runs the rebuild and fires event
+/// `0x127`, and the skill-line and expand-mask commits (1.12 `0x4d8cb0`, `0x4d8cd0`, the collapse
+/// verbs') do the same. The stock window's filter click (`Blizzard_TrainerUI.lua:496`) does not
+/// repaint.
 fn queue_trainer_update(model: &mut Model) {
     model
         .pending_events
@@ -422,13 +419,9 @@ fn set_collapsed(model: &mut Model, id: usize, collapse: bool) {
 }
 
 fn opt_str(lua: &Lua, s: Option<&String>) -> mlua::Result<Value> {
-    Ok(match s {
-        Some(s) => Value::String(lua.create_string(s)?),
-        None => Value::Nil,
-    })
+    s.map_or(Ok(Value::Nil), |s| Ok(Value::String(lua.create_string(s)?)))
 }
 
-/// Register the trainer globals.
 /// Build 12340's `GetTrainerServiceItemLink(index)`: the visible service's product link, else nil.
 pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
     lua.globals().set(
@@ -438,7 +431,9 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
                 .front()
                 .and_then(|v| lua.coerce_number(v.clone()).ok().flatten())
             else {
-                return Err(mlua::Error::runtime("Usage: GetTrainerServiceItemLink(index)"));
+                return Err(mlua::Error::runtime(
+                    "Usage: GetTrainerServiceItemLink(index)",
+                ));
             };
             let link = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
@@ -452,6 +447,7 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
     )
 }
 
+/// Register the trainer globals.
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
 
@@ -464,6 +460,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
 
     // GetTrainerServiceInfo(index) → name, subText, serviceType, isExpanded; one nil past the end.
+    // A service's subText is "" with no rank, never nil (labelled: the native push is untraced),
+    // as stock `ClassTrainer_SetSelection` formats it unguarded (Blizzard_TrainerUI.lua:269).
     g.set(
         "GetTrainerServiceInfo",
         lua.create_function(|lua, index: usize| {
@@ -493,7 +491,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     let s = &t.services[si];
                     Ok(MultiValue::from_vec(vec![
                         opt_str(lua, s.name.as_ref())?,
-                        opt_str(lua, s.subtext.as_ref())?,
+                        Value::String(lua.create_string(s.subtext.as_deref().unwrap_or(""))?),
                         Value::String(lua.create_string(s.category.era_str())?),
                         Value::Nil,
                     ]))
@@ -614,7 +612,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetTrainerServiceStepReq",
         lua.create_function(|lua, index: Value| {
             if lua.coerce_number(index)?.is_none() {
-                return Err(mlua::Error::runtime("Usage: GetTrainerServiceStepReq(index)"));
+                return Err(mlua::Error::runtime(
+                    "Usage: GetTrainerServiceStepReq(index)",
+                ));
             }
             Ok((Value::Nil, Value::Nil))
         })?,
@@ -679,30 +679,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    g.set(
-        "GetTrainerServiceTypeFilter",
-        lua.create_function(|lua, kind: String| {
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(match TrainerServiceCategory::from_filter_str(&kind) {
-                Some(c) => binding_abi::flag(model.trainer_filter[c.filter_slot()]),
-                None => Value::Nil,
-            })
-        })?,
-    )?;
-    g.set(
-        "SetTrainerServiceTypeFilter",
-        lua.create_function(|lua, (kind, on): (String, Value)| {
-            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            if let Some(c) = TrainerServiceCategory::from_filter_str(&kind) {
-                // The stock window passes 1 or 0; nil, false and 0 disable.
-                let enable = !matches!(on, Value::Nil | Value::Integer(0) | Value::Boolean(false));
-                model.trainer_filter[c.filter_slot()] = enable;
-                // Fires even when the bit did not move, as the reference's thunk does.
-                queue_trainer_update(&mut model);
-            }
-            Ok(())
-        })?,
-    )?;
+    filter::register(lua, &g)?;
 
     // Collapse/ExpandTrainerSkillLine(id): fold the group headed by row `id`, or all at 0. `id`
     // spans the whole row array like the getters' gate (`0x4d89b0`); their own bound is untraced.
@@ -725,15 +702,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // SelectTrainerService(index): select the row's service by spell id; past the end clears it
-    // (`0x4d74f0` stores 0, never a clamp). Deviation: a header clears it too, because it has no
-    // spell id; the reference stores its `0xffffffff` (`0x4d7b05`) and reads back 1, which the
-    // stock window's `> 1` test treats the same as 0.
+    // SelectTrainerService(index) (12340 `0x5943a0`): the row's record id; past the end or on a
+    // header it stores 0, which selects nothing and is not a fresh list's unseated `None`.
     g.set(
         "SelectTrainerService",
         lua.create_function(|lua, index: usize| {
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            model.trainer_selection = service(&model, index).map(|s| s.spell_id);
+            model.trainer_selection = Some(service(&model, index).map_or(0, |s| s.spell_id));
             Ok(())
         })?,
     )?;
@@ -742,7 +717,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetTrainerSelectionIndex",
         lua.create_function(|lua, ()| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(selected_row(&model).map_or(0i64, |r| r as i64))
+            Ok(selected_row(&model).map(|r| r as i64))
         })?,
     )?;
 
