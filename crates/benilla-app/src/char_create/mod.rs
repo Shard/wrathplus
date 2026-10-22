@@ -85,7 +85,7 @@ impl Plugin for CharCreatePlugin {
     }
 }
 
-/// The native screen runs unless the stock GlueXML screen hosts the create (`WOW_STOCK_GLUE=1`).
+/// The native screen runs unless the stock GlueXML screen hosts the create (`stock_glue_active`).
 fn native_create() -> bool {
     !crate::ui_script::glue::stock_glue_active()
 }
