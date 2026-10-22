@@ -22,58 +22,42 @@ fn ui_parent() -> UiScript {
     s
 }
 
-/// Stock `MouseIsOver` (`UIParent.lua:1388`) adds each offset to its edge, zeroes all four on a
-/// nil `topOffset`, and tests strictly, so a cursor on an edge is outside.
+/// Stock `MouseIsOver` (`UIParent.lua:2794`) is `region:IsMouseOver(...)` (12340 `0x49e100`): each
+/// offset a number or 0, ADDED to its edge, the test strict, the answer a boolean.
 #[test]
 fn mouse_is_over_is_the_references_own_box_test() {
     benilla_formats::wow_data_or_skip!();
     let mut s = ui_parent();
+    let over = |s: &UiScript, args: &str| -> bool {
+        s.eval(&format!("return MouseIsOver(Box{args})")).unwrap()
+    };
     // The box is x 200..300, y 300..350.
     s.mouse_move(250.0, 325.0);
-    assert_eq!(
-        s.eval::<Option<i64>>("return MouseIsOver(Box)").unwrap(),
-        Some(1),
-        "dead centre"
-    );
+    assert!(over(&s, ""), "dead centre");
 
     s.mouse_move(150.0, 325.0);
-    assert_eq!(
-        s.eval::<Option<i64>>("return MouseIsOver(Box)").unwrap(),
-        None,
-        "100px to the left is out, and the miss is nil rather than false"
+    assert!(
+        !over(&s, ""),
+        "100px to the left is out, and the miss is false"
     );
-    assert_eq!(
-        s.eval::<Option<i64>>("return MouseIsOver(Box, 0, 0, -60, 0)")
-            .unwrap(),
-        Some(1),
+    assert!(
+        over(&s, ", 0, 0, -60, 0"),
         "offsets are ADDED to each edge: leftOffset -60 grows the box leftward"
     );
 
     s.mouse_move(250.0, 305.0);
-    assert_eq!(
-        s.eval::<Option<i64>>("return MouseIsOver(Box)").unwrap(),
-        Some(1)
-    );
-    assert_eq!(
-        s.eval::<Option<i64>>("return MouseIsOver(Box, 0, 10, 0, 0)")
-            .unwrap(),
-        None,
+    assert!(over(&s, ""));
+    assert!(
+        !over(&s, ", 0, 10, 0, 0"),
         "bottom + 10 = 310, and the cursor is at 305"
     );
-
-    assert_eq!(
-        s.eval::<Option<i64>>("return MouseIsOver(Box, nil, 10, 0, 0)")
-            .unwrap(),
-        Some(1),
-        "a nil topOffset discards the other three, exactly as 1.12 does"
+    assert!(
+        !over(&s, ", nil, 10, 0, 0"),
+        "a nil topOffset is 0 alone; the bottom offset still applies"
     );
 
     s.mouse_move(200.0, 325.0);
-    assert_eq!(
-        s.eval::<Option<i64>>("return MouseIsOver(Box)").unwrap(),
-        None,
-        "`x > left`, not `>=`"
-    );
+    assert!(!over(&s, ""), "`x > left`, not `>=`");
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
 
@@ -98,22 +82,21 @@ fn raise_and_lower_frame_level_step_the_frames_own_level() {
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
 
-/// `randomseed` is an engine global in 1.12 beside `random`.
+/// Build 12340 has no seed setter: no "randomseed" string in the binary, so neither the bare global
+/// nor `math.randomseed`, while `random` stays.
 #[test]
-fn randomseed_is_a_bare_global_like_random() {
+fn randomseed_is_absent_and_random_stays() {
     benilla_formats::wow_data_or_skip!();
     let s = ui_parent();
-    let a: i64 = s
-        .eval("randomseed(12345) return random(1, 1000000)")
-        .unwrap();
-    let b: i64 = s
-        .eval("randomseed(12345) return random(1, 1000000)")
-        .unwrap();
-    assert_eq!(a, b, "the same seed gives the same sequence");
+    assert!(s
+        .eval::<bool>("return randomseed == nil and math.randomseed == nil")
+        .unwrap());
+    let r: i64 = s.eval("return random(1, 6)").unwrap();
+    assert!((1..=6).contains(&r));
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
 
-/// `MouseIsOver` returns nil for a frame with no `GetLeft()` (`UIParent.lua:1405`).
+/// `IsMouseOver` answers false for a frame with no resolved rect (`0x488570`).
 #[test]
 fn mouse_is_over_survives_a_frame_with_no_resolved_rect() {
     benilla_formats::wow_data_or_skip!();
@@ -121,30 +104,23 @@ fn mouse_is_over_survives_a_frame_with_no_resolved_rect() {
     s.mouse_move(250.0, 325.0);
     s.run(r#"Floating = CreateFrame("Frame", "Floating", UIParent)"#)
         .unwrap();
-    assert_eq!(
-        s.eval::<Option<i64>>("return MouseIsOver(Floating)")
+    assert!(
+        s.eval::<bool>("return MouseIsOver(Floating) == false")
             .unwrap(),
-        None,
-        "an unanchored frame is a nil answer, not an error"
+        "an unanchored frame is a false answer, not an error"
     );
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
 
-// ── Fonts.xml's shared globals ────────────────────────────────────────────────────────────────
+// ── Constants.lua's shared globals ────────────────────────────────────────────────────────────
 
-/// Addons walk `RAID_CLASS_COLORS` (`Fonts.xml:43`) with `pairs` and index it by the class file
+/// Addons walk `RAID_CLASS_COLORS` (`Constants.lua:54`) with `pairs` and index it by the class file
 /// token, `UnitClass`'s second return.
 #[test]
-fn raid_class_colors_is_the_references_own_nine() {
+fn raid_class_colors_is_the_references_own_ten() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\Fonts.xml");
-    s.set_screen_size(1024.0, 768.0);
-
-    let n: i64 = s
-        .eval("local n = 0 for i, v in pairs(RAID_CLASS_COLORS) do n = n + 1 end return n")
-        .unwrap();
-    assert_eq!(n, 9, "1.12 has nine playable classes and one row each");
+    super::test_ui::load_ui(&mut s, r"Interface\FrameXML\Constants.lua");
 
     let keys: String = s
         .eval(
@@ -153,24 +129,19 @@ fn raid_class_colors_is_the_references_own_nine() {
         )
         .unwrap();
     assert_eq!(
-        keys, "DRUID HUNTER MAGE PALADIN PRIEST ROGUE SHAMAN WARLOCK WARRIOR",
-        "keyed by UnitClass's uppercase second return, which is how addons index it"
-    );
-
-    // SHAMAN has PALADIN's colour in the reference; not a typo to fix.
-    assert_eq!(
-        s.eval::<(f64, f64, f64)>(
-            "local p, h = RAID_CLASS_COLORS.PALADIN, RAID_CLASS_COLORS.SHAMAN \
-             return p.r - h.r, p.g - h.g, p.b - h.b"
-        )
-        .unwrap(),
-        (0.0, 0.0, 0.0),
-        "SHAMAN shares PALADIN's pink in 1.12 — transcribed, not corrected"
+        keys, "DEATHKNIGHT DRUID HUNTER MAGE PALADIN PRIEST ROGUE SHAMAN WARLOCK WARRIOR",
+        "one row per 3.3.5 class, keyed by UnitClass's uppercase second return"
     );
     assert_eq!(
-        s.eval::<(f64, f64, f64)>("local c = RAID_CLASS_COLORS.HUNTER return c.r, c.g, c.b")
+        s.eval::<(f64, f64, f64)>("local c = RAID_CLASS_COLORS.SHAMAN return c.r, c.g, c.b")
             .unwrap(),
-        (0.67, 0.83, 0.45)
+        (0.0, 0.44, 0.87),
+        "3.3.5's Shaman is blue, no longer Paladin's pink"
+    );
+    assert_eq!(
+        s.eval::<(f64, f64, f64)>("local c = RAID_CLASS_COLORS.DEATHKNIGHT return c.r, c.g, c.b")
+            .unwrap(),
+        (0.77, 0.12, 0.23)
     );
 }
 
@@ -238,7 +209,7 @@ fn the_font_path_globals_are_the_references_own_four() {
     );
 }
 
-/// `MouseIsOver` divides the cursor by the frame's effective scale (`UIParent.lua:1389`).
+/// `IsMouseOver` divides the cursor by the frame's effective scale (`0x488570`).
 #[test]
 fn mouse_is_over_reads_a_scaled_frame_in_its_own_units() {
     benilla_formats::wow_data_or_skip!();
@@ -261,15 +232,13 @@ fn mouse_is_over_reads_a_scaled_frame_in_its_own_units() {
     );
     let (cx, cy) = (((l + r) * 0.5 * eff) as f32, ((b + t) * 0.5 * eff) as f32);
     s.mouse_move(cx, cy);
-    assert_eq!(
-        s.eval::<Option<i64>>("return MouseIsOver(Scaled)").unwrap(),
-        Some(1),
+    assert!(
+        s.eval::<bool>("return MouseIsOver(Scaled)").unwrap(),
         "the cursor at the scaled footprint's centre ({cx}, {cy})"
     );
     s.mouse_move((r * eff) as f32 + 10.0, cy);
-    assert_eq!(
-        s.eval::<Option<i64>>("return MouseIsOver(Scaled)").unwrap(),
-        None,
+    assert!(
+        !s.eval::<bool>("return MouseIsOver(Scaled)").unwrap(),
         "past the scaled footprint (inside the unscaled one) is outside"
     );
 }

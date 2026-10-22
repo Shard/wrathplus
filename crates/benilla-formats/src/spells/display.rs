@@ -222,8 +222,7 @@ pub struct SpellDisplay {
     pub effect_trigger_spell: [u32; 3],
     /// `EffectItemType[3]` (columns 103-105): the item a `SPELL_EFFECT_CREATE_ITEM` effect makes.
     pub effect_item_type: [u32; 3],
-    /// `EffectMiscValue[3]` (columns 106-108, signed). On a trade-skill opener (effect 47),
-    /// slot 0 picks the window: nonzero the CraftFrame, 0 the TradeSkillFrame (`0x6e4bd7`).
+    /// `EffectMiscValue[3]` (columns 106-108, signed).
     pub effect_misc_value: [i32; 3],
     /// `EffectMiscValueB[3]`: a SUMMON effect's `SummonProperties.dbc` row (Wrath data only).
     pub effect_misc_value_b: [i32; 3],

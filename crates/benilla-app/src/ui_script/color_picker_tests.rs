@@ -311,10 +311,11 @@ fn escape_hides_the_picker_and_cancel_is_what_reverts() {
     assert_eq!((r, g, b), (0.1, 0.5, 0.9), "Cancel runs cancelFunc");
 }
 
-/// `AceConsole-2.0.lua:1402-1406` in shape: the Okay button's handler, fetched with `GetScript`
-/// and replaced through `SetScript` by one that calls it first.
+/// An addon's hook in 3.x shape: the Okay button's handler, fetched with `GetScript` and replaced
+/// through `SetScript` by one that calls it first, passing `self` on, since 3.3.5's body reads it
+/// (`HideUIPanel(self:GetParent())`, `ColorPickerFrame.xml:88`).
 #[test]
-fn ace_console_can_chain_the_okay_buttons_onclick() {
+fn an_addon_can_chain_the_okay_buttons_onclick() {
     let _data = benilla_formats::wow_data_or_skip!();
     let s = picker();
     s.run(
@@ -323,9 +324,9 @@ fn ace_console_can_chain_the_okay_buttons_onclick() {
         ColorPickerFrame.func = function() table.insert(chained, "original") end
         if ColorPickerOkayButton then
             local ColorPickerOkayButton_OnClick = ColorPickerOkayButton:GetScript("OnClick")
-            ColorPickerOkayButton:SetScript("OnClick", function()
+            ColorPickerOkayButton:SetScript("OnClick", function(self, ...)
                 if ColorPickerOkayButton_OnClick then
-                    ColorPickerOkayButton_OnClick()
+                    ColorPickerOkayButton_OnClick(self, ...)
                 end
                 table.insert(chained, "ace")
             end)

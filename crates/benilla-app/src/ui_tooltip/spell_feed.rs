@@ -494,8 +494,8 @@ pub(crate) struct SpellTooltipSources<'w> {
 }
 
 /// Push a view for every spell the UI can hover (the book, the class's talent ranks, the open
-/// trainer's services, and what the VM holds: the pet's spells, the quest rewards, the craft's
-/// subjects, every unit's auras and the tracking spell) before it is hovered, as the reference
+/// trainer's services, and what the VM holds: the pet's spells, the quest rewards, every unit's
+/// auras and the tracking spell) before it is hovered, as the reference
 /// reads them all locally; an ask for any other id too.
 pub(crate) fn feed_spell_tooltips(
     script: Option<NonSendMut<UiScript>>,
@@ -532,7 +532,7 @@ pub(crate) fn feed_spell_tooltips(
         return;
     };
     let mut wanted: Vec<u32> = script.take_spell_tooltip_asks();
-    // What the VM holds for a hover: pet spells, quest rewards, craft subjects, auras, tracking.
+    // What the VM holds for a hover: pet spells, quest rewards, auras, tracking.
     wanted.extend(
         script
             .spell_tooltip_subjects()
