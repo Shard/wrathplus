@@ -604,3 +604,25 @@ fn a_mount_trainer_orders_rows_as_a_class_trainer() {
         assert_eq!(got, ["Riding", "Aye", "Bee", "Cee"], "type {trainer_type}");
     }
 }
+
+/// `0x76ec80`'s collation: case and accents fold (`Élan` sits with `Elan`), ligatures expand
+/// (`Æther` = `AEther`), and `_` sorts after the letters, as the upper-casing puts it.
+#[test]
+fn names_collate_as_the_clients_folding_compare() {
+    use std::cmp::Ordering::*;
+    assert_eq!(
+        super::collate("élan", "Elan"),
+        Greater,
+        "equal fold; the raw tie"
+    );
+    assert_eq!(super::collate("Élan", "Elk"), Less);
+    assert_eq!(super::collate("Æther", "AEtherz"), Less);
+    assert_eq!(super::collate("Æther", "Afar"), Less);
+    assert_eq!(super::collate("_x", "Zed"), Greater);
+    assert_eq!(super::collate("apple", "Banana"), Less);
+    assert_eq!(
+        super::collate("Straße", "Strasse"),
+        Greater,
+        "ß = SS; the raw tie"
+    );
+}
