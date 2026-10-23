@@ -24,6 +24,7 @@ pub mod inflight;
 mod mods;
 pub mod native_failure;
 pub mod reagents;
+pub mod secure_toggle;
 pub(crate) mod unit_cast;
 pub(crate) mod net;
 mod range_units;
@@ -59,6 +60,8 @@ pub use targeting::{
 pub struct ScriptCast<'w, 's> {
     pub targeting: cast_target::CastTargeting<'w, 's>,
     pub ladder: CastLadder<'w, 's>,
+    /// The `secureAbilityToggle` guard's cast requests ([`secure_toggle`]).
+    pub recent: ResMut<'w, secure_toggle::RecentCastRequests>,
 }
 
 /// The local self-cancel's set: a reader of the in-flight state orders `.after(LocalCancel)` so a
@@ -70,6 +73,7 @@ pub struct SpellPlugin;
 
 impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, secure_toggle::CVARS);
         app.init_resource::<PendingCast>()
             .init_resource::<QueuedMeleeSpell>()
             .init_resource::<ActiveChannel>()
@@ -79,6 +83,7 @@ impl Plugin for SpellPlugin {
             .init_resource::<SpellModifiers>()
             .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
             .init_resource::<AutoSelfCast>()
+            .init_resource::<secure_toggle::RecentCastRequests>()
             .init_resource::<SpellTargeting>()
             .init_resource::<targeting::glyph::GlyphPlacements>()
             .add_systems(
@@ -93,6 +98,7 @@ impl Plugin for SpellPlugin {
             .init_resource::<targeting::UnitPick>()
             .init_resource::<group_relation::GroupRoster>()
             .add_observer(cast_target::on_cvar)
+            .add_observer(secure_toggle::on_cvar)
             .add_systems(
                 Update,
                 (
