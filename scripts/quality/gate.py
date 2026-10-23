@@ -52,7 +52,9 @@ def loc(paths):
 
 # WS2's gate (docs/WRATH-NATIVE-PLAN.md): production code in these crates names descriptor fields
 # through `Field`, never a raw index. The descriptor names come off the generated layout.
-WS2_ROOTS = ('crates/wrathplus-app/src/', 'crates/wrathplus-world/src/')
+WS2_ROOTS = ('crates/wrathplus-app/src/', 'crates/wrathplus-app-core/src/', 'crates/wrathplus-app-net/src/',
+             'crates/wrathplus-app-world/src/', 'crates/wrathplus-app-ui/src/', 'crates/wrathplus-app-tools/src/',
+             'crates/wrathplus-world/src/')
 WS2_LAYOUT = 'crates/wrathplus-protocol/src/types/update_object/fields/layout_generated.rs'
 WS2_TYPES = ('CONTAINER', 'CORPSE', 'DYNAMICOBJECT', 'GAMEOBJECT', 'ITEM', 'OBJECT', 'PLAYER', 'UNIT')
 

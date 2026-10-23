@@ -155,7 +155,7 @@ run pass-span-lint scripts/pass-span-lint.py
 run player-tests env ${wow_data:+WOW_DATA="$wow_data"} \
     ${corpus:+BENILLA_ADDON_CORPUS="$root/wow-addons-vanilla"} \
     ${require_data:+BENILLA_REQUIRE_DATA=1} BENILLA_SKIP_LOG="$skips" \
-    cargo test -p wrathplus-formats -p wrathplus-app --no-default-features --lib
+    cargo test -p wrathplus-formats -p wrathplus-app-core -p wrathplus-app-net -p wrathplus-app-world -p wrathplus-app-ui -p wrathplus-app-tools -p wrathplus-app --no-default-features --lib
 report_skips player-tests
 
 # enforcer: `wrathplus-worldview` boots the engine plugins with no server, login, UI or player, in a
