@@ -575,91 +575,6 @@ fn reload_outside_the_world_is_dropped() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// What 3.3.5's `_ERRORMESSAGE` (BasicControls.xml:13-41) filed in `Blizzard_DebugTools`' store.
-fn shown_script_error(script: &wrathplus_ui::script::UiScript) -> String {
-    let filed = "return _ScriptErrorsFrame and table.concat(_ScriptErrorsFrame.messages, '\\n')";
-    script
-        .eval::<Option<String>>(filed)
-        .expect("eval")
-        .unwrap_or_default()
-}
-
-/// A file-scope raise drops only its addon, and the stock handler files the error.
-#[test]
-#[ignore = "pending Native UI: unfocused ScrollingEdit cursorOffset"]
-fn an_addon_error_while_entering_world_reports_on_screen_and_the_sibling_loads() {
-    wrathplus_formats::wow_data_or_skip!();
-    let _l = ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (tmp, _c, _h) = hermetic_probe("addon-error");
-    // A second addon, first alphabetically, that dies at file scope.
-    let dir = tmp.join("benilla-config/AddOns/AaBroken");
-    std::fs::create_dir_all(&dir).expect("broken addon dir");
-    std::fs::write(dir.join("AaBroken.toc"), "## Interface: 30300\nboom.lua\n").expect("toc");
-    std::fs::write(dir.join("boom.lua"), "error('file-scope boom')\n").expect("lua");
-    let mut world = booted_world();
-
-    log_in_as(&mut world, "Onehunter", 1);
-    assert_eq!(
-        probe_saw(&world).as_deref(),
-        Some("Onehunter"),
-        "the addon AFTER the broken one still loads — a neighbour's error drops only itself"
-    );
-
-    // The app's per-frame drain runs the dispatch; the test runs the same call.
-    let mut script = world
-        .remove_non_send_resource::<wrathplus_ui::script::UiScript>()
-        .expect("VM");
-    script.dispatch_script_errors_to_handler();
-    let shown = shown_script_error(&script);
-    assert!(
-        shown.contains("file-scope boom"),
-        "the handler filed the actual error, got: {shown:?} ",
-    );
-    drop(script);
-    drop(world);
-    let _ = std::fs::remove_dir_all(&tmp);
-}
-
-/// The load's instruction budget fails the looping addon; the test finishing is the claim.
-#[test]
-#[ignore = "pending Native UI: unfocused ScrollingEdit cursorOffset"]
-fn a_looping_addon_cannot_freeze_world_entry() {
-    wrathplus_formats::wow_data_or_skip!();
-    let _l = ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (tmp, _c, _h) = hermetic_probe("addon-loop");
-    let dir = tmp.join("benilla-config/AddOns/AaSpin");
-    std::fs::create_dir_all(&dir).expect("spin addon dir");
-    std::fs::write(dir.join("AaSpin.toc"), "## Interface: 30300\nspin.lua\n").expect("toc");
-    std::fs::write(dir.join("spin.lua"), "while true do end\n").expect("lua");
-    let mut world = booted_world();
-
-    log_in_as(&mut world, "Onehunter", 1);
-
-    assert_eq!(
-        probe_saw(&world).as_deref(),
-        Some("Onehunter"),
-        "the addon after the spinner still loads — the budget failed one addon, not the entry"
-    );
-    // The budget raise reaches the handler queue, so the dialog names the loop.
-    let mut script = world
-        .remove_non_send_resource::<wrathplus_ui::script::UiScript>()
-        .expect("VM");
-    script.dispatch_script_errors_to_handler();
-    let shown = shown_script_error(&script);
-    assert!(
-        shown.contains("instruction budget exhausted"),
-        "the handler filed the runaway loop's budget message, got: {shown:?} ",
-    );
-
-    drop(script);
-    drop(world);
-    let _ = std::fs::remove_dir_all(&tmp);
-}
-
 // ─────────────────── The deferred entry load ───────────────────
 
 /// With the loading cover up, the armed load waits [`super::lifecycle::run_pending_entry_load`]'s
@@ -1471,3 +1386,6 @@ fn a_login_and_a_reload_load_without_the_lost_target_sound() {
     drop(world);
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+#[path = "world_entry_error_tests.rs"]
+mod error_tests;

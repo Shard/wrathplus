@@ -202,7 +202,12 @@ impl Loader<'_> {
             ("vertTile", "SetVertTile"),
         ] {
             if let Some(on) = region.attr_bool_opt(attr) {
-                if wrapper.get::<Option<mlua::Function>>(method).ok().flatten().is_some() {
+                if wrapper
+                    .get::<Option<mlua::Function>>(method)
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
                     self.call_region(wrapper, method, on, dbg);
                 }
             }
@@ -362,10 +367,19 @@ impl Loader<'_> {
             // The expanded element keeps the instance's `inherits=`, a template's name, so the
             // chain is walked to its font object. An unresolved name passes through unchanged:
             // `SetFontObject("")` would clear the font object where a bad name warns.
-            let resolved = self
-                .font_object_through_templates(name)
-                .unwrap_or_else(|| name.to_string());
-            if let Err(e) = wrapper.call_method::<()>("SetFontObject", resolved) {
+            // A chain of virtual FontStrings with no font object at its end links none: the
+            // expanded element already carries their `font=` (`Blizzard_DebugTools.xml:3`'s
+            // `EventTraceTimeFont`, a file and `justifyH`).
+            let resolved = match self.font_object_through_templates(name) {
+                Some(font) => font,
+                None if self.model().framexml_templates.borrow().contains_key(name) => {
+                    String::new()
+                }
+                None => name.to_string(),
+            };
+            if resolved.is_empty() {
+                // Nothing to link; `font=` below applies the template's file.
+            } else if let Err(e) = wrapper.call_method::<()>("SetFontObject", resolved) {
                 self.warn_once(
                     &format!("fontobj:{name}"),
                     format!("{dbg}: <FontString inherits=\"{name}\">: {e}"),
@@ -408,3 +422,7 @@ impl Loader<'_> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "font_template_tests.rs"]
+mod font_template_tests;

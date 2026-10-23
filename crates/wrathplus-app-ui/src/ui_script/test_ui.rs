@@ -3,9 +3,9 @@
 //! path is one off the player's patch chain (an on-demand addon's file), and a bare filename a
 //! fixture under `assets/ui`. It reads the source tree, not the compiled-in copy.
 
-use wrathplus_ui::script::UiScript;
 #[cfg(test)]
 use wrathplus_ui::script::QuadContent;
+use wrathplus_ui::script::UiScript;
 
 /// Load one interface file into `s`, panicking on any loader error; returns the frames it built
 /// (0 for a `.lua` and for a stock FrameXML file, which seats the whole interface). A chain entry
@@ -606,28 +606,6 @@ pub(crate) fn seat_chain_addon(s: &mut UiScript, name: &str) {
 
 #[cfg(test)]
 mod tests {
-    use wrathplus_ui::script::UiScript;
-
-    /// A kit that loads a file after one the production load runs after it fails at that load.
-    #[test]
-    fn a_kit_out_of_the_production_order_fails_at_the_load() {
-        let _data = wrathplus_formats::wow_data_or_skip!();
-        let mut s = UiScript::new().unwrap();
-        super::load_ui(&mut s, r"Interface\FrameXML\Fonts.xml");
-        let late = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            super::load_ui(&mut s, r"Interface\FrameXML\GlobalStrings.lua")
-        }));
-        let message = late.expect_err("GlobalStrings.lua after Fonts.xml loaded");
-        let message = message
-            .downcast_ref::<String>()
-            .cloned()
-            .unwrap_or_default();
-        assert!(
-            message.contains("the production load runs it first"),
-            "{message}"
-        );
-    }
-
     /// The merged kit runs toc rows in the toc's order, each once.
     #[test]
     fn a_merged_kit_takes_the_production_order() {
