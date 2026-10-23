@@ -35,8 +35,6 @@ use crate::app_core::state::SkillLines;
 /// 3 pet). `IsTrainerServiceTradeSkill` answers it for every service, where the 1.12 verb
 /// (`0x4d9f70`) answers per service; the stock window never calls it.
 const TRAINER_TYPE_TRADESKILL: u32 = 2;
-/// A mount trainer, which the client calls "talent" (`IsTalentTrainer 0x4d8ed0`).
-const TRAINER_TYPE_MOUNT: u32 = 1;
 
 pub(crate) use crate::app_core::interaction::TrainerOpen;
 
@@ -111,10 +109,8 @@ fn resolve_service(
     // The VM's own `GlobalStrings.lua`, for the group header labels.
     get: &dyn Fn(&str) -> Option<String>,
 ) -> TrainerService {
-    // `taught` feeds only the group key (labelled in [`service_group`]); the name and subtext are
-    // the service spell's own columns (`00594e80`, `00594f60`), which differ from a taught spell's
-    // on a learn wrapper's row. The service spell stays the buy id.
-    let taught = spells.learned_spell(wire.spell).unwrap_or(wire.spell);
+    // The name and subtext are the service spell's own columns (`00594e80`, `00594f60`), which
+    // differ from a taught spell's on a learn wrapper's row. The service spell stays the buy id.
     let display = spells.get(wire.spell);
     let cat = category(wire.state);
     // The wire has no per-gate bit, so the skill gate follows the service's category; the 1.12
@@ -146,20 +142,11 @@ fn resolve_service(
             }
         })
         .collect();
-    // The wrapper is never in `SkillLineAbility`, so the skill-line arm keys on the taught spell;
-    // a service it cannot place drops, as in the client's builder, and is logged.
-    let (group_key, group_name) = service_group(
-        wire.spell,
-        taught,
-        trainer_type,
-        cat,
-        spells,
-        skill_lines,
-        get,
-    );
+    // A service the builder cannot place drops, as in the client, and is logged.
+    let (group_key, group_name) = service_group(wire.spell, trainer_type, spells, skill_lines, get);
     if group_key == 0 && skill_lines.is_some() {
         debug!(
-            "ui_trainer: trainer spell {} (teaches {taught}) has no skill line — dropped from the tree",
+            "ui_trainer: trainer spell {} has no skill line — dropped from the tree",
             wire.spell
         );
     }
@@ -169,9 +156,7 @@ fn resolve_service(
         subtext: display.and_then(|d| d.rank.clone()),
         // Over the wire spell, like the name and subtext ([`service_icon`]).
         texture: service_icon(wire.spell, trainer_type, spells, icons, items, commands),
-        // Empty, labelled: 12340's `GetTrainerServiceDescription` (`005959d0`) returns the service
-        // spell's expanded Description (`0057abc0`), else a creating trade spell's item
-        // description; neither is built here.
+        // Filled by the feed, which holds the token inputs ([`describe::service_description`]).
         description: String::new(),
         cost: wire.cost,
         prof_first_rank: wire.is_primary_prof_first_rank,
@@ -183,28 +168,8 @@ fn resolve_service(
         group_key,
         group_name,
         tooltip: service_tooltip(wire.spell, spells),
-        item_link: service_item_link(trainer_type, display, items, commands),
+        item_link: describe::service_item_link(trainer_type, display, items, commands),
     }
-}
-
-/// `GetTrainerServiceItemLink` (`0x596290`): at a tradeskill trainer, a spell whose first effect
-/// is `CREATE_ITEM` (24), `CREATE_RANDOM_ITEM` (59) or `CREATE_ITEM_2` (157) links its item,
-/// once the template is cached (the link's level field is 0, as `0x61e360` writes it).
-fn service_item_link(
-    trainer_type: u32,
-    display: Option<&wrathplus_formats::SpellDisplay>,
-    items: &Items,
-    commands: &NetCommands,
-) -> Option<String> {
-    let d = display.filter(|_| trainer_type == TRAINER_TYPE_TRADESKILL)?;
-    let item = d.effect_item_type[0];
-    if !matches!(d.effects[0], 24 | 59 | 157) || item == 0 {
-        return None;
-    }
-    let t = items.template(item, 0, commands)?;
-    Some(crate::items::wrath_item_link(
-        item, &t.name, t.quality, [0; 4], 0, 0, 0,
-    ))
 }
 
 /// Build the Lua snapshot from [`TrainerOpen`] and the spell and skill catalogs.
@@ -402,8 +367,12 @@ pub fn feed_trainer(
     // Read PLAYER_CHARACTER_POINTS2 every frame: a spent or restored slot updates the row
     // without waiting for another trainer list. Missing descriptor data is not a real zero.
     let free_professions = self_player.and_then(|(_, store)| store.0.player_free_professions());
+    let me = self_player.map(|(_, store)| store);
     if let Some(state) = &mut fresh {
         for (service, wire) in state.services.iter_mut().zip(&open.services) {
+            let inputs = (spells, &skill_lines.catalog, me, &*script);
+            service.description =
+                describe::service_description(wire.spell, inputs, &items, &commands);
             if !profession_slot_available(wire, free_professions)
                 && service.category == TrainerServiceCategory::Available
             {
@@ -505,6 +474,7 @@ fn drain_trainer(
     }
 }
 
+mod describe;
 mod law;
 use law::{category, service_group, service_icon, service_tooltip};
 
@@ -523,3 +493,5 @@ fn rederive_edge(edge: &FieldChanged) -> bool {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod wrath_tests;
