@@ -42,7 +42,6 @@ pub mod wrath_quest_pois;
 pub mod wrath_battleground_capture;
 pub mod wrath_death_capture;
 pub mod wrath_session_meta_capture;
-pub mod wrath_help_capture;
 pub mod wrath_refer_friend_capture;
 pub mod wrath_world_objects_capture;
 pub mod wrath_session_misc_capture;
@@ -130,7 +129,6 @@ impl Plugin for NetPlugin {
         wrath_battleground_capture::register(app);
         wrath_death_capture::register(app);
         wrath_session_meta_capture::register(app);
-        wrath_help_capture::register(app);
         wrath_refer_friend_capture::register(app);
         wrath_world_objects_capture::register(app);
         wrath_movie::register(app);
