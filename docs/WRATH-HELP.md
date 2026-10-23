@@ -15,11 +15,11 @@ viewed byte. This build has no ticket category, so the shared ticket's category 
 and viewed bytes are 1.12's assigned and opened bytes; the ticket id and needs-more-help byte are
 dropped. Any other status is malformed.
 
-**Capture-only** (`NativeHelpPackets`, sole owner, cleared on Connected and Disconnected,
-duplicates kept): 04EF GM response (response id, ticket id, ticket text and the response's four
-NUL-terminated parts, empty ones kept), 04F1 response status (1 offers the GM survey), 03C8
-complaint receipt (AC always 0). 1.12 has no reply channel or survey offer, so no shared event
-means these.
+**GM response** (`ui_gm_response`, the sole `WrathHelp` owner; 12340's dispatcher
+`FUN_005ad240`): 04EF fires `GMRESPONSE_RECEIVED` (event `0x28f`, `"%s%s"`) with the ticket text
+(2,000-byte buffer) and the four response parts joined (4,000 bytes each, 16,000 in all); 04F1
+fires `GMSURVEY_DISPLAY` through `ui_gm_ticket`'s survey path for a nonzero byte, else a bare
+`UPDATE_TICKET`. 03C8, the complaint receipt (AC always 0), is logged only: no UI effect traced.
 
 **Outbound**: the existing ticket commands now have native writers (route `NativeHelp`, producer
 `ui_gm_ticket`): 0205 create (map, position, text, `needResponse` 1, `needMoreHelp` 0, no chat
