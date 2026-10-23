@@ -95,7 +95,7 @@ impl PetPress<'_, '_> {
         }
         let pet_guid = self.bar.guid();
         if is_spell
-            && display.is_some_and(|d| crate::ui_action::toggle::active_action_toggle(id, d, store))
+            && display.is_some_and(|d| crate::ui_action::toggle::active_action_toggle(id, d, self.pet.auras_of(pet_guid)))
         {
             let _ = self.commands.0.send(ClientCommand::PetCancelAura {
                 pet_guid,
@@ -194,7 +194,7 @@ impl PetPress<'_, '_> {
             .is_spell()
             .then(|| spells.as_ref().and_then(|s| s.catalog.get(entry.action())))
             .flatten();
-        if let Some(spell_id) = active_aura_press(entry, Some(pet_store), display) {
+        if let Some(spell_id) = active_aura_press(entry, Some(pet.auras_of(pet_guid)), display) {
             debug!("ui_pet: slot {slot} cancels its own aura (spell {spell_id}) — no PetAction");
             let _ = commands
                 .0

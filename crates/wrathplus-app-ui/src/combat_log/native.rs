@@ -823,8 +823,9 @@ pub(crate) struct FeedInputs<'w, 's> {
     group: Option<bevy::prelude::Res<'w, crate::app_core::group::GroupState>>,
     index: bevy::prelude::Res<'w, crate::net::GuidIndex>,
     stores: bevy::prelude::Query<'w, 's, &'static crate::app_core::session::ObjectStore>,
-    factions: Option<bevy::prelude::Res<'w, crate::app_core::state::Factions>>,
-    reputations: bevy::prelude::Res<'w, crate::net::Reputations>,
+    /// The `HOSTILE`/`FRIENDLY` flags' reaction, with the group roster, forced reactions and
+    /// owner lookup.
+    relations: crate::target::RelationInputs<'w, 's>,
     spells: Option<bevy::prelude::Res<'w, crate::app_core::state::Spells>>,
     /// The enchant names and gate of `ENCHANT_APPLIED`/`REMOVED`.
     enchants: Option<bevy::prelude::Res<'w, crate::items::Enchants>>,
@@ -914,8 +915,7 @@ pub(super) fn feed(
         group,
         index,
         stores,
-        factions,
-        reputations,
+        relations,
         spells,
         enchants,
         summon_slots,
@@ -952,7 +952,7 @@ pub(super) fn feed(
     let store = |guid: u64| crate::target::guid_store(Some(&index), &stores, guid);
     let me_store = store(me);
     let reaction = |unit: &crate::app_core::session::ObjectStore| {
-        crate::target::ring_reaction(factions.as_deref(), &reputations, Some(unit), me_store)
+        relations.ring_reaction(Some(unit), me_store)
     };
     let flags_in = super::native_flags::FlagInputs {
         me,

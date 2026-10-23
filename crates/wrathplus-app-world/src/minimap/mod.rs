@@ -378,7 +378,7 @@ fn emit_minimap(
     *blip_hover = blips::MinimapBlipHover::None;
     // Drain the `Minimap:PingLocation` click before any early return: it is spent in the frame it
     // was made, and a click on a frame the map does not draw is not a ping.
-    let trivial_quests = script.as_ref().is_some_and(|s| s.track_trivial_quests());
+    let menu = script.as_ref().map(|s| s.tracking_menu());
     let click = script.and_then(|mut s| s.take_minimap_ping_request());
     let (Some(slot), Some(assets), Some(map), Some(catalog)) =
         (widget.0.as_ref(), assets, map, catalog)
@@ -602,8 +602,7 @@ fn emit_minimap(
         }
     }
 
-    // ── The blip layer: landmarks under the player arrow, the dots above it (the reference's
-    // order).
+    // ── The blip layer: landmarks under the arrow, the dots above it (the reference's order).
     // Our own descriptor's tracking state (private fields, only on the self entity).
     let me = self_store.iter().next();
     // Our own guid: our own pet and minions never take a dot (`0x4eac0d`).
@@ -613,6 +612,8 @@ fn emit_minimap(
             creatures: s.0.player_track_creatures(),
             resources: s.0.player_track_resources(),
             stealthed: s.0.player_track_stealthed(),
+            trivial: menu.is_some_and(|m| m.0),
+            town: menu.and_then(|m| m.1),
         })
         .unwrap_or_default();
     let blip_ctx = (blip_px_per_yd > 0.0).then(|| {
@@ -731,7 +732,6 @@ fn emit_minimap(
                 assets.forms.as_ref(),
                 icons,
                 assets.object_icon_atlas,
-                trivial_quests,
                 player_indoors,
                 |feet| world.indoors_at(feet),
                 &mut quads,
@@ -747,7 +747,7 @@ fn emit_minimap(
                 self_guid,
                 icons,
                 assets.object_icon_atlas,
-                trivial_quests,
+                tracking,
                 player_indoors,
                 // A dot NPC's own containment, the faces-only down-ray the entity lights use.
                 |feet| world.indoors_at(feet),

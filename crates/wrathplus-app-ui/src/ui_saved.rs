@@ -52,6 +52,8 @@ pub(crate) fn load_saved_variables(
         }
     }
     host_settings(script);
+    // The tracking menu's saved type, off its CVar (12340 `0x5128d0`).
+    script.restore_tracking_from_cvar();
     // Fired whether or not there was a file, as a step of the reference's load sequence.
     script.fire_event("VARIABLES_LOADED", vec![]);
 }

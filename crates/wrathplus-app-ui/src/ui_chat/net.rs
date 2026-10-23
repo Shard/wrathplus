@@ -21,6 +21,7 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::ChannelList, on_channel_list)
         .net_handler(K::ChatPlayerNotFound, on_whisper_refusal)
         .net_handler(K::ChatWrongFaction, on_whisper_refusal)
+        .net_handler(K::WrathChatNotice, on_whisper_refusal)
         .net_handler(K::ZoneUnderAttack, on_broadcast)
         .net_handler(K::DefenseMessage, on_broadcast)
         .net_handler(K::ServerMessage, on_broadcast)
@@ -58,6 +59,14 @@ fn on_whisper_refusal(In(ev): In<SessionEvent>, mut errors: ResMut<UiErrorKeys>)
     match ev {
         SessionEvent::ChatPlayerNotFound { name } => chat_player_not_found(&name, &mut errors),
         SessionEvent::ChatWrongFaction => chat_wrong_faction(&mut errors),
+        // 12340's `0x32d` case reads the name and shows message `0x1fa`,
+        // `ERR_CHAT_PLAYER_AMBIGUOUS_S` (`0x5216f0`), as `NOT_FOUND_S`'s row (kind 0, type 0x44).
+        SessionEvent::WrathChatNotice {
+            packet: wrathplus_protocol::wrath_chat_notices::Packet::PlayerAmbiguous { name },
+        } => errors.0.push(crate::app_core::errors::UiError::s(
+            "ERR_CHAT_PLAYER_AMBIGUOUS_S",
+            name,
+        )),
         _ => {}
     }
 }

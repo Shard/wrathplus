@@ -420,11 +420,17 @@ fn the_stock_tracking_menu_lists_the_books_tracking_spells_then_the_town_types()
     s.tick(0.0);
     assert_eq!(icon(&s), "Interface\\Minimap\\Tracking\\Repair");
     assert_eq!(s.tracked_town_type(), Some((1, 0x1000)));
+    assert_eq!(
+        s.cvar("minimapTrackedInfo").as_deref(),
+        Some("MINIMAP_TRACKING_REPAIR"),
+        "the selection persists by its key (`0x57e070`)"
+    );
 
     open(&mut s);
     s.run("DropDownList1Button15:Click()").unwrap();
     s.tick(0.0);
     assert_eq!(icon(&s), "Interface\\Minimap\\Tracking\\None");
     assert_eq!(s.tracked_town_type(), None);
+    assert_eq!(s.cvar("minimapTrackedInfo").as_deref(), Some(""));
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }

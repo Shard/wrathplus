@@ -248,14 +248,14 @@ pub(crate) fn send_item_use(
     // Passed in, not carried on `CastLadder`, so no system reaches it twice.
     ui_errors: &mut crate::app_core::errors::UiErrorKeys,
 ) -> bool {
-    // The toggle predicate over the caster's live aura slots.
+    use crate::ui_action::toggle; // the press-again predicate over the caster's packet auras
     let aura_cancels = |spell: u32| {
         let Some(d) = ladder.spells.as_ref().and_then(|s| s.catalog.get(spell)) else {
             return false;
         };
         ctx.rel
             .self_store
-            .is_some_and(|store| crate::ui_action::toggle::active_action_toggle(spell, d, store))
+            .is_some_and(|s| toggle::active_action_toggle(spell, d, toggle::unit_auras(&ladder.objects, s)))
     };
     // The disarm ladder, asked of the caster's own inventory.
     let disarmed_hand = ctx.rel.self_store.and_then(|store| {

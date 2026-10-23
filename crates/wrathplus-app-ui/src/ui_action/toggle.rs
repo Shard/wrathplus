@@ -1,22 +1,38 @@
-//! Press-again-to-cancel. The reference cancels in its dispatchers, above `TryCast 0x6e4b60`,
-//! and the two toggles differ: the active-action one runs in both `UseAction 0x4e5ee0` (cancel
-//! `0x4e60c1`) and the `CastSpell` dispatcher `0x4b3300` (cancel `0x4b3466`), the form-match one
-//! (`0x4b348b`-`0x4b35e5`, cancel `0x4b35da`) in `CastSpell` only. Both cancel through
-//! `CancelAura 0x6e7040`, the buff right-click's `CMSG_CANCEL_AURA`; its own guard
-//! (`AttributesEx & 0x2000` set, `& 0x4` clear) never fires for a shipped toggle and is not built.
+//! Press-again-to-cancel. Build 12340's cast entry (`0x80da80`, which `CastShapeshiftForm`
+//! `0x53c0f0` and the cast bindings reach) tests the spell with `isActive` (`0x802cb0`) first: an
+//! active spell is cancelled through `0x802f80`, whose aura arm sends `CMSG_CANCEL_AURA` (`0x136`),
+//! instead of being cast. The form-match recast is [`form_recast_disposition`].
+//!
+//! Not built: `0x80da80` skips the cancel while the `secureAbilityToggle` CVar (`DAT_00bd097c`) is
+//! set and the spell was cast within 1500 ms (`0x807d40`); the CVar's default and what fills that
+//! recent list are untraced. `isActive`'s summon-pet (effect 28) and mount (aura 78) arms are not
+//! modelled either.
 
 use wrathplus_formats::{ShapeshiftForm, SpellDisplay};
+use wrathplus_protocol::types::Field;
 
 use crate::app_core::session::ObjectStore;
+use crate::net::wrath_auras::StampedAura;
+use crate::net::Objects;
 
-/// The active-action predicate (`0x4e55f0`, twin `0x4b36f0`): a nonzero raw `ActiveIconID` and
-/// the spell's own aura live with the cancelable bit, so the press cancels instead of casting.
-/// No form guard: a warrior stance has `ActiveIconID` 0.
-pub(crate) fn active_action_toggle(spell_id: u32, d: &SpellDisplay, _store: &ObjectStore) -> bool {
-    // 12340 descriptors carry no aura slots; native auras arrive by packet.
+/// The packet aura flag `isActive` tests (`0x802e45`): `AFLAG_POSITIVE`.
+pub(crate) const AFLAG_POSITIVE: u8 = 0x10;
+
+/// `isActive` (`0x802cb0`) for a spell with no form: its gate, a nonzero `ActiveIconID` (record
+/// `+0x218`), then the spell's own aura on the unit with [`AFLAG_POSITIVE`] (the aura loop,
+/// `0x802db0`-`0x802e49`). A lit paladin aura or hunter aspect passes; a warrior stance has
+/// `ActiveIconID` 0.
+pub(crate) fn active_action_toggle(spell_id: u32, d: &SpellDisplay, auras: &[StampedAura]) -> bool {
     d.active_icon_id != 0
-        && std::iter::empty::<wrathplus_protocol::types::UnitAuraSlot>()
-            .any(|a| a.spell_id == spell_id && a.is_cancelable())
+        && auras
+            .iter()
+            .any(|a| a.aura.spell_id == spell_id && a.aura.flags & AFLAG_POSITIVE != 0)
+}
+
+/// A unit's packet auras (`SMSG_AURA_UPDATE`/`_ALL`), found by its descriptor guid.
+pub(crate) fn unit_auras<'a>(objects: &'a Objects, store: &ObjectStore) -> &'a [StampedAura] {
+    let guid = store.0.get_field_guid(Field::ObjectGuid, 0);
+    guid.map_or(&[], |g| objects.auras_of(g))
 }
 
 /// The form-match recast: `None` casts (not the active form), `Some(true)` cancels the form,

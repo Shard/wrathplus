@@ -74,6 +74,8 @@ pub(super) fn query_statuses(
     index: Res<GuidIndex>,
     factions: Option<Res<Factions>>,
     reputations: Res<crate::net::Reputations>,
+    // The unit leg's reaction, with the group roster, forced reactions and owner lookup.
+    relations: crate::target::RelationInputs,
     mut quest: ResMut<QuestGiver>,
     commands: Res<NetCommands>,
     mut ecs: Commands,
@@ -140,12 +142,7 @@ pub(super) fn query_statuses(
                 // The unit's reaction toward us (`0x6061e0`, this = the unit, at `0x5eb12a`), the
                 // direction `ring_reaction` resolves: `<= 1` is Hated or Hostile, and a missing
                 // input reads Neutral, so a cold catalog never blanks a marker.
-                let reaction = crate::target::ring_reaction(
-                    factions.as_deref(),
-                    &reputations,
-                    Some(&*obj),
-                    Some(&store),
-                );
+                let reaction = relations.ring_reaction(Some(&*obj), Some(&store));
                 // The refresh 00729f40 clears below internal rank 3, questgiver or not.
                 if reaction < 3 {
                     // The sweep's one teardown, questgiver or not. Dropping the ask

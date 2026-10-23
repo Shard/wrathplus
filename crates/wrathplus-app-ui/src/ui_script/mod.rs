@@ -721,7 +721,7 @@ mod color_picker_tests;
 mod uiparent_tests;
 
 #[cfg(test)]
-mod trainer_tests;
+pub(crate) mod trainer_tests;
 
 #[cfg(test)]
 mod bank_tests;

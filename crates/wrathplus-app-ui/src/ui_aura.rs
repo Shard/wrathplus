@@ -16,10 +16,9 @@ use wrathplus_ui::script::{AuraState, ScriptValue, TrackingState, UiScript};
 
 use crate::app_core::state::aura_trace_period as trace_period;
 use crate::app_core::state::ClientState;
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, Reputations};
+use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::state::Factions;
 use crate::app_core::state::Selection;
 use crate::app_core::state::Spells;
 use crate::app_core::schedule::UiInput;
@@ -340,8 +339,7 @@ fn native_visible(
     guid: u64,
     target: Option<&ObjectStore>,
     player: &ObjectStore,
-    factions: Option<&Factions>,
-    reputations: &Reputations,
+    relations: &crate::target::RelationInputs,
     names: Option<&crate::names::NameCache>,
     commands: &NetCommands,
 ) -> bool {
@@ -358,7 +356,7 @@ fn native_visible(
     native::all_visible(
         native::has_active_aura_295(catalog, auras),
         local_guid,
-        crate::target::ring_reaction(factions, reputations, target, Some(player)),
+        relations.ring_reaction(target, Some(player)),
         type_flags,
     )
 }
@@ -370,9 +368,9 @@ fn feed_auras(
     stores: Query<&ObjectStore>,
     spells: Option<Res<Spells>>,
     index: Res<GuidIndex>,
-    // The `UnitBuff` gate's inputs, the same reaction the selection ring and nameplates use.
-    factions: Option<Res<Factions>>,
-    reputations: Res<Reputations>,
+    // The `UnitBuff` gate's inputs, the same reaction the selection ring and nameplates use, with
+    // the group roster, forced reactions and owner lookup.
+    relations: crate::target::RelationInputs,
     // Read-only: the net path writes the stamps and only the session's end drops them.
     durations: Res<AuraDurations>,
     mut cache: ResMut<PlayerAuraCache>,
@@ -455,8 +453,7 @@ fn feed_auras(
             self_guid.0,
             Some(store),
             store,
-            factions.as_deref(),
-            &reputations,
+            &relations,
             units.names.as_deref(),
             &units.commands,
         );
@@ -558,8 +555,7 @@ fn feed_auras(
                         guid,
                         target,
                         store,
-                        factions.as_deref(),
-                        &reputations,
+                        &relations,
                         units.names.as_deref(),
                         &units.commands,
                     )
@@ -676,8 +672,6 @@ mod tests {
             .init_resource::<Selection>()
             .init_resource::<crate::app_core::state::PetBar>()
             .init_resource::<GuidIndex>()
-            // A required system parameter, unlike `Factions`.
-            .init_resource::<Reputations>()
             .insert_resource(NetCommands(tx))
             .add_plugins(UiAuraPlugin);
         app

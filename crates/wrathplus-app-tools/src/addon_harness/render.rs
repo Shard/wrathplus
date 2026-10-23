@@ -173,7 +173,7 @@ pub(super) fn measure_render(
         if GameTooltip and UIParent then
             try(function()
                 GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
-                GameTooltip:SetText("benilla render probe")
+                GameTooltip:SetText("wrathplus render probe")
                 GameTooltip:Show()
             end)
         end

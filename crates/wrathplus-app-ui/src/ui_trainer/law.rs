@@ -7,14 +7,14 @@ use wrathplus_formats::{
     SPELL_EFFECT_LEARN_PET_SPELL, SPELL_EFFECT_LEARN_SPELL, SPELL_EFFECT_SKILL_STEP,
 };
 use wrathplus_protocol::types::trainer_spell_state;
-use wrathplus_ui::script::{TrainerServiceCategory, TrainerTooltip, TRAINER_GROUP_KNOWN};
+use wrathplus_ui::script::{TrainerServiceCategory, TrainerTooltip};
 
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::net::NetCommands;
 use crate::ui_items::item_icon;
 
-use super::{TRAINER_TYPE_MOUNT, TRAINER_TYPE_TRADESKILL};
+use super::TRAINER_TYPE_TRADESKILL;
 
 /// `Effect[0]` creating an item: `CREATE_ITEM` (24), `CREATE_ITEM_2` (157) or
 /// `CREATE_RANDOM_ITEM` (59), the item arm of the icon, tooltip and description.
@@ -78,39 +78,53 @@ pub(super) fn service_tooltip(wire_spell: u32, spells: &SpellCatalog) -> Trainer
     wire_only
 }
 
-/// The list builder's group key. Labelled: transcribed from 1.12's `0x4d7560` (`0x4d7786`);
-/// 12340's builder (the writer of `[0xc0e4bc]`) is not traced. Its readers agree: a header row's
-/// name is the `[0xa13e08]` key table at a tradeskill trainer, else the `SkillLine.dbc` name
-/// (`00594e80`). Type 2 resolves no skill line, so no row
-/// drops: 1 when the wire spell steps a skill (`0x4d77b6`), else 2, labelled from the table at
-/// `0x807520`. Type 1 puts a known service in the signed `-1` group (`0x4d77e8`). The rest key on
-/// the taught spell's skill line (`0x4d7c60` → `0x60c920`), and 0 drops the service (`0x4d7807`).
+/// `SPELL_ATTR0_PASSIVE`, the tradeskill builder's third group.
+const SPELL_ATTR_PASSIVE: u32 = 0x40;
+/// `TARGET_UNIT_PET`: a learn effect aimed at the pet keys nothing.
+const TARGET_UNIT_PET: u32 = 5;
+
+/// The group key of 12340's list builder `0x596450`, with its header name (`00594e80`).
+/// - A tradeskill trainer (`[0xc0e498] == 2`) keys on the service spell: 3 when it is passive
+///   (`Attributes & 0x40`), else 1 when any effect steps a skill (44), else 2, also for a spell
+///   with no record. The header is the `[0xa13e08]` key's string, `TRADESKILL_SERVICE_STEP`,
+///   `_LEARN` or `_PASSIVE`.
+/// - Every other type keys on `0x594ae0`: the `SkillLineAbility` line (`0x71a700`) of the taught
+///   spell, which is the trigger of the first `LEARN_SPELL` (36) effect not aimed at the pet,
+///   else the service spell itself. The header is the `SkillLine.dbc` name, and 0 drops the
+///   service. There is no known-services group, which is 1.12's.
 pub(super) fn service_group(
     wire_spell: u32,
-    taught: u32,
     trainer_type: u32,
-    category: TrainerServiceCategory,
     spells: &SpellCatalog,
     skill_lines: Option<&SkillLineCatalog>,
     // The VM's own `GlobalStrings.lua`, for the header labels.
     get: &dyn Fn(&str) -> Option<String>,
 ) -> (u32, String) {
+    let display = spells.get(wire_spell);
     if trainer_type == TRAINER_TYPE_TRADESKILL {
-        let step = spells
-            .get(wire_spell)
-            .is_some_and(|d| d.effects.contains(&SPELL_EFFECT_SKILL_STEP));
-        return if step {
-            (1, get("TRADESKILL_SERVICE_STEP").unwrap_or_default())
-        } else {
-            (2, get("TRADESKILL_SERVICE_LEARN").unwrap_or_default())
+        let key = match display {
+            Some(d) if d.attributes & SPELL_ATTR_PASSIVE != 0 => 3,
+            Some(d) if d.effects.contains(&SPELL_EFFECT_SKILL_STEP) => 1,
+            _ => 2,
         };
+        let label = [
+            "",
+            "TRADESKILL_SERVICE_STEP",
+            "TRADESKILL_SERVICE_LEARN",
+            "TRADESKILL_SERVICE_PASSIVE",
+        ][key];
+        return (key as u32, get(label).unwrap_or_default());
     }
-    if trainer_type == TRAINER_TYPE_MOUNT && category == TrainerServiceCategory::Used {
-        return (
-            TRAINER_GROUP_KNOWN,
-            get("KNOWN_TALENTS_HEADER").unwrap_or_default(),
-        );
-    }
+    let taught = display
+        .and_then(|d| {
+            (0..3)
+                .find(|&i| {
+                    d.effects[i] == SPELL_EFFECT_LEARN_SPELL
+                        && d.effect_implicit_target_a[i] != TARGET_UNIT_PET
+                })
+                .map(|i| d.effect_trigger_spell[i])
+        })
+        .unwrap_or(wire_spell);
     let line = skill_lines
         .and_then(|c| c.spell_to_line(taught))
         .unwrap_or(0);
