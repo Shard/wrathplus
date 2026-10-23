@@ -25,8 +25,26 @@ pub struct Group {
     pub lfg_restricted: bool,
 }
 impl super::super::UiScript {
+    /// The group list's state. The difficulty fields stay [`Self::set_difficulties`]': they are
+    /// the player's answer, grouped or not, not the list's.
     pub fn set_wrath_group(&mut self, group: Group) {
-        self.model_mut().wrath_group = group;
+        let mut model = self.model_mut();
+        let old = &model.wrath_group;
+        let (dungeon_difficulty, raid_difficulty) = (old.dungeon_difficulty, old.raid_difficulty);
+        model.wrath_group = Group {
+            dungeon_difficulty,
+            raid_difficulty,
+            ..group
+        };
+    }
+
+    /// The effective dungeon and raid difficulty `GetDungeonDifficulty`/`GetRaidDifficulty`
+    /// answer, 1-based, whether grouped or not (build 12340's `0xbd0898`/`0xbd1978` pair and its
+    /// raid twin), from the native difficulty feed.
+    pub fn set_difficulties(&mut self, dungeon: u8, raid: u8) {
+        let mut model = self.model_mut();
+        model.wrath_group.dungeon_difficulty = Some(dungeon);
+        model.wrath_group.raid_difficulty = Some(raid);
     }
 }
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -136,16 +154,17 @@ mod tests {
                 flags: 2,
                 roles: 2,
             }],
-            dungeon_difficulty: Some(2),
-            raid_difficulty: Some(4),
+            // The list's own copy is not the answer: `set_difficulties` owns it.
+            dungeon_difficulty: Some(9),
             ..Default::default()
         });
+        s.set_difficulties(2, 4);
         assert!(s.eval::<bool>("local a,b,c,d,e,f,g,h,i,j,k=GetRaidRosterInfo(1); return a=='Ally' and j=='MAINTANK' and k==false and select('#', UnitGroupRolesAssigned('raid1'))==3 and UnitGroupRolesAssigned('raid1')==true and select(2, UnitGroupRolesAssigned('raid1'))==false and GetDungeonDifficulty()==2 and GetRaidDifficulty()==4").unwrap());
         assert_eq!(s.arity("GetRaidRosterInfo(1)").unwrap(), 11);
         s.set_wrath_group(Default::default());
         assert!(s
             .eval::<bool>(
-                "return GetDungeonDifficulty()==nil and not (UnitGroupRolesAssigned('raid1') or select(2, UnitGroupRolesAssigned('raid1')) or select(3, UnitGroupRolesAssigned('raid1')))"
+                "return GetDungeonDifficulty()==2 and not (UnitGroupRolesAssigned('raid1') or select(2, UnitGroupRolesAssigned('raid1')) or select(3, UnitGroupRolesAssigned('raid1')))"
             )
             .unwrap());
     }
