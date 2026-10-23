@@ -145,46 +145,55 @@ impl FfxSwitches {
     }
 }
 
-/// The glue screens' FFX state. The select build's tail (`0x472fba`–`0x473007`) forks on the
-/// selected record's `CHARSELECT+0xfc & 0x2000` (`0x472fd9`), installs (`0x6cde60`) the glue
-/// death or glow pass and pins `LightParams.glow` (`[0x6d48b0()+0x110]`) to a constant: both
+/// The glue screens' FFX state: the glue glow or death pass and the `LightParams.glow` pin, both
 /// combines' blur² weight, which the death combine packs as its alpha byte (`0x6cb930`).
-#[derive(Resource, Clone, Copy, Default, PartialEq, Eq, Debug, ExtractResource)]
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, ExtractResource)]
 pub enum GlueFfx {
-    /// A glue model widget is shown and nothing has re-pinned it: login, create, and a character
-    /// select with no characters. The widget's OnShow (`0x46fa60`) installs the glue glow pass and
-    /// pins `*0x8380b4` = 0.30, once on show, so the select build's pins hold.
-    #[default]
-    Shown,
-    /// Character select, a living selection: the glue glow pass, pinned at `*0x838574` = 0.40
-    /// (`0x472ff7`/`0x473002`).
-    SelectLiving,
-    /// Character select, a ghost selection: the glue death pass, pinned at `*0x838570` = 0.15
-    /// (`0x472fde`/`0x472fe9`).
+    /// The glue glow pass at the shown widget's glow, in thousandths. Stock 3.3.5 states it in
+    /// the GlueXML, never a client constant: `AccountLogin.xml`'s ModelFFX `glow="0.08"` on the
+    /// login screen, and `GlueParent.lua`'s `SetLighting` on select and create,
+    /// `SetGlow(CharModelGlowInfo[race] or 0.3)` ([`scene_glow_milli`]).
+    Glow(u16),
+    /// Character select, a ghost selection: the glue death pass at 0.15. Labelled: the arm and
+    /// its pin are the 1.12 select build's (`0x472fde`/`0x472fe9`); stock 3.3.5's `SetLighting`
+    /// adds no ghost light and 12340's ghost path is untraced.
     SelectGhost,
 }
 
+/// The login screen's `glow="0.08"`, the default until a glue scene re-pins it.
+pub const LOGIN_GLOW_MILLI: u16 = 80;
+
+impl Default for GlueFfx {
+    fn default() -> Self {
+        Self::Glow(LOGIN_GLOW_MILLI)
+    }
+}
+
+/// A select or create stage's glow by its `UI_<token>` stage: stock `CharModelGlowInfo`, 0.15 for
+/// the Human and Dwarf stages and `SetLighting`'s 0.3 for every other one (Worgen and Goblin's 0.0
+/// rows name no 3.3.5 stage).
+pub fn scene_glow_milli(token: &str) -> u16 {
+    match token {
+        "Human" | "Dwarf" => 150,
+        _ => 300,
+    }
+}
+
 impl GlueFfx {
-    /// The glue pair's death gate, with no ramp. The swap re-runs on every selection, an
-    /// already-built record included (`0x472a6d`), so the scene changes on the click's frame.
+    /// The glue pair's death gate, with no ramp: the scene changes on the click's frame.
     fn death(self) -> f32 {
         match self {
             Self::SelectGhost => 1.0,
-            Self::Shown | Self::SelectLiving => 0.0,
+            Self::Glow(_) => 0.0,
         }
     }
 
-    /// `LightParams.glow` (`0xce9c70`) on a glue screen; the death combine packs it into its alpha
-    /// byte (`0x6cb9ec`: 0.15 → 38, 0.40 → 102). Deviation: kept a float where every reference
-    /// pack (`0x6cb0e2`/`0x6cb557`/`0x6cb9e1`) quantizes it to a byte, because the two differ by
-    /// under a thousandth (38/255 against 0.15).
+    /// `LightParams.glow` on a glue screen. Deviation: kept a float where every reference pack
+    /// (`0x6cb0e2`/`0x6cb557`/`0x6cb9e1`) quantizes it to a byte; the two differ by under a
+    /// thousandth.
     fn glow(self) -> f32 {
         match self {
-            // `*0x8380b4`, the widget's OnShow pin.
-            Self::Shown => 0.30,
-            // `*0x838574`, the select build's living arm.
-            Self::SelectLiving => 0.40,
-            // `*0x838570`, the select build's ghost arm.
+            Self::Glow(milli) => f32::from(milli) / 1000.0,
             Self::SelectGhost => 0.15,
         }
     }
@@ -1672,26 +1681,20 @@ mod tests {
         assert_eq!(lut[96 * 2], 0, "sin(3π/2) = −1 → 0");
     }
 
-    /// The default is the shown, unselected glue screen (login, create, an empty account).
+    /// The login screen's `glow="0.08"` is the default; select and create follow the stage.
     #[test]
-    fn the_glue_screens_pin_three_verified_glow_weights() {
-        assert_eq!(GlueFfx::default(), GlueFfx::Shown);
-        assert_eq!(
-            GlueFfx::Shown.glow(),
-            0.30,
-            "*0x8380b4, the widget's OnShow"
-        );
-        assert_eq!(GlueFfx::SelectLiving.glow(), 0.40, "*0x838574");
-        assert_eq!(GlueFfx::SelectGhost.glow(), 0.15, "*0x838570");
+    fn the_glue_screens_take_the_stock_glue_glow() {
+        assert_eq!(GlueFfx::default(), GlueFfx::Glow(80));
+        assert_eq!(GlueFfx::default().glow(), 0.08);
+        assert_eq!(GlueFfx::Glow(scene_glow_milli("Human")).glow(), 0.15);
+        assert_eq!(GlueFfx::Glow(scene_glow_milli("Orc")).glow(), 0.3);
         // Only the ghost arm installs the death pass.
         assert_eq!(GlueFfx::SelectGhost.death(), 1.0);
-        assert_eq!(GlueFfx::Shown.death(), 0.0);
-        assert_eq!(GlueFfx::SelectLiving.death(), 0.0);
+        assert_eq!(GlueFfx::default().death(), 0.0);
         // The packed byte (`0x6cb9ec`: ×255, +512, `fstp`, `shr 14`): 38, the ghost's death
-        // combine alpha, and 102, the living glow pass's `w`.
+        // combine alpha.
         let alpha_byte = |glow: f32| ((glow * 255.0 + 512.0).to_bits() >> 14) & 0xff;
         assert_eq!(alpha_byte(GlueFfx::SelectGhost.glow()), 38);
-        assert_eq!(alpha_byte(GlueFfx::SelectLiving.glow()), 102);
     }
 }
 
@@ -1705,69 +1708,7 @@ fn postprocess_key(policy: ModernLighting, world: bool) -> [bool; 3] {
 }
 
 #[cfg(test)]
-mod modern_tests {
-    use super::*;
-
-    #[test]
-    fn all_plus_switches_are_independent_and_booths_never_opt_in() {
-        for bits in 0..8 {
-            let policy = ModernLighting {
-                shadows: true,
-                fog: true,
-                bloom: bits & 1 != 0,
-                tone_mapping: bits & 2 != 0,
-                colour_grading: bits & 4 != 0,
-            };
-            assert_eq!(postprocess_key(policy, false), [false; 3]);
-            assert_eq!(
-                postprocess_key(policy, true),
-                [policy.bloom, policy.tone_mapping, policy.colour_grading]
-            );
-        }
-    }
-
-    // CPU mirror of the production Plus bloom extraction, not a claim about live colour range.
-    fn bloom(blur: Vec3, zone: f32) -> Vec3 {
-        let brightness = blur.max_element();
-        let knee = (brightness - 0.35 + 0.15).clamp(0.0, 0.30);
-        let soft = knee * knee / 0.60;
-        let contribution = (brightness - 0.35).max(soft) / brightness.max(0.0001);
-        blur * contribution * (0.25 + 0.15 * zone.clamp(0.0, 1.0))
-    }
-
-    #[test]
-    fn plus_bloom_retains_highlight_hue_and_dark_surfaces_stay_dark() {
-        assert_eq!(bloom(Vec3::ZERO, 1.0), Vec3::ZERO);
-        assert_eq!(bloom(Vec3::splat(0.19), 1.0), Vec3::ZERO);
-        let highlight = Vec3::new(0.1, 0.4, 0.8);
-        let glow = bloom(highlight, 0.0);
-        assert!(glow.z > 0.0);
-        assert!((glow.x / glow.z - highlight.x / highlight.z).abs() < 1e-6);
-        assert!((glow.y / glow.z - highlight.y / highlight.z).abs() < 1e-6);
-        assert_eq!(bloom(highlight, -100.0), glow);
-        assert_eq!(bloom(highlight, 100.0), bloom(highlight, 1.0));
-    }
-
-    #[test]
-    fn plus_bloom_soft_knee_is_continuous_monotonic_and_bounded() {
-        let mut previous = 0.0;
-        for i in 0..=1000 {
-            let input = i as f32 / 1000.0;
-            let output = bloom(Vec3::splat(input), 1.0).x;
-            assert!(output.is_finite() && output >= previous && output <= input * 0.4 + 1e-6);
-            assert!(output - previous < 0.001);
-            previous = output;
-        }
-        let src = include_str!("shaders/ffx_plus.wgsl");
-        assert!(src.contains("let knee = clamp(brightness - 0.35 + 0.15, 0.0, 0.30);"));
-        assert!(src.contains("colour += blur * contribution"));
-    }
-
-    #[test]
-    fn classic_postprocess_key_is_the_original_variant() {
-        assert_eq!(postprocess_key(ModernLighting::default(), true), [false; 3]);
-    }
-}
+mod modern_tests;
 
 #[cfg(test)]
 mod gpu_smoke;
