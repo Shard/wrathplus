@@ -6,7 +6,8 @@
 //! consecutive packets.
 
 use crate::motion::UnitMoveModes;
-use crate::net::{GuidIndex, NetEvents, ObjectStore, UnitSpeeds};
+use crate::net::{GuidIndex, NetEvents, UnitSpeeds};
+use crate::app_core::session::ObjectStore;
 use wrathplus_protocol::types::{ObjectType, SpeedKind, SplineMode};
 use wrathplus_protocol::{EntityKind, MoveSpeeds, ObjectFields, SessionEvent};
 use bevy::prelude::*;

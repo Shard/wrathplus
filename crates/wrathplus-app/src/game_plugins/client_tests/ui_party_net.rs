@@ -1,8 +1,8 @@
 //! Whole-client tests of `crate::ui_party::net`, from `ui_party/net.rs` (`wrath_raid_tests`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::SelfGuid;
-use crate::ui_party::GroupState;
+use crate::app_core::session::SelfGuid;
+use crate::app_core::group::GroupState;
 use wrathplus_protocol::SessionEvent;
 
 #[test]

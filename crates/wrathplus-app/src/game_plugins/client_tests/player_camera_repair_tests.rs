@@ -21,8 +21,8 @@ fn a_right_press_in_the_world_ends_repair_mode_and_one_on_the_ui_does_not() {
         let mut buttons = ButtonInput::<MouseButton>::default();
         buttons.press(MouseButton::Right);
         world.insert_resource(buttons);
-        world.insert_resource(crate::ui_script::PointerOverUi(over_ui));
-        world.insert_resource(crate::ui_script::CursorPayloadHeld(payload_held));
+        world.insert_resource(crate::app_core::state::PointerOverUi(over_ui));
+        world.insert_resource(crate::app_core::state::CursorPayloadHeld(payload_held));
         world.init_resource::<CameraControl>();
         world.init_resource::<Messages<WorldRightPress>>();
         world.spawn((

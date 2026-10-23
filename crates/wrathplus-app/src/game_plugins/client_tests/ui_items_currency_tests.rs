@@ -1,8 +1,8 @@
 //! Whole-client tests of `crate::ui_items::currency`, from `ui_items/currency/tests.rs`.
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::ObjectStore;
-use crate::net::SelfPlayer;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::ui_items::currency::tests::fields;
 use crate::ui_items::currency::*;
 use wrathplus_protocol::types::Field;

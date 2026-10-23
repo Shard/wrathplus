@@ -2,7 +2,7 @@
 //! They build the client with `headless_client`, so they live in the root layer.
 
 use crate::ui_party::feed::*;
-use crate::ui_party::GroupState;
+use crate::app_core::group::GroupState;
 use wrathplus_protocol::wrath_group::{raid::Packet, Packet as GroupPacket};
 use wrathplus_protocol::SessionEvent;
 use wrathplus_ui::script::PartyState;

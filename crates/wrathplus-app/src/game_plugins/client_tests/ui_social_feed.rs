@@ -6,7 +6,7 @@ use crate::net::NetCommands;
 use crate::ui_native_who::NativeWhoPackets;
 use crate::ui_social::feed::native_tests::entries;
 use crate::ui_social::feed::*;
-use crate::ui_social::SocialState;
+use crate::app_core::interaction::SocialState;
 use wrathplus_protocol::wrath_who::Packet;
 use wrathplus_ui::script::UiScript;
 use bevy::prelude::*;
@@ -68,7 +68,7 @@ fn real_handlers_clear_capture_and_pending_receipts_before_fresh_feed() {
     cpu.insert_resource(social)
         .insert_resource(packets)
         .init_resource::<NameCache>()
-        .init_resource::<crate::ui_chat::ChatLog>()
+        .init_resource::<crate::app_core::chat::ChatLog>()
         .init_resource::<crate::sound::MessageSounds>()
         .insert_resource(NetCommands(tx))
         .insert_non_send_resource(UiScript::new().unwrap())

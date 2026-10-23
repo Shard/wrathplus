@@ -60,7 +60,7 @@ fn scheduled_drain_exposes_fresh_post_connected_name_to_ui_feed_same_frame() {
         .insert_resource(packets)
         .init_resource::<Seen>();
     net::register(&mut app);
-    app.add_systems(Update, observe.in_set(crate::ui_script::UiFeed));
+    app.add_systems(Update, observe.in_set(crate::app_core::schedule::UiFeed));
     app.update();
     assert_eq!(
         app.world().resource::<Seen>().0,

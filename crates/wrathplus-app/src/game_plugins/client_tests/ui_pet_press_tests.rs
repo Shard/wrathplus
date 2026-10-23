@@ -5,13 +5,16 @@
 //! (`0x4bd367`-`0x4bd36e`), whole client headless, with the press applied as the script call it is.
 //! The rig is shared with `flush_tests`, whose packets reach the same list.
 
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
-use crate::spell::Cooldowns;
-use crate::ui_action::Spells;
+use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfGuid;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::cooldowns::Cooldowns;
+use crate::app_core::state::Spells;
 use crate::ui_pet::bar::{feed_pet_bar, fire_pet_cooldown_events};
 use crate::ui_pet::drain::PetPress;
 use crate::ui_pet::press_tests::*;
-use crate::ui_pet::PetBar;
+use crate::app_core::state::PetBar;
 use wrathplus_formats::{SpellCatalog, SpellDisplay};
 use wrathplus_protocol::types::Field;
 use wrathplus_protocol::types::{
@@ -390,7 +393,7 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
         ))
         .id();
     world.resource_mut::<GuidIndex>().0.insert(FOE, foe);
-    *world.resource_mut::<crate::target::Selection>() = crate::target::Selection {
+    *world.resource_mut::<crate::app_core::state::Selection>() = crate::app_core::state::Selection {
         target: Some(foe),
         guid: Some(FOE),
         ..Default::default()

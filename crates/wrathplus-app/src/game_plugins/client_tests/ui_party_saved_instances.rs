@@ -3,7 +3,7 @@
 //! They build the client with `headless_client`, so they live in the root layer.
 
 use crate::net::handlers::dispatch;
-use crate::ui_party::GroupState;
+use crate::app_core::group::GroupState;
 use wrathplus_protocol::wrath_instance::RaidInstanceInfo;
 use wrathplus_protocol::{
     wrath_events::{WrathDispatch, WrathEventAdapter},

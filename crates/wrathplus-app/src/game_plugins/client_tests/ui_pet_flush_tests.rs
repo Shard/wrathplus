@@ -7,9 +7,9 @@
 //! `PET_BAR_UPDATE_COOLDOWN`; none of the callers fires `PET_BAR_UPDATE`.
 
 use super::ui_pet_press_tests::{rig, Rig};
-use crate::net::ObjectStore;
+use crate::app_core::session::ObjectStore;
 use crate::ui_pet::press_tests::{claw, growl, listen, listening_vm, CLAW, GROWL, ME, PET};
-use crate::ui_pet::PetBar;
+use crate::app_core::state::PetBar;
 use wrathplus_formats::SpellDisplay;
 use wrathplus_protocol::types::Field;
 use wrathplus_protocol::types::{PetSpellCooldown, PetSpells};
@@ -370,7 +370,7 @@ fn a_pet_gcd_sweeps_the_spellbooks_pet_tab_button() {
         let world = rig.app.world_mut();
         // Our class, so the book reads a token (`0x4b4463`); no `ChrClasses` row, so "PET".
         world.spawn((
-            crate::net::SelfPlayer,
+            crate::app_core::session::SelfPlayer,
             ObjectStore(wrathplus_protocol::ObjectFields::from_fields(&[(
                 Field::UnitBytes0,
                 3 << 8,

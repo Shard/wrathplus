@@ -1,7 +1,7 @@
 //! Whole-client tests of `crate::ui_party::wrath`, from `ui_party/wrath.rs` (`tests`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::ui_party::GroupState;
+use crate::app_core::group::GroupState;
 use wrathplus_protocol::wrath_group::{self as g};
 
 #[test]

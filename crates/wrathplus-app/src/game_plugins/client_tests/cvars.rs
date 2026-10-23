@@ -17,8 +17,9 @@ use crate::player::camera_zoom::ZoomLimit;
 use crate::portrait::PaneRate;
 use crate::sound::SoundConfig;
 use crate::target::ClickConfig;
-use crate::ui_loot::LootConfig;
-use crate::ui_script::{UiScaleCvar, DEFAULT_UI_SCALE};
+use crate::app_core::state::LootConfig;
+use crate::ui_script::DEFAULT_UI_SCALE;
+use crate::app_core::ui_flags::UiScaleCvar;
 use crate::video::VideoConfig;
 use crate::world_backdrop::{RenderScale, RENDER_SCALE_RANGE};
 use wrathplus_ui::widget::MINIMAP_ZOOM_LEVELS;
@@ -167,7 +168,7 @@ fn registered_defaults_mirror_the_code_truths() {
     );
     assert_eq!(
         d["guildMemberNotify"] != 0.0,
-        crate::ui_guild::GuildMemberNotify::default().0
+        crate::guild::GuildMemberNotify::default().0
     );
     assert_eq!(d["guildMemberNotify"], 0.0, "the binary registers \"0\"");
     assert_eq!(
@@ -470,7 +471,7 @@ fn the_observers_apply_every_arm() {
     apply(&mut app, "showLootSpam", "0");
     assert!(!res::<LootConfig>(&app).show_loot_spam);
     apply(&mut app, "guildMemberNotify", "1");
-    assert!(res::<crate::ui_guild::GuildMemberNotify>(&app).0);
+    assert!(res::<crate::guild::GuildMemberNotify>(&app).0);
     apply(&mut app, "BlockTrades", "1");
     assert!(res::<crate::ui_trade::BlockTrades>(&app).0);
     use crate::nameplates::name_bit;
@@ -664,7 +665,7 @@ fn the_observers_apply_every_arm() {
 #[test]
 fn the_spell_effect_level_handler_echoes_to_the_console() {
     let mut app = cvar_app();
-    app.init_resource::<crate::console::ConsoleEcho>();
+    app.init_resource::<crate::app_core::state::ConsoleEcho>();
     assert_eq!(
         crate::console::execute(app.world_mut(), "spellEffectLevel 0"),
         ["Spell effect level set to 0."]
@@ -864,7 +865,7 @@ fn cvar_app() -> App {
             crate::realmlist::DEFAULT_REALMLIST,
         ))
         .init_resource::<PaneRate>()
-        .init_resource::<crate::ui_guild::GuildMemberNotify>()
+        .init_resource::<crate::guild::GuildMemberNotify>()
         .init_resource::<crate::ui_trade::BlockTrades>()
         .init_resource::<crate::spell::AutoSelfCast>()
         .init_resource::<crate::perf::FpsJournalSetting>()
@@ -980,7 +981,8 @@ fn res<T: Resource>(app: &App) -> &T {
 /// reach the file through the registry's dirty/compose path.
 #[test]
 fn entering_the_world_survives_the_quit_and_comes_back_selected() {
-    use crate::char_select::{ClientState, Roster};
+    use crate::app_core::state::ClientState;
+    use crate::app_core::state::Roster;
     use crate::local_state::test_env::{EnvGuard, ENV_LOCK};
     let _l = ENV_LOCK
         .lock()

@@ -103,7 +103,7 @@ pub(crate) struct GamePlugins {
     /// deterministic whether or not a server is up.
     pub(crate) connect: bool,
     /// [`crate::char_select::CharSelectPlugin::start`]: the screen this session opens on.
-    pub(crate) start: crate::char_select::ClientState,
+    pub(crate) start: crate::app_core::state::ClientState,
 }
 
 impl PluginGroup for GamePlugins {
@@ -324,7 +324,7 @@ pub(crate) mod schedule_tests {
         app.add_plugins(wrathplus_world::world_plugins::WorldPlugins);
         app.add_plugins(GamePlugins {
             connect: false,
-            start: crate::char_select::ClientState::Login,
+            start: crate::app_core::state::ClientState::Login,
         });
         app.finish();
         app.cleanup();
@@ -584,10 +584,10 @@ pub(crate) mod schedule_tests {
             ("Creatures", TypeId::of::<crate::entities::Creatures>),
         ];
         const SINKS: &[ClassRow] = &[
-            ("ChatLog", TypeId::of::<crate::ui_chat::ChatLog>),
+            ("ChatLog", TypeId::of::<crate::app_core::chat::ChatLog>),
             ("MessageSounds", TypeId::of::<crate::sound::MessageSounds>),
-            ("UiErrorKeys", TypeId::of::<crate::ui_action::UiErrorKeys>),
-            ("UiErrorTexts", TypeId::of::<crate::ui_action::UiErrorTexts>),
+            ("UiErrorKeys", TypeId::of::<crate::app_core::errors::UiErrorKeys>),
+            ("UiErrorTexts", TypeId::of::<crate::app_core::errors::UiErrorTexts>),
         ];
         const STREAMS: &[ClassRow] = &[
             ("SoundKits", TypeId::of::<crate::sound::SoundKits>),

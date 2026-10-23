@@ -13,7 +13,7 @@ use crate::ui_pet::press_tests::{
     SUMMONEDBY,
 };
 use crate::ui_pet::usable_tests::{FARSIGHT, OTHER};
-use crate::ui_pet::PetBar;
+use crate::app_core::state::PetBar;
 use wrathplus_protocol::types::Field;
 use wrathplus_protocol::types::{
     PetActionEntry, PET_ACT_COMMAND, PET_ACT_ENABLED, PET_ACT_REACTION, PET_COMMAND_ATTACK,
@@ -73,14 +73,14 @@ fn scene() -> Rig {
         .spawn((
             Guid(FOE),
             Transform::default(),
-            crate::net::ObjectStore(wrathplus_protocol::ObjectFields::from_fields(&[
+            crate::app_core::session::ObjectStore(wrathplus_protocol::ObjectFields::from_fields(&[
                 (Field::UnitHealth, 100),
                 (Field::UnitMaxHealth, 100),
             ])),
         ))
         .id();
     world.resource_mut::<GuidIndex>().0.insert(FOE, foe);
-    *world.resource_mut::<crate::target::Selection>() = crate::target::Selection {
+    *world.resource_mut::<crate::app_core::state::Selection>() = crate::app_core::state::Selection {
         target: Some(foe),
         guid: Some(FOE),
         ..Default::default()

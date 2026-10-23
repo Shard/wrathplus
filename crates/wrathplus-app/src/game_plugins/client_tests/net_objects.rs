@@ -4,7 +4,7 @@
 use crate::motion::Spline;
 use crate::motion::SplineStopped;
 use crate::net::GuidIndex;
-use crate::net::SelfGuid;
+use crate::app_core::session::SelfGuid;
 use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_protocol::ObjectFields;
 use wrathplus_protocol::SessionEvent;

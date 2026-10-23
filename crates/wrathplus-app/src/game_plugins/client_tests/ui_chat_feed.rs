@@ -86,7 +86,7 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
     );
     assert_eq!(census[&K::DurabilityDamageDeath].len(), 1);
     assert!(census[&K::DurabilityDamageDeath][0].contains("combat_log::on_durability_damage_death"));
-    app.world_mut().resource_mut::<crate::net::SelfGuid>().0 = Some(42);
+    app.world_mut().resource_mut::<crate::app_core::session::SelfGuid>().0 = Some(42);
     let entity = app.world_mut().spawn(Transform::default()).id();
     app.world_mut()
         .resource_mut::<crate::net::GuidIndex>()
@@ -97,7 +97,7 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
         .map(|(f, v)| (f.span().unwrap().index, v));
     let item = app
         .world_mut()
-        .spawn(crate::net::ObjectStore(
+        .spawn(crate::app_core::session::ObjectStore(
             wrathplus_protocol::ObjectFields::from_pairs(&fields),
         ))
         .id();
@@ -123,7 +123,7 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
             wrathplus_formats::load_environmental_damage(&mut chain).unwrap(),
         ));
     std::fs::remove_dir_all(dir).unwrap();
-    let mut cursor = bevy::ecs::message::MessageCursor::<crate::creature_anim::KitPush>::default();
+    let mut cursor = bevy::ecs::message::MessageCursor::<crate::app_core::movement::KitPush>::default();
     let mut adapter = WrathEventAdapter::new();
     let mut body = 42u64.to_le_bytes().to_vec();
     body.push(2);
@@ -140,7 +140,7 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
     let kits: Vec<_> = cursor
         .read(
             app.world()
-                .resource::<Messages<crate::creature_anim::KitPush>>(),
+                .resource::<Messages<crate::app_core::movement::KitPush>>(),
         )
         .collect();
     assert_eq!(kits.len(), 1);
@@ -157,7 +157,7 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
         cursor
             .read(
                 app.world()
-                    .resource::<Messages<crate::creature_anim::KitPush>>()
+                    .resource::<Messages<crate::app_core::movement::KitPush>>()
             )
             .count(),
         0
@@ -172,8 +172,8 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
     let Pending::Combat(line) = &log.pending[0] else {
         panic!()
     };
-    assert_eq!(line.kind, crate::ui_chat::ChatEventKind::CombatMiscInfo);
-    let fields = &app.world().get::<crate::net::ObjectStore>(item).unwrap().0;
+    assert_eq!(line.kind, crate::app_core::chat::ChatEventKind::CombatMiscInfo);
+    let fields = &app.world().get::<crate::app_core::session::ObjectStore>(item).unwrap().0;
     assert_eq!(
         (fields.item_durability(), fields.item_max_durability()),
         (Some(17), Some(80))

@@ -7,7 +7,8 @@ use bevy::prelude::*;
 /// renderer's policy resource, and back to Classic's all-off policy.
 #[test]
 fn console_switch_drives_the_renderer_policy() {
-    use crate::console::{execute, ConsoleCommandApp, ConsolePlugin};
+    use crate::console::{execute, ConsolePlugin};
+    use crate::app_core::console::ConsoleCommandApp;
     use crate::experience::{console_command, sync_lighting, Experience};
     use wrathplus_world::modern_lighting::ModernLighting;
     let mut app = App::new();

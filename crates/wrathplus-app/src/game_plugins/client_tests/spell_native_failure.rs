@@ -11,7 +11,7 @@ use bevy::prelude::*;
 fn registered_capture_never_duplicates_shared_cleanup_or_clears_colliding_player_cast() {
     use crate::creature_anim::{CastEvent, Casting};
     let mut app = crate::game_plugins::schedule_tests::headless_client();
-    app.world_mut().resource_mut::<crate::net::SelfGuid>().0 = Some(42);
+    app.world_mut().resource_mut::<crate::app_core::session::SelfGuid>().0 = Some(42);
     let entity = app
         .world_mut()
         .spawn(Casting {

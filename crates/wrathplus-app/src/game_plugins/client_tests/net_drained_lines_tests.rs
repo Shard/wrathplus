@@ -7,8 +7,9 @@ use wrathplus_protocol::types::{Field, GroupMemberEntry, ObjectFields};
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
-use crate::net::{GuidIndex, ObjectStore, Reputations, StandingChanged};
-use crate::ui_party::GroupState;
+use crate::net::{GuidIndex, Reputations, StandingChanged};
+use crate::app_core::session::ObjectStore;
+use crate::app_core::group::GroupState;
 
 /// Where in `kind`'s registration order the handler named `name` runs.
 fn position(app: &App, kind: SessionEventKind, name: &str) -> usize {

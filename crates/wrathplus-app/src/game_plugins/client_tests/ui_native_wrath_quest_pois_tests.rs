@@ -48,7 +48,7 @@ fn a_pvp_kill_tick_reasks_the_givers_and_leaves_the_pois_alone() {
     let mut adapter = WrathEventAdapter::new();
     let before = app
         .world()
-        .resource::<crate::ui_quest::QuestGiver>()
+        .resource::<crate::app_core::state::QuestGiver>()
         .reask_epoch();
     let mut body = 6u32.to_le_bytes().to_vec();
     body.extend(3u32.to_le_bytes());
@@ -56,7 +56,7 @@ fn a_pvp_kill_tick_reasks_the_givers_and_leaves_the_pois_alone() {
     dispatch(&mut app, &mut adapter, 0x46f, &body);
     let after = app
         .world()
-        .resource::<crate::ui_quest::QuestGiver>()
+        .resource::<crate::app_core::state::QuestGiver>()
         .reask_epoch();
     assert_eq!(after, before.wrapping_add(1));
     assert!(!app.world().resource::<QuestPois>().fresh);

@@ -39,9 +39,9 @@ fn wrath_connected_clears_old_pose_before_publishing_the_new_endpoint() {
     endpoint_tx.send(new).unwrap();
     app.insert_resource(NetCommands::session_stamped(old))
         .insert_resource(CommandEndpoints(endpoint_rx))
-        .init_resource::<crate::player::Player>();
+        .init_resource::<crate::app_core::player::Player>();
     {
-        let mut player = app.world_mut().resource_mut::<crate::player::Player>();
+        let mut player = app.world_mut().resource_mut::<crate::app_core::player::Player>();
         player.active = true;
         player.pos = Vec3::new(11.0, 22.0, 33.0);
     }
@@ -49,8 +49,8 @@ fn wrath_connected_clears_old_pose_before_publishing_the_new_endpoint() {
     // The prior session edge and the new connection are drained in one ECS frame.
     handlers::dispatch(app.world_mut(), vec![SessionEvent::LoggedOut, connected()]);
 
-    let player = app.world().resource::<crate::player::Player>();
-    assert!(*player == crate::player::Player::default());
+    let player = app.world().resource::<crate::app_core::player::Player>();
+    assert!(*player == crate::app_core::player::Player::default());
     // Even a producer retaining the old clone remains stamped old. The normal movement gate
     // sees inactive and therefore cannot copy the old pose through the newly active endpoint.
     old_clone
@@ -83,14 +83,14 @@ fn raw_offline_connected_neither_waits_for_a_sidechannel_nor_resets_vanilla_play
     let (_endpoint_tx, endpoint_rx) = crossbeam_channel::unbounded();
     app.insert_resource(NetCommands(raw_tx))
         .insert_resource(CommandEndpoints(endpoint_rx))
-        .init_resource::<crate::player::Player>();
+        .init_resource::<crate::app_core::player::Player>();
     app.world_mut()
-        .resource_mut::<crate::player::Player>()
+        .resource_mut::<crate::app_core::player::Player>()
         .active = true;
 
     handlers::dispatch(app.world_mut(), vec![connected()]);
 
-    assert!(app.world().resource::<crate::player::Player>().active);
+    assert!(app.world().resource::<crate::app_core::player::Player>().active);
     assert!(matches!(
         app.world().resource::<NetCommands>().0,
         CommandSender::Raw(_)

@@ -5,8 +5,8 @@
 
 use crate::inventory::BANK_CONTAINER;
 use crate::inventory::KEYRING_CONTAINER;
-use crate::net::ObjectStore;
-use crate::net::SelfPlayer;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::ui_items::feed::*;
 use wrathplus_protocol::types::Field;
 use wrathplus_ui::script::UiScript;

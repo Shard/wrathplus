@@ -1,9 +1,12 @@
 //! Whole-client tests of `crate::script_calls`, from `script_calls.rs` (`tests`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
+use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfGuid;
+use crate::app_core::session::SelfPlayer;
 use crate::script_calls::*;
-use crate::target::Selection;
+use crate::app_core::state::Selection;
 use wrathplus_protocol::types::Field;
 use wrathplus_protocol::types::{
     ActionButton, GroupMemberEntry, ACTION_KIND_MACRO, ACTION_KIND_SPELL,
@@ -87,7 +90,7 @@ fn frame(selected: bool) -> Frame {
     index.insert(NEW, new);
     world.resource_mut::<SelfGuid>().0 = Some(ME);
     world
-        .resource_mut::<crate::ui_party::GroupState>()
+        .resource_mut::<crate::app_core::group::GroupState>()
         .members
         .push(GroupMemberEntry {
             name: "Bob".into(),
@@ -191,7 +194,7 @@ fn with_factions(f: &mut Frame, old: u32, fields: &[(u16, u32)]) {
         ..Default::default()
     };
     let world = f.app.world_mut();
-    world.insert_resource(crate::target::Factions::from_catalog(
+    world.insert_resource(crate::app_core::state::Factions::from_catalog(
         FactionCatalog::from_rows(
             HashMap::from([
                 (OURS, tpl(OURS, 1, 2, 4)),
@@ -242,7 +245,7 @@ fn swings(f: &Frame) -> (Vec<u64>, bool) {
 fn errors(f: &Frame) -> Vec<&'static str> {
     f.app
         .world()
-        .resource::<crate::ui_action::UiErrorKeys>()
+        .resource::<crate::app_core::errors::UiErrorKeys>()
         .0
         .iter()
         .map(|e| e.key)
@@ -287,9 +290,9 @@ fn with_fortitude(f: &mut Frame) {
         implicit_target_a1: 21,
         ..Default::default()
     };
-    world.insert_resource(crate::ui_action::Spells {
+    world.insert_resource(crate::app_core::state::Spells {
         catalog: wrathplus_formats::SpellCatalog::from_displays([(FORTITUDE, display)].into()),
-        ..crate::ui_action::Spells::empty_for_tests()
+        ..crate::app_core::state::Spells::empty_for_tests()
     });
     world
         .non_send_resource_mut::<UiScript>()
@@ -363,7 +366,7 @@ fn a_pet_book_cast_on_self_aims_at_the_player() {
         let mut f = frame(true);
         f.app
             .world_mut()
-            .resource_mut::<crate::ui_pet::PetBar>()
+            .resource_mut::<crate::app_core::state::PetBar>()
             .spells
             .pet_guid = PET;
         f.app
@@ -487,13 +490,13 @@ fn attack_with_a_friend_selected_swings_at_the_nearest_enemy_instead() {
         spawn_mob(&mut f, &[(TEMPLATE, FOE)]);
         f.app
             .world_mut()
-            .resource_mut::<crate::ui_action::PlayerActions>()
+            .resource_mut::<crate::app_core::state::PlayerActions>()
             .buttons
             .insert(
                 0,
                 ActionButton {
                     slot: 0,
-                    action: crate::ui_action::SPELL_ATTACK,
+                    action: crate::app_core::state::SPELL_ATTACK,
                     kind: wrathplus_protocol::types::ACTION_KIND_SPELL,
                 },
             );
@@ -604,7 +607,7 @@ fn a_macros_calls_land_inside_the_use_action_that_ran_it() {
         // The bar holds the macro's id, not its index.
         let id = script.macros().get(index as usize).expect("made").id;
         world
-            .resource_mut::<crate::ui_action::PlayerActions>()
+            .resource_mut::<crate::app_core::state::PlayerActions>()
             .buttons
             .insert(
                 0,
@@ -632,12 +635,12 @@ fn with_strike(f: &mut Frame) {
         implicit_target_a1: 6,
         ..Default::default()
     };
-    world.insert_resource(crate::ui_action::Spells {
+    world.insert_resource(crate::app_core::state::Spells {
         catalog: wrathplus_formats::SpellCatalog::from_displays([(SINISTER_STRIKE, strike)].into()),
-        ..crate::ui_action::Spells::empty_for_tests()
+        ..crate::app_core::state::Spells::empty_for_tests()
     });
     world
-        .resource_mut::<crate::ui_action::PlayerActions>()
+        .resource_mut::<crate::app_core::state::PlayerActions>()
         .buttons
         .insert(
             0,
@@ -725,11 +728,11 @@ fn a_strike_with_nothing_to_attack_says_so_and_sends_nothing() {
     assert_eq!(selected(&f), None);
     let world = f.app.world();
     assert_eq!(
-        world.resource::<crate::ui_action::UiErrorKeys>().0,
-        vec![crate::ui_action::UiError::key("ERR_NO_ATTACK_TARGET")]
+        world.resource::<crate::app_core::errors::UiErrorKeys>().0,
+        vec![crate::app_core::errors::UiError::key("ERR_NO_ATTACK_TARGET")]
     );
     assert!(world
-        .resource::<crate::ui_action::CastErrors>()
+        .resource::<crate::app_core::errors::CastErrors>()
         .0
         .is_empty());
 }

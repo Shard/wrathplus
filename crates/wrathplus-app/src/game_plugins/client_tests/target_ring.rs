@@ -1,8 +1,11 @@
 //! Whole-client tests of `crate::target::ring::tests`, from `target/ring.rs` (`teardown`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, SelfPlayer};
-use crate::target::{AttackPick, Selection};
+use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::target::AttackPick;
+use crate::app_core::state::Selection;
 use wrathplus_protocol::types::ObjectType;
 use wrathplus_protocol::{EntityKind, ObjectFields, SessionEvent};
 use wrathplus_world::model_fade::DespawnFade;
@@ -142,7 +145,7 @@ fn the_nearest_enemy_scan_never_picks_a_torn_down_object() {
                 |mut pick: AttackPick,
                  mut sel: ResMut<Selection>,
                  mut seam: crate::creature_anim::AttackSeam,
-                 mut errors: ResMut<crate::ui_action::UiErrorKeys>| {
+                 mut errors: ResMut<crate::app_core::errors::UiErrorKeys>| {
                     pick.target(None, &mut sel, &mut seam, &mut errors)
                 },
             )
