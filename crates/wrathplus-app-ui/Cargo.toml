@@ -65,6 +65,7 @@ windows-sys = { version = "0.59", features = [
 ] }
 
 [dev-dependencies]
+wrathplus-blp = { path = "../wrathplus-blp" }
 wrathplus-app-core = { path = "../wrathplus-app-core", default-features = false, features = ["test-support"] }
 wrathplus-app-net = { path = "../wrathplus-app-net", default-features = false, features = ["test-support"] }
 wrathplus-app-world = { path = "../wrathplus-app-world", default-features = false, features = ["test-support"] }

@@ -196,6 +196,7 @@ impl Chain {
     pub fn override_path(&self, name: &str) -> Option<&Path> {
         self.overrides
             .resolve(name)
+            .filter(|entry| entry.builtin.is_none())
             .map(|entry| entry.path.as_path())
     }
 
@@ -252,6 +253,10 @@ impl Chain {
     /// Read a file by internal path (`/` or `\`) from its winning archive.
     pub fn read(&self, name: &str) -> Result<Vec<u8>> {
         if let Some(entry) = self.overrides.resolve(name) {
+            if let Some((pack, bytes)) = &entry.builtin {
+                tracing::info!(path = name, source = %pack, "asset override (built-in pack)");
+                return Ok(bytes.to_vec());
+            }
             tracing::info!(path = name, source = %entry.path.display(), "asset override");
             return std::fs::read(&entry.path)
                 .with_context(|| format!("reading override {}", entry.path.display()));

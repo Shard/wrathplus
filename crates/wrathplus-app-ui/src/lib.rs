@@ -2,6 +2,7 @@
 #![cfg_attr(not(feature = "dev"), allow(dead_code, unused_imports))]
 
 pub mod bindings;
+pub mod wrathplus_pack;
 pub mod console;
 pub mod combat_log;
 pub mod char_select;

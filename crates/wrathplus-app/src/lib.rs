@@ -223,6 +223,7 @@ pub use wrathplus_app_world::weapon_trail;
 pub use wrathplus_app_world::world_backdrop;
 pub use wrathplus_app_world::world_state;
 pub use wrathplus_app_ui::world_state_ui;
+pub use wrathplus_app_ui::wrathplus_pack;
 pub use wrathplus_app_core::wrath_vehicle_seats;
 
 use bevy::prelude::*;
@@ -301,9 +302,8 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     // The panel footer and the build banner read the stamp back.
     app.insert_resource(build);
     let experience = experience::boot();
-    let overrides = experience
-        .asset_overrides()
-        .expect("valid enabled asset packs");
+    let packs = experience.asset_overrides();
+    let overrides = wrathplus_pack::mount(packs.expect("valid enabled asset packs"));
     ui_script::initialize_asset_overrides(overrides.clone());
     app.insert_resource(wrathplus_assets::AssetOverridePolicy(overrides.clone()));
     app.insert_resource(experience_ao::AoBootPolicy::from_experience(&experience));
