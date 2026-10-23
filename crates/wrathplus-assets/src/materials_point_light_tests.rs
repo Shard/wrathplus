@@ -51,3 +51,31 @@ fn every_point_light_lane_seats_from_the_farthest_gathered() {
         );
     }
 }
+
+/// CPU twin of the M2 lane's candidacy: the light's 20-yd grid cell (`0x834c70`) inside the
+/// receiver sphere's cell sweep (`0x81e400`), on each horizontal axis.
+fn swept(centre: [f32; 2], radius: f32, light: [f32; 2]) -> bool {
+    (0..2).all(|i| {
+        let cell = (light[i] * 0.05).floor();
+        cell >= ((centre[i] - radius) * 0.05 - 0.5).floor()
+            && cell <= ((centre[i] + radius) * 0.05 + 0.5).floor()
+    })
+}
+
+#[test]
+fn the_m2_lane_sweeps_the_receiver_spheres_cells() {
+    // A 1-yd receiver at 5 sweeps cells [floor(-0.3), floor(0.8)] = [-1, 0]: [-20, 20) yd.
+    assert!(swept([5.0, 5.0], 1.0, [-19.0, 0.0]));
+    assert!(!swept([5.0, 5.0], 1.0, [20.5, 0.0]));
+    // A box, not a disc: the far corner of the swept cells is still a candidate.
+    assert!(swept([5.0, 5.0], 1.0, [19.5, -19.5]));
+    // A 30-yd receiver sweeps [floor(-1.75), floor(2.25)] = [-2, 2]: [-40, 60) yd.
+    assert!(swept([5.0, 5.0], 30.0, [59.0, -39.0]));
+    assert!(!swept([5.0, 5.0], 30.0, [61.0, 0.0]));
+
+    let forward = include_str!("shaders/wow_model.wgsl");
+    assert!(forward.contains("let lo = floor((anchor.xz - vec2<f32>(reach)) * 0.05 - 0.5);"));
+    assert!(forward.contains("let hi = floor((anchor.xz + vec2<f32>(reach)) * 0.05 + 0.5);"));
+    assert!(forward.contains("let cell = floor(pos_range.xz * 0.05);"));
+    assert!(forward.contains("reach = m.light_sphere.w * scale;"));
+}

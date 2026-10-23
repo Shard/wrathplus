@@ -55,6 +55,7 @@ struct ModelParams {
     stage2: vec4<f32>,
     stage2_anim: vec4<f32>,
     stage2_seed: vec4<f32>,
+    light_sphere: vec4<f32>,
 };
 fn second_stage_uv(uv: vec2<f32>) -> vec2<f32> {
     if (m.stage2.z > 2.0) { return uv; }
@@ -166,9 +167,15 @@ fn wow_normalize(v: vec3<f32>) -> vec3<f32> {
 // The point lights at P. 12340 gathers the four nearest to the receiving unit's own position
 // `anchor` by squared distance into an ascending list (`0x834f60`), then seats GL slots 1-3 from
 // the farthest down and stops at slot 3 (`0x8353d0`): with four candidates the nearest is never
-// committed. Range bounds candidacy only; a seated light falls off as `1/(0.7·d + 0.03·d²)`,
-// diffuse only, on the submitted normal (no GL_LIGHT_MODEL_TWO_SIDE). Mirrored in terrain.wgsl.
-fn point_light_sum(P: vec3<f32>, N: vec3<f32>, anchor: vec3<f32>) -> vec3<f32> {
+// committed. Candidacy is the light grid's 20-yd cells (`0x834c70`: `floor(p·0.05)`) inside the
+// receiver sphere's sweep (`0x81e400`: `[floor((c − r)·0.05 − 0.5), floor((c + r)·0.05 + 0.5)]`
+// on both horizontal axes, no vertical bound) when `reach` (the radius) is known, else the packed
+// per-light range. A seated light falls off as `1/(0.7·d + 0.03·d²)`, diffuse only, on the
+// submitted normal (no GL_LIGHT_MODEL_TWO_SIDE). Mirrored in terrain.wgsl.
+fn point_light_sum(P: vec3<f32>, N: vec3<f32>, anchor: vec3<f32>, reach: f32) -> vec3<f32> {
+    // Bevy x/z are WoW −y/−x; the cell partition is symmetric under the flip.
+    let lo = floor((anchor.xz - vec2<f32>(reach)) * 0.05 - 0.5);
+    let hi = floor((anchor.xz + vec2<f32>(reach)) * 0.05 + 0.5);
     let count = u32(wow_light.point_count.x);
     var sel = array<u32, 4>(0u, 0u, 0u, 0u);
     var sd = array<f32, 4>(1e30, 1e30, 1e30, 1e30);
@@ -177,7 +184,12 @@ fn point_light_sum(P: vec3<f32>, N: vec3<f32>, anchor: vec3<f32>) -> vec3<f32> {
         let pos_range = wow_light.points[2u * i];
         let dv = pos_range.xyz - anchor;
         let d2 = dot(dv, dv);
-        if (d2 > pos_range.w * pos_range.w) {
+        if (reach >= 0.0) {
+            let cell = floor(pos_range.xz * 0.05);
+            if (any(cell < lo) || any(cell > hi)) {
+                continue;
+            }
+        } else if (d2 > pos_range.w * pos_range.w) {
             continue;
         }
         if (n == 4u && d2 >= sd[3]) {
@@ -436,15 +448,25 @@ fn vertex(vertex: WowVertex) -> WowVsOut {
 #endif
 
     // Point lights: none on WMO surfaces, none here on interior M2 props (their group's MOLR lights
-    // are in the SH probe), else the ≤3 nearest to the instance origin (clutter: its MCNK chunk).
+    // are in the SH probe). The receiver is the model's world sphere (`0x834900` copies the
+    // object's `[centre, radius]` into the light state), else the instance origin; clutter
+    // gathers at its MCNK chunk.
     if (m.model_flags.x > 0.5 || m.model_flags.z > 0.5) {
         out.point_lit = vec3<f32>(0.0);
     } else {
         var anchor = mesh_world_from_local[3].xyz;
+        var reach = -1.0;
         if (m.clutter_fade.w > 0.5) {
             anchor = mcnk_cell_anchor(out.world_position.xyz);
+        } else if (m.light_sphere.w > 0.0) {
+            anchor = (mesh_world_from_local * vec4<f32>(m.light_sphere.xyz, 1.0)).xyz;
+            let scale = max(
+                length(mesh_world_from_local[0].xyz),
+                max(length(mesh_world_from_local[1].xyz), length(mesh_world_from_local[2].xyz)),
+            );
+            reach = m.light_sphere.w * scale;
         }
-        out.point_lit = point_light_sum(out.world_position.xyz, out.world_normal, anchor);
+        out.point_lit = point_light_sum(out.world_position.xyz, out.world_normal, anchor, reach);
     }
     return out;
 }

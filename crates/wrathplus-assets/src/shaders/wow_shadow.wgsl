@@ -36,6 +36,7 @@ struct ModelParams {
     stage2: vec4<f32>,
     stage2_anim: vec4<f32>,
     stage2_seed: vec4<f32>,
+    light_sphere: vec4<f32>,
 };
 fn second_stage_uv(uv: vec2<f32>) -> vec2<f32> {
     if (m.stage2.z > 2.0) { return uv; }

@@ -6,11 +6,11 @@
 //! and the order its model pass draws them in is untraced. Rigged models are not animated: every
 //! spell geometry model probed is static.
 
-use wrathplus_assets::coords::wow_to_bevy;
-use wrathplus_assets::M2Model;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::mesh::MeshTag;
 use bevy::prelude::*;
+use wrathplus_assets::coords::wow_to_bevy;
+use wrathplus_assets::M2Model;
 
 use crate::model_render::{model_material_stages, MaterialCache, ShadeSel};
 use wrathplus_assets::materials::WowModelMaterial;
@@ -111,6 +111,7 @@ pub(super) fn update_model_particles(
                         } else {
                             0
                         },
+                        sub.light_sphere,
                     );
                     // Realized now: the over-life ramp writes it every frame.
                     crate::model_render::lazy::realize(&mut materials, material.id());

@@ -119,6 +119,7 @@ fn both_shader_parameter_layouts_match_rust_stage_order() {
         "stage2",
         "stage2_anim",
         "stage2_seed",
+        "light_sphere",
     ];
     for source in [forward, shadow] {
         let abi = source
@@ -134,7 +135,7 @@ fn both_shader_parameter_layouts_match_rust_stage_order() {
             assert!(at >= last);
             last = at;
         }
-        assert_eq!(abi.matches(": vec4<f32>").count(), 9);
+        assert_eq!(abi.matches(": vec4<f32>").count(), 10);
         assert!(source.contains("@binding(101) var second_texture"));
         assert!(source.contains("@binding(102) var second_sampler"));
     }

@@ -1,6 +1,5 @@
 //! Ignored, headless real-device validation of the production WoW shadow prepass.
 #![cfg(test)]
-use wrathplus_assets::materials::{WowModelExt, WowModelMaterial};
 use bevy::asset::RenderAssetUsages;
 use bevy::ecs::system::SystemState;
 use bevy::mesh::{MeshVertexBufferLayoutRef, MeshVertexBufferLayouts};
@@ -13,6 +12,7 @@ use bevy::render::texture::FallbackImage;
 use bevy::render::{RenderApp, RenderPlugin, RenderStartup};
 use bevy::shader::{PipelineCacheError, ShaderCache, ShaderCacheSource, ShaderRef, ValidateShader};
 use std::{any::TypeId, borrow::Cow, sync::Arc, time::Duration};
+use wrathplus_assets::materials::{WowModelExt, WowModelMaterial};
 
 mod fixtures;
 use fixtures::{fixture_group, load_module, specialize_material};
@@ -152,6 +152,7 @@ fn wow_shadowcaster_gpu_smoke() {
                 stage2: Vec4::ZERO,
                 stage2_anim: Vec4::ZERO,
                 stage2_seed: Vec4::ZERO,
+                light_sphere: Vec4::ZERO,
                 texture2: None,
                 light_buf: light.clone(),
             },
