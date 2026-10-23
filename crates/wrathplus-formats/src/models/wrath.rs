@@ -698,11 +698,12 @@ fn render_submeshes(
                 };
                 // A Mod2x first stage selects Combiners_Mod_Mod2x (over Mod) or Mod2x_Mod2x
                 // (`0x836600`), one program: `t0·t1·primary·2`, alpha `t0.a·primary.a·t1.a·2`,
-                // which is a Mod first stage under op 4. Labelled: Add_Mod (first op 3) is not
-                // built.
+                // which is a Mod first stage under op 4. An Add first stage over Mod is
+                // Combiners_Add_Mod: `t1·(primary + t0)`, alpha `t1.a·(primary.a + t0.a)`, op 8.
                 match (first_op, op) {
                     (0 | 1, _) => {}
                     (4, 1 | 4) => op = 4,
+                    (3, 1) => op = 8,
                     _ => bail!("unsupported Wrath first-stage combiner {first_op}"),
                 }
             }

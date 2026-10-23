@@ -136,6 +136,10 @@ pub struct WowModelExt {
     pub stage2_anim: Vec4,
     #[uniform(100)]
     pub stage2_seed: Vec4,
+    /// The receiver sphere for the point-light cell sweep: `xyz` model-space centre, `w` radius;
+    /// `w == 0` keeps the per-light range around the instance origin.
+    #[uniform(100)]
+    pub light_sphere: Vec4,
     #[texture(101)]
     #[sampler(102)]
     pub texture2: Option<Handle<Image>>,

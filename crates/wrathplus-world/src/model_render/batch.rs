@@ -3,12 +3,12 @@
 //! cannot feather through alpha, an authored-Blend batch is its own twin, and a batch that writes
 //! no depth primes nothing.
 
-use wrathplus_assets::materials::WowModelMaterial;
-use wrathplus_assets::ModelSubmesh;
-use wrathplus_formats::ModelBlend;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::render::render_resource::Buffer;
+use wrathplus_assets::materials::WowModelMaterial;
+use wrathplus_assets::ModelSubmesh;
+use wrathplus_formats::ModelBlend;
 
 use super::{model_material, zfill_material, MaterialCache, ShadeSel};
 use crate::lighting::SharedLightBuffer;
@@ -457,6 +457,7 @@ impl M2BatchMaterials<'_> {
             } else {
                 0
             },
+            sub.light_sphere,
         )
     }
 }
