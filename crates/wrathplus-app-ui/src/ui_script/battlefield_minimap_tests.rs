@@ -19,8 +19,6 @@ pub(super) fn quiet(s: &UiScript) {
 
 /// The full interface with the addon registered but not loaded. A player exists because stock
 /// OnLoads format `UnitName("player")` into their labels.
-/// Every test here needs Assets' PlayerMiniArrowEffectFrame (`CreateMiniWorldMapArrowFrame`,
-/// worldmap_arrow.rs): `BattlefieldMinimap_OnLoad` indexes it (Blizzard_BattlefieldMinimap.lua:52-54).
 pub(super) fn session() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
@@ -613,7 +611,6 @@ fn the_battleground_blips_and_the_flag_follow_the_position_family() {
         Some("BattlefieldMinimapRaid1"),
         "the blip is what the cursor is over"
     );
-    // Needs Assets' `PlayerIsPVPInactive` (a group member's name, never raising).
     s.mouse_move(bx, by);
     assert!(
         s.eval::<bool>("return GameTooltip:IsShown()").unwrap(),

@@ -48,7 +48,7 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 435 | 65 | 189 | 689 |
+| S→C | 436 | 64 | 189 | 689 |
 | C→S | 419 | 0 | 305 | 724 |
 
 Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 419 admitted numeric opcodes, 78 of them transport-only (no UI producer) and 341 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
@@ -924,7 +924,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x032A` | `CMSG_GMSURVEY_SUBMIT` | C→S | handled | niche | AC receive: `HandleGMSurveySubmit` (STATUS_LOGGEDIN). | C→S: Session — transport-only; `ClientCommand::NativeHelp`, P/wrath_help.rs encoder; no UI producer. See docs/WRATH-HELP.md. |
 | `0x032B` | `SMSG_UPDATE_INSTANCE_OWNERSHIP` | S→C | capture-only | niche | proven_send_site: `game/Entities/Player/PlayerStorage.cpp:6784` | S→C: capture-only — P/wrath_instance_control.rs → A/net/wrath_instance_control_capture.rs FIFO; no UI feed; see docs/WRATH-INSTANCE-CONTROL.md. |
 | `0x032C` | `CMSG_IGNORE_KNOCKBACK_CHEAT` | C→S | missing | GM-debug | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x032D` | `SMSG_CHAT_PLAYER_AMBIGUOUS` | S→C | capture-only | core | proven_send_site: `game/Handlers/ChatHandler.cpp:828` | S→C: capture-only — P/wrath_chat_notices.rs → A/net/wrath_chat_notice_capture.rs FIFO (player ambiguous); see docs/WRATH-CHAT.md. |
+| `0x032D` | `SMSG_CHAT_PLAYER_AMBIGUOUS` | S→C | handled | core | proven_send_site: `game/Handlers/ChatHandler.cpp:828` | S→C: P/wrath_chat_notices.rs → sole owner `ui_chat::net::on_whisper_refusal` → `ERR_CHAT_PLAYER_AMBIGUOUS_S` with the name (12340 case `0x32d`, message `0x1fa`); see docs/WRATH-CHAT.md. |
 | `0x032E` | `MSG_DELAY_GHOST_TELEPORT` | S→C / C→S | missing / missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x032F` | `SMSG_SPELLINSTAKILLLOG` | S→C | handled | niche | proven_send_site: `game/Spells/SpellEffects.cpp:298` | S→C: semantic-consumer — P/wrath_logs.rs (strict AC framing, Wrath fields kept) → P/wrath_events.rs `wrath_logs` arm → A/combat_log/mod.rs `on_spell_insta_kill_log`; Wrath caster GUID carried. |
 | `0x0330` | `SMSG_SPELL_UPDATE_CHAIN_TARGETS` | S→C | missing | core | registry_only_no_source_refs | S→C: not actionable — registry only, no AC send site; deliberately undecoded (P/wrath_spell_control.rs `REGISTRY_ONLY`), no layout invented. See docs/WRATH-SPELL-CONTROL.md. |

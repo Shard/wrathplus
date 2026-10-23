@@ -106,11 +106,7 @@ impl RelationInputs<'_, '_> {
     }
 
     /// [`super::ring::ring_reaction_in`] on these live inputs: `target`'s reaction toward `me`.
-    pub(crate) fn ring_reaction(
-        &self,
-        target: Option<&ObjectStore>,
-        me: Option<&ObjectStore>,
-    ) -> u8 {
+    pub fn ring_reaction(&self, target: Option<&ObjectStore>, me: Option<&ObjectStore>) -> u8 {
         let (factions, reps) = (self.factions.as_deref(), self.reputations());
         super::ring::ring_reaction_in(factions, reps, target, me, self.context())
     }

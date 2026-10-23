@@ -271,36 +271,36 @@ fn a_received_text_emote_composes_its_sentence_and_names_the_performer() {
     assert!(line(SIT, them("-")).is_none(), "/sit prints nothing");
 }
 
-/// `COMBATLOG_HONORAWARD`, `COMBATLOG_HONORGAIN` and `COMBATLOG_DISHONORGAIN`
-/// (`GlobalStrings.lua:785-787`).
+/// `COMBATLOG_HONORAWARD`, `COMBATLOG_HONORGAIN` and `COMBATLOG_HONORGAIN_NO_RANK`
+/// (GlobalStrings.lua:1685-1687), as 12340's `0x50b6d0` picks them.
 #[test]
 fn honor_gain_lines_pick_the_reference_form() {
     let _data = wrathplus_formats::wow_data_or_skip!();
+    let line = |victim, title, ranked, honor| {
+        with_strings(|g| super::feed::honor_gain_line(victim, title, ranked, honor, g))
+    };
     assert_eq!(
-        with_strings(|g| super::feed::honor_gain_line(None, None, 42, g)).as_deref(),
+        line(None, None, true, 42).as_deref(),
         Some("You have been awarded 42 honor points.")
     );
     assert_eq!(
-        with_strings(|g| super::feed::honor_gain_line(Some("Grimtusk"), Some("Sergeant"), 137, g))
-            .as_deref(),
+        line(Some("Grimtusk"), Some("Sergeant"), true, 137).as_deref(),
         Some("Grimtusk dies, honorable kill Rank: Sergeant (137 Honor Points)")
     );
-    // A dishonorable kill: vmangos sends a negative honor (`HonorMgr.cpp:807`).
+    // A signed rank below 0 is the unranked form.
     assert_eq!(
-        with_strings(|g| super::feed::honor_gain_line(Some("Innkeeper Renee"), None, -37, g))
-            .as_deref(),
-        Some("Innkeeper Renee dies, dishonorable kill.")
+        line(Some("Grimtusk"), None, false, 21).as_deref(),
+        Some("Grimtusk dies, honorable kill (21 Honor Points)")
     );
-    // The fork is `honor <= 0` (`0x625270`): zero honor is dishonorable.
+    // A ranked victim with no title side keeps the clause, empty.
     assert_eq!(
-        with_strings(|g| super::feed::honor_gain_line(Some("Grimtusk"), Some("Sergeant"), 0, g))
-            .as_deref(),
-        Some("Grimtusk dies, dishonorable kill.")
-    );
-    // No rank title: the clause stays, empty.
-    assert_eq!(
-        with_strings(|g| super::feed::honor_gain_line(Some("Grimtusk"), None, 5, g)).as_deref(),
+        line(Some("Grimtusk"), None, true, 5).as_deref(),
         Some("Grimtusk dies, honorable kill Rank:  (5 Honor Points)")
+    );
+    // The award ignores the rank form.
+    assert_eq!(
+        line(None, None, false, 7).as_deref(),
+        Some("You have been awarded 7 honor points.")
     );
 }
 
