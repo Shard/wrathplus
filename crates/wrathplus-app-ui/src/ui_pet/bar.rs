@@ -12,8 +12,8 @@ use wrathplus_protocol::types::{
 use wrathplus_ui::script::{PetActionView, UiScript};
 
 use crate::app_core::session::ObjectStore;
-use crate::target::UNIT_FLAG_POSSESSED;
 use crate::app_core::state::Spells;
+use crate::target::UNIT_FLAG_POSSESSED;
 
 use super::{PetBar, PetUnit};
 
@@ -157,14 +157,14 @@ pub(super) fn slot_paint(
 /// (`0x4bcefd`), so a press on a spell without one re-casts rather than cancels.
 pub(super) fn active_aura_press(
     entry: PetActionEntry,
-    pet: Option<&ObjectStore>,
+    pet_auras: Option<&[crate::net::wrath_auras::StampedAura]>,
     spell: Option<&wrathplus_formats::SpellDisplay>,
 ) -> Option<u32> {
     if !entry.is_spell() || entry.is_empty() {
         return None;
     }
     let spell_id = entry.action();
-    crate::ui_action::toggle::active_action_toggle(spell_id, spell?, pet?).then_some(spell_id)
+    crate::ui_action::toggle::active_action_toggle(spell_id, spell?, pet_auras?).then_some(spell_id)
 }
 
 /// Push the ten slot views on a change, and `PET_BAR_UPDATE` when the bar itself moved. A change
@@ -204,6 +204,7 @@ pub fn feed_pet_bar(
     let has_bar = bar.has_bar();
     // An unstreamed pet is not usable (`0x4bd034`), and no slot shows active.
     let pet_store = pet.store(bar.guid());
+    let pet_auras = pet_store.map(|_| pet.auras_of(bar.guid()));
     let pet_flags = pet_store.map(|s| s.0.unit_flags());
     let usable = pet.actions_usable(&bar);
     // `PickupPetAction`'s gate alone: the pet's object must resolve (`0x4be1f7`) and not be
@@ -228,7 +229,15 @@ pub fn feed_pet_bar(
                         .wrath_pet_info(entry.id(), Some(d), now)
                         .ui_triple(anchor, ui_now)
                 });
-                native_slot_view(entry, native, display, cooldown, pet_attacking, pet_store)
+                native_slot_view(
+                    entry,
+                    native,
+                    display,
+                    cooldown,
+                    pet_attacking,
+                    pet_store,
+                    pet_auras,
+                )
             })
             .collect()
     } else if has_bar {
@@ -251,7 +260,7 @@ pub fn feed_pet_bar(
                     display,
                     cooldown,
                     pet_attacking,
-                    active_aura_press(entry, pet_store, display).is_some(),
+                    active_aura_press(entry, pet_auras, display).is_some(),
                 )
             })
             .collect()
@@ -328,6 +337,7 @@ fn native_slot_view(
     cooldown: Option<(i64, u32, bool)>,
     attacking: bool,
     store: Option<&ObjectStore>,
+    auras: Option<&[crate::net::wrath_auras::StampedAura]>,
 ) -> PetActionView {
     let kind = entry.raw_type() & 0x3f;
     let id = entry.id();
@@ -369,7 +379,7 @@ fn native_slot_view(
         return view;
     };
     let active =
-        store.is_some_and(|s| crate::ui_action::toggle::active_action_toggle(id, spell, s));
+        auras.is_some_and(|a| crate::ui_action::toggle::active_action_toggle(id, spell, a));
     view.name = Some(spell.name.clone());
     view.subtext = spell.rank.clone();
     view.texture = if active {
@@ -437,6 +447,7 @@ mod native_view_tests {
             None,
             false,
             None,
+            None,
         );
         assert_eq!(view.packed, word);
         assert_eq!(view.spell_id, Some(0x12_abcd));
@@ -446,8 +457,15 @@ mod native_view_tests {
     #[test]
     fn missing_catalog_and_unknown_types_keep_raw_word_without_fabricating_spell() {
         for word in [0x8112_abcd, 0x0512_abcd, 0x8100_0000] {
-            let view =
-                native_slot_view(Action(word), &PetSpells::default(), None, None, false, None);
+            let view = native_slot_view(
+                Action(word),
+                &PetSpells::default(),
+                None,
+                None,
+                false,
+                None,
+                None,
+            );
             assert_eq!(view.packed, word);
             assert!(view.name.is_none());
             assert!(view.spell_id.is_none());

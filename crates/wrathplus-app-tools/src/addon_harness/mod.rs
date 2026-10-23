@@ -704,7 +704,7 @@ fn drive_ui_probe(script: &mut UiScript) -> Vec<String> {
             end
             try(function()
                 GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
-                GameTooltip:SetText("benilla probe")
+                GameTooltip:SetText("wrathplus probe")
                 GameTooltip:Show()
             end)
             try(function() GameTooltip:Hide() end)

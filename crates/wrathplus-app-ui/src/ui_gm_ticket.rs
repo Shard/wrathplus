@@ -1,8 +1,7 @@
 //! The GM ticket flow behind the stock Help window: the events it hears and the packets it sends.
 //! The client holds no ticket: `SMSG_GMTICKET_GETTICKET` is the only truth, and every answer fires
 //! `UPDATE_TICKET`, an unchanged one too, as the window re-polls `GetGMTicket()` every 10 minutes.
-//! 1.12 has no response channel, so vmangos appends a GM's reply to the ticket text
-//! (`GMTicketMgr.cpp:124-136`).
+//! A GM's answer arrives on 12340's own response channel, [`crate::ui_gm_response`].
 //!
 //! Every send is fire-and-forget and never retried: vmangos answers some refusals with silence
 //! (`GMTicketHandler.cpp:91,106-113`), and a third `CMSG_GMTICKET_UPDATETEXT` in one world tick
@@ -454,6 +453,7 @@ pub struct UiGmTicketPlugin;
 impl Plugin for UiGmTicketPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        crate::ui_gm_response::register(app);
         app.init_resource::<GmTicketState>()
             .init_resource::<GmTicketFeedState>()
             .add_systems(

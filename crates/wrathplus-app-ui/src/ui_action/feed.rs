@@ -471,7 +471,7 @@ fn spell_action_icon(
     auto_attack_icon(d, store, &spells.forms, objects, items, icons, commands)
         .or_else(|| {
             store
-                .filter(|s| super::toggle::active_action_toggle(spell_id, d, s))
+                .filter(|s| super::toggle::active_action_toggle(spell_id, d, super::toggle::unit_auras(objects, s)))
                 .and_then(|_| d.active_icon.clone())
         })
         .or_else(|| d.icon.clone())

@@ -21,8 +21,9 @@ Strict framing validates AC emitted shapes (including welcome kind 4's two flags
 
 **Since then (2026-10-23 audit):** `ui_instance::take_native` consumes 0147 lock warning and 02FA
 raid instance message among others; their coverage rows say handled. The difficulty replies 0329
-and 04EB still end in the FIFO, so `GetDungeonDifficulty`/`GetRaidDifficulty` read only the group
-list's loot block.
+and 04EB go to `ui_native::wrath_difficulty` (12340 `0x526530`): own and group stores per kind,
+the group's answering while grouped, a "difficulty set to" chat line when the answer moves. It now
+owns `GetDungeonDifficulty`/`GetRaidDifficulty`, solo included; the group list no longer sets them.
 
 Outbound typed commands: 013F lock response (u8), 0292 saved-instance extension
 (u32 map/u32 difficulty/u8), 031D reset (empty), 0329/04EB difficulty (u32 mode).

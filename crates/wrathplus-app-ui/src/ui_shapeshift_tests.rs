@@ -1,6 +1,7 @@
 //! The stance bar feed's unit tests: the `isActive` fork, the icon election and the aura edge.
 
 use super::*;
+use crate::ui_action::toggle::AFLAG_POSITIVE;
 use wrathplus_formats::SpellDisplay;
 
 /// One of our player's packet auras.

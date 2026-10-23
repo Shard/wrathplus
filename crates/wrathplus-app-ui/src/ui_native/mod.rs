@@ -6,6 +6,7 @@
 pub(crate) mod wrath_achievements;
 pub(crate) mod wrath_appearance;
 pub(crate) mod wrath_death_capture;
+pub(crate) mod wrath_difficulty;
 pub(crate) mod wrath_equipment_sets;
 pub(crate) mod wrath_item_refunds;
 pub(crate) mod wrath_movie;
@@ -36,5 +37,6 @@ impl bevy::prelude::Plugin for NativeFeedsPlugin {
         wrath_death_capture::register(app);
         wrath_movie::register(app);
         wrath_threat::register(app);
+        wrath_difficulty::register(app);
     }
 }

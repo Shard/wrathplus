@@ -46,6 +46,7 @@ pub mod ui_duel;
 pub mod ui_follow;
 pub mod ui_gamma;
 pub mod ui_glyphs;
+pub mod ui_gm_response;
 pub mod ui_gm_ticket;
 pub mod ui_gossip;
 pub mod ui_guild;

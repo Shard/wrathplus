@@ -103,8 +103,9 @@ restart after changing pack configuration.
   textures. Directory enumeration on the Bevy source remains unsupported as before; these
   loaders request explicit paths, while chain clients use `list_filtered`.
 - World startup applies the same policy to `WorldAssets`; its DBC/model/texture/audio reads all
-  use that chain. Vanilla reference UI has an explicit pre-VM boot initializer for its independent
-  once-per-process chain; standalone test VMs do not discover player packs.
+  use that chain. The stock UI's independent once-per-process chain gets the policy from an
+  explicit boot initializer before the first VM (`ui_script::initialize_asset_overrides`);
+  standalone test VMs do not discover player packs.
 - Skin compositing no longer uses a direct archive handle. Ambience streams select a loose file
   before taking the original MPQ streaming branch; Classic retains sector-at-a-time MPQ audio.
 - Public archive-only asset-source registration functions intentionally keep their original
@@ -144,7 +145,8 @@ texture-loading pipeline without installed Blizzard assets.
 `fog`, `bloom`, `tone_mapping` and `colour_grading` are independent runtime switches. The app
 publishes their resolved policy to the renderer each frame; the renderer used without the app
 starts with every switch off. Classic masks all four, including saved explicit overrides.
-`shadows` is reserved for the next stage: no real shadow rendering is claimed by this stage.
+`shadows` is the separate sun-shadow path described under
+[Plus shadow implementation](#plus-shadow-implementation--material-extension-seam) below.
 
 The Plus postprocess is a separate shader/pipeline family. It runs on the world image before UI
 composition, both for a direct world camera and the backdrop behind the UI. Only `WorldCamera`
@@ -254,7 +256,7 @@ pixel-equality claim follows from CPU sampler tests.
 ### Recording the offline sequence (explicit developer mode)
 
 `WOW_SHOWCASE_PATH=<path.toml>` selects the recorder before plugins build. The app starts directly
-in-world with `connect: false`: neither Vanilla nor Wrath network threads start. It never creates
+in-world with `connect: false`: no network thread starts. It never creates
 an avatar or sends camera/player commands. The currently selected experience is retained, including
 Classic; no Plus gate applies. `WOW_CAPTURE` and the showcase knob are mutually exclusive. With
 no path knob, recorder preparation and registration do nothing and existing eval selection,
@@ -327,7 +329,7 @@ installed data. Fixed minutes are authored lighting choices, not observations of
 Manager-only, from the repo root, using an **already-built dev-enabled** binary:
 
 ```sh
-scripts/showcase-pair.sh /absolute/path/to/benilla \
+scripts/showcase-pair.sh /absolute/path/to/wrathplus \
   docs/showcase/northshire-abbey.toml /tmp/northshire-pair
 ```
 
