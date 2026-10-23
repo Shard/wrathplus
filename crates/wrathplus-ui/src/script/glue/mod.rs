@@ -163,33 +163,40 @@ impl super::UiScript {
         super::glue_create::install(self.lua())
     }
 
-    /// The glue VM's state; the glue API must be installed.
-    fn glue_mut(&self) -> mlua::AppDataRefMut<'_, GlueState> {
-        self.lua()
-            .app_data_mut::<GlueState>()
-            .expect("the glue API is installed on this VM")
+    /// The glue VM's state; `None` on a VM without the glue API (the in-world one), where every
+    /// glue setter is a no-op and every getter answers nothing, so a caller scheduled across the
+    /// world switch cannot take the client down.
+    fn glue_mut(&self) -> Option<mlua::AppDataRefMut<'_, GlueState>> {
+        self.lua().app_data_mut::<GlueState>()
     }
 
     /// Drain the glue calls App acts on, in call order.
     pub fn take_glue_requests(&mut self) -> Vec<GlueRequest> {
-        std::mem::take(&mut self.glue_mut().requests)
+        self.glue_mut()
+            .map(|mut m| std::mem::take(&mut m.requests))
+            .unwrap_or_default()
     }
 
     /// `GetSavedAccountName`'s answer.
     pub fn set_glue_saved_account(&mut self, name: &str) {
-        self.glue_mut().saved_account = name.to_string();
+        if let Some(mut m) = self.glue_mut() {
+            m.saved_account = name.to_string();
+        }
     }
 
     /// `IsConnectedToServer` and `GetServerName`'s answers.
     pub fn set_glue_connection(&mut self, connected: bool, server_name: &str) {
-        let mut m = self.glue_mut();
-        m.connected = connected;
-        m.server_name = server_name.to_string();
+        if let Some(mut m) = self.glue_mut() {
+            m.connected = connected;
+            m.server_name = server_name.to_string();
+        }
     }
 
     /// `GetNumCharacters`'s answer.
     pub fn set_glue_num_characters(&mut self, n: u32) {
-        self.glue_mut().num_characters = n;
+        if let Some(mut m) = self.glue_mut() {
+            m.num_characters = n;
+        }
     }
 
     /// The realm list `GetRealmCategories`/`GetNumRealms`/`GetRealmInfo` read, the tab
@@ -200,26 +207,29 @@ impl super::UiScript {
         selected_category: usize,
         update_rate: f32,
     ) {
-        let mut m = self.glue_mut();
-        m.realm_tabs = tabs;
-        m.realm_selected_category = selected_category;
-        m.realm_update_rate = update_rate;
+        if let Some(mut m) = self.glue_mut() {
+            m.realm_tabs = tabs;
+            m.realm_selected_category = selected_category;
+            m.realm_update_rate = update_rate;
+        }
     }
 
     /// Character select's rows (`GetNumCharacters`, `GetCharacterInfo`, `GetSelectBackgroundModel`)
     /// and the stage an empty account stands on.
     pub fn set_glue_characters(&mut self, characters: Vec<GlueCharacter>, empty_stage: &str) {
-        let mut m = self.glue_mut();
-        m.num_characters = characters.len() as u32;
-        m.characters = characters;
-        m.empty_stage = empty_stage.to_string();
+        if let Some(mut m) = self.glue_mut() {
+            m.num_characters = characters.len() as u32;
+            m.characters = characters;
+            m.empty_stage = empty_stage.to_string();
+        }
     }
 
     /// `BenillaGetRealmlist`'s answer.
     pub fn set_glue_realmlist(&mut self, address: &str, pinned: bool) {
-        let mut m = self.glue_mut();
-        m.realmlist = address.to_string();
-        m.realmlist_pinned = pinned;
+        if let Some(mut m) = self.glue_mut() {
+            m.realmlist = address.to_string();
+            m.realmlist_pinned = pinned;
+        }
     }
 
     /// The launch's prefill (`--fill-only`): the stock login boxes hold `account` and `password`,
@@ -235,8 +245,9 @@ impl super::UiScript {
         fill.call((account, password))
     }
 
-    /// The screen `SetCurrentScreen` last named (`"login"`, `"charselect"`, …).
-    pub fn glue_current_screen(&self) -> String {
-        self.glue_mut().current_screen.clone()
+    /// The screen `SetCurrentScreen` last named (`"login"`, `"charselect"`, …); `None` off the
+    /// glue VM.
+    pub fn glue_current_screen(&self) -> Option<String> {
+        self.glue_mut().map(|m| m.current_screen.clone())
     }
 }

@@ -34,7 +34,7 @@ impl Plugin for StockCreatePlugin {
             .add_systems(
                 Update,
                 (
-                    follow_glue_screen.run_if(super::glue::stock_glue_active),
+                    follow_glue_screen.run_if(super::glue::stock_glue_up),
                     drive_stock_create.run_if(stock_create_up),
                 )
                     .chain()
@@ -218,8 +218,11 @@ fn follow_glue_screen(
     state: Res<State<ClientState>>,
     mut next: ResMut<NextState<ClientState>>,
 ) {
-    let Some(script) = script else { return };
-    match (state.get(), script.glue_current_screen().as_str()) {
+    // Off the glue VM (the world's, from the switch frame on) there is no screen to follow.
+    let Some(screen) = script.and_then(|s| s.glue_current_screen()) else {
+        return;
+    };
+    match (state.get(), screen.as_str()) {
         (ClientState::CharSelect, "charcreate") => next.set(ClientState::CharCreate),
         (ClientState::CharCreate, "charselect") => next.set(ClientState::CharSelect),
         _ => {}

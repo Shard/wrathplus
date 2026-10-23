@@ -283,7 +283,7 @@
     "crates/wrathplus-app/src/lib.rs": 534,
     "crates/wrathplus-app/tests/auction_frame.rs": 851,
     "crates/wrathplus-app/tests/mail_frame.rs": 950,
-    "crates/wrathplus-app/tests/world_api_wall.rs": 882,
+    "crates/wrathplus-app/tests/world_api_wall.rs": 884,
     "crates/wrathplus-assets/src/lib.rs": 768,
     "crates/wrathplus-assets/src/materials.rs": 743,
     "crates/wrathplus-assets/src/model.rs": 863,

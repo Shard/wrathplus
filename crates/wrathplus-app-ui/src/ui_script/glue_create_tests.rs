@@ -112,7 +112,7 @@ fn the_stock_character_create_drives_the_selection_on_the_installed_data() {
         "Okay queues the create"
     );
     script.run("CharCreateBackButton:Click()").unwrap();
-    assert_eq!(script.glue_current_screen(), "charselect");
+    assert_eq!(script.glue_current_screen().as_deref(), Some("charselect"));
 }
 
 /// A small glue VM: both APIs, a two-race catalog, and a frame recording the status events.
