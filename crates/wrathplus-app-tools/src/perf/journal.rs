@@ -237,7 +237,7 @@ fn preamble(adapter: Option<&RenderAdapterInfo>, device: Option<&RenderDevice>) 
             "no"
         }
     });
-    format!("# benilla fps journal | gpu {gpu} | backend {backend} | driver {driver} | gpu_spans {spans}\n")
+    format!("# wrathplus fps journal | gpu {gpu} | backend {backend} | driver {driver} | gpu_spans {spans}\n")
 }
 
 /// The journal's residency columns, grouped for Bevy's system-param arity limit. The
@@ -522,7 +522,7 @@ mod tests {
     fn the_preamble_names_the_adapter_or_says_it_cannot() {
         assert_eq!(
             preamble(None, None),
-            "# benilla fps journal | gpu ? | backend ? | driver ? | gpu_spans ?\n"
+            "# wrathplus fps journal | gpu ? | backend ? | driver ? | gpu_spans ?\n"
         );
     }
 }

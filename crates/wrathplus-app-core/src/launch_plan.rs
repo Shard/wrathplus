@@ -72,7 +72,7 @@ impl LaunchPlan {
 
 /// The usage text for a refused command line.
 pub(crate) const USAGE: &str = "\
-usage: benilla [--server <host[:port]>] [--account <name>] \
+usage: wrathplus [--server <host[:port]>] [--account <name>] \
 [--password-env <VAR> | --password-stdin] [--realm <name>] [--character <name>] [--enter-world]
 Each flag skips only its own pre-world step; with none, the login screen shows.
 The password is never an argument: name an environment variable or pipe it on stdin.";

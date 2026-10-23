@@ -2,7 +2,7 @@
 # Manager-only: invokes an already-built dev-enabled client, never cargo/builds or servers.
 set -euo pipefail
 if [[ $# != 3 ]]; then
-  echo "usage: $0 /absolute/path/to/benilla path.toml NEW-output-root" >&2
+  echo "usage: $0 /absolute/path/to/wrathplus path.toml NEW-output-root" >&2
   exit 2
 fi
 bin=$1
