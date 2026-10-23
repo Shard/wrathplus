@@ -1,4 +1,3 @@
-
 use crate::layout::{self, Anchor, LayoutInput, Point, Rect};
 use crate::order::ZTarget;
 use crate::widget::{FrameHandle, FrameKind, HandleMap, KindState, RegionHandle};
@@ -7,8 +6,7 @@ use super::backdrop;
 use super::types::RegionData;
 use super::{ExtractedQuad, MeasureRequest, Model, QuadContent, UiScript, SCREEN};
 
-/// The fixpoint's absolute round ceiling: deeper than any authored anchor chain, and short enough
-/// that a cycle costs a frame, not the session.
+/// The fixpoint's round ceiling: deeper than any authored anchor chain; a cycle costs one frame.
 const MAX_LAYOUT_ROUNDS: usize = 100;
 
 /// A frame's `effective_alpha` and `effective_scale`, worn by the quads it emits itself.
@@ -18,9 +16,8 @@ pub(super) struct FramePaint {
     pub(super) scale: f32,
 }
 
-/// A 128-bit fingerprint of what [`UiScript::resolve_layout`] reads: tier 2 of the change gate,
-/// behind the mutation epoch ([`Model::touch_layout`]). Two lanes, as a collision keeps a stale
-/// rect; fed in `HashMap` order, stable for an unmutated map, so a reorder only costs a resolve.
+/// A 128-bit fingerprint of what [`UiScript::resolve_layout`] reads, tier 2 behind the epoch
+/// ([`Model::touch_layout`]); two lanes, as a collision keeps a stale rect; `HashMap` order.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct InputFingerprint(u64, u64);
 
@@ -356,15 +353,6 @@ impl LayoutScope {
         self.last_screen = Some(screen);
     }
 
-    /// [`Self::commit`] for an incremental pass: only the re-hashed slots. `last_count` and
-    /// `last_screen` stay, since a structural change always takes the full path.
-    fn commit_incremental(&mut self) {
-        for &(id, h) in &self.staged {
-            self.last[id as usize] = h;
-        }
-        self.staged.clear();
-    }
-
     /// Forget the memory, so the next resolve derives the graph in full scope.
     pub(crate) fn invalidate(&mut self) {
         self.last_count = 0;
@@ -603,8 +591,7 @@ impl UiScript {
             ..
         } = model;
         // ── The incremental seed ─────────────────────────────────────────────
-        // Re-hash only the named nodes and seed those whose hash moved. It runs before the gate
-        // because on this path it is the verdict: an empty seed set means nothing moved.
+        // Re-hash named nodes, seeding moved ones, before the gate: an empty set is the verdict.
         let mut scope_nodes = 0usize;
         let mut full_scope = false;
         if let Some(touched) = &touched {
@@ -1352,3 +1339,6 @@ fn stale_measure_key(model: &Model, rh: RegionHandle) -> Option<(u64, f32)> {
     }
     Some((key, scale))
 }
+
+#[path = "layout_grow.rs"]
+mod grow;

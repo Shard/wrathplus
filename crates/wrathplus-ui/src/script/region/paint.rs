@@ -492,5 +492,7 @@ impl crate::script::UiScript {
     /// region stays where it was.
     pub fn set_texture_size_probe(&mut self, probe: crate::script::TextureSizeProbe) {
         self.model_mut().texture_size_probe = Some(probe);
+        // Every art-sized region's span reads the probe, which no node hash holds: re-solve all.
+        self.force_full_layout_resolve();
     }
 }

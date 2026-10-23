@@ -450,6 +450,7 @@ pub(super) fn region_type_name(model: &Model, rh: RegionHandle) -> &'static str 
 /// wrapper raises as stale; the reference frees too, as `CSimpleButton::SetFontString 0x778d20`
 /// deletes the label it replaces.
 pub(crate) fn free_region(model: &mut Model, rh: RegionHandle) {
+    model.touch_layout_freed_region(rh);
     model.region_data.remove(&rh);
     model.region_resolved.remove(&rh);
     if let Some(id) = model.region_to_id.remove(&rh) {
@@ -457,8 +458,7 @@ pub(crate) fn free_region(model: &mut Model, rh: RegionHandle) {
         model.region_names.retain(|_, v| *v != id);
     }
     model.arena.destroy_region(rh);
-    // A removed node takes its edges with it: a structural change, so the full touch.
-    model.touch_layout();
+    // A removed node takes its edges with it: the touch above, made while it could still read them.
 }
 
 pub(super) fn region_owner_id(model: &mut Model, rh: RegionHandle) -> u32 {
@@ -497,7 +497,7 @@ pub(crate) fn implicit_creation_anchor(model: &mut Model, rh: RegionHandle) {
         }
         RegionKind::Title => return,
     }
-    model.touch_layout();
+    model.touch_layout_region_anchors(rh, &[]);
 }
 
 /// The middle-row point a justify word selects, as the FontString post-step (`0x771480`) and the
@@ -526,7 +526,7 @@ pub(crate) fn anchor_unanchored_at(
         return;
     }
     data.anchors = vec![Anchor::new(point, owner_id, point, 0.0, 0.0)];
-    model.touch_layout();
+    model.touch_layout_region_anchors(rh, &[]);
 }
 
 /// [`implicit_creation_anchor`] for the loader, which holds region wrappers.

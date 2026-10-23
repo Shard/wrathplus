@@ -78,7 +78,7 @@ fn ensure_bar(lua: &Lua, this: &Table, layer: Option<DrawLayer>) -> mlua::Result
                 )
                 .ok_or_else(|| mlua::Error::runtime("stale frame handle"))?;
             model.region_data.insert(rh, RegionData::default());
-            model.touch_layout(); // a region entered the layout gate's read set
+            model.touch_layout_region_write(rh); // unanchored: no layout node yet
             if let Some(frame) = model.arena.frame_mut(h) {
                 if let KindState::StatusBar(sb) = &mut frame.kind_state {
                     sb.bar = Some(rh);
@@ -105,8 +105,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 (range_changed, store_value(sb, sb.value), sb.min, sb.max)
             })?;
             if range_changed {
-                event::fire_widget_handler(lua, super::object::decode_id(&this)?, "OnMinMaxChanged",
-                    vec![Value::Number(min as f64), Value::Number(max as f64)])?;
+                event::fire_widget_handler(
+                    lua,
+                    super::object::decode_id(&this)?,
+                    "OnMinMaxChanged",
+                    vec![Value::Number(min as f64), Value::Number(max as f64)],
+                )?;
             }
             fire_value_changed(lua, &this, changed)
         })?,
