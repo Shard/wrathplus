@@ -13,6 +13,7 @@
 //! | `--realm <name>` | `WOW_REALM` | the realm list |
 //! | `--character <name>` | | the selected row on character select |
 //! | `--enter-world` | | the Enter World press, on the selected row |
+//! | `--fill-only` | `WOW_FILL_ONLY=1` | with `--account`/a password, fill the login boxes and stop: the player presses Login |
 //!
 //! `WOW_CHAR=<name>` is the scripted fast path the probes use: `--character <name> --enter-world`.
 //! So `--account X --password-env Y` logs in and stops at character select.
@@ -33,6 +34,8 @@ pub struct LaunchPlan {
     pub realm: Option<String>,
     pub character: Option<String>,
     pub enter_world: bool,
+    /// `--fill-only`: the credentials fill the login screen and the login waits for the player.
+    pub fill_only: bool,
 }
 
 impl std::fmt::Debug for LaunchPlan {
@@ -44,6 +47,7 @@ impl std::fmt::Debug for LaunchPlan {
             .field("realm", &self.realm)
             .field("character", &self.character)
             .field("enter_world", &self.enter_world)
+            .field("fill_only", &self.fill_only)
             .finish()
     }
 }
@@ -54,9 +58,19 @@ impl LaunchPlan {
         self.password.as_deref()
     }
 
-    /// Both credentials are given: the login submits without typing.
+    /// Both credentials are given and not only to fill the boxes: the login submits without typing.
     pub fn logs_in(&self) -> bool {
-        self.account.is_some() && self.password.is_some()
+        self.account.is_some() && self.password.is_some() && !self.fill_only
+    }
+
+    /// `--fill-only`'s account and password for the login boxes (either may be empty).
+    pub fn fill(&self) -> Option<(&str, &str)> {
+        self.fill_only.then(|| {
+            (
+                self.account.as_deref().unwrap_or_default(),
+                self.password.as_deref().unwrap_or_default(),
+            )
+        })
     }
 
     /// A test plan with these steps answered and no password.
@@ -73,8 +87,10 @@ impl LaunchPlan {
 /// The usage text for a refused command line.
 pub(crate) const USAGE: &str = "\
 usage: wrathplus [--server <host[:port]>] [--account <name>] \
-[--password-env <VAR> | --password-stdin] [--realm <name>] [--character <name>] [--enter-world]
+[--password-env <VAR> | --password-stdin] [--realm <name>] [--character <name>] [--enter-world] \
+[--fill-only]
 Each flag skips only its own pre-world step; with none, the login screen shows.
+--fill-only puts the account and password in the login boxes and waits for the Login press.
 The password is never an argument: name an environment variable or pipe it on stdin.";
 
 /// Fold `args` (without the program name) and the environment into a plan. `env` reads a
@@ -93,6 +109,7 @@ pub(crate) fn parse(
         realm: given(env("WOW_REALM")),
         character: None,
         enter_world: false,
+        fill_only: env("WOW_FILL_ONLY").as_deref() == Some("1"),
     };
     if let Some(name) = given(env("WOW_CHAR")) {
         plan.character = Some(name);
@@ -136,6 +153,7 @@ pub(crate) fn parse(
             "--realm" => plan.realm = Some(value("--realm")?),
             "--character" => plan.character = Some(value("--character")?),
             "--enter-world" => plan.enter_world = true,
+            "--fill-only" => plan.fill_only = true,
             // Refused without echoing what followed it.
             "--password" | "-p" => {
                 return Err(format!(
@@ -233,6 +251,17 @@ mod tests {
         assert_eq!(plan.character.as_deref(), Some("Hero"));
         assert!(!plan.enter_world, "a character is selected, not entered");
         assert!(run(&["--enter-world"], &[], None).unwrap().enter_world);
+        // `--fill-only`: the credentials fill the boxes and nothing submits.
+        let fill = run(
+            &["--account", "Bob", "--password-env", "V", "--fill-only"],
+            &[("V", "hunter2")],
+            None,
+        )
+        .unwrap();
+        assert!(!fill.logs_in());
+        assert_eq!(fill.fill(), Some(("Bob", "hunter2")));
+        assert_eq!(run(&["--account", "Bob"], &[], None).unwrap().fill(), None);
+        assert!(run(&[], &[("WOW_FILL_ONLY", "1")], None).unwrap().fill_only);
     }
 
     #[test]

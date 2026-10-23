@@ -222,6 +222,19 @@ impl super::UiScript {
         m.realmlist_pinned = pinned;
     }
 
+    /// The launch's prefill (`--fill-only`): the stock login boxes hold `account` and `password`,
+    /// which travel as call arguments, never as Lua source, and nothing submits.
+    pub fn fill_login(&self, account: &str, password: &str) -> mlua::Result<()> {
+        let fill: mlua::Function = self
+            .lua()
+            .load(
+                "return function(a, p) AccountLoginAccountEdit:SetText(a) \
+                 AccountLoginPasswordEdit:SetText(p) end",
+            )
+            .eval()?;
+        fill.call((account, password))
+    }
+
     /// The screen `SetCurrentScreen` last named (`"login"`, `"charselect"`, …).
     pub fn glue_current_screen(&self) -> String {
         self.glue_mut().current_screen.clone()

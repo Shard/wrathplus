@@ -1,2 +1,2 @@
 ## Title: AzerothBench glue additions (not stock 3.3.5)
-glue/RealmlistButton.xml
+glue/ServerField.xml

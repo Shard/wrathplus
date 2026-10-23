@@ -309,8 +309,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     }
     constant(lua, "AccountMsg_GetBody", None)?;
 
-    // ── AzerothBench's own, not stock 3.3.5: the login screen's Realmlist button
-    // (`assets/ui/glue/RealmlistButton.xml`) reads and sets the address through these. ──
+    // ── AzerothBench's own, not stock 3.3.5: the login screen's Server field
+    // (`assets/ui/glue/ServerField.xml`) reads and sets the address through these. ──
     set(lua, "BenillaGetRealmlist", |lua, _| {
         let (address, pinned) = {
             let m = glue(lua);
