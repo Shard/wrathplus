@@ -3,6 +3,8 @@
 //! entity of that display; [`super::attach`] gives each entity its visual from them.
 
 use avian3d::prelude::Collider;
+use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
+use bevy::prelude::*;
 use wrathplus_assets::coords::wow_to_bevy;
 use wrathplus_assets::{
     M2Model, ModelAnimations, ModelEmitter, ModelSkeleton, ModelSubmesh, WmoModel,
@@ -10,8 +12,6 @@ use wrathplus_assets::{
 use wrathplus_formats::{
     CharSkinSlot, CollisionMesh, CreatureCatalog, GameObjectCatalog, ModelBlend, NpcAppearance,
 };
-use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use bevy::prelude::*;
 
 use wrathplus_assets::materials::WowModelMaterial;
 use wrathplus_assets::{m2_url, skin_url, wmo_url};
@@ -397,14 +397,20 @@ pub(super) fn build_parts(
                     let order = u16::try_from(pi + 1).unwrap_or(u16::MAX);
                     let mut resolved_sub = sub.clone();
                     if resolved_sub.texture2.is_none() {
-                        resolved_sub.texture2 = sub
-                            .geometry
-                            .stage2
-                            .as_ref()
-                            .and_then(|stage| stage.skin_slot)
-                            .and_then(|slot| dm.skins.get(slot as usize))
-                            .and_then(|s| s.as_ref())
-                            .map(|name| asset_server.load(skin_url(&dm.dir, name)));
+                        let stage = sub.geometry.stage2.as_ref();
+                        // An object-skin stage (M2 type 2) takes the item's own texture again.
+                        resolved_sub.texture2 =
+                            if stage.is_some_and(|s| s.char_slot == Some(CharSkinSlot::Object)) {
+                                dm.object_texture
+                                    .as_deref()
+                                    .map(|t| asset_server.load(skin_url(&dm.dir, t)))
+                            } else {
+                                stage
+                                    .and_then(|stage| stage.skin_slot)
+                                    .and_then(|slot| dm.skins.get(slot as usize))
+                                    .and_then(|s| s.as_ref())
+                                    .map(|name| asset_server.load(skin_url(&dm.dir, name)))
+                            };
                     }
                     let v = mats.entity_variants(&resolved_sub, texture, order, uv);
                     let v = v.expect("light buffer checked at entry");
@@ -569,43 +575,5 @@ fn model_dir(model_path: &str) -> &str {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Both kinds carry the same empty `parts` once built, so only the handle tells a display that
-    /// named no model from one whose model draws nothing.
-    #[test]
-    fn only_a_display_with_no_model_file_earns_the_cube() {
-        assert!(
-            !empty_display().names_a_model(),
-            "a display that resolved to no model must stay cube-eligible"
-        );
-        assert!(
-            !DisplayModel {
-                handle: ModelHandle::None,
-                parts: Some(Vec::new()),
-                ..empty_shell()
-            }
-            .names_a_model(),
-            "the handle decides, not the parts"
-        );
-        assert!(
-            DisplayModel {
-                handle: ModelHandle::M2(Handle::default()),
-                // Built with nothing to draw, like `InvisibleStalker.m2`'s zero batches.
-                parts: Some(Vec::new()),
-                ..empty_shell()
-            }
-            .names_a_model(),
-            "a display that named an M2 is answered by that model, empty parts included"
-        );
-        assert!(
-            DisplayModel {
-                handle: ModelHandle::Wmo(Handle::default()),
-                ..empty_shell()
-            }
-            .names_a_model(),
-            "a WMO display names a model too"
-        );
-    }
-}
+#[path = "display_tests.rs"]
+mod tests;
