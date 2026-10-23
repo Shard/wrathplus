@@ -40,16 +40,6 @@ impl TrainerServiceCategory {
         }
     }
 
-    /// The record's state byte `[+0x30]`, which `0x4d8ba0` maps to the type string; at type 1 it is
-    /// also a sort key ([`talent_order`]), so it stays apart from the equal filter slot.
-    fn state_key(self) -> u8 {
-        match self {
-            TrainerServiceCategory::Available => 0,
-            TrainerServiceCategory::Unavailable => 1,
-            TrainerServiceCategory::Used => 2,
-        }
-    }
-
     fn from_filter_str(s: &str) -> Option<Self> {
         match s {
             "available" => Some(TrainerServiceCategory::Available),
@@ -124,13 +114,12 @@ pub struct TrainerService {
     pub skill_req: Option<TrainerSkillReq>,
     pub ability_reqs: Vec<TrainerAbilityReq>,
     pub is_trade_skill: bool,
-    /// The tree group: the taught spell's `SkillLine` at types 0, 1 and 3, where 0 (unresolved)
-    /// drops the service and a known service at type 1 takes `TRAINER_GROUP_KNOWN`; at type 2, 1
-    /// when the wire spell has a `SKILL_STEP` (44) effect, else 2 (`0x4d77b6`), so a tradeskill
-    /// trainer drops nothing.
+    /// The tree group, 12340's builder `0x596450`: at type 2, 3 for a passive spell, 1 for a
+    /// `SKILL_STEP` (44) one, else 2, so a tradeskill trainer drops nothing; at every other type the
+    /// taught spell's `SkillLine` (`0x594ae0`), where 0 (unresolved) drops the service.
     pub group_key: u32,
-    /// The header text: the skill line's name, `KNOWN_TALENTS_HEADER` for the known group, or at
-    /// type 2 `TRADESKILL_SERVICE_STEP`/`_LEARN`.
+    /// The header text: the skill line's name, or at type 2 `TRADESKILL_SERVICE_STEP`, `_LEARN`
+    /// or `_PASSIVE`.
     pub group_name: String,
     pub tooltip: TrainerTooltip,
     /// Build 12340's `GetTrainerServiceItemLink` (`0x596290`): at a tradeskill trainer, the link
@@ -220,20 +209,15 @@ fn collate(a: &str, b: &str) -> std::cmp::Ordering {
 }
 
 const TRAINER_TYPE_TRADESKILL: u32 = 2;
-/// The mount trainer type, which the client calls "talent".
-const TRAINER_TYPE_MOUNT: u32 = 1;
-
-/// The group a type 1 trainer files its `used` services under: the client's signed -1 key
-/// (`0x4d77e8`), headed `KNOWN_TALENTS_HEADER` and sorted before every other header by `0x4d7b90`.
-pub const TRAINER_GROUP_KNOWN: u32 = u32::MAX;
 
 /// The record's required-skill value `[+0x1c]`, 0 with no skill gate.
 fn skill_value(s: &TrainerService) -> u32 {
     s.skill_req.as_ref().map_or(0, |r| r.rank)
 }
 
-/// Rows at a class or pet trainer (`0x4d85c0`; `0x4d8561` sends pet here too): required level,
-/// skill value, name, then rank, all ascending.
+/// Rows at every trainer but a tradeskill one (12340's `0x5947d0`): required level `[+0x14]`,
+/// skill value `[+0x1c]`, name, then rank, all ascending. Labelled: its string compare
+/// (`0x76ec80`) is untraced; [`collate`] stands in.
 fn class_order(a: &TrainerService, b: &TrainerService) -> std::cmp::Ordering {
     let name = |s: &TrainerService| s.name.clone().unwrap_or_default();
     let rank = |s: &TrainerService| s.subtext.clone().unwrap_or_default();
@@ -244,8 +228,8 @@ fn class_order(a: &TrainerService, b: &TrainerService) -> std::cmp::Ordering {
         .then_with(|| collate(&rank(a), &rank(b)))
 }
 
-/// Rows at a tradeskill trainer (`0x4d8760`): required skill value ascending (`0x4d87d9`), then
-/// name. It has no level key and no rank key.
+/// Rows at a tradeskill trainer (`0x5949a0`): required skill value ascending, then name. It has
+/// no level key and no rank key.
 fn tradeskill_order(a: &TrainerService, b: &TrainerService) -> std::cmp::Ordering {
     let name = |s: &TrainerService| s.name.clone().unwrap_or_default();
     skill_value(a)
@@ -253,19 +237,8 @@ fn tradeskill_order(a: &TrainerService, b: &TrainerService) -> std::cmp::Orderin
         .then_with(|| collate(&name(a), &name(b)))
 }
 
-/// Rows at a mount trainer (`0x4d8850`): the state byte ascending (`0x4d88f1`: available,
-/// unavailable, used), then name.
-fn talent_order(a: &TrainerService, b: &TrainerService) -> std::cmp::Ordering {
-    let name = |s: &TrainerService| s.name.clone().unwrap_or_default();
-    a.category
-        .state_key()
-        .cmp(&b.category.state_key())
-        .then_with(|| collate(&name(a), &name(b)))
-}
-
 /// Group the services by [`TrainerService::group_key`], dropping key 0, and sort each group's rows
-/// by the type's comparator; headers sort by raw key at type 2 (`0x4d7c30`), else by name
-/// (`0x4d7b90`).
+/// by the type's comparator; headers sort by raw key at type 2 (`0x593ce0`), else as `0x5941b0`.
 fn build_groups(services: &[TrainerService], trainer_type: u32) -> Vec<TrainerGroup> {
     let mut map: std::collections::HashMap<u32, TrainerGroup> = std::collections::HashMap::new();
     for (i, s) in services.iter().enumerate() {
@@ -284,7 +257,6 @@ fn build_groups(services: &[TrainerService], trainer_type: u32) -> Vec<TrainerGr
     let mut groups: Vec<TrainerGroup> = map.into_values().collect();
     let order = match trainer_type {
         TRAINER_TYPE_TRADESKILL => tradeskill_order,
-        TRAINER_TYPE_MOUNT => talent_order,
         _ => class_order,
     };
     for g in &mut groups {
@@ -294,11 +266,12 @@ fn build_groups(services: &[TrainerService], trainer_type: u32) -> Vec<TrainerGr
     if trainer_type == TRAINER_TYPE_TRADESKILL {
         groups.sort_by_key(|g| g.key);
     } else {
-        // `0x4d7b90`: the known group first, then name. Its middle key, `hdr[+0x24] == 0` first, is
-        // untraced and not built.
+        // `0x5941b0`: a group whose every service carries a profession point cost (`[+0x24]`,
+        // cleared by the first service without one) sorts last, then by name.
+        let all_cost = |g: &TrainerGroup| g.services.iter().all(|&i| services[i].prof_first_rank);
         groups.sort_by(|a, b| {
-            (a.key != TRAINER_GROUP_KNOWN)
-                .cmp(&(b.key != TRAINER_GROUP_KNOWN))
+            all_cost(a)
+                .cmp(&all_cost(b))
                 .then_with(|| collate(&a.name, &b.name))
                 .then_with(|| a.key.cmp(&b.key))
         });
@@ -534,10 +507,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetTrainerServiceDescription",
         lua.create_function(|lua, index: usize| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let text = service(&model, index)
-                .map(|s| s.description.clone())
-                .unwrap_or_default();
-            lua.create_string(&text)
+            // `005959d0` answers nil with no description (`0x84e280`), never "".
+            match service(&model, index).filter(|s| !s.description.is_empty()) {
+                Some(s) => Ok(Value::String(lua.create_string(&s.description)?)),
+                None => Ok(Value::Nil),
+            }
         })?,
     )?;
 

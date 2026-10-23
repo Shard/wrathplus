@@ -9,7 +9,7 @@ use wrathplus_ui::script::{
 use super::test_ui::load_ui as load_xml;
 
 /// The trainer window with every state filter on, for the full tree at fixed indices.
-pub(super) fn trainer_script() -> UiScript {
+pub(crate) fn trainer_script() -> UiScript {
     let mut s = trainer_script_base();
     load_xml(
         &mut s,
