@@ -1,0 +1,106 @@
+<!--
+	AzerothBench's own addition to the stock 3.3.5 login screen, its only non-stock element: a
+	"Server" field, bottom left, holding the address the login dials (host or host:port; the
+	port defaults to 3724). Stock 3.3.5 has no such control; its realmlist is realmlist.wtf.
+	Leaving the field after an edit keeps it in $BENILLA_HOME/realmlist.wtf, searched before the
+	install's; an address the client cannot use is refused with a dialog and the field reverts.
+	A launch with the server flag (or WOW_HOST) pins the address for the session: the field then
+	shows it, greyed and read-only.
+-->
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Script>
+		-- The saved address, and whether the launch pins it, into the field.
+		function BenillaServerField_Refresh(self)
+			local address, pinned = BenillaGetRealmlist();
+			self:SetText(address or "");
+			self.committed = address;
+			-- Read-only while pinned: the field takes no focus, greyed (an EditBox has no Disable).
+			self.pinned = pinned;
+			if ( pinned ) then
+				self:ClearFocus();
+				self:SetTextColor(0.5, 0.5, 0.5);
+				AccountLoginServerEditLabel:SetText("Server (set by the launch)");
+			else
+				self:SetTextColor(1, 1, 1);
+				AccountLoginServerEditLabel:SetText("Server");
+			end
+		end
+		-- Leaving the field commits an edit; the host answers with BENILLA_REALMLIST_CHANGED.
+		function BenillaServerField_Commit(self)
+			local text = self:GetText();
+			if ( not self.pinned and text ~= self.committed ) then
+				BenillaSetRealmlist(text);
+			end
+		end
+	</Script>
+	<EditBox name="AccountLoginServerEdit" parent="AccountLoginUI" letters="64" autoFocus="false">
+		<Size x="200" y="37"/>
+		<Anchors>
+			<Anchor point="BOTTOMLEFT">
+				<Offset>
+					<AbsDimension x="16" y="40"/>
+				</Offset>
+			</Anchor>
+		</Anchors>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<FontString name="$parentLabel" inherits="GlueFontNormal" justifyH="LEFT" text="Server">
+					<Anchors>
+						<Anchor point="BOTTOMLEFT" relativePoint="TOPLEFT">
+							<Offset>
+								<AbsDimension x="8" y="-4"/>
+							</Offset>
+						</Anchor>
+					</Anchors>
+				</FontString>
+			</Layer>
+		</Layers>
+		<Backdrop bgFile="Interface\Tooltips\UI-Tooltip-Background" edgeFile="Interface\Glues\Common\Glue-Tooltip-Border" tile="true">
+			<BackgroundInsets>
+				<AbsInset left="10" right="5" top="4" bottom="9"/>
+			</BackgroundInsets>
+			<TileSize>
+				<AbsValue val="16"/>
+			</TileSize>
+			<EdgeSize>
+				<AbsValue val="16"/>
+			</EdgeSize>
+		</Backdrop>
+		<Scripts>
+			<OnLoad>
+				self:RegisterEvent("BENILLA_REALMLIST_CHANGED");
+			</OnLoad>
+			<OnShow>
+				BenillaServerField_Refresh(self);
+			</OnShow>
+			<OnEvent>
+				BenillaServerField_Refresh(self);
+			</OnEvent>
+			<OnEnterPressed>
+				self:ClearFocus();
+			</OnEnterPressed>
+			<OnTabPressed>
+				AccountLogin_FocusAccountName();
+			</OnTabPressed>
+			<OnEscapePressed>
+				BenillaServerField_Refresh(self);
+				self:ClearFocus();
+			</OnEscapePressed>
+			<OnEditFocusGained>
+				if ( self.pinned ) then
+					self:ClearFocus();
+					return;
+				end
+				self:HighlightText();
+			</OnEditFocusGained>
+			<OnEditFocusLost>
+				self:HighlightText(0, 0);
+				BenillaServerField_Commit(self);
+			</OnEditFocusLost>
+		</Scripts>
+		<FontString inherits="GlueEditBoxFont"/>
+		<TextInsets>
+			<AbsInset left="12" right="5" bottom="5"/>
+		</TextInsets>
+	</EditBox>
+</Ui>

@@ -140,6 +140,14 @@ pub(crate) fn enter_stock_login(world: &mut World) {
         return;
     }
     set_glue_screen(world, "login");
+    // `--fill-only`: the launch's credentials wait in the boxes for the player's Login.
+    if let Some((account, password)) = crate::launch_plan::plan().fill() {
+        if let Some(script) = world.get_non_send_resource::<UiScript>() {
+            if let Err(e) = script.fill_login(account, password) {
+                warn!("ui_script: --fill-only could not fill the login boxes: {e}");
+            }
+        }
+    }
     if let Some(mut preview) = world.get_resource_mut::<crate::portrait::GluePreview>() {
         preview.scene = Some(crate::portrait::GlueScene::MainMenu);
         preview.look = None;

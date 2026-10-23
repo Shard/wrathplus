@@ -31,31 +31,72 @@ fn the_stock_account_login_opens_and_submits_on_the_installed_data() {
         shown, "v v v v v login",
         "GlueParent AccountLogin AccountLoginUI account password screen"
     );
-    // AzerothBench's Realmlist button (`assets/ui/glue`): the stock dialog edits the address.
+    // AzerothBench's Server field (`assets/ui/glue/ServerField.xml`): it shows the address,
+    // and leaving it after an edit asks the host to keep the new one.
     script.set_glue_realmlist("127.0.0.1", false);
-    script.run("AccountLoginRealmlistButton:Click()").unwrap();
-    assert_eq!(
+    script.fire_event("BENILLA_REALMLIST_CHANGED", vec![]);
+    let field = |script: &UiScript| {
         script
             .eval::<String>(
-                "return tostring(AccountLoginRealmlistButton:IsVisible())..' '..GlueDialog.which..' '..\
-                 GlueDialogEditBox:GetText()"
+                "return tostring(AccountLoginServerEdit:IsVisible())..' '..\
+                 tostring(not AccountLoginServerEdit.pinned)..' '..\
+                 AccountLoginServerEdit:GetText()..' '..AccountLoginServerEditLabel:GetText()",
             )
-            .unwrap(),
-        "1 BENILLA_REALMLIST 127.0.0.1"
-    );
+            .unwrap()
+    };
+    assert_eq!(field(&script), "1 true 127.0.0.1 Server");
     script
-        .run("GlueDialogEditBox:SetText('10.0.0.5:3724') GlueDialog_OnClick(1)")
+        .run(
+            "AccountLoginServerEdit:SetFocus() AccountLoginServerEdit:SetText('10.0.0.5:3724') \
+             AccountLoginServerEdit:ClearFocus()",
+        )
         .unwrap();
     assert_eq!(
         script.take_glue_requests(),
         vec![GlueRequest::SetRealmlist("10.0.0.5:3724".into())]
     );
+    // The host keeps it and says so; a launch pin shows, disabled.
+    script.set_glue_realmlist("10.0.0.5:3724", false);
+    script.fire_event("BENILLA_REALMLIST_CHANGED", vec![]);
+    assert_eq!(field(&script), "1 true 10.0.0.5:3724 Server");
+    script.set_glue_realmlist("vps.example:3724", true);
+    script.fire_event("BENILLA_REALMLIST_CHANGED", vec![]);
+    assert_eq!(
+        field(&script),
+        "1 false vps.example:3724 Server (set by the launch)"
+    );
     script
         .run(
-            "AccountLoginAccountEdit:SetText('Bob') AccountLoginPasswordEdit:SetText('hunter2') \
-             AccountLogin_Login()",
+            "AccountLoginServerEdit:SetFocus() AccountLoginServerEdit:SetText('x') \
+             AccountLoginServerEdit:ClearFocus()",
         )
         .unwrap();
+    assert!(
+        script.take_glue_requests().is_empty(),
+        "a pinned field sends nothing"
+    );
+    assert!(
+        script.errors().is_empty(),
+        "script errors: {:?}",
+        script.errors()
+    );
+    script.set_glue_realmlist("127.0.0.1", false);
+    script.fire_event("BENILLA_REALMLIST_CHANGED", vec![]);
+    // `--fill-only`: the launch's credentials wait in the boxes; nothing submits until Login.
+    script.fill_login("Bob", "hunter2").unwrap();
+    assert_eq!(
+        script
+            .eval::<(String, String)>(
+                "return AccountLoginAccountEdit:GetText(), AccountLoginPasswordEdit:GetText()"
+            )
+            .unwrap(),
+        ("Bob".to_string(), "hunter2".to_string())
+    );
+    assert!(
+        script.take_glue_requests().is_empty(),
+        "a fill does not log in"
+    );
+    script.run("AccountLogin_Login()").unwrap();
     assert_eq!(
         script.take_glue_requests(),
         vec![
