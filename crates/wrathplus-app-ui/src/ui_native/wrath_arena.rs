@@ -9,16 +9,21 @@
 //! - An opponent leaving visibility, the update's out-of-range block, fires `"unseen"` (`0x4d7230`
 //!   → `0x54abf0`); `SMSG_ARENA_UNIT_DESTROYED` (0x4C7), which AzerothCore sends ahead of every
 //!   arena destroy (`Object::DestroyForPlayer`), fires `"destroyed"` (`0x54b5e0` → `0x54ad10`).
+//! - A hostile pet created inside an arena (`UNIT_FIELD_PETNUMBER` set, reaction under neutral,
+//!   `0x7251c0 < 2`) takes a pet slot for its owner, `UNIT_FIELD_CHARMEDBY` else
+//!   `UNIT_FIELD_CREATEDBY` (the unit's post-create `0x73fcc0` → `0x54d1c0`,
+//!   [`ArenaOpponents::assign_pet`]), and `arenapetN` fires `"seen"` (`0x54b920`). Its leaving and
+//!   its 0x4C7 are the opponents' (`0x54abf0`, `0x54ad10`, which also frees the pet slot).
 //! - Leaving the battleground clears every slot and fires `"cleared"` for all ten tokens
 //!   (`0x54ca50`).
 //!
-//! An unseen opponent keeps its slot and its last snapshot, which no longer exists: the reference
+//! An unseen unit keeps its slot and its last snapshot, which no longer exists: the reference
 //! answers `UnitClass` from the slot's cache while `UnitExists` is false (`Blizzard_ArenaUI.lua:133`).
 //!
-//! Unresolved, labelled: the pet slots' filler (`0x54d1c0`, reached from `0x73fcc0`/`0x7402b0`) is
-//! not traced, so `arenapetN` stays empty; the event's `"seen"` is the string at `0xa0c3d8`, read
-//! as the one kind the stock handler takes besides the three named here; a faction change on a
-//! player already created (`0x6e1d70`) does not assign.
+//! Unresolved, labelled: the event's `"seen"` is the string at `0xa0c3d8`, read as the one kind the
+//! stock handler takes besides the three named here; a change after creation does not assign
+//! (`0x6e1d70`, and `0x7402b0` for pets); the party-member-stats path into both fillers
+//! (`0x6cf9b0`) needs a leading flag AzerothCore always writes 0 (`GroupHandler.cpp:1016`).
 
 use bevy::prelude::*;
 use wrathplus_protocol::types::{Field, ObjectType};
@@ -53,7 +58,14 @@ pub fn register(app: &mut App) {
 #[derive(Resource, Default)]
 pub struct ArenaFeed {
     in_arena: bool,
-    /// The opponent was streamed when last looked at, so its leaving reads as `"unseen"` once.
+    opponents: Slots,
+    pets: Slots,
+}
+
+/// One kind's five slots as the feed last saw them.
+#[derive(Default)]
+struct Slots {
+    /// The unit was streamed when last looked at, so its leaving reads as `"unseen"` once.
     streamed: [bool; 5],
     /// The slot's last snapshot, the reference's info cache (`0xbe8f90`).
     cache: [Option<UnitState>; 5],
@@ -82,6 +94,9 @@ fn event(token: String, kind: &str) -> (String, String) {
     (token, kind.to_string())
 }
 
+/// The memo of what each token last had pushed, opponents then pets.
+type Pushed = [[Option<UnitState>; 5]; 2];
+
 #[allow(clippy::too_many_arguments)]
 fn feed_arena(
     script: Option<NonSendMut<UiScript>>,
@@ -91,7 +106,7 @@ fn feed_arena(
     created: Created,
     rest: Option<ResMut<NativeBattlegroundRest>>,
     inputs: SnapshotInputs,
-    mut memo: Local<VmMemo<[Option<UnitState>; 5]>>,
+    mut memo: Local<VmMemo<Pushed>>,
 ) {
     let Some(mut script) = script else {
         return;
@@ -112,43 +127,6 @@ fn feed_arena(
     }
     feed.in_arena = in_arena;
 
-    if in_arena {
-        // `0x6e8280`: a created player of the other arena faction.
-        for (store, guid) in &created {
-            if store.0.object_type() != Some(ObjectType::Player) {
-                continue;
-            }
-            let faction = store
-                .0
-                .get(Field::PlayerBytes3)
-                .map_or(0, |b| (b >> 24) as u8);
-            if faction == ours {
-                continue;
-            }
-            if let Some((slot, fresh)) = table.assign(guid.0) {
-                if fresh {
-                    feed.cache[slot] = None;
-                }
-                feed.streamed[slot] = true;
-                events.push(event(format!("arena{}", slot + 1), "seen"));
-            }
-        }
-    }
-
-    // `0x54b5e0`: consumed everywhere, acted on only in an arena.
-    if let Some(mut rest) = rest {
-        rest.0.retain(|packet| {
-            let Packet::ArenaUnitDestroyed { guid } = *packet else {
-                return true;
-            };
-            if let Some(slot) = table.slot_of(guid).filter(|_| in_arena) {
-                feed.streamed[slot] = false;
-                events.push(event(format!("arena{}", slot + 1), "destroyed"));
-            }
-            false
-        });
-    }
-
     let lookup = crate::target::GuidStores {
         index: inputs.index.as_deref(),
         stores: &inputs.stores,
@@ -164,40 +142,118 @@ fn feed_arena(
         types: inputs.tables.types(&inputs.names),
         relations: crate::target::RelationContext::new(Some(&inputs.names), &lookup),
     };
+
+    if in_arena {
+        for (store, guid) in &created {
+            let fields = &store.0;
+            match fields.object_type() {
+                // `0x6e8280`: a player of the other arena faction.
+                Some(ObjectType::Player) => {
+                    let faction = fields
+                        .get(Field::PlayerBytes3)
+                        .map_or(0, |b| (b >> 24) as u8);
+                    if faction == ours {
+                        continue;
+                    }
+                    if let Some((slot, fresh)) = table.assign(guid.0) {
+                        if fresh {
+                            feed.opponents.cache[slot] = None;
+                        }
+                        feed.opponents.streamed[slot] = true;
+                        events.push(event(format!("arena{}", slot + 1), "seen"));
+                    }
+                }
+                // `0x73fcc0`: a hostile pet (`UnitReaction` 1 or 2 is `0x7251c0`'s 0 or 1).
+                Some(ObjectType::Unit) if fields.unit_pet_number() != 0 => {
+                    if !(1..=2).contains(&held.state(store, guid.0).reaction) {
+                        continue;
+                    }
+                    let owner = fields
+                        .unit_charmed_by()
+                        .filter(|&g| g != 0)
+                        .or_else(|| fields.unit_created_by())
+                        .unwrap_or(0);
+                    let before = table.pets;
+                    if let Some(slot) = table.assign_pet(guid.0, owner) {
+                        if before[slot] != guid.0 {
+                            feed.pets.cache[slot] = None;
+                        }
+                        feed.pets.streamed[slot] = true;
+                        events.push(event(format!("arenapet{}", slot + 1), "seen"));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // `0x54b5e0`: consumed everywhere, acted on only in an arena; a pet's slot is freed.
+    if let Some(mut rest) = rest {
+        rest.0.retain(|packet| {
+            let Packet::ArenaUnitDestroyed { guid } = *packet else {
+                return true;
+            };
+            if !in_arena {
+                return false;
+            }
+            if let Some(slot) = table.slot_of(guid) {
+                feed.opponents.streamed[slot] = false;
+                events.push(event(format!("arena{}", slot + 1), "destroyed"));
+            } else if let Some(slot) = table.pet_slot_of(guid) {
+                table.pets[slot] = 0;
+                table.pet_owners[slot] = 0;
+                feed.pets.streamed[slot] = false;
+                feed.pets.cache[slot] = None;
+                events.push(event(format!("arenapet{}", slot + 1), "destroyed"));
+            }
+            false
+        });
+    }
+
+    let feed = &mut *feed;
     let store_of = |guid: u64| {
         let entity = *inputs.index.as_deref()?.0.get(&guid)?;
         inputs.stores.get(entity).ok()
     };
-    for slot in 0..5 {
-        let guid = table.arena[slot];
-        if guid == 0 {
-            feed.cache[slot] = None;
-            continue;
-        }
-        match store_of(guid) {
-            Some(store) => {
-                feed.streamed[slot] = true;
-                feed.cache[slot] = Some(held.state(store, guid));
+    for (prefix, guids, slots) in [
+        ("arena", table.arena, &mut feed.opponents),
+        ("arenapet", table.pets, &mut feed.pets),
+    ] {
+        for (slot, guid) in guids.into_iter().enumerate() {
+            if guid == 0 {
+                slots.cache[slot] = None;
+                continue;
             }
-            None => {
-                // `0x4d7230`: gone without a destroy first, so out of range.
-                if std::mem::take(&mut feed.streamed[slot]) {
-                    events.push(event(format!("arena{}", slot + 1), "unseen"));
+            match store_of(guid) {
+                Some(store) => {
+                    slots.streamed[slot] = true;
+                    slots.cache[slot] = Some(held.state(store, guid));
                 }
-                if let Some(cached) = feed.cache[slot].as_mut() {
-                    cached.exists = false;
-                    cached.has_object = false;
+                None => {
+                    // `0x4d7230`: gone without a destroy first, so out of range.
+                    if std::mem::take(&mut slots.streamed[slot]) {
+                        events.push(event(format!("{prefix}{}", slot + 1), "unseen"));
+                    }
+                    if let Some(cached) = slots.cache[slot].as_mut() {
+                        cached.exists = false;
+                        cached.has_object = false;
+                    }
                 }
             }
         }
     }
 
     script.set_arena_units(table.arena, table.pets);
-    let pushed = memo.get(&script);
-    for (slot, (pushed, cached)) in pushed.iter_mut().zip(&feed.cache).enumerate() {
-        if pushed != cached {
-            script.set_unit(&format!("arena{}", slot + 1), cached.clone());
-            pushed.clone_from(cached);
+    let [opponents, pets] = memo.get(&script);
+    for (prefix, pushed, slots) in [
+        ("arena", opponents, &feed.opponents),
+        ("arenapet", pets, &feed.pets),
+    ] {
+        for (slot, (pushed, cached)) in pushed.iter_mut().zip(&slots.cache).enumerate() {
+            if pushed != cached {
+                script.set_unit(&format!("{prefix}{}", slot + 1), cached.clone());
+                pushed.clone_from(cached);
+            }
         }
     }
     for (unit, kind) in events {
