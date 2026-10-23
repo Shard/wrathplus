@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
@@ -10,6 +11,31 @@ pub(crate) struct LooseEntry {
     pub name: String,
     pub path: PathBuf,
     pub size: u64,
+    /// A built-in pack's file: the pack's name and the bytes, with no file on disk.
+    pub builtin: Option<(&'static str, Arc<[u8]>)>,
+}
+
+/// A pack compiled into the client: named files served from memory, mounted below every loose
+/// pack and in every profile ([`AssetOverrides::with_builtin_pack`]).
+#[derive(Clone, Debug)]
+pub struct BuiltinPack {
+    name: &'static str,
+    files: Vec<(String, Arc<[u8]>)>,
+}
+
+impl BuiltinPack {
+    pub fn new(name: &'static str) -> Self {
+        Self {
+            name,
+            files: Vec::new(),
+        }
+    }
+
+    /// Add a file at an archive path (`/` or `\`, any case).
+    pub fn with_file(mut self, path: &str, bytes: Arc<[u8]>) -> Self {
+        self.files.push((path.replace('\\', "/"), bytes));
+        self
+    }
 }
 
 /// Ordered loose roots mirroring MPQ paths; later roots win. Snapshot names at boot, read bytes
@@ -47,6 +73,23 @@ impl AssetOverrides {
         self.entries.is_empty()
     }
 
+    /// Mount `pack` below every loose pack: it serves its files ahead of the archives whatever
+    /// the profile or pack settings, and an enabled pack's file of the same path still wins.
+    pub fn with_builtin_pack(mut self, pack: BuiltinPack) -> Self {
+        for (name, bytes) in pack.files {
+            let Some(normalized) = key(&name) else {
+                continue;
+            };
+            self.entries.entry(normalized).or_insert(LooseEntry {
+                path: PathBuf::new(),
+                size: bytes.len() as u64,
+                builtin: Some((pack.name, bytes)),
+                name,
+            });
+        }
+        self
+    }
+
     pub(crate) fn resolve(&self, name: &str) -> Option<&LooseEntry> {
         self.entries.get(&key(name)?)
     }
@@ -80,6 +123,7 @@ fn collect(root: &Path, dir: &Path, out: &mut BTreeMap<String, LooseEntry>) -> R
                 name,
                 path,
                 size: metadata.len(),
+                builtin: None,
             };
             if out.insert(normalized, value).is_some() {
                 bail!("ambiguous case-folded names in pack {}", root.display());

@@ -14,7 +14,7 @@ mod overrides;
 mod wrath_layouts;
 #[cfg(test)]
 mod wrath_layouts_installed_tests;
-pub use overrides::AssetOverrides;
+pub use overrides::{AssetOverrides, BuiltinPack};
 mod chain;
 pub use chain::{Chain, ChainEntry};
 mod profile;
