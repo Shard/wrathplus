@@ -4,12 +4,12 @@
 //! module lights, poses, seats and yaws them, and the bake lands in [`super::PortraitImages`] under
 //! [`GLUE_SLOT`].
 
-use wrathplus_assets::M2Model;
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::PerspectiveProjection;
 use bevy::prelude::*;
 use bevy::render::render_resource::Extent3d;
 use bevy::window::PrimaryWindow;
+use wrathplus_assets::M2Model;
 
 use super::glue_stage::{glue_stage, glue_stage_model_path};
 use crate::entities::Creatures;
@@ -551,31 +551,22 @@ pub(super) fn spawn_glue_booth(
     });
 }
 
-/// Drive the glue FFX state ([`wrathplus_world::ffx_glow::GlueFfx`]) off the live look: the pass
-/// installed and the pinned `LightParams.glow`.
-///
-/// | look | reference | pass | glow |
-/// |---|---|---|---|
-/// | none (login, empty account) | `CSimpleModelFFX::OnShow 0x46fa60` | glow | `*0x8380b4` 0.30 |
-/// | a create look | same, no select build runs | glow | 0.30 |
-/// | a living select record | `0x472ff7`/`0x473002` | glow | `*0x838574` 0.40 |
-/// | a ghost select record | `0x472fde`/`0x472fe9` | death | `*0x838570` 0.15 |
-///
-/// An empty account is the OnShow state: `0x472950` is gated `-1 ≤ [0x83856c] < [0xb42140]`.
+/// Drive the glue FFX state ([`wrathplus_world::ffx_glow::GlueFfx`]) off the live scene: the glow
+/// pass at the stock GlueXML's glow for the shown stage (the login screen's `glow="0.08"`, else
+/// `SetLighting`'s per-stage `SetGlow`), or the death pass for a ghost selection.
 pub(super) fn sync_glue_ffx(
     preview: Res<GluePreview>,
     mut ffx: ResMut<wrathplus_world::ffx_glow::GlueFfx>,
 ) {
-    use wrathplus_world::ffx_glow::GlueFfx;
-    let want = match preview.look {
-        Some(GlueLook::Select(l)) => {
-            if l.flags & wrathplus_protocol::CHARACTER_FLAG_GHOST != 0 {
-                GlueFfx::SelectGhost
-            } else {
-                GlueFfx::SelectLiving
-            }
+    use wrathplus_world::ffx_glow::{scene_glow_milli, GlueFfx, LOGIN_GLOW_MILLI};
+    let want = match (preview.look, preview.scene) {
+        (Some(GlueLook::Select(l)), _)
+            if l.flags & wrathplus_protocol::CHARACTER_FLAG_GHOST != 0 =>
+        {
+            GlueFfx::SelectGhost
         }
-        Some(GlueLook::Create(_)) | None => GlueFfx::Shown,
+        (_, None | Some(GlueScene::MainMenu)) => GlueFfx::Glow(LOGIN_GLOW_MILLI),
+        (_, Some(scene)) => GlueFfx::Glow(scene_glow_milli(scene_token(scene))),
     };
     if *ffx != want {
         *ffx = want;
@@ -1550,6 +1541,10 @@ pub(super) fn drive_create_test(
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "glue_booth_installed_tests.rs"]
+mod installed_tests;
 
 #[cfg(test)]
 mod tests {
