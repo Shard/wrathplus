@@ -22,6 +22,7 @@ pub mod cooldowns;
 pub mod group_relation;
 pub mod inflight;
 mod mods;
+mod native_control;
 pub mod native_failure;
 pub mod reagents;
 pub(crate) mod unit_cast;
@@ -122,6 +123,7 @@ impl Plugin for SpellPlugin {
             .add_systems(OnEnter(ClientState::InWorld), mods::clear_on_world_enter);
         net::register(app);
         native_failure::register(app);
+        native_control::register(app);
         unit_cast::register(app);
     }
 }

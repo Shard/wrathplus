@@ -14,8 +14,11 @@ map, area, floor, two raw words and points; counts bounded by the body) merges i
 logged quests' POIs, in log order, go to `set_wrath_quest_pois` whole, and `QUEST_POI_UPDATE`
 (event `0x297`) fires, which WorldMapFrame and WatchFrame redraw on. Labelled: the event fires
 once per response. Its native fire site is untraced: the only quest-module `push 0x297` is at
-`0x5e7628`, unverified against the 01E4 handler that `0x54cd1d` registers. 0501 completed-quests reply keeps its existing
-capture (`wrath_quests_completed_capture`); its row was stale.
+`0x5e7628`, unverified against the 01E4 handler that `0x54cd1d` registers.
+
+The 0501 completed-quests reply is handled, not capture-only: the net FIFO
+(`wrath_quests_completed_capture`) feeds `ui_native::wrath_quests_completed_capture`, which replaces
+`GetQuestsCompleted`'s list and fires `QUEST_QUERY_COMPLETE` (`0x5b5190`). Its row said otherwise.
 
 **Special items.** `A/ui_quest_log.rs` `feed_quest_special_items` publishes each logged quest's
 usable item to `set_wrath_quest_special_items` as the Lua `(bag, slot)` of its first copy in the

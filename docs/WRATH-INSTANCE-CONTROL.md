@@ -19,6 +19,11 @@ Raw flags/reasons/unknown fields and duplicate receipts are preserved. Encounter
 packed GUIDs are decoded losslessly as GUID values; raw parameter bytes remain raw.
 Strict framing validates AC emitted shapes (including welcome kind 4's two flags).
 
+**Since then (2026-10-23 audit):** `ui_instance::take_native` consumes 0147 lock warning and 02FA
+raid instance message among others; their coverage rows say handled. The difficulty replies 0329
+and 04EB still end in the FIFO, so `GetDungeonDifficulty`/`GetRaidDifficulty` read only the group
+list's loot block.
+
 Outbound typed commands: 013F lock response (u8), 0292 saved-instance extension
 (u32 map/u32 difficulty/u8), 031D reset (empty), 0329/04EB difficulty (u32 mode).
 Routes require the ordinary live epoch-bound writer; they do not assert leadership,

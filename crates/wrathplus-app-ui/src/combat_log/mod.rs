@@ -6,24 +6,26 @@
 //! The completed swing and the environmental-damage log also drive animation; those handlers
 //! ([`crate::creature_anim::net`]) register after these, so the line runs before the animation.
 
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
+use crate::app_core::chat::ChatLog;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfGuid;
+use crate::app_core::state::CombatTextEvent;
 use crate::combat_text::{CombatTextSpawn, DamageTextGates};
 use crate::names::NameCache;
 use crate::net::{GuidIndex, NetCommands, NetHandlerApp, ServerSoundMessage};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfGuid;
 use crate::ui_chat::combat::LogPeriodicSpells;
 use crate::ui_chat::feed::ChatLogFeed;
-use crate::app_core::chat::ChatLog;
 use crate::ui_unit::UnitCombatFeedback;
-use crate::app_core::state::CombatTextEvent;
 
 pub(crate) mod chat;
 pub(crate) mod native;
 pub(crate) mod native_flags;
+#[cfg(test)]
+mod pvp_credit_tests;
 pub(crate) mod text;
 
 /// The floating-text leg's read-only inputs.
@@ -50,6 +52,9 @@ pub(crate) struct Sinks<'w, 's> {
     center: MessageWriter<'w, CombatTextEvent>,
     /// The build-12340 entries for `COMBAT_LOG_EVENT` ([`native`]); `Option` for harnesses.
     native: Option<ResMut<'w, native::NativeCombatLog>>,
+    /// The honor line's victim lookup and its `FactionTemplate` side; `Option` for harnesses.
+    index: Option<Res<'w, GuidIndex>>,
+    factions: Option<Res<'w, crate::app_core::state::Factions>>,
 }
 
 impl Sinks<'_, '_> {
@@ -323,20 +328,45 @@ fn on_level_up(In(ev): In<SessionEvent>, mut l: Sinks) {
     }
 }
 
-/// An honor award: the combat-log line (name-resolved, so it queues) and the `HONOR_GAINED`
-/// number. A dishonorable kill carries negative honor, passed signed: the stock handler prefixes
-/// "+" only to a positive number (`Blizzard_CombatText.lua:234`).
+/// An honor payout as build 12340 takes it (`0x50b6d0`): the combat-log line (name-resolved, so
+/// it queues) and the `HONOR_GAINED` number (`0x74d4f0`, type `0x2b`). An award (no victim)
+/// always reports. A kill reports only for a streamed victim and at least 1 honor, so a
+/// dishonorable kill is silent. A signed rank below 0 takes the unranked form; otherwise the title's
+/// side is the victim's `FactionTemplate` group (Horde 0, Alliance 1, neither none). Unresolved:
+/// the ranked path's call to `0x7155d0` (rank, honor, title).
 fn on_pvp_credit(In(ev): In<SessionEvent>, mut l: Sinks) {
-    if let SessionEvent::PvpCredit(credit) = ev {
-        l.log.push_pvp_credit(
-            credit.honor,
-            credit.victim_guid,
-            u8::try_from(credit.victim_rank).unwrap_or(0),
-        );
-        l.center.write(CombatTextEvent {
-            message_type: "HONOR_GAINED",
-            data: Some(credit.honor.to_string()),
-            extra: None,
-        });
+    let SessionEvent::PvpCredit(credit) = ev else {
+        return;
+    };
+    let mut rank = None;
+    if credit.victim_guid != 0 {
+        let victim = l
+            .index
+            .as_ref()
+            .and_then(|i| i.0.get(&credit.victim_guid).copied());
+        let Some(store) = victim.and_then(|e| l.stores.get(e).ok()) else {
+            return;
+        };
+        if credit.honor < 1 {
+            return;
+        }
+        if credit.victim_rank >= 0 {
+            let group = store
+                .0
+                .unit_faction_template()
+                .and_then(|id| l.factions.as_ref()?.catalog().template(id))
+                .map_or(0, |t| t.group_mask);
+            let side = (group & 4 != 0)
+                .then_some(0)
+                .or((group & 2 != 0).then_some(1));
+            rank = Some((u8::try_from(credit.victim_rank).unwrap_or(u8::MAX), side));
+        }
     }
+    l.log
+        .push_pvp_credit(credit.honor, credit.victim_guid, rank);
+    l.center.write(CombatTextEvent {
+        message_type: "HONOR_GAINED",
+        data: Some(credit.honor.to_string()),
+        extra: None,
+    });
 }
