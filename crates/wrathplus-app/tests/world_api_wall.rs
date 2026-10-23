@@ -113,6 +113,8 @@ const PUBLISHED: &[(&str, &str)] = &[
     ("ffx_glow::FfxGlow", "record"),
     ("ffx_glow::FfxSwitches", "record"),
     ("ffx_glow::GlueFfx", "record"),
+    ("ffx_glow::LOGIN_GLOW_MILLI", "record"),
+    ("ffx_glow::scene_glow_milli", "record"),
     ("final_pass::FinalPassTarget", "record"),
     // A spell effect's ground decal, spawned by spell_fx.
     ("ground_fx::spawn_ground_fx_decal", "record"),
