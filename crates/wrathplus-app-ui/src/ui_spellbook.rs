@@ -474,12 +474,12 @@ fn leading_number(s: &str) -> u32 {
 /// with `onSelf` at the caster.
 pub(crate) fn cast_spell(cast: &mut crate::spell::ScriptCast, spell_id: u32, on_self: bool) {
     let crate::spell::ScriptCast { targeting, ladder } = cast;
-    // `CastSpell`'s two cancel forks (`0x4b3300`), in order: the active-action toggle
-    // (`0x4b36f0`), then the form match (`0x4b348b`), which `UseAction` lacks, with its silent
-    // no-op (`0x4b35cf`).
+    // `CastSpell`'s two cancel forks, in order: the press-again cancel (12340 `isActive`
+    // `0x802cb0`), then the form match, which `UseAction` lacks, with its silent no-op.
     if let (Some(sp), Some(store)) = (ladder.spells.as_ref(), targeting.self_store.iter().next()) {
         if let Some(d) = sp.catalog.get(spell_id) {
-            if crate::ui_action::toggle::active_action_toggle(spell_id, d, store) {
+            let auras = crate::ui_action::toggle::unit_auras(&ladder.objects, store);
+            if crate::ui_action::toggle::active_action_toggle(spell_id, d, auras) {
                 debug!("ui_spellbook: cast {spell_id} re-pressed — aura cancels");
                 let _ = ladder
                     .commands

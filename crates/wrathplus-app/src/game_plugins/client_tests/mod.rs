@@ -41,6 +41,7 @@ mod script_calls;
 mod shipped_cvars;
 mod spell_native_failure;
 mod target_ring;
+mod ui_action_toggle;
 mod ui_arena_team_tests;
 mod ui_chat_ambiguous_tests;
 mod ui_chat_feed;

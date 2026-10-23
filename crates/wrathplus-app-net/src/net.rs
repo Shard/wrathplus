@@ -644,9 +644,16 @@ pub struct Objects<'w, 's> {
     stores: Query<'w, 's, &'static ObjectStore>,
     countdowns: Query<'w, 's, &'static crate::items::Countdowns>,
     me: Query<'w, 's, Entity, With<SelfPlayer>>,
+    auras: Option<Res<'w, wrath_auras::PacketAuras>>,
 }
 
 impl Objects<'_, '_> {
+    /// A unit's packet auras (`SMSG_AURA_UPDATE`/`_ALL`), empty while none arrived.
+    pub fn auras_of(&self, guid: u64) -> &[wrath_auras::StampedAura] {
+        let auras = self.auras.as_deref().and_then(|a| a.by_guid.get(&guid));
+        auras.map_or(&[], Vec::as_slice)
+    }
+
     /// The entity behind a guid, if streamed (`ClntObjMgrObjectPtr`, `0x468460`).
     pub fn entity(&self, guid: u64) -> Option<Entity> {
         self.index.0.get(&guid).copied()
@@ -654,11 +661,7 @@ impl Objects<'_, '_> {
 
     /// A streamed object's merged descriptor fields, found as `0x468460` does, by guid.
     pub fn object(&self, guid: u64) -> Option<&ObjectFields> {
-        self.index
-            .0
-            .get(&guid)
-            .and_then(|&e| self.stores.get(e).ok())
-            .map(|s| &s.0)
+        Some(&self.stores.get(self.entity(guid)?).ok()?.0)
     }
 
     /// Every streamed object, items included.
@@ -676,10 +679,7 @@ impl Objects<'_, '_> {
 
     /// An item object's countdown cells.
     pub fn countdowns(&self, guid: u64) -> Option<&crate::items::Countdowns> {
-        self.index
-            .0
-            .get(&guid)
-            .and_then(|&e| self.countdowns.get(e).ok())
+        self.countdowns.get(self.entity(guid)?).ok()
     }
 }
 

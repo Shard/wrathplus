@@ -21,14 +21,14 @@ use wrathplus_formats::SpellDisplay;
 use wrathplus_protocol::types::PetActionEntry;
 use wrathplus_ui::script::{PetBookState, SpellSlotView, UiScript};
 
-use crate::net::{ClientCommand, GuidIndex, NetCommands};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::app_core::state::Spells;
-use crate::ui_pet::PetUnit;
-use crate::app_core::state::PetBar;
 use crate::app_core::schedule::UiInput;
 use crate::app_core::schedule::UnitFeed;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::PetBar;
+use crate::app_core::state::Spells;
+use crate::net::{ClientCommand, GuidIndex, NetCommands};
+use crate::ui_pet::PetUnit;
 
 pub struct UiPetBookPlugin;
 
@@ -66,6 +66,7 @@ pub fn feed_pet_book(
     index: Res<GuidIndex>,
     stores: Query<&ObjectStore>,
     clock: Res<crate::app_core::ui_flags::UiClock>,
+    auras: Option<Res<crate::net::wrath_auras::PacketAuras>>,
     mut memory: Local<crate::app_core::vm_memo::VmMemo<FeedMemory>>,
 ) {
     let Some(mut script) = script else {
@@ -79,6 +80,10 @@ pub fn feed_pet_book(
     let now = Instant::now();
     let (anchor, ui_now) = (clock.anchor, clock.ui_now);
     let pet_store = index.0.get(&bar.guid()).and_then(|&e| stores.get(e).ok());
+    let pet_auras = pet_store.map(|_| {
+        let snapshot = auras.as_deref().and_then(|a| a.by_guid.get(&bar.guid()));
+        snapshot.map_or(&[][..], Vec::as_slice)
+    });
 
     let mut fresh = PetBookState {
         // `HasPetSpells`'s token is the player's class, not the pet's (`0x4b4463` reads
@@ -106,8 +111,8 @@ pub fn feed_pet_book(
                     rank: d.rank.clone(),
                     texture: d.icon.clone(),
                     passive: d.passive,
-                    current: pet_store.is_some_and(|s| {
-                        crate::ui_action::toggle::active_action_toggle(entry.id(), d, s)
+                    current: pet_auras.is_some_and(|a| {
+                        crate::ui_action::toggle::active_action_toggle(entry.id(), d, a)
                     }),
                     cooldown: bar
                         .cooldowns
@@ -129,7 +134,7 @@ pub fn feed_pet_book(
                 }
                 fresh
                     .slots
-                    .push(slot_view(entry, d, &bar, pet_store, now, anchor, ui_now));
+                    .push(slot_view(entry, d, &bar, pet_auras, now, anchor, ui_now));
             }
         }
         // `0x4b2fd0`'s re-sort, with the player book's own comparator.
@@ -170,7 +175,7 @@ fn slot_view(
     entry: PetActionEntry,
     d: &SpellDisplay,
     bar: &PetBar,
-    pet_store: Option<&ObjectStore>,
+    pet_auras: Option<&[crate::net::wrath_auras::StampedAura]>,
     now: Instant,
     anchor: Instant,
     ui_now: f64,
@@ -184,8 +189,8 @@ fn slot_view(
         passive: d.passive,
         // `IsCurrentCast`'s pet arm (`0x4b36f0`, and its delegate `0x4b3600`): lit while the
         // spell's aura is on the pet (`[pet.fields + 0xa4]`), the bar's own predicate.
-        current: pet_store
-            .is_some_and(|s| crate::ui_action::toggle::active_action_toggle(spell_id, d, s)),
+        current: pet_auras
+            .is_some_and(|a| crate::ui_action::toggle::active_action_toggle(spell_id, d, a)),
         // The pet's own cooldown store, the one `GetPetActionCooldown` reads.
         cooldown: bar
             .cooldowns
@@ -210,8 +215,8 @@ pub(crate) fn cast_pet_spell(p: &mut crate::ui_pet::PetPress, spell_id: u32, on_
     }
     let target_guid = p.spell_target(on_self);
     let display = p.spells.as_ref().and_then(|s| s.catalog.get(spell_id));
-    if let (Some(d), Some(store)) = (display, p.pet.store(pet_guid)) {
-        if crate::ui_action::toggle::active_action_toggle(spell_id, d, store) {
+    if let (Some(d), Some(_)) = (display, p.pet.store(pet_guid)) {
+        if crate::ui_action::toggle::active_action_toggle(spell_id, d, p.pet.auras_of(pet_guid)) {
             debug!("ui_pet_book: cast {spell_id} cancels the pet's own aura");
             let _ = p
                 .commands
@@ -332,7 +337,9 @@ fn flip_autocast(spells: &mut wrathplus_protocol::types::PetSpells, spell_id: u3
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_protocol::types::{PetSpells, PET_ACT_DISABLED, PET_ACT_ENABLED, PET_ACT_PASSIVE};
+    use wrathplus_protocol::types::{
+        PetSpells, PET_ACT_DISABLED, PET_ACT_ENABLED, PET_ACT_PASSIVE,
+    };
 
     #[test]
     fn native_book_cast_and_toggle_preserve_full_ids_and_raw_words() {

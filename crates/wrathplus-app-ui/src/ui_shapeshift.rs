@@ -20,17 +20,17 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{ShapeshiftFormView, UiScript};
 
+use crate::app_core::cooldowns::Cooldowns;
+use crate::app_core::schedule::UnitFeed;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::PlayerActions;
+use crate::app_core::state::Selection;
+use crate::app_core::state::Spells;
 use crate::items::Items;
 use crate::net::wrath_auras::{PacketAuras, StampedAura};
 use crate::net::{ClientCommand, Guid, NetCommands, Objects, Reputations};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::app_core::cooldowns::Cooldowns;
 use crate::spell::{usable, CastCommit};
-use crate::app_core::state::Selection;
-use crate::app_core::state::PlayerActions;
-use crate::app_core::state::Spells;
-use crate::app_core::schedule::UnitFeed;
 
 /// Keeps a spell off the stance bar; Ghost Wolf 2645 carries it, so a shaman has no bar.
 const ATTR_EX2_STANCE_BAR_EXCLUDE: u32 = 0x2;
@@ -39,14 +39,11 @@ const ATTR_EX2_STANCE_BAR_EXCLUDE: u32 = 0x2;
 /// Ironweave Battlesuit 27733.
 const ATTR_EX2_STANCE_BAR_FORCE: u32 = 0x10;
 
-/// The packet aura flag `0x802cb0` tests (`0x802e45`): `AFLAG_POSITIVE`.
-const AFLAG_POSITIVE: u8 = 0x10;
-
 /// `isActive`: 12340's `0x802cb0`, as `GetShapeshiftFormInfo` (`0x53de90`) calls it, forked on the
 /// form id (the first `MOD_SHAPESHIFT` misc value, else 0). A form spell matches the form byte (the
-/// spell-side arm, kept from 1.12's `4b46a0`). Any other stance-bar spell is active while the
-/// player carries its aura with [`AFLAG_POSITIVE`] (the aura loop, `0x802db0`-`0x802e49`), with no
-/// `ActiveIconID` or cancelable gate; a paladin aura lights this way.
+/// spell-side arm, kept from 1.12's `4b46a0`). Any other stance-bar spell takes the press-again
+/// predicate ([`crate::ui_action::toggle::active_action_toggle`]): a nonzero `ActiveIconID` and its
+/// positive aura on the player; a paladin aura lights this way.
 fn form_active(
     spell_id: u32,
     d: &wrathplus_formats::SpellDisplay,
@@ -54,9 +51,7 @@ fn form_active(
     auras: &[StampedAura],
 ) -> bool {
     match d.shapeshift_form.unwrap_or(0) {
-        0 => auras
-            .iter()
-            .any(|a| a.aura.spell_id == spell_id && a.aura.flags & AFLAG_POSITIVE != 0),
+        0 => crate::ui_action::toggle::active_action_toggle(spell_id, d, auras),
         form => form == u32::from(form_byte),
     }
 }
@@ -324,10 +319,10 @@ fn feed_shapeshift_bar(
     }
 }
 
-/// `CastShapeshiftForm` (`0x4b4810`), forked on the form id like the info call: the active form
-/// cancels unless `SpellShapeshiftForm.dbc` `flags1 & 0x2` makes it a silent no-op (`0x4b4963`,
-/// warrior stances); a force-admitted spell whose aura is up cancels, with no DBC guard since it
-/// has no form id. Anything else casts.
+/// `CastShapeshiftForm` (12340 `0x53c0f0`, into the cast entry `0x80da80`), forked on the form id
+/// like the info call: the active form cancels unless `SpellShapeshiftForm.dbc` `flags1 & 0x2`
+/// makes it a silent no-op (`0x4b4963`, warrior stances); a force-admitted spell that is lit (its
+/// aura up) cancels, with no DBC guard since it has no form id. Anything else casts.
 pub(crate) fn cast_form(cast: &mut crate::spell::ScriptCast, spell_id: u32) {
     let crate::spell::ScriptCast { targeting, ladder } = cast;
     let store = targeting.self_store.iter().next();
@@ -341,9 +336,10 @@ pub(crate) fn cast_form(cast: &mut crate::spell::ScriptCast, spell_id: u32) {
     // The force-admit arm uses `form_active`'s predicate, so a lit button always cancels.
     let disposition = d.and_then(|d| {
         if d.shapeshift_form.unwrap_or(0) == 0 {
-            store
-                .filter(|s| crate::ui_action::toggle::active_action_toggle(spell_id, d, s))
-                .map(|_| true)
+            let auras = store.map_or(&[][..], |s| {
+                crate::ui_action::toggle::unit_auras(&ladder.objects, s)
+            });
+            form_active(spell_id, d, form_byte, auras).then_some(true)
         } else {
             crate::ui_action::toggle::form_recast_disposition(d, form_byte, row)
         }
