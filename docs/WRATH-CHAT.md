@@ -21,7 +21,8 @@ path; the other tails match 1.12, plus 0x20/0x21 empty and 0x22/0x23 voice on/of
 one byte or none; the emote number is dropped), 01CB notification, 0219 wrong faction, 0254 zone
 under attack, 0291 server message, 02A9 player not found, 02B8 area-trigger message (length-checked),
 02D2 play sound, 02FD restricted (the restriction byte is dropped), 033D message of the day (one
-shared system line per line). **Capture-only**: 032D player ambiguous (`NativeChatNoticePackets`).
+shared system line per line), 032D player ambiguous (`ERR_CHAT_PLAYER_AMBIGUOUS_S` with the name, as
+12340's `0x32d` case shows message `0x1fa`).
 
 **Outbound** (existing producers in `ui_chat`; no server acceptance claimed): 0095 chat lines in
 this build's `ChatMsg` numbering, speaking the character's own tongue (`faction_language`, which now
