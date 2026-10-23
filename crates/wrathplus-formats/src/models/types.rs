@@ -272,7 +272,7 @@ pub struct ModelTextureStage {
     pub wrap_y: bool,
     /// The stage's coordinates: 0 UV0, 1 UV1, >2 the sphere map's lookup value.
     pub coord: u16,
-    /// Native stage combiner, before environment-coordinate bits.
+    /// Native stage combiner, before environment-coordinate bits; 8 is Combiners_Add_Mod.
     pub op: u16,
     pub first_opaque: bool,
     pub uv_anim: Option<UvAnim>,

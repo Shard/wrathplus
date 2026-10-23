@@ -382,4 +382,10 @@ fn installed_two_stage_gear_adapts() {
     assert!(stages(fist, &m)
         .iter()
         .any(|s| s.op == 4 && !s.first_opaque));
+
+    // The one installed Add-over-Mod pair: the whole Combiners_Add_Mod program, op 8.
+    let cell = "World\\EXPANSION01\\DOODADS\\TEMPESTKEEP\\PASSIVEDOODADS\\PRISONCELLGLASS\\\
+                TK_Prison_Cell_Illuminated.m2";
+    let m = adapt(cell);
+    assert!(stages(cell, &m).iter().any(|s| s.op == 8));
 }
