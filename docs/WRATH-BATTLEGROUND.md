@@ -44,8 +44,13 @@ drives build 12340's arena-opponent table (two read-only Ghidra rounds, `Battlef
   clears every slot and fires `"cleared"` for all ten tokens (`0x54ca50`);
 - `GetNumArenaOpponents` counts the slots before the first empty one (`0x549630`), and the
   `arenaN` tokens resolve and fan out after the raid rows (`0x60bb70`).
-Labelled: `arenapetN` stays empty (its filler `0x54d1c0` is reached from untraced unit code), a
-faction change after creation does not assign, and `"seen"` is read for the string at `0xa0c3d8`.
+- a third round traced the pet slots: a unit created in an arena with `UNIT_FIELD_PETNUMBER` set
+  and a reaction toward us under neutral (`0x7251c0` < 2) takes `arenapetN` for its owner,
+  `UNIT_FIELD_CHARMEDBY` else `UNIT_FIELD_CREATEDBY` (`0x73fcc0` → `0x54d1c0`: the owner's slot,
+  else its earlier pet's, else the first empty one), and fires `"seen"`; 04C7 frees the pet slot.
+Labelled: a change after creation does not assign (`0x6e1d70`, `0x7402b0`), the party-member-stats
+path into both fillers (`0x6cf9b0`) needs a flag AzerothCore always writes 0, and `"seen"` is read
+for the string at `0xa0c3d8`.
 
 **Outbound**:
 - Existing commands whose 3.3.5 bodies are unchanged now route natively: 02D7 battlemaster hello,

@@ -262,15 +262,15 @@ pub enum FogPolicy {
     Off = 4,
 }
 
-/// One render batch: self-contained geometry and its material.
 /// Resolved second stage of a native Wrath combined material. Both stages draw in one pass.
 #[derive(Clone, Debug)]
 pub struct ModelTextureStage {
     pub texture: Option<String>,
     pub skin_slot: Option<u8>,
+    pub char_slot: Option<CharSkinSlot>, // M2 type 2: the item's own texture, a helm's sheen
     pub wrap_x: bool,
     pub wrap_y: bool,
-    /// Texture-coordinate lookup value: 0 UV0, 1 UV1, >2 sphere map.
+    /// The stage's coordinates: 0 UV0, 1 UV1, >2 the sphere map's lookup value.
     pub coord: u16,
     /// Native stage combiner, before environment-coordinate bits.
     pub op: u16,

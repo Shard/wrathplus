@@ -24,7 +24,7 @@ fn press(lua: &str, active_icon: u32, aura: Option<bool>) -> Vec<ClientCommand> 
         active_icon_id: active_icon,
         ..Default::default()
     };
-    press_with(lua, display, aura, &[])
+    press_with(lua, display, aura, &[], &|_| {})
 }
 
 /// [`press`] with the spell's whole display and extra `(index, word)` pairs on our descriptor.
@@ -33,6 +33,7 @@ fn press_with(
     display: wrathplus_formats::SpellDisplay,
     aura: Option<bool>,
     fields: &[(u16, u32)],
+    prep: &dyn Fn(&mut World),
 ) -> Vec<ClientCommand> {
     let mut app = crate::game_plugins::schedule_tests::headless_client();
     let (tx, rx) = crossbeam_channel::unbounded();
@@ -83,6 +84,7 @@ fn press_with(
         castable: true,
         ..Default::default()
     }]);
+    prep(world);
     script.run(lua).expect("the script runs");
     world.insert_non_send_resource(script);
     app.world_mut()
@@ -147,9 +149,9 @@ fn re_pressing_the_mount_we_ride_cancels_its_aura() {
         ..Default::default()
     };
     let lua = r#"CastSpellByName("Devotion Aura")"#;
-    let sent = press_with(lua, mount(), Some(true), &[]);
+    let sent = press_with(lua, mount(), Some(true), &[], &|_| {});
     assert!(sent.len() == 1 && cancel(&sent[0]), "mounted: {sent:?}");
-    let sent = press_with(lua, mount(), None, &[]);
+    let sent = press_with(lua, mount(), None, &[], &|_| {});
     assert!(
         sent.len() == 1 && cast(&sent[0]),
         "on foot it mounts: {sent:?}"
@@ -170,7 +172,7 @@ fn re_pressing_our_companion_dismisses_it() {
     };
     let out = [(index, critter as u32), (index + 1, (critter >> 32) as u32)];
     let lua = r#"CastSpellByName("Devotion Aura")"#;
-    let sent = press_with(lua, summon(), None, &out);
+    let sent = press_with(lua, summon(), None, &out, &|_| {});
     assert!(
         matches!(
             sent[..],
@@ -180,13 +182,63 @@ fn re_pressing_our_companion_dismisses_it() {
         ),
         "our companion is out: {sent:?}"
     );
-    let sent = press_with(lua, summon(), None, &[]);
+    let sent = press_with(lua, summon(), None, &[], &|_| {});
     assert!(
         sent.len() == 1 && cast(&sent[0]),
         "none out: it summons: {sent:?}"
     );
     // Charmed, `0x802f80` sends nothing, and the lit spell is still not cast.
     let charmed = Field::UnitCharmedby.span().unwrap().index;
-    let sent = press_with(lua, summon(), None, &[out[0], out[1], (charmed, 0x99)]);
+    let sent = press_with(
+        lua,
+        summon(),
+        None,
+        &[out[0], out[1], (charmed, 0x99)],
+        &|_| {},
+    );
     assert!(sent.is_empty(), "charmed: {sent:?}");
+}
+
+/// The `secureAbilityToggle` guard (`0x80daec`): a lit aura re-pressed within 1500 ms of its own
+/// cast request is held, nothing sent and nothing cast; past the window, or with the CVar off, it
+/// cancels.
+#[test]
+fn the_secure_toggle_holds_a_double_press_for_1500_ms() {
+    use crate::spell::secure_toggle::RecentCastRequests;
+    use std::time::{Duration, Instant};
+    let display = || wrathplus_formats::SpellDisplay {
+        active_icon_id: 122,
+        ..Default::default()
+    };
+    let requested = |ago_ms: u64, cvar_off: bool| {
+        move |world: &mut World| {
+            let at = Instant::now() - Duration::from_millis(ago_ms);
+            world
+                .resource_mut::<RecentCastRequests>()
+                .record(DEVOTION, at);
+            if cvar_off {
+                world.trigger(crate::cvars::CvarChanged {
+                    name: "secureAbilityToggle".into(),
+                    old: "1".into(),
+                    new: "0".into(),
+                });
+            }
+        }
+    };
+    let lua = r#"CastSpellByName("Devotion Aura")"#;
+    let sent = press_with(lua, display(), Some(true), &[], &requested(200, false));
+    assert!(
+        sent.is_empty(),
+        "a double press inside the window: {sent:?}"
+    );
+    let sent = press_with(lua, display(), Some(true), &[], &requested(1600, false));
+    assert!(
+        sent.len() == 1 && cancel(&sent[0]),
+        "past the window: {sent:?}"
+    );
+    let sent = press_with(lua, display(), Some(true), &[], &requested(0, true));
+    assert!(
+        sent.len() == 1 && cancel(&sent[0]),
+        "the CVar off: {sent:?}"
+    );
 }
