@@ -222,3 +222,48 @@ fn the_stock_account_login_opens_and_submits_on_the_installed_data() {
     let errors = script.take_errors();
     assert!(errors.is_empty(), "{errors:#?}");
 }
+
+/// Character select takes down the login's connect status: Shannon's 10-24 session kept
+/// "Handshaking" up over the character list, the realm list (which closes it) never opening for a
+/// remembered realm.
+#[test]
+fn character_select_closes_the_connect_status_dialog() {
+    let _data = wrathplus_formats::wow_data_or_skip!();
+    let mut script = UiScript::new().unwrap();
+    script.install_glue_api().unwrap();
+    script.set_screen_size(1600.0, 1000.0);
+    let failures = load_glue_ui(&script);
+    assert!(failures.is_empty(), "{failures:#?}");
+    script.fire_event("FRAMES_LOADED", vec![]);
+    script.fire_event("SET_GLUE_SCREEN", vec![ScriptValue::Str("login".into())]);
+    script.fire_event(
+        "OPEN_STATUS_DIALOG",
+        vec![
+            ScriptValue::Str("CANCEL".into()),
+            ScriptValue::Str("Connecting".into()),
+        ],
+    );
+    script.fire_event(
+        "UPDATE_STATUS_DIALOG",
+        vec![ScriptValue::Str("Handshaking".into())],
+    );
+    let dialog = |script: &UiScript| {
+        script
+            .eval::<(bool, String)>("return GlueDialog:IsShown(), GlueDialogText:GetText()")
+            .unwrap()
+    };
+    assert_eq!(dialog(&script), (true, "Handshaking".to_string()));
+
+    show_stock_select(&mut script);
+    assert!(!dialog(&script).0, "the status dialog is down");
+    // Login to character select fades the login out first (`GlueScreenExit`, `LOGIN_FADE_OUT`).
+    for _ in 0..20 {
+        script.tick(0.1);
+    }
+    assert_eq!(script.glue_current_screen().as_deref(), Some("charselect"));
+    assert!(
+        script.errors().is_empty(),
+        "script errors: {:?}",
+        script.errors()
+    );
+}
