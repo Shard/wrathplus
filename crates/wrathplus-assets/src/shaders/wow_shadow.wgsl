@@ -329,12 +329,9 @@ fn fragment(in: VertexOutput) -> ShadowOutput {
 #endif
         let a1 = textureSample(second_texture, second_sampler, second_stage_uv(second_uv)).a;
         if ((is_mask || source_cutout) && m.stage2.z > 2.0 && op != 0u && op != 6u && op != 7u) { discard; }
-        if (op == 3u && m.stage2.w < 0.5) {
-            var opacity = pbr_bindings::material.base_color.a;
-#ifdef VERTEX_COLORS
-            if (m.model_flags.x <= 0.5) { opacity *= in.color.a; }
-#endif
-            alpha += opacity * a1;
+        // Combiners_*_Add: `primary.a + t1.a` (`t0.a·primary.a + t1.a` after Mod).
+        if (op == 3u) {
+            alpha += a1;
         }
         else if (op != 0u && op != 6u && op != 7u) {
             alpha *= a1 * select(1.0, 2.0, op == 4u);
