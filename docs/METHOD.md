@@ -95,7 +95,7 @@ crate of its own or a fork, and benilla opens a piece of itself to such a crate 
 
 The client talks to an AzerothCore 3.3.5a server: `WOW_HOST` (or `--server`) names it (default
 `127.0.0.1`), `WOW_USER` and `WOW_PASS` together log in without typing, `WOW_CHAR` picks the
-character and enters the world (the flag forms are in `crates/benilla-app/src/launch_plan.rs`). There is
+character and enters the world (the flag forms are in `crates/wrathplus-app/src/launch_plan.rs`). There is
 no default account. These bind every session and every agent:
 
 - A scripted run logs in as the account its checkout declares in `.probe-identity` (the three

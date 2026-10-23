@@ -37,7 +37,7 @@ agent bench (observation/control contract in `AZEROTHBENCH.md`).
   own with durations.
 - Key bindings dispatch through the VM (`Bindings.xml` over `WTF\DefaultBindings.wtf`).
 - DBCs: a 1.12 schema reads a 3.3.5 file whose only change is wider locale blocks automatically
-  (`benilla-dbc`), and `benilla-formats/src/wrath_layouts.rs` maps the restructured tables
+  (`wrathplus-dbc`), and `wrathplus-formats/src/wrath_layouts.rs` maps the restructured tables
   (Spell, SkillLine/Ability, Talent/Tab, Faction, ChrRaces/Classes, AreaTable, SpellRange, …)
   from AzerothCore's `DBCStructure.h`. Checked on installed data by `wrath_layouts_installed_tests`.
   Still unmapped: AreaPOI, Cfg_Categories, ChatProfanity, CreatureSoundData, PetPersonality,

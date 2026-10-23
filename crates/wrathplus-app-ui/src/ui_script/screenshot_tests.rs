@@ -1,0 +1,113 @@
+//! The stock screenshot status line, 3.3.5's `ActionStatus` (`WorldFrame.xml:42-60`, 1.12's
+//! `ScreenshotStatus`), which must never be in the picture it announces.
+
+use wrathplus_ui::script::UiScript;
+
+use super::test_ui::load_ui as load_xml;
+
+fn harness() -> UiScript {
+    let mut s = UiScript::new().unwrap();
+    s.set_screen_size(1024.0, 768.0);
+    for f in [
+        "Interface\\FrameXML\\GlobalStrings.lua",
+        "Interface\\FrameXML\\Fonts.xml",
+        "Interface\\FrameXML\\BasicControls.xml",
+        r"Interface\FrameXML\WorldFrame.xml",
+        r"Interface\FrameXML\UIParent.xml",
+        r"Interface\FrameXML\MoneyFrame.lua",
+        r"Interface\FrameXML\MoneyFrame.xml",
+        r"Interface\FrameXML\UIPanelTemplates.lua",
+        r"Interface\FrameXML\UIPanelTemplates.xml",
+        "Interface\\FrameXML\\StaticPopup.xml",
+    ] {
+        load_xml(&mut s, f);
+    }
+    s
+}
+
+fn shown(s: &UiScript) -> bool {
+    s.eval::<bool>("return ActionStatus:IsVisible()").unwrap()
+}
+
+fn text(s: &UiScript) -> String {
+    s.eval::<String>("return ActionStatusText:GetText() or \"\"")
+        .unwrap()
+}
+
+fn alpha(s: &UiScript) -> f64 {
+    s.eval::<f64>("return ActionStatus:GetAlpha()").unwrap()
+}
+
+/// The line appears only on the engine's answer, frames after the capture.
+#[test]
+fn the_capture_is_asked_for_silently_and_only_the_answer_speaks() {
+    wrathplus_formats::wow_data_or_skip!();
+    let mut s = harness();
+    assert!(!shown(&s), "the status line starts hidden");
+
+    s.run("TakeScreenshot()").unwrap();
+    assert_eq!(
+        s.take_screenshot_asks(),
+        1,
+        "the binding body reaches the engine verb"
+    );
+    assert!(
+        !shown(&s),
+        "NOTHING is on screen at the moment of capture — this is the whole contract"
+    );
+
+    // The engine's answer, one or more frames later.
+    s.fire_event("SCREENSHOT_SUCCEEDED", Vec::new());
+    assert!(shown(&s));
+    assert_eq!(text(&s), "Screen Captured");
+    assert_eq!(alpha(&s), 1.0);
+}
+
+/// `TakeScreenshot` hides a line still fading before it calls `Screenshot()` (`WorldFrame.lua:77-82`).
+#[test]
+fn a_second_press_inside_the_fade_clears_the_line_before_capturing() {
+    wrathplus_formats::wow_data_or_skip!();
+    let mut s = harness();
+    s.fire_event("SCREENSHOT_SUCCEEDED", Vec::new());
+    s.tick(0.5);
+    assert!(shown(&s), "half a second in, the line is still up");
+    assert!(alpha(&s) < 1.0, "and already fading");
+
+    s.run("TakeScreenshot()").unwrap();
+    assert!(
+        !shown(&s),
+        "hidden BEFORE the engine is asked, not after it answers"
+    );
+    assert_eq!(s.take_screenshot_asks(), 1);
+
+    // The new answer restarts at full alpha (`ActionStatus_DisplayMessage`, `WorldFrame.lua:98-106`).
+    s.fire_event("SCREENSHOT_SUCCEEDED", Vec::new());
+    assert_eq!(alpha(&s), 1.0);
+}
+
+/// `ACTION_STATUS_FADETIME` is 2.0 s (`WorldFrame.lua:75`, `:108-115`).
+#[test]
+fn the_line_fades_out_over_the_references_two_seconds() {
+    wrathplus_formats::wow_data_or_skip!();
+    let mut s = harness();
+    s.fire_event("SCREENSHOT_SUCCEEDED", Vec::new());
+
+    s.tick(1.0);
+    let half = alpha(&s);
+    assert!(
+        (half - 0.5).abs() < 1e-3,
+        "halfway through 2 s the line is at half alpha, got {half}"
+    );
+
+    s.tick(1.0);
+    assert!(!shown(&s), "and it is gone at the end of the fade");
+}
+
+#[test]
+fn a_failed_capture_shows_the_failure_string() {
+    wrathplus_formats::wow_data_or_skip!();
+    let mut s = harness();
+    s.fire_event("SCREENSHOT_FAILED", Vec::new());
+    assert!(shown(&s));
+    assert_eq!(text(&s), "Screen Capture Failed");
+}

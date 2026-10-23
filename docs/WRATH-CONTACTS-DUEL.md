@@ -5,7 +5,7 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `SocialM
 `SpellEffects.cpp` (`EffectDuel`). No client-only behaviour is inferred; no Ghidra round.
 
 The lossless `wrath_social` and `wrath_duel` codecs existed but nothing dispatched them.
-`crates/benilla-protocol/src/wrath_contacts.rs` now maps them into the shared events their feeds own
+`crates/wrathplus-protocol/src/wrath_contacts.rs` now maps them into the shared events their feeds own
 (**handled**):
 - 0067 contact list → shared friend list and ignore list, split by contact flags (1 friend,
   2 ignored); notes and the mute bit have no place there and are dropped. 0068 friend status →

@@ -4,7 +4,7 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `Battleg
 `Battleground.cpp`, `Arena.cpp`, the zone `BuildObjectivesBlock`s, `BattleGroundHandler.cpp`,
 `ArenaTeamHandler.cpp`, `ArenaTeam.cpp`, `Object.cpp`, `MiscHandler.cpp`, `Player.cpp`,
 `NPCHandler.cpp`, `BattlefieldHandler.cpp`. No client-only behaviour is inferred; no Ghidra round.
-Codec: `crates/benilla-protocol/src/wrath_battleground.rs`; arena-team leave/remove/disband/leader
+Codec: `crates/wrathplus-protocol/src/wrath_battleground.rs`; arena-team leave/remove/disband/leader
 added to `wrath_arena_team.rs`.
 
 This build keys queues on the BattlemasterList bg type (1.12 used the map), and adds arena type,

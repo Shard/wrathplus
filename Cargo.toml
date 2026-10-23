@@ -65,7 +65,7 @@ lto = "fat"
 codegen-units = 1
 
 # `release` plus incremental, run as `cargo play`: under `release` a one-line edit to
-# `benilla-app` costs 2m47s. Incremental applies to workspace members only, so dependencies stay
+# `wrathplus-app` costs 2m47s. Incremental applies to workspace members only, so dependencies stay
 # sccache-cacheable; it changes codegen, so it lives here and not in the measured `release`.
 [profile.play]
 inherits = "release"

@@ -37,7 +37,7 @@ does instead, and where. Work happens on a branch and lands by review.
 ## Building on top
 
 A feature 3.3.5a does not have lives in a crate of its own that adds its Bevy plugins through
-`benilla_app::run_with`, as `crates/benilla-app/examples/extended_launcher.rs` shows, or in a
+`wrathplus_app::run_with`, as `crates/wrathplus-app/examples/extended_launcher.rs` shows, or in a
 fork. A client started through `run_with` says `extended` in its build line, so its reports read
 apart from stock benilla's. The crate keeps its own settings, never rows in benilla's CVar table,
 which every addon reads.
@@ -56,7 +56,7 @@ builds on. What a crate cannot reach stays a fork's.
 2. The reference fact is stated: what 3.3.5a does, and where that is known from (the build-12340
    `Wow.exe`, a DBC field, a FrameXML line, a packet capture, AzerothCore source for a wire
    layout). The 3.3.5 interface surface is the installed-FrameXML census
-   (`benilla-app`'s `wrath_framexml_tests`); the 1.12 tables under `reference/` serve only the
+   (`wrathplus-app`'s `wrath_framexml_tests`); the 1.12 tables under `reference/` serve only the
    1.12 gates that removal step 9 deletes.
 3. A comment where it matters, one line, saying what the code does and the 3.3.5a fact behind it.
    No history.
@@ -91,7 +91,7 @@ out of scope is closed with the reason.
   failure, and the gates set it themselves when the install and the corpus both resolve.
 - **A server to test against.** An AzerothCore 3.3.5a server; `--server` or `WOW_HOST` names it
   for the session (default `127.0.0.1:3724`, or the install's `realmlist.wtf`; the launch flags
-  are in `crates/benilla-app/src/launch_plan.rs`). A scripted run has no default account: `WOW_USER`, `WOW_PASS` and
+  are in `crates/wrathplus-app/src/launch_plan.rs`). A scripted run has no default account: `WOW_USER`, `WOW_PASS` and
   `WOW_CHAR` name a test account on your server whose login kicks nobody, all three, either in
   the environment or in a `.probe-identity` file at the repo root (one per line, never
   committed), and `scripts/smoke.sh` (the live login gate) refuses without them. `WOW_CHAR`
@@ -120,7 +120,7 @@ out of scope is closed with the reason.
     A replay miss is logged explicitly. With `hit` filtered out, no diagnostic cast, triangle
     search or formatting runs; movement resolution is unchanged.
   - A capture runs through `scripts/visual.sh`, whose recipe is the header of
-    `crates/benilla-app/src/capture/mod.rs`. Pixel questions go through `benilla-visual crop`,
+    `crates/wrathplus-app/src/capture/mod.rs`. Pixel questions go through `wrathplus-visual crop`,
     `series` and `hotspot`.
 - **The loop.** `cargo play` builds and runs the play profile. `scripts/check.sh` verifies a
   round of work; `scripts/gates.sh` is the full chain, and it opens a window for the engine boot

@@ -41,7 +41,7 @@ and sends the ordinary join (`0x5572d0`).
 
 App owns the sole reducer of `NativeLfgPackets` for these packets (L1's lock packets stay as
 they are) and publishes one immutable snapshot **before** each packet's events, in wire order.
-Native UI owns the DTO (`benilla-ui/src/script/wrath_lfg/queue.rs`) and its setter, which only
+Native UI owns the DTO (`wrathplus-ui/src/script/wrath_lfg/queue.rs`) and its setter, which only
 stores (a DTO setter is not a receipt, as in L1). Raw wire fields; Native UI derives the Lua
 shapes.
 
@@ -110,7 +110,7 @@ the current snapshot and replays no events.
   - Teleport;
   - SetComment.
 - `set_wrath_lfg_encounters` gets `DungeonEncounter.dbc` with each row's `SpellIcon` path
-  (`benilla_formats::lfg::load_dungeon_encounters`).
+  (`wrathplus_formats::lfg::load_dungeon_encounters`).
 - `set_wrath_lfg_location` is `CurrentMap` with the latest `SMSG_INSTANCE_DIFFICULTY`.
 - `WrathGroup` takes `lfg_status`/`lfg_dungeon_entry` from `SMSG_GROUP_LIST`'s LFG block.
 - Labelled: `lfg_flags` and `lfg_restricted` have no traced source and read 0.

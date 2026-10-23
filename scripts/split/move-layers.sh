@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Move benilla-app's modules into one crate per layer (docs/APP-CRATE-SPLIT-PLAN.md), in the
+# Move wrathplus-app's modules into one crate per layer (docs/APP-CRATE-SPLIT-PLAN.md), in the
 # checkout $PWD is in. The layers and their modules are scripts/split/layers.txt; every ui_*
-# module not listed elsewhere is ui; the rest stays in benilla-app, the root.
+# module not listed elsewhere is ui; the rest stays in wrathplus-app, the root.
 #
 #   scripts/split/move-layers.sh [--layers "core net"] [--drop-reexports] [--widen] [--test-support]
 #
-# For each layer, in dependency order: crates/benilla-app-<layer> with benilla-app's package,
+# For each layer, in dependency order: crates/wrathplus-app-<layer> with wrathplus-app's package,
 # dependencies and features, a path dependency on every lower layer crate (and a dev-dependency
 # with `test-support`, so a lower crate's test helpers reach this crate's tests), its modules
 # `git mv`'d with their `#[path]` siblings, and a lib.rs that declares them `pub mod` and
@@ -25,8 +25,8 @@
 # `cfg(test)`, so the lib build has no test-only dead code.
 #
 # It never commits and never builds. Run it on a throwaway worktree for a dry run, or on the move
-# commit's tree, then `cargo check` bottom-up: `-p benilla-app-core`, `-net`, `-world`, `-ui`,
-# `-tools`, then `-p benilla-app`, each `--lib --tests`. The crates take the root's prefix:
+# commit's tree, then `cargo check` bottom-up: `-p wrathplus-app-core`, `-net`, `-world`, `-ui`,
+# `-tools`, then `-p wrathplus-app`, each `--lib --tests`. The crates take the root's prefix:
 # `wrathplus-app-<layer>` once scripts/rename-wrathplus.sh has run, which goes first.
 #
 # It starts only from a committed tree with no merge in progress: a half-moved layer's crate would
@@ -90,7 +90,7 @@ for l in $layers; do
     crate=$P-app-$l
     dst=crates/$crate
     mkdir -p "$dst/src"
-    # Cargo.toml: benilla-app's, renamed, with the lower crates as dependencies.
+    # Cargo.toml: wrathplus-app's, renamed, with the lower crates as dependencies.
     deps=""; devdeps=""; devf=""; tsf=""
     for b in $lower; do
         deps+="$P-app-$b = { path = \"../$P-app-$b\", default-features = false }"$'\n'

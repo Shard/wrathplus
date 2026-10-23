@@ -3,7 +3,7 @@
 Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `Group.cpp` (`ChangeLeader`,
 `Disband`), `MiscPackets.cpp` (`MinimapPing`, `RandomRoll`), `PlayerUpdates.cpp`
 (`SMSG_RAID_GROUP_ONLY`), `GroupHandler.cpp`. No client-only behaviour is inferred; no Ghidra round.
-Codec: `crates/benilla-protocol/src/wrath_party.rs`. Invite/roster/stats/raid-target/ready-check
+Codec: `crates/wrathplus-protocol/src/wrath_party.rs`. Invite/roster/stats/raid-target/ready-check
 and loot-roll handling was already native and is unchanged; instance rows are the instance family's.
 
 Replies that mean what their 1.12 counterparts mean feed the shared events their feeds own

@@ -3,7 +3,7 @@
 Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `QueryHandler.cpp`
 (`HandleQuestPOIQuery`), `PlayerQuest.cpp` (`SendQuestUpdateAddPlayer`), `QuestPackets.cpp`,
 `QuestHandler.cpp`. No Ghidra round; the PvP leaderboard line's client placement is labelled below. Codec:
-`crates/benilla-protocol/src/wrath_quest.rs`. The core quest flow (giver, details, rewards, log
+`crates/wrathplus-protocol/src/wrath_quest.rs`. The core quest flow (giver, details, rewards, log
 updates, status-multiple replies) was already handled and is unchanged.
 
 **POIs** (`A/net/wrath_quest_pois.rs`, sole owner of the quest receipts, `QuestPois` cleared on

@@ -2,7 +2,7 @@
 
 Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `ReferAFriendHandler.cpp`
 (`HandleGrantLevel`, `HandleAcceptGrantLevel`), `Player.h` (`ReferAFriendError`). No client-only
-behaviour is inferred; no Ghidra round. Codec: `crates/benilla-protocol/src/wrath_refer_friend.rs`.
+behaviour is inferred; no Ghidra round. Codec: `crates/wrathplus-protocol/src/wrath_refer_friend.rs`.
 
 **Capture-only** (`NativeReferFriendPackets`, sole owner, cleared on Connected and Disconnected,
 duplicates kept): 041F propose level grant (the granter's packed guid, which the accept echoes),

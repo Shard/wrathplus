@@ -43,16 +43,16 @@ Script issues found (all fixed in step 3):
 
 **LoC.** The ratchet was never enforced, so it drifted. Offenders by crate: app 293, ui 126,
 protocol 52, world 49, formats 39, others ≤ 9. The largest file is the generated
-`benilla-protocol/.../layout_generated.rs` (6,142 lines), which should be exempt as generated.
+`wrathplus-protocol/.../layout_generated.rs` (6,142 lines), which should be exempt as generated.
 The largest growth is in `net/io/wrath.rs` (+2,950), `wrath_authority.rs` (+863),
 `wrath_ground.rs` (+493) and `ui_chat/feed.rs` (+383). The largest new offenders are
 `wrath_lfg/queue.rs` (1,405), `wrath_calendar/bindings.rs` (1,386), `ui_calendar.rs` (1,061)
 and `wrath_admission_tests.rs` (961).
 
 **clippy.** `gates.sh`'s clippy rung and CI's `cargo clippy --workspace --all-targets -D warnings`
-are red on wrath-hud. benilla-formats stopped the run with 8 errors; 95a121eb fixes those. After
-it, the `-D` run still stops in formats' `wrath_material` test, benilla-protocol (7) and
-benilla-ui (11). The 121 warnings-mode diagnostics by crate: app 61, ui 21, formats 18, world 13,
+are red on wrath-hud. wrathplus-formats stopped the run with 8 errors; 95a121eb fixes those. After
+it, the `-D` run still stops in formats' `wrath_material` test, wrathplus-protocol (7) and
+wrathplus-ui (11). The 121 warnings-mode diagnostics by crate: app 61, ui 21, formats 18, world 13,
 protocol 8. The top lints are `type_complexity` 18, `chunks_exact_to_as_chunks` 16,
 `field_reassign_with_default` 8, `needless_update` 7, `manual_is_multiple_of` 6,
 `result_large_err` 6 and `dead_code` 6. Most are mechanical; the toolchain's newer lints
@@ -75,7 +75,7 @@ committed.
 - two-letter hex and abbreviation fragments: `fo`, `iy`, `toi`, `anc`, `ba`, `inh`.
 
 1,998 of the findings are in `reference/1.12-globals.tsv`. Likely real typos include `Encrypter`
-(23, `benilla-srp`), `unparseable` (48), `hander` (14), `boxs` (9) and `numer` (8). Per the
+(23, `wrathplus-srp`), `unparseable` (48), `hander` (14), `boxs` (9) and `numer` (8). Per the
 manager, these are recorded, not fixed.
 
 With `_typos.toml` (step 2: `reference/*.tsv`, `third_party/` and the baselines excluded; `lod`,

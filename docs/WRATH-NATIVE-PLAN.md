@@ -43,7 +43,7 @@ Each workstream is owned by one worker bot, on its own branch and worktree off
 `azerothbench/wrath-hud`. The manager (session "Revise Azerothbench") reviews and merges.
 
 ### WS1: native descriptor, protocol layer (blocks WS2)
-Crate `benilla-protocol` (`messages/update_object/fields/*`, `wrath_events.rs`, `wrath_auras.rs`).
+Crate `wrathplus-protocol` (`messages/update_object/fields/*`, `wrath_events.rs`, `wrath_auras.rs`).
 - A `Field` enum naming every descriptor field the client reads (object, item, container, unit,
   player, gameobject, dynamicobject, corpse), and a `FieldLayout` per dialect mapping
   `Field` → index (+ width). Sources: vmangos `UpdateFields.h` (1.12) and AzerothCore
@@ -59,12 +59,12 @@ Crate `benilla-protocol` (`messages/update_object/fields/*`, `wrath_events.rs`, 
   index appears in Wrath code paths; protocol tests green.
 
 ### WS2: native descriptor, app migration (after WS1's API lands)
-Crates `benilla-app`, `benilla-world`.
+Crates `wrathplus-app`, `wrathplus-world`.
 - Replace every raw field index (`const F_*: u16 = 147;`, `FIELD_*` imports, `get_u32(N)`; about 256
   constants) with `Field` reads or the WS1 accessors. Remove duplicated per-module constants.
 - Field-change watchers (`FieldChanged`, `FieldEdges`) key on `Field`, not raw index.
 - Done when (refined with the manager, 2026-10-16): no production `const`, `FIELD_*` import or
-  `ObjectFields::from_pairs` key in `crates/benilla-app` / `crates/benilla-world` maps to a
+  `ObjectFields::from_pairs` key in `crates/wrathplus-app` / `crates/wrathplus-world` maps to a
   descriptor field, script-verified against the generated reverse tables
   (`layout_generated.rs`); fixtures derive indices from `Field` (`FieldLayout::index_of`,
   `ObjectFields::from_fields`). The original `rg 'const [A-Z_]*: u16 = [0-9]+'` still lists
@@ -78,7 +78,7 @@ Crates `benilla-app`, `benilla-world`.
   converted, and raw pairs passed to `from_pairs` through a variable are found by review.
 
 ### WS3: native 3.3.5 Lua API (parallel with WS1/WS2)
-Crate `benilla-ui` (`script/*`), reading data the app pushes into the `Model`.
+Crate `wrathplus-ui` (`script/*`), reading data the app pushes into the `Model`.
 - Spec: the installed 3.3.5 FrameXML and Blizzard addons (dump with `AZB_FRAMEXML_DUMP`), plus the
   census `wrath_framexml_tests` "missing surface" list (546 names today).
 - Implement Wrath-dialect bindings with 3.3.5 signatures and return shapes, natively. Retire the
@@ -100,7 +100,7 @@ Crate `benilla-ui` (`script/*`), reading data the app pushes into the `Model`.
   (`CalendarGetEventInfo` answers 25). Stock FrameXML never does this.
 
 ### WS4: wire boundary, server messages and client commands (parallel)
-Crates `benilla-protocol` (`wrath_*.rs` codecs), `benilla-app/src/net/io/wrath.rs`, `net.rs`.
+Crates `wrathplus-protocol` (`wrath_*.rs` codecs), `wrathplus-app/src/net/io/wrath.rs`, `net.rs`.
 - Decode the 3.3.5 messages still dropped (see `WOW_CAST_TRACE=1` "unhandled opcode" census):
   power update, threat (update/highest/clear), world states, proficiency, talents info, GO query
   response, loot list, heal/energize/periodic/dispel/interrupt logs, chat, group, trainer, bank,
@@ -113,7 +113,7 @@ Crates `benilla-protocol` (`wrath_*.rs` codecs), `benilla-app/src/net/io/wrath.r
   modules (`wrath_npc.rs`, `wrath_vendor.rs` style) and only touches the dispatch arms.
 
 ### WS5: engine and widget semantics (parallel)
-Crate `benilla-ui` (`loader/`, `widget/`, `script/object*`, `script/event.rs`).
+Crate `wrathplus-ui` (`loader/`, `widget/`, `script/object*`, `script/event.rs`).
 - Systematic audit of where the Wrath dialect must follow 3.3.5 widget rules: script kinds
   (`OnEnable`, `OnDisable`, `PreClick`, `PostClick`, `OnTooltipSet*`, `OnMinMaxChanged`,
   `OnMovie*`), `AnimationGroup`/`Animation`, frame methods missing per the census, XML elements
@@ -123,7 +123,7 @@ Crate `benilla-ui` (`loader/`, `widget/`, `script/object*`, `script/event.rs`).
   or attribute for the installed UI.
 
 ### WS6: assets and data (parallel)
-Crates `benilla-formats`, `benilla-m2`, `benilla-assets`, `benilla-world`.
+Crates `wrathplus-formats`, `wrathplus-m2`, `wrathplus-assets`, `wrathplus-world`.
 - Remaining DBCs (AreaPOI, Cfg_Categories, ChatProfanity, CreatureSoundData, PetPersonality,
   SpellChainEffects) and any 3.3.5-only tables the API needs (Achievement*, CurrencyTypes,
   GlyphProperties, Vehicle*, LFGDungeons, QuestFactionReward, QuestXP …).
@@ -164,8 +164,8 @@ Build the seams now; features land on them later.
 - **Build/test**: own target dir `CARGO_TARGET_DIR=/tmp/azb-target-<ws>`, `CARGO_BUILD_JOBS=4`,
   `nice -n 15`, tests with `--test-threads 4`. Only one heavy build at a time across workers when
   possible: if another worker's cargo is running (`pgrep -fl cargo`), wait for it.
-- **Heavy-build lock**: wrap every heavy build or test (anything compiling benilla-app or
-  benilla-world, including the census) in `lockf -k /tmp/azb-heavy.lock <command>`. Builds then
+- **Heavy-build lock**: wrap every heavy build or test (anything compiling wrathplus-app or
+  wrathplus-world, including the census) in `lockf -k /tmp/azb-heavy.lock <command>`. Builds then
   queue on one lock instead of racing a `pgrep` check. Small crate builds don't take the lock.
 - **Disk**: the disk is shared and filled up on 2026-10-14 (build folders grew to 225 GB). Keep
   your `CARGO_TARGET_DIR` under 40 GB: check with `du -sh` before a heavy build (free space: `df -h /System/Volumes/Data`; `df /` is the sealed system volume and always looks full), and when it is over,
@@ -176,7 +176,7 @@ Build the seams now; features land on them later.
 - **Unit tests** must run with `env -u WOW_CLIENT_PROFILE -u WOW_LOCALE WOW_DATA=` (otherwise
   vanilla tests read Wrath data). Installed-data tests: `WOW_CLIENT_PROFILE=wrath WOW_LOCALE=enUS
   WOW_DATA=/Users/shannon/Games/Client/Data`.
-- **Census** (installed UI, headless): `cargo test -p benilla-app --lib wrath_framexml_tests --
+- **Census** (installed UI, headless): `cargo test -p wrathplus-app --lib wrath_framexml_tests --
   --ignored --nocapture --test-threads 1` with the Wrath env above; `AZB_FRAMEXML_DUMP=<dir>` writes
   the stock sources for reading (never into the repo).
 - **Never launch the game client** (`target/azb-live/*.sh`): Shannon plays on the same account. The
@@ -184,11 +184,11 @@ Build the seams now; features land on them later.
 - **Trusted UI**: no taint, no protected frames, no secure-execution emulation.
 - **No server changes**: AzerothCore source is a protocol reference only.
 - **Never commit** Blizzard assets, dumps, or `.azerothbench-test.env`.
-- **Every unit passes `cargo test -p benilla-app --lib` before it is reported** (heavy; take your
+- **Every unit passes `cargo test -p wrathplus-app --lib` before it is reported** (heavy; take your
   turn), with the counts pasted. Library-only runs miss what the app builds and asserts: struct
   literals, event ownership (`net::handlers`: every `SessionEvent` kind needs exactly one owner),
   and behaviour tests on top of descriptor accessors. A unit that touches another crate also runs
-  that crate's full `--lib` suite (benilla-ui especially: its reference-surface test rejects any
+  that crate's full `--lib` suite (wrathplus-ui especially: its reference-surface test rejects any
   global the 1.12 dialect gains; Wrath-only Lua API is installed for the Wrath dialect only).
 - **Bound everything under the heavy lock**: wrap on-demand GPU/probe/installed-data runs in
   `timeout 900` (and give in-test GPU polls a deadline). A hung test once held the lock for 48 minutes
@@ -235,7 +235,7 @@ high-CRAP functions). CRAP on the whole Bevy app is too slow per commit, so the 
 the crates a commit touches; a full run is a manual gate before merges.
 
 ### Split the app crate
-`benilla-app` is ~393k lines (over half the codebase): game systems, net handling, UI glue and
+`wrathplus-app` is ~393k lines (over half the codebase): game systems, net handling, UI glue and
 capture/probe tooling in one crate. As part of the tidy-up (after the rename, so the new crates are
 born `wrathplus-*`), split it along its existing seams into a few crates with one-way dependencies,
 e.g. net/session handling, gameplay systems (spells, combat, units, items, quests), UI script

@@ -157,7 +157,7 @@ coverage, to cross-check against the client loader before implementing.
 its installed loader mapping and localized fields rather than infer layout from
 LFGDungeons.GroupID. Both parsers need strict header/record/string bounds,
 locale fallback, signedness checks, and synthetic fixtures. Loader/catalog belongs
-in benilla-assets; byte layouts in benilla-formats. Check installed availability
+in wrathplus-assets; byte layouts in wrathplus-formats. Check installed availability
 through the MPQ chain; no extracted tables committed.
 
 Reward values/locks are server data, not DBC guesses. Item names/links/icons use
@@ -192,11 +192,11 @@ not expose a missing companion API.
 
 ### File/ownership contracts
 
-- **Descriptor:** `benilla-protocol/wrath_lfg/` strict native types/decoders and
+- **Descriptor:** `wrathplus-protocol/wrath_lfg/` strict native types/decoders and
   command bodies; dedicated native SessionEvent path, no Vanilla projection.
   Wire owns NetCommand enum/transport routing and encoding integration; Descriptor
   supplies independently tested body codecs. Coordinate schemas before edits.
-- **App Migration:** dedicated `benilla-app/ui_lfg/` (not growth in ui_party),
+- **App Migration:** dedicated `wrathplus-app/ui_lfg/` (not growth in ui_party),
   session-scoped native reducer/store and lifecycle tests; feed into UI-owned
   frozen DTO/API using semantic player reads, never inferring queue/group state
   from Vanilla party; item/aura/instance joins; ordered request
@@ -208,7 +208,7 @@ not expose a missing companion API.
   App Migration is the sole reducer/capture owner per event; Wire adds no parallel
   reducer. Native metadata crosses an explicit lossless event seam rather than
   being inferred from shared projection. Confirmation is for plan review only.
-- **Native UI:** `benilla-ui/script/wrath_lfg/`, native Model snapshot/choices,
+- **Native UI:** `wrathplus-ui/script/wrath_lfg/`, native Model snapshot/choices,
   Wrath-only registration/exports and ABI/event tests. Retire matching compat
   stubs only as real bindings land; Vanilla surface unchanged. Native UI confirmed
   the binding/status-event/intent-queue/ABI/stock-integration scope. Its existing

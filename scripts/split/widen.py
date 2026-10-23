@@ -11,14 +11,14 @@ out ... the item is gated here") is opened to `#[cfg(any(test, feature = "test-s
 what is reached, so a helper only its own crate's tests use stays `cfg(test)`. The crate
 split's move step (scripts/split/move-layers.sh), one layer crate at a time, bottom-up:
 
-  uv run scripts/split/widen.py -p benilla-app-net        # dry run: what it would widen
-  uv run scripts/split/widen.py -p benilla-app-net --apply
+  uv run scripts/split/widen.py -p wrathplus-app-net        # dry run: what it would widen
+  uv run scripts/split/widen.py -p wrathplus-app-net --apply
 
 Python on this machine runs only through `uv run` (stdlib only; no environment to install).
 
 A declaration is widened in place: `pub(crate)`/`pub(super)`/`pub(in …)` becomes `pub`, and an
 unqualified one gains `pub`. A field the compiler names without a definition span is found by its
-struct's name in the crates under `crates/benilla-app*/src`. It never commits. At the end it prints
+struct's name in the crates under `crates/wrathplus-app*/src`. It never commits. At the end it prints
 what it widened by error code and the errors that are not privacy (E0116, E0117, …), which a
 widening cannot fix, grouped by code.
 """
@@ -247,7 +247,7 @@ def find_reexported(root, d):
 def app_prefix(root):
     """The root crate's name, the layer crates' prefix: `wrathplus-app` once the rename has run."""
     renamed = os.path.isdir(os.path.join(root, "crates", "wrathplus-app"))
-    return "wrathplus-app" if renamed else "benilla-app"
+    return "wrathplus-app" if renamed else "wrathplus-app"
 
 
 def find_type(root, name):

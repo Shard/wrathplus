@@ -70,7 +70,7 @@ if [ -n "$install_root" ]; then
 fi
 
 # Build before the timed run: the timeout bounds the client, and a cold build takes minutes.
-if ! cargo build -q -p benilla >"$log" 2>&1; then
+if ! cargo build -q -p wrathplus >"$log" 2>&1; then
     echo "SMOKE FAILED: the client did not build"
     sed -E 's/\x1b\[[0-9;]*m//g' "$log" | tail -30
     exit 1
@@ -79,7 +79,7 @@ fi
 echo "smoke: running the logout/re-login round trip (~45 s, opens a window)…"
 # WOW_NOSOUND: the client opens no audio device (`sound/mod.rs`), so the run is silent.
 WOW_UNATTENDED=1 WOW_NOSOUND=1 WOW_USER="$user" WOW_PASS="$pass" WOW_CHAR="$char" WOW_LOGOUT_SMOKE=1 \
-    timeout 180 cargo run -q -p benilla >"$log" 2>&1
+    timeout 180 cargo run -q -p wrathplus >"$log" 2>&1
 code=$?
 
 # Strip ANSI once: the tracing level is colour-wrapped, and the checks below match plain text.
@@ -193,7 +193,7 @@ echo "smoke: running the realm-list boundary walk (~12 s, opens a window)…"
 rlog="$(mktemp "${TMPDIR:-/tmp}/benilla-smoke-realm.XXXXXX")"
 # No WOW_CHAR: the walk drives character select, and `realm_select::smoke` refuses a seated body.
 WOW_UNATTENDED=1 WOW_NOSOUND=1 WOW_USER="$user" WOW_PASS="$pass" WOW_REALM_SMOKE=1 \
-    timeout 120 cargo run -q -p benilla >"$rlog" 2>&1
+    timeout 120 cargo run -q -p wrathplus >"$rlog" 2>&1
 rcode=$?
 rplain="$(sed -E 's/\x1b\[[0-9;]*m//g' "$rlog")"
 [ -n "${WOW_SMOKE_KEEP:-}" ] || rm -f "$rlog"

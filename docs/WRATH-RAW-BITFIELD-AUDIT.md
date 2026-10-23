@@ -27,7 +27,7 @@ Statuses apply only to the bounded finding described, not complete subsystem par
 | Dynamic-flag masks | not-a-bug | Compared consumed masks agree. |
 | Player flags other than FFA | not-a-bug | Compared masks agree; PvP preference 0x200 is not replicated PvP state. |
 | Already semantic packed bytes / PvP title guards | not-a-bug | Preserve existing layout handling listed below. |
-| Wrath special-area PvP projection | fixed | `area.rs::wrath_zone_pvp` runs `0x51ba50`: leaf flags (else zone), `0x800` sanctuary, `0x80` arena, `0x1000000` combat, with isSubZone from the leaf (`ZoneTexts::pvp_is_subzone`, benilla-ui, agreed with Native UI); then AC `CONTESTED_AREA` `0x40000`, then the player template masks (no template reads friendly). Vanilla `is_arena` untouched. **Labelled:** the ordinary-territory gate `[0xb2f998] == 0 && !(zone flags & 0x10)` (no values) is untraced and not applied. |
+| Wrath special-area PvP projection | fixed | `area.rs::wrath_zone_pvp` runs `0x51ba50`: leaf flags (else zone), `0x800` sanctuary, `0x80` arena, `0x1000000` combat, with isSubZone from the leaf (`ZoneTexts::pvp_is_subzone`, wrathplus-ui, agreed with Native UI); then AC `CONTESTED_AREA` `0x40000`, then the player template masks (no template reads friendly). Vanilla `is_arena` untouched. **Labelled:** the ordinary-territory gate `[0xb2f998] == 0 && !(zone flags & 0x10)` (no values) is untraced and not applied. |
 | Drunk scaling | not-a-bug | AC `Player::SetDrunkValue` writes 0..100 to `PLAYER_BYTES_3` byte 1; `player/drunk.rs::fraction` is `min(byte,100) × 0.01`, so the Wrath byte is consumed directly. The 12340 constant is untraced (labelled). |
 | Highest lifetime rank offset | not-a-bug | Offset retained; no demonstrated move. |
 | Gameobject consumed flag masks | not-a-bug | Numeric agreement; NO_INTERACT/NOT_SELECTABLE wording alone proves no collision. |
@@ -49,7 +49,7 @@ player flags, packed unit/player bytes, gameobject flags and item instance flags
 Compare the local AzerothCore reference under
 `azerothcore-playerbots/core/src/server/` with the repository's pinned vmangos
 revision `e5f2bc2645bc971e3864cba5b601c1fc0eea8277`.
-Paths below are relative to `crates/benilla-app/src` unless stated otherwise.
+Paths below are relative to `crates/wrathplus-app/src` unless stated otherwise.
 Enum agreement establishes a bit's meaning, not the complete native client branch
 predicate. Missing native functionality is not automatically a mask collision.
 
@@ -162,5 +162,5 @@ Protocol already handles the following packed-layout changes:
    ask the manager before any other policy change.
 2. Migrate one App module family at a time with independent-bit/collision tests;
    request missing semantic predicates from Native Descriptor, never edit protocol.
-3. Run the locked full `cargo test -p benilla-app --lib` gate before committing
+3. Run the locked full `cargo test -p wrathplus-app --lib` gate before committing
    each unit and paste counts in handoff. Do not launch the client or push.

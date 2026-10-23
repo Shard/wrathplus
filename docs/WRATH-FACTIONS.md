@@ -3,7 +3,7 @@
 Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `ReputationMgr.cpp`
 (`SendForceReactions`, `SendVisible`) and `CharacterHandler.cpp` (`HandleSetFactionAtWar`,
 `HandleSetFactionInactiveOpcode`, `HandleSetWatchedFactionOpcode`). No client-only behaviour is
-inferred; no Ghidra round. Codec: `crates/benilla-protocol/src/wrath_faction.rs`. The initial faction
+inferred; no Ghidra round. Codec: `crates/wrathplus-protocol/src/wrath_faction.rs`. The initial faction
 list (0122) and standing updates (0124) keep their existing decoders.
 
 **Shared (handled)**: 0123 faction visible (the reputation list id) → `ReputationVisible`.

@@ -3,7 +3,7 @@
 Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `AchievementMgr.cpp`
 (`CompletedAchievement`, `SendAllAchievementData`, `SendRespondInspectAchievements`,
 `BuildAllDataPacket`, `Reset`) and `MiscHandler.cpp` (`HandleQueryInspectAchievements`). Client-only behaviour of the consumer
-below comes from one Ghidra round. Codec: `crates/benilla-protocol/src/wrath_achievement.rs`.
+below comes from one Ghidra round. Codec: `crates/wrathplus-protocol/src/wrath_achievement.rs`.
 
 All receive rows are **capture-only** (`NativeAchievementPackets` FIFO, sole owner, cleared on
 Connected and Disconnected, duplicates kept): 0468 earned (packed player GUID, id, packed date, raw

@@ -1,6 +1,6 @@
 # `wrath_compat.lua` shim audit (VANILLA-REMOVAL-PLAN step 8)
 
-Every global `crates/benilla-ui/src/script/wrath_compat.lua` defined on 2026-10-19, checked against
+Every global `crates/wrathplus-ui/src/script/wrath_compat.lua` defined on 2026-10-19, checked against
 build 12340's `Wow.exe` Lua binding table (Ghidra 12.0.4 headless, read-only;
 `/tmp/azb-app-mig/ghidra/{shim1,shim2,opt1-5,audit1,audit2}.log`) and the stock 3.3.5 FrameXML.
 Addresses are the bound C functions.

@@ -7,7 +7,7 @@
       WOW_PROBE_CHAT=".go xyz -9465 74 58 0" WOW_PROBE_CHAT_AT=10 \
       WOW_PROBE_KEY="Shift@20:3;V@20.5:0.2;W@24:8" \
       WOW_MOVE_TRACE=/tmp/vpl.trace WOW_MOVE_TRACE_TAGS=vpl \
-      WOW_PROBE_EXIT_AT=34 cargo run -q -p benilla
+      WOW_PROBE_EXIT_AT=34 cargo run -q -p wrathplus
     python3 scripts/vplsum.py /tmp/vpl.trace --from 24 --to 32     # the walk leg only
 
 Jitter in a moving overlay has four causes the eye cannot tell apart: a noisy camera, a stale
@@ -34,7 +34,7 @@ SOLVE section is skipped. The ANCHOR section matters most for it, because the bu
 posed head attachment, which bobs with the run cycle:
 
     WOW_MOVE_TRACE=/tmp/bub.trace WOW_MOVE_TRACE_TAGS=bub \
-      WOW_PROBE_CHAT="hello" WOW_PROBE_CHAT_AT=20 WOW_PROBE_KEY="W@20:6" ... cargo run -q -p benilla
+      WOW_PROBE_CHAT="hello" WOW_PROBE_CHAT_AT=20 WOW_PROBE_KEY="W@20:6" ... cargo run -q -p wrathplus
     python3 scripts/vplsum.py /tmp/bub.trace --from 20 --to 26
 """
 

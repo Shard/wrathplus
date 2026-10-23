@@ -6,7 +6,7 @@ timers, `PlayTimeWarning`, `CrossedInebriationThreshold`), `CharacterHandler.cpp
 status at login), `ChatHandler.cpp` (`HandleEmoteOpcode`), `SkillHandler.cpp`
 (`HandleUnlearnSkillOpcode`), `MiscHandler.cpp` (`HandlePlayerLogoutOpcode`), `WorldSession.cpp`
 (`SendAddonsInfo`), `AuthHandler.cpp` (`SendClientCacheVersion`). No client-only behaviour is
-inferred; no Ghidra round. Codec: `crates/benilla-protocol/src/wrath_session_misc.rs`. Not in
+inferred; no Ghidra round. Codec: `crates/wrathplus-protocol/src/wrath_session_misc.rs`. Not in
 `wrath_session_meta` (Wire B's).
 
 **Shared (handled)**: 01CF time response (server unix time to `ServerUnixTime`, the server

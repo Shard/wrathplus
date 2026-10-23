@@ -40,7 +40,7 @@ tree_key() {
     printf '%s|%s|%s' "$t" "$(rustc -V 2>/dev/null)" \
         "$(shasum "$root/scripts/gates.sh" 2>/dev/null | cut -d' ' -f1)"
 }
-resolve_wow() { cargo run -q -p benilla-formats --example where 2>/dev/null || true; }
+resolve_wow() { cargo run -q -p wrathplus-formats --example where 2>/dev/null || true; }
 # A delta only under docs/ or in top-level *.md files keeps the stamped verdict, since no gate
 # reads those paths; a gate that starts to read one must narrow this pattern.
 docs_only_delta() { # $1 = stamped tree, $2 = current tree
@@ -109,7 +109,7 @@ run fmt cargo fmt --all -- --check
 # The LoC ratchet: a tracked `.rs` file over 500 lines fails unless it is within its
 # scripts/quality/loc-baseline.json allowance; an offender may shrink, never grow.
 run loc scripts/quality/run.sh loc
-# WS2: production benilla-app and benilla-world code names descriptor fields through `Field`, never
+# WS2: production wrathplus-app and wrathplus-world code names descriptor fields through `Field`, never
 # a raw index, a `FIELD_*` constant or a literal `from_pairs` key (docs/WRATH-NATIVE-PLAN.md).
 run ws2 scripts/quality/run.sh ws2
 # The clippy ratchet: every warning fails unless scripts/quality/clippy-baseline.json names it.
@@ -143,10 +143,10 @@ run doc-links scripts/doc-links.py
 # wgpu validation error on Vulkan and a silent no-op on Metal and DX12, which no macOS run sees.
 run pass-span-lint scripts/pass-span-lint.py
 
-# player-tests: the player build, `benilla-app` without `dev`, which compiles out the debug panel,
+# player-tests: the player build, `wrathplus-app` without `dev`, which compiles out the debug panel,
 # perf HUD, inspector, capture harness and probes, so it fails when any other code names one of
 # them. Its test build compiles every line of the player graph but the `benilla` launcher, a shim
-# with no `dev` seam, so a `cargo build -p benilla --no-default-features` would add only the shim
+# with no `dev` seam, so a `cargo build -p wrathplus --no-default-features` would add only the shim
 # and a link. It runs the unit tests of the `cfg(not(feature = "dev"))` code (the resolver skips
 # the source tree; the state folder sits beside the binary), which no other gate runs. WOW_DATA, which
 # a player build reads too, goes in for the shipped-UI tests that read FrameXML off the install.
@@ -155,25 +155,25 @@ run pass-span-lint scripts/pass-span-lint.py
 run player-tests env ${wow_data:+WOW_DATA="$wow_data"} \
     ${corpus:+BENILLA_ADDON_CORPUS="$root/wow-addons-vanilla"} \
     ${require_data:+BENILLA_REQUIRE_DATA=1} BENILLA_SKIP_LOG="$skips" \
-    cargo test -p benilla-formats -p benilla-app --no-default-features --lib
+    cargo test -p wrathplus-formats -p wrathplus-app-core -p wrathplus-app-net -p wrathplus-app-world -p wrathplus-app-ui -p wrathplus-app-tools -p wrathplus-app --no-default-features --lib
 report_skips player-tests
 
-# enforcer: `benilla-worldview` boots the engine plugins with no server, login, UI or player, in a
+# enforcer: `wrathplus-worldview` boots the engine plugins with no server, login, UI or player, in a
 # small window, and refuses any system whose parameters need a gameplay resource, a coupling no
 # compiler sees. The client's own resolver decides whether there is an install, so it skips
 # exactly where the client could not run.
-if cargo run -q -p benilla-formats --example where >/dev/null 2>&1; then
-    run enforcer env WOW_WORLDVIEW_CHECK=10 cargo run -q -p benilla-worldview
+if cargo run -q -p wrathplus-formats --example where >/dev/null 2>&1; then
+    run enforcer env WOW_WORLDVIEW_CHECK=10 cargo run -q -p wrathplus-worldview
 else
     echo "gate SKIPPED: enforcer (no WoW install found — the engine boot check needs one;"
-    echo "             \`cargo run -p benilla-formats --example where\` says where it looked)"
+    echo "             \`cargo run -p wrathplus-formats --example where\` says where it looked)"
     note_timing enforcer 0 SKIPPED
 fi
 
 # enforcer-no-install: the engine boot with no client data, which a dev build reaches only under
 # `WOW_DATA=`; refuses a system that needs a resource inserted only when there is client data.
 # Five seconds suffice: with nothing to stream, every system validates in the first frames.
-run enforcer-no-install env WOW_DATA= WOW_WORLDVIEW_CHECK=5 cargo run -q -p benilla-worldview
+run enforcer-no-install env WOW_DATA= WOW_WORLDVIEW_CHECK=5 cargo run -q -p wrathplus-worldview
 
 echo "ALL GATES GREEN ($((SECONDS - chain_t0)) s; per-gate seconds in $timing)"
 note_timing chain "$((SECONDS - chain_t0))" ok

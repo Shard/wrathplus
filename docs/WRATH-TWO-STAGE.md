@@ -121,7 +121,7 @@ Example paths (five distinct models per nonempty category):
   `ITEM\OBJECTCOMPONENTS\Shoulder\RShoulder_Robe_D_01.m2`,
   `ITEM\OBJECTCOMPONENTS\WEAPON\Bow_2H_Crossbow_OutlandPVP_D_01.m2`.
 
-Reproduce with the environment above and `cargo test -p benilla-formats --test
+Reproduce with the environment above and `cargo test -p wrathplus-formats --test
 wrath_stage_gap_census -- --ignored --nocapture --test-threads 4`. Latest run:
 1 passed, 0 failed. No proprietary payloads are emitted or committed.
 

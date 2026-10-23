@@ -1,0 +1,22 @@
+[package]
+name = "wrathplus-worldview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The world viewer: the engine with no game attached, which keeps the engine and game split honest"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Only the engine, never a game crate: a world concept that needs the game fails to build here.
+wrathplus-world = { path = "../wrathplus-world" }
+
+[build-dependencies]
+wrathplus-buildstamp = { path = "../wrathplus-buildstamp" }
+
+[[bin]]
+name = "wrathplus-worldview"
+path = "src/main.rs"
+# Test-building this bin would relink it on every commit, since the build stamp changes.
+test = false

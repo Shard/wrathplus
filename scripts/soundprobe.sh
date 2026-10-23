@@ -26,4 +26,4 @@ cat <<'BANNER'
 
 BANNER
 
-exec env WOW_SOUND_PROBE=1 cargo run -q --profile play -p benilla "$@"
+exec env WOW_SOUND_PROBE=1 cargo run -q --profile play -p wrathplus "$@"

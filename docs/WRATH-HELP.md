@@ -5,7 +5,7 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `TicketH
 (`GmTicket::WritePacket`, `GmTicket::SendResponse`, `TicketMgr::SendTicket`), `MiscHandler.cpp`
 (`HandleBugOpcode`, `HandleComplainOpcode`), `MiscPackets.cpp` (`Complain`, `ComplainResult`).
 No client-only behaviour is inferred; no Ghidra round. Codec:
-`crates/benilla-protocol/src/wrath_help.rs`.
+`crates/wrathplus-protocol/src/wrath_help.rs`.
 
 **Shared (handled)**, fed to the existing `ui_gm_ticket` flow: 0206 create, 0208 update text,
 0218 delete (each a u32 response code), 021B system status (u32, read signed as 1.12 does), 0212

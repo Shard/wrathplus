@@ -38,7 +38,7 @@ CRATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "c
 # The root crate: `wrathplus-app` once scripts/rename-wrathplus.sh has run.
 ROOT = os.path.join(
     CRATES,
-    "wrathplus-app" if os.path.isdir(os.path.join(CRATES, "wrathplus-app")) else "benilla-app",
+    "wrathplus-app" if os.path.isdir(os.path.join(CRATES, "wrathplus-app")) else "wrathplus-app",
     "src",
 )
 
@@ -288,7 +288,7 @@ def main():
     ap.add_argument("--via", help="only re-exports declared in this module path and below")
     ap.add_argument("--home", help="only re-exports whose canonical home is under this module path")
     ap.add_argument("--drop-reexports", action="store_true", help="with --via: delete those re-exports")
-    ap.add_argument("--root", default=ROOT, help="the crate's src/ (default: benilla-app)")
+    ap.add_argument("--root", default=ROOT, help="the crate's src/ (default: wrathplus-app)")
     args = ap.parse_args()
     if args.drop_reexports and not args.via:
         ap.error("--drop-reexports needs --via")
