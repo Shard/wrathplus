@@ -2,8 +2,8 @@
 //! (`ChatEvent`, `ChatEventKind`), the client-composed lines, pending broadcasts and
 //! the drain's log. `ui_chat` keeps the systems and re-exports these from their old paths.
 
-use wrathplus_protocol::types::{ChatMessage, LevelUpInfo, XpGain};
 use bevy::prelude::*;
+use wrathplus_protocol::types::{ChatMessage, LevelUpInfo, XpGain};
 
 /// One value slot of a client-composed line's format string, in the order the shipped template
 /// consumes it.
@@ -281,12 +281,12 @@ pub enum Pending {
         bonus: u32,
         tries: u16,
     },
-    /// An honor award waiting on the victim's name; `rank` (0 none) becomes a title at the drain,
-    /// from the victim's side in the same name-query record.
+    /// An honor line waiting on the victim's name; `rank` is `None` for the unranked form, else the
+    /// internal rank and the victim's title side, which becomes a title at the drain.
     HonorGain {
         victim: u64,
         honor: i32,
-        rank: u8,
+        rank: Option<(u8, Option<u8>)>,
         tries: u16,
     },
     /// A text emote waiting on its performer's name: the reference's `PENDINGTEXTEMOTE` node
@@ -386,9 +386,8 @@ impl ChatLog {
         });
     }
 
-    /// Queue an honor award's line (`SMSG_PVP_CREDIT`); victim 0 is a bonus or objective award.
-    pub fn push_pvp_credit(&mut self, honor: i32, victim: u64, rank: u8) {
-        // Both forks park: the template resolves at the drain.
+    /// Queue an honor line (`SMSG_PVP_CREDIT`); victim 0 is a bonus or objective award.
+    pub fn push_pvp_credit(&mut self, honor: i32, victim: u64, rank: Option<(u8, Option<u8>)>) {
         self.pending.push(Pending::HonorGain {
             victim,
             honor,
