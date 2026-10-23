@@ -280,24 +280,31 @@ pub(crate) fn register_dev_commands(script: &wrathplus_ui::script::UiScript, dev
     }
 }
 
-/// Build the table in `PostStartup`, after `Startup` has inserted the VM and the emote catalog.
+/// Build the table off the live VM's globals, once per VM that has them. The client's first VM is
+/// the glue screens', which runs no `GlobalStrings.lua`, so the build waits for the in-game load;
+/// each `/reload`'s fresh VM builds it again.
 pub(crate) fn build_slash_commands(
-    mut commands: Commands,
+    mut table: ResMut<SlashCommands>,
     script: Option<NonSend<wrathplus_ui::script::UiScript>>,
     emotes: Option<Res<crate::app_core::state::EmoteSounds>>,
+    mut built: Local<crate::app_core::vm_memo::VmMemo<bool>>,
 ) {
     let (Some(script), Some(emotes)) = (script, emotes) else {
-        warn!("chat: no UI VM or emote catalog — the slash-command table is EMPTY");
-        commands.insert_resource(SlashCommands::default());
         return;
     };
+    let built = built.get(&script);
     let globals = script.lua().globals();
-    let table = SlashCommands::build(
+    // `EMOTE1_CMD1` is the strings' first emote alias: absent, they have not run in this VM yet.
+    if *built || globals.get::<String>("EMOTE1_CMD1").is_err() {
+        return;
+    }
+    *built = true;
+    *table = SlashCommands::build(
         |name| globals.get::<String>(name).ok().filter(|s| !s.is_empty()),
         |token| emotes.text_id(token),
     );
     let (slash, emote, dev) = table.counts();
-    // The shipped 1.12 data gives the counts `real_alias_table_resolves_the_shipped_commands` pins.
+    // The shipped data gives the counts `real_alias_table_resolves_the_shipped_commands` pins.
     info!(
         "chat: slash table — {slash} command aliases, {emote} emote aliases, \
          {dev} instrument aliases"
@@ -305,5 +312,4 @@ pub(crate) fn build_slash_commands(
     if emote == 0 {
         error!("chat: NO emote aliases — every /wave-style command is dead (GlobalStrings?)");
     }
-    commands.insert_resource(table);
 }
