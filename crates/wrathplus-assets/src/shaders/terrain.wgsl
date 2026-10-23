@@ -82,9 +82,10 @@ struct TerrainVsOut {
 // the lights that differ are 33 yd out or more, where att ≈ 0.02.
 const TERRAIN_REACH: f32 = 33.570166;
 
-// The dynamic point-light term. The reference commits at most three point lights per draw, the
-// nearest by squared distance to the receiving unit, into GL slots 1-3; terrain's unit is the MCNK
-// chunk, so `anchor` is its cell centre. Candidacy is a 20-yd spatial-hash sweep over
+// The dynamic point-light term. 12340 gathers the four nearest point lights by squared distance to
+// the receiving unit (`0x834f60`) and seats GL slots 1-3 from the farthest down (`0x8353d0`), so
+// four candidates drop the nearest; terrain's unit is the MCNK chunk, so `anchor` is its cell
+// centre. Candidacy is a 20-yd spatial-hash sweep (`0x81e400`, cell scale 0.05) over
 // `[floor((c - w - 10)/20), floor((c + w + 10)/20)]`, a Chebyshev box (`w` is `chunk+0x68`,
 // copied at `0x71bc47`) of half-width `w + 10`, at least `TERRAIN_REACH`. A committed light is
 // diffuse only (the ambient and specular slots are zeroed at `0x71c7e3`), falls off as
@@ -92,8 +93,9 @@ const TERRAIN_REACH: f32 = 33.570166;
 // wow_model.wgsl uses the packed per-light range: the lanes differ on purpose.
 fn point_light_sum(P: vec3<f32>, N: vec3<f32>, anchor: vec3<f32>) -> vec3<f32> {
     let count = u32(wow_light.point_count.x);
-    var sel = array<u32, 3>(0u, 0u, 0u);
-    var sd = array<f32, 3>(1e30, 1e30, 1e30);
+    var sel = array<u32, 4>(0u, 0u, 0u, 0u);
+    var sd = array<f32, 4>(1e30, 1e30, 1e30, 1e30);
+    var n = 0u;
     for (var i = 0u; i < count; i = i + 1u) {
         let pos_range = wow_light.points[2u * i];
         let dv = pos_range.xyz - anchor;
@@ -103,22 +105,19 @@ fn point_light_sum(P: vec3<f32>, N: vec3<f32>, anchor: vec3<f32>) -> vec3<f32> {
         if (max(abs(dv.x), abs(dv.z)) > TERRAIN_REACH) {
             continue;
         }
-        if (d2 < sd[0]) {
-            sd[2] = sd[1]; sel[2] = sel[1];
-            sd[1] = sd[0]; sel[1] = sel[0];
-            sd[0] = d2; sel[0] = i;
-        } else if (d2 < sd[1]) {
-            sd[2] = sd[1]; sel[2] = sel[1];
-            sd[1] = d2; sel[1] = i;
-        } else if (d2 < sd[2]) {
-            sd[2] = d2; sel[2] = i;
+        if (n == 4u && d2 >= sd[3]) {
+            continue;
         }
+        var k = min(n, 3u);
+        while (k > 0u && sd[k - 1u] >= d2) {
+            sd[k] = sd[k - 1u]; sel[k] = sel[k - 1u];
+            k = k - 1u;
+        }
+        sd[k] = d2; sel[k] = i;
+        n = min(n + 1u, 4u);
     }
     var sum = vec3<f32>(0.0);
-    for (var s = 0u; s < 3u; s = s + 1u) {
-        if (sd[s] > 9.9e29) {
-            break;
-        }
+    for (var s = n - min(n, 3u); s < n; s = s + 1u) {
         let pos_range = wow_light.points[2u * sel[s]];
         let to_light = pos_range.xyz - P;
         let d = length(to_light);

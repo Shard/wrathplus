@@ -630,3 +630,7 @@ mod tests {
 #[cfg(test)]
 #[path = "materials_two_stage_tests.rs"]
 mod two_stage_tests;
+
+#[cfg(test)]
+#[path = "materials_point_light_tests.rs"]
+mod point_light_tests;
