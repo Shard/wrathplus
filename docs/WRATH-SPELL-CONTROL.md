@@ -37,9 +37,10 @@ Strict framing throughout: a short body or a trailing byte is `Unhandled`, never
 whose tables now hold all 96 family bits (`SpellDisplay::has_family_bit`, from Assets' third
 family word, ba707306). The tooltip dependency mask widened with them (`u128`).
 
-**Capture-only** (`NativeSpellControlPackets`, `net/wrath_spell_control_capture.rs`, ordered with
-duplicates, cleared on Connected and Disconnected): 01F7 spell
-impact, 0413 totem created.
+**Capture FIFO** (`NativeSpellControlPackets`, `net/wrath_spell_control_capture.rs`, ordered with
+duplicates, cleared on Connected and Disconnected): every packet below also lands here. 01F7 spell
+impact plays its kit (see below); 0413 totem created fills the totem bar from `ui_totems`'
+`NativeTotems` (`GetTotemInfo`, `PLAYER_TOTEM_UPDATE`).
 
 **Outbound** (`WrathRoute::NativeSpellControl`, admission fixtures in `wrath_admission_tests.rs`),
 bodies as AC's handlers read them; no server acceptance is claimed:
@@ -122,3 +123,27 @@ One read-only Ghidra round on build 12340 `Wow.exe` found the senders by their p
 - **`CMSG_UPDATE_MISSILE_TRAJECTORY` `0x0462` and `CMSG_UPDATE_PROJECTILE_POSITION` `0x04BE`.** No
   sender opens either through `0x47b0a0`. A byte scan finds one `push` of each, at `0x6fd744` and
   `0x70364c`, probably for an opcode-taking sender. Both stay missing and labelled.
+
+## Cooldown deltas and the forced deselect
+
+One read-only Ghidra round on build 12340 `Wow.exe` (`WireASpellCtl.java`, log
+`/tmp/azb-wire-ghidra-sweep/spellctl-decomp.log`) traced the two handlers through their
+`0x6b0b80` registrations.
+
+- **`SMSG_MODIFY_COOLDOWN` `0x0491`** (`0x804010`, registered at `0x81018c`).
+  - AzerothCore `Player::ModifySpellCooldown` sends `u32 spell, u64 player, i32 delta ms` for a
+    cooldown the server holds, after moving its end by the delta.
+  - The handler skips a zero spell, then `0x802bf0`: the list edit `0x802a10`, then the flush
+    `SMSG_SPELL_COOLDOWN`'s `0x802ba0` also ends with: `0x53bac0` (`SPELL_UPDATE_COOLDOWN`),
+    `0x53cf10`, and the pet bar's events when the guid is the pet's.
+  - Here `spell/native_control.rs` (wrathplus-app-world) moves the spell's recovery in the list
+    the guid names (ours or the pet's, as for every cooldown packet), never below zero, and bumps
+    that list, which fires the same events. Inferred: that `0x802a10` moves the recovery as
+    AzerothCore moves the end; it was not decompiled.
+- **`SMSG_CLEAR_TARGET` `0x03BF`** (`0x756800`, registered at `0x756c62`).
+  - AzerothCore `Spell::EffectForceDeselect` sends the caster's `u64` guid to hostile players in
+    visibility range (vanish, feign death).
+  - The handler calls `0x5241b0(guid, 1)`: when the selection is that guid, it stops melee on it,
+    drops the selection and sends `CMSG_SET_SELECTION` 0. Any other selection stays.
+  - Here `spell/native_control.rs` raises `target::DeselectGuid(caster)`, the existing
+    guid-scoped deselect.
