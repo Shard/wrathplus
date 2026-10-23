@@ -51,18 +51,15 @@ impl InspectHonorStats {
     }
 }
 
-/// `SMSG_PVP_CREDIT` (opcode 652): one honor payout, dishonorable ones included (vmangos
-/// `HonorMgr.cpp:1061-1093`). The descriptor holds only totals; this is the only per-payout notice.
+/// `SMSG_PVP_CREDIT` (opcode 652): one honor payout. The descriptor holds only totals; this is
+/// the only per-payout notice. Build 12340's handler is `0x50b6d0`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PvpCredit {
-    /// Honor, truncated server-side; negative for a dishonorable kill (`HonorMgr.cpp:807`).
+    /// Honor, read as a signed word; the client prints a kill only at 1 or more.
     pub honor: i32,
-    /// Who we killed; 0 for an honor row with no source (`HonorMgr.cpp:1069-1071`), which
-    /// needs a victim-less phrasing rather than a name lookup.
+    /// Who we killed; 0 for an award with no victim (`COMBATLOG_HONORAWARD`).
     pub victim_guid: u64,
-    /// The victim's internal rank (0..18), indexing the `PVP_RANK_<rank>_<team>` strings; the
-    /// badge's visual rank is `internal > 4 ? internal - 4 : -internal` (`HonorMgr.cpp:991`).
-    /// A creature sends 19 if a racial leader, else 0; vmangos floors a player victim at 5
-    /// (`HonorMgr.cpp:1078-1089`), a server fallback rather than a rule to re-implement.
+    /// The victim's rank, signed: below 0 the client takes `COMBATLOG_HONORGAIN_NO_RANK`, else
+    /// it indexes the `PVP_RANK_<rank>_<side>` strings.
     pub victim_rank: i32,
 }

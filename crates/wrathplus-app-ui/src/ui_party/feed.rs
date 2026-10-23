@@ -373,8 +373,7 @@ pub(super) fn feed_party(
             }
             wrathplus_ui::script::WrathGroup {
                 members,
-                dungeon_difficulty: r.loot.as_ref().map(|l| l.dungeon_difficulty + 1),
-                raid_difficulty: r.loot.as_ref().map(|l| l.raid_difficulty + 1),
+                // The difficulties are `ui_native::wrath_difficulty`'s, grouped or solo.
                 // `SMSG_GROUP_LIST`'s LFG block (group type `0x08`): its status byte and entry.
                 // Labelled: `lfg_flags` and `lfg_restricted` have no traced source and stay 0.
                 lfg_status: r.lfg.map_or(0, |l| l.0),

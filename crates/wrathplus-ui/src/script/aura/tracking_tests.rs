@@ -152,3 +152,66 @@ fn a_row_cancels_the_aura_and_none_clears_everything() {
         .count();
     assert_eq!(queued, 2, "one per selection, none past the end");
 }
+
+/// The selected row persists in `minimapTrackedInfo` by its global's key (`0x57e070`), and the
+/// load restores it only for a class that may use it (`0x57ea60`).
+#[test]
+fn the_selected_type_persists_in_its_cvar_and_restores_by_class() {
+    let cvar = |s: &UiScript| s.cvar("minimapTrackedInfo");
+    let s = script(Some("MAGE"));
+    assert_eq!(
+        cvar(&s).as_deref(),
+        Some(""),
+        "registered, empty by default"
+    );
+    s.run("SetTracking(1)").unwrap();
+    assert_eq!(cvar(&s).as_deref(), Some("MINIMAP_TRACKING_REPAIR"));
+    s.run("SetTracking()").unwrap();
+    assert_eq!(cvar(&s).as_deref(), Some(""));
+
+    for (class, restored) in [("HUNTER", Some((1, 0x400000))), ("MAGE", None)] {
+        let mut s = script(Some(class));
+        s.run(r#"SetCVar("minimapTrackedInfo", "MINIMAP_TRACKING_STABLEMASTER")"#)
+            .unwrap();
+        s.restore_tracking_from_cvar();
+        assert_eq!(s.tracked_town_type(), restored, "{class}");
+    }
+}
+
+/// `GameTooltip:SetTracking` (`0x625940`): the selected type's name; with none, the tracking
+/// spell's tooltip; with neither, `MINIMAP_TRACKING_TOOLTIP_NONE`.
+#[test]
+fn the_tracking_hover_names_the_type_the_spell_or_none() {
+    let mut s = script(Some("MAGE"));
+    s.run(
+        "MINIMAP_TRACKING_REPAIR = 'Repair' \
+         MINIMAP_TRACKING_TOOLTIP_NONE = 'Click to choose tracking type' \
+         local f = CreateFrame('Frame', 'TRK') f:SetPoint('CENTER', 0, 0) \
+         f:SetWidth(10) f:SetHeight(10) \
+         TT = CreateFrame('GameTooltip', 'TT') TT:SetOwner(f, 'ANCHOR_BOTTOMLEFT')",
+    )
+    .unwrap();
+    let hover = |s: &UiScript| -> (bool, i64, String) {
+        s.eval(
+            "TT:SetTracking() \
+             return TT:IsShown() and true or false, TT:NumLines(), TTTextLeft1:GetText() or ''",
+        )
+        .unwrap()
+    };
+    assert_eq!(hover(&s), (true, 1, "Click to choose tracking type".into()));
+
+    s.set_tracking(Some(TrackingState {
+        spell_id: HERBS,
+        name: Some("Find Herbs".into()),
+        cancelable: true,
+        ..Default::default()
+    }));
+    assert_eq!(hover(&s).2, "Find Herbs", "the spell's own tooltip");
+
+    s.run("SetTracking(1)").unwrap(); // Repair, cancelling the herb aura
+    assert_eq!(
+        hover(&s),
+        (true, 1, "Repair".into()),
+        "a type outranks the spell"
+    );
+}

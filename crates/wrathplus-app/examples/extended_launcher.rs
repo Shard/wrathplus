@@ -6,7 +6,7 @@
 //! cargo run -p wrathplus-app --example extended_launcher
 //! ```
 //!
-//! The banner reads `benilla build … · extended`, and the plugin logs one line at `Startup`.
+//! The banner reads `wrathplus build … · extended`, and the plugin logs one line at `Startup`.
 //!
 //! A crate of its own copies the `benilla` launcher (`crates/wrathplus`): a build script that stamps
 //! its commit, a `main` like this one that reads the stamp back as `crates/wrathplus/src/main.rs`
@@ -60,7 +60,7 @@ struct HelloPlugin;
 
 impl Plugin for HelloPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, || info!("a plugin on top of benilla is running"));
+        app.add_systems(Startup, || info!("a plugin on top of wrathplus is running"));
     }
 }
 

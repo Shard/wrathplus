@@ -32,14 +32,17 @@ fn one_owner_keeps_ordered_duplicates_and_both_boundaries_clear() {
         .world()
         .resource::<crate::net::handlers::NetHandlers>()
         .census();
-    // The capture, then the totem bar's own handler.
+    // The capture, the world layer's cooldown delta and forced deselect, then the totem bar.
     let owners = &census[&SessionEventKind::WrathSpellControl];
-    assert_eq!(owners.len(), 2, "{owners:?}");
-    assert!(owners[0].contains("wrath_spell_control_capture::receive"));
-    assert!(
-        owners[1].contains("ui_totems::on_totem_created"),
-        "{owners:?}"
-    );
+    assert_eq!(owners.len(), 4, "{owners:?}");
+    for (owner, name) in owners.iter().zip([
+        "wrath_spell_control_capture::receive",
+        "native_control::on_modify_cooldown",
+        "native_control::on_clear_target",
+        "ui_totems::on_totem_created",
+    ]) {
+        assert!(owner.contains(name), "{owners:?}");
+    }
     let mut adapter = WrathEventAdapter::new();
     // Slot 1, totem guid 9, 120 s, Searing Totem.
     let mut totem = vec![1];

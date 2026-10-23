@@ -5,11 +5,11 @@
 
 use bevy::prelude::*;
 
-use crate::net::GuidIndex;
-use crate::app_core::session::ObjectStore;
-use crate::ui_action::CooldownEvents;
 use crate::app_core::schedule::UiInput;
 use crate::app_core::schedule::UnitFeed;
+use crate::app_core::session::ObjectStore;
+use crate::net::GuidIndex;
+use crate::ui_action::CooldownEvents;
 
 pub mod bar;
 pub mod drain;
@@ -84,9 +84,17 @@ pub struct PetUnit<'w, 's> {
     index: Res<'w, GuidIndex>,
     stores: Query<'w, 's, &'static ObjectStore>,
     self_guid: Res<'w, crate::app_core::session::SelfGuid>,
+    /// The packet auras the press-again cancel reads (`isActive`, `0x802cb0`); `Option` for harnesses.
+    auras: Option<Res<'w, crate::net::wrath_auras::PacketAuras>>,
 }
 
 impl PetUnit<'_, '_> {
+    /// The pet's packet auras, empty while none arrived.
+    pub(crate) fn auras_of(&self, pet_guid: u64) -> &[crate::net::wrath_auras::StampedAura] {
+        let auras = self.auras.as_deref().and_then(|a| a.by_guid.get(&pet_guid));
+        auras.map_or(&[], Vec::as_slice)
+    }
+
     /// The pet's descriptor, `None` while its object is not streamed: the reference's "no pet".
     pub(crate) fn store(&self, pet_guid: u64) -> Option<&ObjectStore> {
         let e = *self.index.0.get(&pet_guid)?;

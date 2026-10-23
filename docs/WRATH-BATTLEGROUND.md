@@ -31,6 +31,11 @@ The tables mirror the guild command-result and event handlers, whose codes AC's 
 A `_S` code takes the player name, else the team name. 04C7 stays in the rest FIFO, capture-only:
 no arena-opponent model consumes it.
 
+**Since then (2026-10-23 audit):** the FIFO is no longer terminal. `ui_battlefield::drain_native`
+consumes 02D4, 023D, 02E0, 02E8, 02E9, 0377, 02D6 and the battlefield-manager family 04DE, 04E0,
+04E1, 04E4, 04E6 into the queue, list, scoreboard, positions, inspect and `WorldPvp` tables; the
+coverage rows say handled. Only 04C7 still ends in `NativeBattlegroundRest`.
+
 **Outbound**:
 - Existing commands whose 3.3.5 bodies are unchanged now route natively: 02D7 battlemaster hello,
   02E2/02E3 area spirit healer query/queue, 021C spirit healer, 02D6 honor inspect, 0253 toggle

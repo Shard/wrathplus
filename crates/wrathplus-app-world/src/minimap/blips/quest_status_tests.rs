@@ -108,10 +108,10 @@ fn native_status_lifetime_matches_object_and_session_lifetime() {
 
 #[test]
 fn native_status_packets_emit_a_wrath_question_mark_quad() {
+    use bevy::ecs::system::SystemState;
     use wrathplus_protocol::types::ObjectType;
     use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
     use wrathplus_protocol::{wrath_npc as n, ObjectFields};
-    use bevy::ecs::system::SystemState;
     let npc = 0xf130_0001_2300_4567u64;
     for opcode in [
         n::SMSG_QUESTGIVER_STATUS,
@@ -147,7 +147,8 @@ fn native_status_packets_emit_a_wrath_question_mark_quad() {
             // What `ui_quest::net`'s handler does with each decoded status.
             let mut giver = crate::app_core::state::QuestGiver::default();
             for ev in session_events {
-                if let wrathplus_protocol::SessionEvent::WrathQuestGiverStatus { npc, status } = ev {
+                if let wrathplus_protocol::SessionEvent::WrathQuestGiverStatus { npc, status } = ev
+                {
                     giver.set_wrath_status(npc, status);
                 }
             }
@@ -162,8 +163,11 @@ fn native_status_packets_emit_a_wrath_question_mark_quad() {
                 },
                 GlobalTransform::IDENTITY,
                 ObjectStore(
-                    ObjectFields::from_fields(&[(wrathplus_protocol::types::Field::UnitHealth, 100)])
-                        .into_created(ObjectType::Unit),
+                    ObjectFields::from_fields(&[(
+                        wrathplus_protocol::types::Field::UnitHealth,
+                        100,
+                    )])
+                    .into_created(ObjectType::Unit),
                 ),
             ));
             let ctx = BlipCtx {
@@ -197,7 +201,10 @@ fn native_status_packets_emit_a_wrath_question_mark_quad() {
                 None,
                 &icons,
                 ObjectIconAtlas::from_size(256, 64),
-                trivial,
+                SelfTracking {
+                    trivial,
+                    ..Default::default()
+                },
                 false,
                 |_| false,
                 &mut quads,
@@ -256,6 +263,7 @@ fn installed_wrath_question_mark_cell_is_nonempty() {
     for icon in [
         ObjectIcon::TrackedResource,
         ObjectIcon::TrackedUnit,
+        ObjectIcon::TrackedTown,
         ObjectIcon::Party,
         ObjectIcon::CompleteQuest,
         ObjectIcon::AvailableQuest,
@@ -297,11 +305,12 @@ fn installed_wrath_question_mark_cell_is_nonempty() {
             }
             ObjectIcon::RepeatableQuest => assert!(rgb[2] > rgb[0], "blue repeatable ! art"),
             ObjectIcon::TrackedResource
+            | ObjectIcon::TrackedTown
             | ObjectIcon::CompleteQuest
             | ObjectIcon::AvailableQuest => {
                 assert!(
                     rgb[0] > rgb[2] * 3 && rgb[1] > rgb[2] * 3,
-                    "gold resource/quest art"
+                    "gold resource, town or quest art"
                 );
             }
         }
@@ -328,9 +337,10 @@ fn installed_wrath_question_mark_cell_is_nonempty() {
     assert_eq!(atlas.cell(10), Some([0.25, 0.375, 0.5, 1.0]));
     assert_eq!(atlas.cell(5), None);
     // Corpse is POIIcons cell 7 on an 8x8 32px grid, not an ObjectIcons cell.
-    let (width, height, rgba) =
-        wrathplus_formats::blp_to_rgba(&chain.read_file("Interface\\Minimap\\POIIcons.blp").unwrap())
-            .unwrap();
+    let (width, height, rgba) = wrathplus_formats::blp_to_rgba(
+        &chain.read_file("Interface\\Minimap\\POIIcons.blp").unwrap(),
+    )
+    .unwrap();
     assert_eq!((width, height), (256, 256));
     let visible = (0..32)
         .flat_map(|y| (224..256).map(move |x| (y, x)))

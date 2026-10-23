@@ -86,7 +86,7 @@ fn feed_taxi(
     index: Res<GuidIndex>,
     stores: Query<&ObjectStore>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
-    reactions: crate::target::ReactionInputs,
+    relations: crate::target::RelationInputs,
     mut last: Local<crate::app_core::vm_memo::VmMemo<Option<TaxiUiState>>>,
     mut last_name: Local<crate::app_core::vm_memo::VmMemo<Option<String>>>,
     mut sink: crate::ui_action::MessageSink,
@@ -150,14 +150,9 @@ fn feed_taxi(
             .0
             .get(&open.flightmaster)
             .and_then(|&e| stores.get(e).ok());
-        let discount = flightmaster.zip(self_q.iter().next()).map(|(master, me)| {
-            crate::target::vendor_price_discount(
-                reactions.factions.as_deref(),
-                &reactions.reputations,
-                master,
-                me,
-            )
-        });
+        let discount = flightmaster
+            .zip(self_q.iter().next())
+            .map(|(master, me)| crate::target::vendor_price_discount(&relations, master, me));
         let (map_id, nodes, resolved) = build_nodes(open, &catalogs, discount)?;
         cache.0 = resolved;
         Some(TaxiUiState {

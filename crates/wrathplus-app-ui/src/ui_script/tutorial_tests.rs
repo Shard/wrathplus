@@ -40,6 +40,15 @@ fn a_trigger_opens_the_window_and_a_second_waits_for_okay() {
     let mut s = session();
     assert!(!visible(&s, "TutorialFrameAlertButton"));
     assert!(!visible(&s, "TutorialFrame"));
+    // `OnLoad` builds the key strings on a virtual `<Font>` (TutorialFrame.lua:615, FontStyles.xml:122).
+    assert_eq!(
+        s.eval::<(String, f64, f64, f64)>(
+            "local k = TutorialFrameKeyString1 local r, g, b = k:GetTextColor() \
+             return k:GetFontObject():GetName(), r, g, b"
+        )
+        .unwrap(),
+        ("GameFontNormalHugeBlack".into(), 0.0, 0.0, 0.0)
+    );
 
     trigger(&mut s, 41);
     assert!(visible(&s, "TutorialFrameAlertButton"), "the alert shows");

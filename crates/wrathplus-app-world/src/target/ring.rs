@@ -388,7 +388,7 @@ pub(super) fn push_ring(
 /// ([`super::wrath_relations::reaction::unit_reaction`]), the direction every NPC colour uses, on
 /// `ctx`'s live inputs. [`ring_reaction`] is the detached form, for a caller holding no
 /// [`super::wrath_relations::Context`] (no group roster, forced reactions or owner lookup): the
-/// aura gate, the combat log, the quest markers, the vendor discount and the debug panel.
+/// debug panel and fixtures; systems read [`super::RelationInputs::ring_reaction`].
 pub fn ring_reaction_in(
     factions: Option<&Factions>,
     reputations: &Reputations,

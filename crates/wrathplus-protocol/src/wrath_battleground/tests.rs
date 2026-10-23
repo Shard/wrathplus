@@ -185,6 +185,12 @@ fn fixtures() -> Vec<(u16, Vec<u8>, SessionEvent)> {
             cat(&[w(14), q(9), w(5)]),
             SessionEvent::PvpCredit(PvpCredit { honor: 14, victim_guid: 9, victim_rank: 5 }),
         ),
+        // The rank word is signed: all ones is the client's unranked form.
+        (
+            0x28c,
+            cat(&[w(14), q(9), w(u32::MAX)]),
+            SessionEvent::PvpCredit(PvpCredit { honor: 14, victim_guid: 9, victim_rank: -1 }),
+        ),
     ]
 }
 

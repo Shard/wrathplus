@@ -137,6 +137,7 @@ do
     lockActionBars = "1",
     lootUnderMouse = "0",
     mapQuestDifficulty = "0",
+    minimapTrackedInfo = "",
     miniWorldMap = "0",
     mouseInvertPitch = "0",
     mouseSpeed = "1",

@@ -9,6 +9,8 @@
 //! - `SMSG_PET_UPDATE_COMBO_POINTS` for the unit we drive becomes our combo display. The native
 //!   handler compares the unit with a client global (`0xc23500`); that it is the controlled unit
 //!   is inferred.
+//! - `SMSG_MODIFY_COOLDOWN` and `SMSG_CLEAR_TARGET` act from the world layer's own handlers on
+//!   this kind (`wrathplus_app_world::spell::native_control`).
 //! - `SMSG_TOTEM_CREATED` fills the totem bar from `crate::ui_totems`' own handler on this kind,
 //!   after this one.
 use super::NetHandlerApp;
