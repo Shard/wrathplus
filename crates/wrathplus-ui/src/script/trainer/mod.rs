@@ -200,12 +200,39 @@ enum Row {
     Service(usize),
 }
 
-/// Folds case, raw bytes breaking ties. The reference's row comparators call the case-sensitive
-/// `0x64a480`, its header comparator the case-insensitive `0x64a4c0` (`0x4d7c12`).
+/// 12340's `0x76ec80`, the row and group comparators' compare: per code point, upper-cased
+/// (`0x76e7a0`) and folded to its base letter (`0x76eab0`), Æ, ß and Œ matching AE, SS and OE
+/// (`0x76eb80`); the first raw difference breaks a tie.
 fn collate(a: &str, b: &str) -> std::cmp::Ordering {
-    a.to_lowercase()
-        .cmp(&b.to_lowercase())
-        .then_with(|| a.cmp(b))
+    fold(a).cmp(&fold(b)).then_with(|| a.cmp(b))
+}
+
+fn fold(s: &str) -> Vec<u32> {
+    let mut out = Vec::with_capacity(s.len());
+    for c in s.chars() {
+        let c = c as u32;
+        let upper = match c {
+            0x61..=0x7a | 0xe0..=0xfe | 0x430..=0x44f => c - 0x20,
+            0x153 => 0x152,
+            0x451 => 0x401,
+            _ => c,
+        };
+        match upper {
+            0xc6 => out.extend([0x41, 0x45]),
+            0xdf => out.extend([0x53, 0x53]),
+            0x152 => out.extend([0x4f, 0x45]),
+            0xc0..=0xc5 => out.push(0x41),
+            0xc7 => out.push(0x43),
+            0xc8..=0xcb => out.push(0x45),
+            0xcc..=0xcf => out.push(0x49),
+            0xd1 => out.push(0x4e),
+            0xd2..=0xd6 => out.push(0x4f),
+            0xd9..=0xdc => out.push(0x55),
+            0x401 => out.push(0x415),
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 const TRAINER_TYPE_TRADESKILL: u32 = 2;
@@ -216,8 +243,7 @@ fn skill_value(s: &TrainerService) -> u32 {
 }
 
 /// Rows at every trainer but a tradeskill one (12340's `0x5947d0`): required level `[+0x14]`,
-/// skill value `[+0x1c]`, name, then rank, all ascending. Labelled: its string compare
-/// (`0x76ec80`) is untraced; [`collate`] stands in.
+/// skill value `[+0x1c]`, name, then rank, all ascending.
 fn class_order(a: &TrainerService, b: &TrainerService) -> std::cmp::Ordering {
     let name = |s: &TrainerService| s.name.clone().unwrap_or_default();
     let rank = |s: &TrainerService| s.subtext.clone().unwrap_or_default();

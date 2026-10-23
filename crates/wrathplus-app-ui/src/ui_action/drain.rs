@@ -219,6 +219,8 @@ pub struct ActionPress<'w, 's> {
     ui_errors: ResMut<'w, UiErrorKeys>,
     ladder: CastLadder<'w, 's>,
     gate: crate::ui_bind_confirm::BindGate<'w>,
+    /// The `secureAbilityToggle` guard's cast requests.
+    recent: ResMut<'w, crate::spell::secure_toggle::RecentCastRequests>,
 }
 
 /// What a `UseAction` press leaves to another applier.
@@ -245,6 +247,7 @@ pub(crate) fn use_action(
         ui_errors,
         ladder,
         gate,
+        recent,
     } = p;
     let selection = &targeting.selection;
     let action = press.action;
@@ -279,7 +282,7 @@ pub(crate) fn use_action(
             if let Some(d) = ladder.spells.as_ref().and_then(|s| s.catalog.get(b.action)) {
                 if let Some(store) = targeting.self_store.iter().next() {
                     let (commands, objects) = (&ladder.commands, &ladder.objects);
-                    if super::toggle::send_press_again(commands, b.action, d, objects, store) {
+                    if super::toggle::send_press_again(commands, recent, b.action, d, objects, store) {
                         return UseOutcome::Done;
                     }
                 }

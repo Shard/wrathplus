@@ -87,7 +87,9 @@ fn error_message_returns_its_argument_and_message_shows_the_dialog_itself() {
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
 
-/// `BasicControls.xml:16` installs `_ERRORMESSAGE` as the error handler.
+/// `BasicControls.xml:43` installs `_ERRORMESSAGE` as the error handler. With `scriptErrors` on it
+/// demand-loads `Blizzard_DebugTools` (`:16`), and once that is loaded the report is the addon's
+/// `ScriptErrorsFrame` (`:27`), not `BasicScriptErrors`.
 #[test]
 fn error_message_is_the_installed_handler_and_the_host_channel_stays_sighted() {
     wrathplus_formats::wow_data_or_skip!();
@@ -97,19 +99,27 @@ fn error_message_is_the_installed_handler_and_the_host_channel_stays_sighted() {
             .unwrap(),
         "the reference's own default handler is installed"
     );
-    // An addon's pcall wrapper reports through `geterrorhandler()`, which pops the dialog.
+    // An addon's pcall wrapper reports through `geterrorhandler()`.
     s.run(r#"geterrorhandler()("reported")"#).unwrap();
+    let report = |s: &UiScript| -> (bool, bool, String) {
+        s.eval(
+            r#"return IsAddOnLoaded("Blizzard_DebugTools") == 1, ScriptErrorsFrame:IsVisible() == 1,
+                   ScriptErrorsFrameScrollFrameText:GetText()"#,
+        )
+        .unwrap()
+    };
+    let (loaded, shown, text) = report(&s);
     assert!(
-        s.eval::<bool>("return BasicScriptErrors:IsVisible()")
-            .unwrap(),
-        "the dialog is the report now"
+        loaded && shown,
+        "the debug tools loaded and their frame is the report"
     );
-    assert_eq!(
-        s.eval::<String>("return BasicScriptErrorsText:GetText()")
+    assert!(text.contains("reported"), "{text}");
+    assert!(
+        !s.eval::<bool>("return BasicScriptErrors:IsVisible() == 1")
             .unwrap(),
-        "reported"
+        "the basic dialog is the fallback for a client without the debug tools"
     );
-    // An engine-caught error still lands in `errors()`; the dispatch adds the dialog on top.
+    // An engine-caught error still lands in `errors()`; the dispatch files it in the same frame.
     s.run("BrokenProbe = CreateFrame('Frame') BrokenProbe:RegisterEvent('ERROR_PROBE') BrokenProbe:SetScript('OnEvent', function() error('fault') end)")
         .unwrap();
     s.fire_event("ERROR_PROBE", vec![]);
@@ -119,10 +129,12 @@ fn error_message_is_the_installed_handler_and_the_host_channel_stays_sighted() {
         s.errors()
     );
     s.dispatch_script_errors_to_handler();
-    assert!(
-        s.eval::<bool>("return BasicScriptErrors:IsVisible()")
-            .unwrap(),
-        "and the dispatch keeps the dialog up for the player"
+    s.tick(0.016);
+    assert_eq!(
+        // The frame's own table: `_ScriptErrorsFrame` is a file local (`Blizzard_DebugTools.lua:369`).
+        s.eval::<i64>("return #ScriptErrorsFrame.order").unwrap(),
+        2,
+        "and the dispatch files it beside the first report"
     );
 }
 
@@ -161,7 +173,8 @@ fn a_dialog_box_from_the_template_names_and_closes_the_callers_frame() {
     assert_eq!(
         s.eval::<String>(r#"return getglobal("MyDialogButton"):GetText()"#)
             .unwrap(),
-        "OKAY"
+        "Okay",
+        "`text=\"OKAY\"` is a GlobalStrings key, resolved at load"
     );
 
     s.run("MyDialogButton:Click()").unwrap();

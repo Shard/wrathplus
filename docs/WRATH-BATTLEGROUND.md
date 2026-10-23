@@ -34,7 +34,23 @@ no arena-opponent model consumes it.
 **Since then (2026-10-23 audit):** the FIFO is no longer terminal. `ui_battlefield::drain_native`
 consumes 02D4, 023D, 02E0, 02E8, 02E9, 0377, 02D6 and the battlefield-manager family 04DE, 04E0,
 04E1, 04E4, 04E6 into the queue, list, scoreboard, positions, inspect and `WorldPvp` tables; the
-coverage rows say handled. Only 04C7 still ends in `NativeBattlegroundRest`.
+coverage rows say handled. 04C7 too, from `NativeBattlegroundRest`: `ui_native::wrath_arena`
+drives build 12340's arena-opponent table (two read-only Ghidra rounds, `BattlefieldInfo.cpp`):
+- a player created in an arena whose `PLAYER_BYTES_3` byte 3 (arena faction) is not ours, the
+  status-3 byte, takes the first free slot (`0x6e8280` → `0x54d100`: a slot whose pet names it,
+  else the first with no pet and no other opponent) and fires `ARENA_OPPONENT_UPDATE(arenaN, "seen")`;
+- leaving visibility fires `"unseen"` (`0x4d7230` → `0x54abf0`), keeping the slot and its last
+  snapshot with `UnitExists` false; 04C7 fires `"destroyed"` (`0x54ad10`); the battleground's end
+  clears every slot and fires `"cleared"` for all ten tokens (`0x54ca50`);
+- `GetNumArenaOpponents` counts the slots before the first empty one (`0x549630`), and the
+  `arenaN` tokens resolve and fan out after the raid rows (`0x60bb70`).
+- a third round traced the pet slots: a unit created in an arena with `UNIT_FIELD_PETNUMBER` set
+  and a reaction toward us under neutral (`0x7251c0` < 2) takes `arenapetN` for its owner,
+  `UNIT_FIELD_CHARMEDBY` else `UNIT_FIELD_CREATEDBY` (`0x73fcc0` → `0x54d1c0`: the owner's slot,
+  else its earlier pet's, else the first empty one), and fires `"seen"`; 04C7 frees the pet slot.
+Labelled: a change after creation does not assign (`0x6e1d70`, `0x7402b0`), the party-member-stats
+path into both fillers (`0x6cf9b0`) needs a flag AzerothCore always writes 0, and `"seen"` is read
+for the string at `0xa0c3d8`.
 
 **Outbound**:
 - Existing commands whose 3.3.5 bodies are unchanged now route natively: 02D7 battlemaster hello,

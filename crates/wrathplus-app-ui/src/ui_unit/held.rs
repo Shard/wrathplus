@@ -25,25 +25,25 @@ use crate::ui_script::gate;
 use crate::app_core::vm_memo::VmMemo;
 
 /// What a held unit's snapshot reads beside its descriptor.
-pub(super) struct HeldUnits<'a> {
-    pub(super) names: &'a NameCache,
-    pub(super) commands: &'a NetCommands,
-    pub(super) factions: Option<&'a Factions>,
-    pub(super) reputations: &'a Reputations,
-    pub(super) group: &'a crate::app_core::group::GroupState,
+pub(crate) struct HeldUnits<'a> {
+    pub(crate) names: &'a NameCache,
+    pub(crate) commands: &'a NetCommands,
+    pub(crate) factions: Option<&'a Factions>,
+    pub(crate) reputations: &'a Reputations,
+    pub(crate) group: &'a crate::app_core::group::GroupState,
     /// Our own descriptor, which reaction, attackability and the faction line read.
-    pub(super) self_store: Option<&'a ObjectStore>,
-    pub(super) classes: Option<&'a ChrClasses>,
-    pub(super) types: CreatureTypeSources<'a>,
+    pub(crate) self_store: Option<&'a ObjectStore>,
+    pub(crate) classes: Option<&'a ChrClasses>,
+    pub(crate) types: CreatureTypeSources<'a>,
     /// `CanAttack`'s creature metadata and controller lookup.
-    pub(super) relations: crate::target::RelationContext<'a>,
+    pub(crate) relations: crate::target::RelationContext<'a>,
 }
 
 impl HeldUnits<'_> {
     /// The snapshot of the held unit `guid`, whose descriptor is `store`, as a token naming a unit
     /// other than the player carries it. It has no guild leg, so `GetGuildInfo` on a chain answers
     /// nothing, where the reference resolves the token and reads the object's guild (`0x4c9330`).
-    pub(super) fn state(&self, store: &ObjectStore, guid: u64) -> UnitState {
+    pub(crate) fn state(&self, store: &ObjectStore, guid: u64) -> UnitState {
         let name = self
             .names
             .resolve_unit(guid, Some(store), self.commands)

@@ -4,6 +4,7 @@
 //! step 0); the owning modules re-export from their old paths.
 
 pub mod anim;
+pub mod arena;
 pub mod catalogs;
 pub mod chat;
 pub mod console;

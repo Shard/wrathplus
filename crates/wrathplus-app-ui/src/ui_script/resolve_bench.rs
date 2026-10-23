@@ -179,13 +179,13 @@ fn the_settled_shipped_ui_costs_no_gate_walk_on_a_quiet_frame() {
     for _ in 0..8 {
         app_frame_ticked(&mut s, 1.0 / 60.0);
     }
-    // Positive control: zero walks means nothing unless the handlers ran, and
-    // `BuffFrame_OnUpdate` moves `BuffFrameUpdateTime` every frame (`BuffFrame.lua:29-33`).
-    s.run("__probe_bfut = BuffFrameUpdateTime")
+    // Positive control: zero walks means nothing unless the handlers ran, and `BuffFrame_OnUpdate`
+    // moves the frame's own `BuffFrameUpdateTime` every frame (`BuffFrame.lua:50-55`).
+    s.run("__probe_bfut = BuffFrame.BuffFrameUpdateTime")
         .expect("read the control");
     app_frame_ticked(&mut s, 1.0 / 60.0);
     s.run(
-        "if BuffFrameUpdateTime == __probe_bfut then \
+        "if BuffFrame.BuffFrameUpdateTime == __probe_bfut then \
          error('the VM tick ran no shipped OnUpdate — this test proves nothing') end",
     )
     .expect("the shipped UI's OnUpdate handlers must run under app_frame_ticked");

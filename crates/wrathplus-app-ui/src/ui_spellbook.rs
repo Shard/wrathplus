@@ -473,13 +473,17 @@ fn leading_number(s: &str) -> u32 {
 /// through the cast tail the action bar uses, at the selection as the calls before it left it, or
 /// with `onSelf` at the caster.
 pub(crate) fn cast_spell(cast: &mut crate::spell::ScriptCast, spell_id: u32, on_self: bool) {
-    let crate::spell::ScriptCast { targeting, ladder } = cast;
+    let crate::spell::ScriptCast {
+        targeting,
+        ladder,
+        recent,
+    } = cast;
     // `CastSpell`'s two cancel forks, in order: the press-again cancel (12340 `isActive`
     // `0x802cb0`), then the form match, which `UseAction` lacks, with its silent no-op.
     if let (Some(sp), Some(store)) = (ladder.spells.as_ref(), targeting.self_store.iter().next()) {
         if let Some(d) = sp.catalog.get(spell_id) {
             let (commands, objects) = (&ladder.commands, &ladder.objects);
-            if crate::ui_action::toggle::send_press_again(commands, spell_id, d, objects, store) {
+            if crate::ui_action::toggle::send_press_again(commands, recent, spell_id, d, objects, store) {
                 return;
             }
             let form = store.0.unit_shapeshift_form();

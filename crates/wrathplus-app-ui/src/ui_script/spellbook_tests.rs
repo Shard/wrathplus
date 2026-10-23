@@ -574,11 +574,9 @@ fn the_pet_tab_switches_books_and_renders_the_pets_spells() {
         .unwrap());
 }
 
-/// The macro-editor fork (`SpellBookFrame.lua:271-283`, `Blizzard_MacroUI.lua:122-126`): only a
-/// shift-click writes, appending a whole `/cast <name>[(<rank>)]` line with no separator. The
-/// `/cast` line is 1.12's; the bare-name insert is a later client's.
+/// The macro-editor fork (`SpellBookFrame.lua:360-379`): only a shift-click (`CHATLINK`) writes,
+/// through `ChatEdit_InsertLink`, which the open editor takes.
 #[test]
-#[ignore = "pending Native UI: unfocused ScrollingEdit cursorOffset"]
 fn the_macro_editor_takes_a_shift_click_and_only_a_shift_click() {
     wrathplus_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
@@ -759,14 +757,15 @@ fn the_macro_editor_takes_a_shift_click_and_only_a_shift_click() {
     s.run("MacroFrame_Update()").unwrap();
     assert_eq!(body(&s), before, "nothing landed while the popup was up");
 
-    // ── Editor hidden: shift-click picks up again (`SpellBookFrame.lua:281-282`) ───────────────
+    // ── Editor hidden: Shift is `CHATLINK` before `PICKUPACTION` (`SpellBookFrame.lua:360-384`),
+    // a link insert that returns, so no chat line takes it and nothing is picked up.
     s.run("HideUIPanel(MacroFrame)").unwrap();
     click(&mut s, "SpellButton1", "LeftButton");
     s.set_modifiers(false, false, false);
-    assert!(s.errors().is_empty(), "pickup errors: {:?}", s.errors());
+    assert!(s.errors().is_empty(), "link errors: {:?}", s.errors());
     assert!(
-        matches!(s.cursor_payload(), Some(wrathplus_ui::script::CursorPayload::Spell(c)) if c.spell_id == 133),
-        "the cursor holds spell 133: {:?}",
+        s.cursor_payload().is_none(),
+        "Shift is the chat link, not a pickup: {:?}",
         s.cursor_payload()
     );
     assert!(s.take_spell_casts().is_empty());

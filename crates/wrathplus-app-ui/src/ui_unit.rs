@@ -481,7 +481,7 @@ fn fire_combat_text(
 
 /// The tokens naming `unit`, in build 12340's order (`0x60bb70`): `player`, `vehicle`, `pet`, the
 /// first `partyN` or `partypetN`, the first `raidN` or `raidpetN`, then the arena units. Labelled:
-/// `vehicle` and `arenaN`/`arenapetN` resolve to nothing in [`UnitTokens`] yet, so they never fire.
+/// `vehicle` resolves to nothing in [`UnitTokens`] yet and the arena units are not listed here.
 fn unit_combat_tokens(tokens: &UnitTokens, unit: Entity) -> Vec<String> {
     let names = |token: &str| {
         tokens

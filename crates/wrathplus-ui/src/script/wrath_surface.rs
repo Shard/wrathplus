@@ -230,10 +230,10 @@ fn install_trusted_secure_environment(lua: &Lua) -> mlua::Result<()> {
 }
 
 fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
-    // UIParent.lua:1927 positions the stock arena frames; no opponents outside an arena.
-    lua.globals()
-        .set("GetNumArenaOpponents", lua.create_function(|_, ()| Ok(0))?)?;
     let globals = lua.globals();
+    // `0x54a2c0`: the arena feed's leading slots (`UnitGuids::arena_count`, `0x549630`).
+    let arena = lua.create_function(super::UnitGuids::arena_lua)?;
+    globals.set("GetNumArenaOpponents", arena)?;
 
     // `IsMouseButtonDown([button])`: a named button ("LeftButton", or 1-5), else any button.
     globals.set(

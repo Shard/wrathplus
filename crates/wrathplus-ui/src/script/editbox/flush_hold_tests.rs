@@ -1,5 +1,6 @@
 //! The flush's hold: with no inline measurer, a focused box's `OnTextChanged` waits for the caret
-//! leg, so `OnCursorChanged` precedes it as in the reference (`0x77d475` before `0x77d498`).
+//! leg, and an unfocused box's leg places at a fallback, so `OnCursorChanged` precedes it as in
+//! the reference (`0x77d475` before `0x77d498`).
 
 use crate::script::UiScript;
 
@@ -49,11 +50,15 @@ fn a_pending_table_holds_on_text_changed_until_the_caret_places() {
     assert_eq!(take_log(&s), "", "fired once");
 }
 
+/// An unfocused box never gets the host's table, so its caret leg places at the fallback x 0,
+/// and `OnCursorChanged` still precedes `OnTextChanged`, which stock `ScrollingEdit` needs.
 #[test]
-fn an_unfocused_box_with_no_table_still_fires_on_text_changed() {
+fn an_unfocused_box_with_no_table_places_its_caret_before_on_text_changed() {
     let mut s = focused_box();
     s.run(r#"E:ClearFocus() LOG = {} E:SetText("ab")"#).unwrap();
     s.resolve();
     s.tick(0.016);
-    assert_eq!(take_log(&s), "text:ab");
+    assert_eq!(take_log(&s), "cursor@0 text:ab");
+    s.tick(0.016);
+    assert_eq!(take_log(&s), "", "fired once");
 }

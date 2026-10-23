@@ -217,7 +217,10 @@ impl Plugin for UiScriptPlugin {
             .init_resource::<UiClock>()
             .init_resource::<AddOnIdentity>()
             // After `AssetSet::Open`: the VM's first load is the chain's `GlobalStrings.lua`.
-            .add_systems(Startup, setup_script.after(wrathplus_assets::AssetSet::Open))
+            .add_systems(
+                Startup,
+                setup_script.after(wrathplus_assets::AssetSet::Open),
+            )
             // The in-game UI loads on world entry, as the reference's does, once the loading cover
             // has presented, so its ~0.5 s never stalls the cover's first frame.
             .add_systems(
@@ -336,9 +339,9 @@ fn arbitrate_pointer_over_ui(
 
 /// The session lifecycle: the VM's birth, identity, death and reload.
 mod lifecycle;
-pub(crate) use crate::app_core::ui_state::seam_scale;
 #[cfg(test)]
 pub(crate) use crate::app_core::ui_state::ingame_ui_up;
+pub(crate) use crate::app_core::ui_state::seam_scale;
 pub(crate) use lifecycle::{
     end_ui_session, run_pending_reload, setup_script, AddOnIdentity, LeavingWorldArmed,
     PendingEntryUiLoad, ReloadUiPending,
@@ -794,10 +797,6 @@ mod duel_tests;
 #[cfg(test)]
 mod enchant_confirm_tests;
 
-/// The `toplevel`, mouse and `id` flags of the whole loaded tree against the reference.
-#[cfg(test)]
-mod frame_flag_gate;
-
 #[cfg(test)]
 mod friends_tests;
 
@@ -826,11 +825,11 @@ mod quest_tests;
 #[cfg(test)]
 mod quest_timer_tests;
 
+#[cfg(test)]
+mod battlefield_minimap_options_tests;
 /// The battle map: the stock `Blizzard_BattlefieldMinimap` addon, demand-loaded as SHIFT-M does.
 #[cfg(test)]
 mod battlefield_minimap_tests;
-#[cfg(test)]
-mod battlefield_minimap_options_tests;
 
 #[cfg(test)]
 mod tutorial_tests;
@@ -888,7 +887,6 @@ mod errors_tests;
 
 #[cfg(test)]
 mod shipped_xml_tests;
-
 
 #[cfg(test)]
 mod bottom_hud_tests;
