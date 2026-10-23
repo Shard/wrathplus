@@ -88,7 +88,9 @@ impl CharCreateCatalog {
 
     /// A race's display name for a sex (0 male, 1 female), as `GetAvailableRaces` lists it.
     pub fn race_name(&self, race: u8, sex: u8) -> Option<&str> {
-        self.names.get(&race).map(|n| n[(sex as usize).min(1)].as_str())
+        self.names
+            .get(&race)
+            .map(|n| n[(sex as usize).min(1)].as_str())
     }
 
     /// A race's hair glue token (`"NORMAL"`, `"HORNS"`), keying `HAIR_<tok>_STYLE`/`_COLOR`.
@@ -280,9 +282,9 @@ fn load_combos(chain: &mut Chain) -> Result<HashSet<(u8, u8)>> {
     Ok(combos)
 }
 
-/// CharStartOutfit → (race, class, sex) → worn items, parsed by hand (41 fields, 152 bytes): `ID`
-/// u32 @0, race/class/gender u8 @4/5/6, `ItemId[12]` @8, `DisplayId[12]` @56, `InventoryType[12]`
-/// @104. A slot is kept when both are ≥ 1, dropping the `-1` tail and the InventoryType-0 bags.
+/// CharStartOutfit → (race, class, sex) → worn items, parsed by hand (build 12340: 77 fields, 296
+/// bytes): `ID` u32 @0, race/class/gender/outfit u8 @4/5/6/7, `ItemId[24]` @8, `DisplayId[24]`
+/// @104, `InventoryType[24]` @200. A slot is kept when both are ≥ 1, dropping the `-1` tail and the InventoryType-0 bags.
 fn load_start_outfits(
     chain: &mut Chain,
     profile: &DataProfile,
