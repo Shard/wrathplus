@@ -16,7 +16,7 @@ mod wrath_layouts;
 mod wrath_layouts_installed_tests;
 pub use overrides::AssetOverrides;
 mod chain;
-pub use chain::{Chain, ChainEntry};
+pub use chain::{Chain, ChainEntry, NONSTOCK_PATCHES_ENV, STOCK_MAX_PATCH};
 mod profile;
 pub use profile::DataProfile;
 /// Loose `.tga` art, as addon folders ship it.

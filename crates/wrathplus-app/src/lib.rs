@@ -373,9 +373,9 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
         }
     }
 
-    // The `mpq://` source must be registered before `AssetPlugin` (in `DefaultPlugins`) builds. The
-    // install is found by `wrathplus_formats::wow_data`, as everywhere; without one the source is
-    // absent and terrain loads fail gracefully.
+    // The `mpq://` source registers before `AssetPlugin` builds, on `wrathplus_formats::wow_data`'s
+    // install (none: terrain loads fail gracefully); `[data] nonstock_patches` may widen its chain.
+    wrathplus_app_core::data_config::apply_nonstock_patches();
     let data_profile = wrathplus_formats::DataProfile::from_env()
         .expect("valid explicit WOW_CLIENT_PROFILE/WOW_LOCALE configuration");
     eprintln!("wrathplus: client data profile={data_profile:?}");
