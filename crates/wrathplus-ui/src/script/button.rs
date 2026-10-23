@@ -307,7 +307,7 @@ fn ensure_slot(lua: &Lua, this: &Table, slot: Slot) -> mlua::Result<u32> {
                     ..Default::default()
                 },
             );
-            model.touch_layout(); // a region entered the layout gate's read set
+            model.touch_layout_region_write(rh); // unanchored: no layout node yet
             if let Some(frame) = model.arena.frame_mut(h) {
                 if let KindState::Button(bs) = &mut frame.kind_state {
                     slot.set(bs, Some(rh));
@@ -342,7 +342,7 @@ fn swap_slot(
     };
     let outgoing = slot.get(bs).filter(|old| Some(*old) != rh);
     slot.set(bs, rh);
-    model.touch_layout();
+    model.touch_layout_slot(rh);
     Ok(outgoing)
 }
 
@@ -589,7 +589,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             }
             adopt_label(&mut model, owner, rh);
             // The layout's read set moved, and `GetTextWidth` reads the new label's extents.
-            model.touch_layout();
+            model.touch_layout_region_write(rh);
             model.touch_measure(rh);
             Ok(())
         })?,
