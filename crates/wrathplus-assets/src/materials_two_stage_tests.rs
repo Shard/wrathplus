@@ -51,6 +51,10 @@ fn stage_two_add_matches_the_installed_combiner_programs() {
     );
     let shadow = include_str!("shaders/wow_shadow.wgsl");
     assert!(shadow.contains("if (op == 3u) {\n            alpha += a1;"));
+    // Combiners_Add_Mod (op 8): `t1·(primary + t0)`, the t0·t1 term outside the lit primary.
+    assert!(forward.contains("stage_add = t0.rgb * t.rgb;"));
+    assert!(forward.contains("base_color = vec4<f32>(p.rgb * t.rgb, t.a * (p.a + t0.a));"));
+    assert!(shadow.contains("alpha += t0a; // Combiners_Add_Mod"));
 
     let data = wrathplus_formats::wow_data_or_skip!();
     let mut chain = wrathplus_formats::Chain::open_wrath(&data, "enUS").expect("chain");
@@ -74,6 +78,13 @@ fn stage_two_add_matches_the_installed_combiner_programs() {
             [
                 "TEX R1, fragment.texcoord[1], texture[1], 2D;",
                 "MAD result.color, R0, fragment.color.primary, R1;",
+            ],
+        ),
+        (
+            "Combiners_Add_Mod",
+            [
+                "MAD result.color.xyz, R0, fragment.color.primary, R1;",
+                "MUL result.color.w, R0, R1;",
             ],
         ),
         (

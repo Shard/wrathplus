@@ -535,6 +535,23 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
             if (op == 3u) {
                 base_color.a += t.a;
             }
+        } else if (op == 8u) {
+            // Combiners_Add_Mod: `t1·(primary + t0)`, alpha `t1.a·(primary.a + t0.a)`. The lit
+            // term keeps the folded tint and vertex colour under t1; t0·t1 adds outside it.
+#ifdef VERTEX_UVS_A
+            let t0 = textureSampleBias(
+                pbr_bindings::base_color_texture,
+                pbr_bindings::base_color_sampler,
+                vo.uv,
+                view.mip_bias,
+            );
+            var p = pbr_bindings::material.base_color;
+#ifdef VERTEX_COLORS
+            p *= in.color;
+#endif
+            stage_add = t0.rgb * t.rgb;
+            base_color = vec4<f32>(p.rgb * t.rgb, t.a * (p.a + t0.a));
+#endif
         } else {
             let scale = select(1.0, 2.0, op == 4u || op == 6u);
             base_color = vec4<f32>(base_color.rgb * t.rgb * scale, base_color.a);

@@ -314,9 +314,12 @@ fn fragment(in: VertexOutput) -> ShadowOutput {
     uv = (pbr_bindings::material.uv_transform * vec3<f32>(uv, 1.0)).xy;
     if ((flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT) != 0u) {
         // No light-camera mip bias or distance-dependent dither/fade. Normal implicit LOD.
-        if (m.stage2.x < 0.5 || m.stage2.w < 0.5) {
-            alpha *= textureSample(pbr_bindings::base_color_texture,
-                pbr_bindings::base_color_sampler, uv).a;
+        let t0a = textureSample(pbr_bindings::base_color_texture,
+            pbr_bindings::base_color_sampler, uv).a;
+        if (m.stage2.x > 0.5 && u32(m.stage2.y) == 8u) {
+            alpha += t0a; // Combiners_Add_Mod: `primary.a + t0.a`, under t1.a below
+        } else if (m.stage2.x < 0.5 || m.stage2.w < 0.5) {
+            alpha *= t0a;
         }
     }
 #endif
