@@ -2,10 +2,12 @@
 //! taxi map's fare (`0x4dc3d0`, callers `0x4dc45d` and `0x4dc4a2`). The merchant's goods and the
 //! trainer's services are the server's prices, shown as sent.
 
-use crate::net::Reputations;
 use crate::app_core::session::ObjectStore;
+#[cfg(any(test, feature = "test-support"))]
+use crate::net::Reputations;
 
-use super::{ring_reaction, Factions};
+#[cfg(any(test, feature = "test-support"))]
+use super::Factions;
 
 /// Wrath: 3.3.5 has no honor ranks (`PLAYER_BYTES_3` byte 2 is the PvP title), so only the
 /// reputation term applies, 5% per rank above Neutral, as AzerothCore charges it
@@ -18,19 +20,13 @@ fn wrath_price_discount(reaction: u8) -> f64 {
 }
 
 /// [`wrath_price_discount`] for `vendor` and the player: the vendor's reaction toward the player
-/// ([`ring_reaction`]).
+/// on the live inputs ([`super::RelationInputs::ring_reaction`]).
 pub fn vendor_price_discount(
-    factions: Option<&Factions>,
-    reputations: &Reputations,
+    relations: &super::RelationInputs,
     vendor: &ObjectStore,
     player: &ObjectStore,
 ) -> f64 {
-    wrath_price_discount(ring_reaction(
-        factions,
-        reputations,
-        Some(vendor),
-        Some(player),
-    ))
+    wrath_price_discount(relations.ring_reaction(Some(vendor), Some(player)))
 }
 
 /// A fixture off the install's `Faction.dbc`: the catalog, a `FactionTemplate` of Stormwind
@@ -106,7 +102,9 @@ mod tests {
                 template,
             )]));
             let me = ObjectStore(human_warrior_player(&[]));
-            let got = vendor_price_discount(Some(&factions), &reps, &vendor, &me);
+            let reaction =
+                super::super::ring_reaction(Some(&factions), &reps, Some(&vendor), Some(&me));
+            let got = wrath_price_discount(reaction);
             assert!((got - want).abs() < 1e-12, "standing {total}: got {got:e}");
         }
     }
