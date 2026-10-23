@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::io::Cursor;
 
 use anyhow::{anyhow, Context, Result};
-use wrathplus_dbc::{DbcParser, FieldType, Record, RecordSet, Schema, SchemaField, StringRef, Value};
+use wrathplus_dbc::{
+    DbcParser, FieldType, Record, RecordSet, Schema, SchemaField, StringRef, Value,
+};
 
 use crate::Chain;
 
@@ -113,3 +115,7 @@ pub(crate) fn load_id_name_table(
     }
     Ok(out)
 }
+
+#[cfg(test)]
+#[path = "installed_catalogs_tests.rs"]
+mod installed_catalogs_tests;
