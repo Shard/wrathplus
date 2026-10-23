@@ -66,17 +66,35 @@ fn patch_number(name: &str, prefix: &str) -> Option<u32> {
     }
 }
 
-fn numeric_patch_family(names: &[String], prefix: &str) -> Vec<String> {
+/// The highest patch number build 12340 ships, root and locale alike: `patch-3.MPQ`,
+/// `patch-enUS-3.MPQ`. A higher one is a repack's (a server's custom GlueXML, art or DBCs).
+pub const STOCK_MAX_PATCH: u32 = 3;
+
+/// The opt-in that mounts a non-stock patch archive: the default is the stock client.
+pub const NONSTOCK_PATCHES_ENV: &str = "WOW_NONSTOCK_PATCHES";
+
+fn numeric_patch_family(names: &[String], prefix: &str, nonstock: bool) -> Vec<String> {
     let mut patches = names
         .iter()
         .filter_map(|name| patch_number(name, prefix).map(|number| (number, name.clone())))
+        .filter(|(number, name)| {
+            let stock = *number <= STOCK_MAX_PATCH;
+            if !stock && !nonstock {
+                tracing::warn!(
+                    "chain: {name} is not a stock 3.3.5a archive — skipped \
+                     ({NONSTOCK_PATCHES_ENV}=1 mounts it)"
+                );
+            }
+            stock || nonstock
+        })
         .collect::<Vec<_>>();
     patches.sort_by_cached_key(|(number, name)| (*number, name.to_ascii_lowercase(), name.clone()));
     patches.into_iter().map(|(_, name)| name).collect()
 }
 
 /// Build the 3.3.5 archive profile, ascending priority, from names actually present on disk.
-fn wrath_mount_plan(path: &Path, locale: &str) -> Result<Vec<PathBuf>> {
+/// `nonstock` admits patch archives numbered past [`STOCK_MAX_PATCH`].
+fn wrath_mount_plan(path: &Path, locale: &str, nonstock: bool) -> Result<Vec<PathBuf>> {
     validate_wrath_locale(locale)?;
     if !path.is_dir() {
         bail!("Wrath data path is not a directory: {}", path.display());
@@ -120,16 +138,16 @@ fn wrath_mount_plan(path: &Path, locale: &str) -> Result<Vec<PathBuf>> {
         }
     }
 
-    // Patch suffixes are numeric priority, not lexical order; accept the family present rather
-    // than asserting a maximum patch number for every 3.3.5 distribution.
+    // Patch suffixes are numeric priority, not lexical order. Past the stock three, a family
+    // member is a repack's and mounts only on request.
     plan.extend(
-        numeric_patch_family(&root_names, "patch")
+        numeric_patch_family(&root_names, "patch", nonstock)
             .into_iter()
             .map(|name| path.join(name)),
     );
     let locale_patch_prefix = format!("patch-{}", locale.to_ascii_lowercase());
     plan.extend(
-        numeric_patch_family(&locale_names, &locale_patch_prefix)
+        numeric_patch_family(&locale_names, &locale_patch_prefix, nonstock)
             .into_iter()
             .map(|name| locale_dir.join(name)),
     );
@@ -189,9 +207,10 @@ impl Chain {
     /// Open the read-only Wrath 3.3.5 archive profile for `locale` from a `Data` directory.
     ///
     /// Base archives mount root-first then locale-specific; root and locale patch families follow,
-    /// each in numeric order. Archive and locale-directory names are resolved case-insensitively.
+    /// each in numeric order, stock numbers only unless `WOW_NONSTOCK_PATCHES=1`. Archive and locale-directory names are resolved case-insensitively.
     pub fn open_wrath(path: &Path, locale: &str) -> Result<Self> {
-        let plan = wrath_mount_plan(path, locale)?;
+        let nonstock = std::env::var(NONSTOCK_PATCHES_ENV).is_ok_and(|v| v == "1");
+        let plan = wrath_mount_plan(path, locale, nonstock)?;
         if plan.is_empty() {
             bail!(
                 "no known Wrath MPQs found for locale {locale:?} in {}",
@@ -321,132 +340,5 @@ impl Chain {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    fn owned(names: &[&str]) -> Vec<String> {
-        names.iter().map(|n| n.to_string()).collect()
-    }
-
-    fn synthetic_data_tree(
-        root_names: &[&str],
-        locale_dir: &str,
-        locale_names: &[&str],
-    ) -> PathBuf {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        let root = std::env::temp_dir().join(format!(
-            "benilla-wrath-chain-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        let locale = root.join(locale_dir);
-        fs::create_dir_all(&locale).unwrap();
-        for name in root_names {
-            fs::write(root.join(name), []).unwrap();
-        }
-        for name in locale_names {
-            fs::write(locale.join(name), []).unwrap();
-        }
-        root
-    }
-
-    fn relative_plan(root: &Path, locale: &str) -> Vec<String> {
-        wrath_mount_plan(root, locale)
-            .unwrap()
-            .into_iter()
-            .map(|path| {
-                path.strip_prefix(root)
-                    .unwrap()
-                    .to_string_lossy()
-                    .replace('\\', "/")
-            })
-            .collect()
-    }
-
-    #[test]
-    fn wrath_mount_plan_matches_335_profile_and_numeric_patch_layers() {
-        let root = synthetic_data_tree(
-            &[
-                "PATCH-10.mpq",
-                "lichking.MPQ",
-                "common.MPQ",
-                "patch-3.MPQ",
-                "expansion.MPQ",
-                "patch.MPQ",
-                "common-2.MPQ",
-                "patch-2.MPQ",
-                "patch-not-a-number.MPQ",
-            ],
-            "enUS",
-            &[
-                "patch-enUS-4.MPQ",
-                "lichking-speech-enUS.MPQ",
-                "locale-enUS.MPQ",
-                "expansion-locale-enUS.MPQ",
-                "patch-enUS.MPQ",
-                "speech-enUS.MPQ",
-                "patch-enUS-3.MPQ",
-                "lichking-locale-enUS.MPQ",
-                "expansion-speech-enUS.MPQ",
-                "patch-enUS-2.MPQ",
-            ],
-        );
-        assert_eq!(
-            relative_plan(&root, "enUS"),
-            owned(&[
-                "common.MPQ",
-                "common-2.MPQ",
-                "expansion.MPQ",
-                "lichking.MPQ",
-                "enUS/locale-enUS.MPQ",
-                "enUS/speech-enUS.MPQ",
-                "enUS/expansion-locale-enUS.MPQ",
-                "enUS/expansion-speech-enUS.MPQ",
-                "enUS/lichking-locale-enUS.MPQ",
-                "enUS/lichking-speech-enUS.MPQ",
-                "patch.MPQ",
-                "patch-2.MPQ",
-                "patch-3.MPQ",
-                "PATCH-10.mpq",
-                "enUS/patch-enUS.MPQ",
-                "enUS/patch-enUS-2.MPQ",
-                "enUS/patch-enUS-3.MPQ",
-                "enUS/patch-enUS-4.MPQ",
-            ])
-        );
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn wrath_mount_plan_resolves_locale_and_archives_case_insensitively() {
-        let root = synthetic_data_tree(
-            &["COMMON.mpq", "Patch-2.mpq", "PATCH.MPQ"],
-            "ENus",
-            &["LOCALE-ENUS.mpq", "PATCH-enUS.MPQ"],
-        );
-        assert_eq!(
-            relative_plan(&root, "enus"),
-            owned(&[
-                "COMMON.mpq",
-                "ENus/LOCALE-ENUS.mpq",
-                "PATCH.MPQ",
-                "Patch-2.mpq",
-                "ENus/PATCH-enUS.MPQ",
-            ])
-        );
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn wrath_locale_rejects_path_components_and_non_locale_shapes() {
-        for locale in ["../x", "en/US", "en\\US", ".enU", "en1S", "enusx", ""] {
-            assert!(
-                validate_wrath_locale(locale).is_err(),
-                "accepted {locale:?}"
-            );
-        }
-        assert!(validate_wrath_locale("enUS").is_ok());
-    }
-}
+#[path = "chain_tests.rs"]
+mod tests;

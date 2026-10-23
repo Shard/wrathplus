@@ -94,6 +94,22 @@ separate `allow_classic_overrides` permission. Ordinary `Chain::open`/`open_prof
 UI test harnesses remain archive-only. Packs are not hot-mounted by runtime profile setters;
 restart after changing pack configuration.
 
+### Non-stock patch archives
+
+The archive chain mounts Blizzard's 3.3.5a archives alone by default: `patch.MPQ` to `patch-3.MPQ`
+and `patch-<locale>.MPQ` to `patch-<locale>-3.MPQ`. A repack's later archives (`patch-4.MPQ`,
+`patch-enUS-4.MPQ`, …; often a server's own login screen, art or DBCs) are skipped with a warning
+naming each one. To mount them, add to `config.toml`:
+
+```toml
+[data]
+nonstock_patches = true
+```
+
+or launch with `WOW_NONSTOCK_PATCHES=1`. They mount above the stock patches in numeric order, as
+the original client would. This is independent of Classic/Plus and of the loose packs above, which
+stay the way to ship replacement art; restart after changing it.
+
 ### Reader audit
 
 - `Chain::read` (and its `read_file` alias), `contains`, `list` and `list_filtered` share one policy;

@@ -3,6 +3,7 @@
 
 pub mod run_mode;
 pub mod local_state;
+pub mod data_config;
 pub mod query_cache;
 pub mod area;
 pub mod chr_classes;
