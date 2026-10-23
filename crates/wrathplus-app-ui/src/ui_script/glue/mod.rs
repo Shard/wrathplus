@@ -170,8 +170,24 @@ pub(crate) fn enter_stock_select(world: &mut World) {
         return;
     }
     push_characters(world);
-    set_glue_screen(world, "charselect");
+    if let Some(mut script) = world.get_non_send_resource_mut::<UiScript>() {
+        show_stock_select(&mut script);
+    }
     info!("ui_script: stock glue — CharacterSelect up");
+}
+
+/// Character select comes up: the login's connect status dialog ("Connecting", "Handshaking", …)
+/// goes first, then `SET_GLUE_SCREEN "charselect"`. Arriving here means the login is past
+/// connecting, as the realm list's arrival does (`host::stock_glue`); with a remembered realm
+/// that list never opens, and the dialog stayed up over the characters. Inferred: 12340 fires
+/// `CLOSE_STATUS_DIALOG` (glue event 5, table `0xb6aff8`) by index through `0x4da5f0`'s callers,
+/// and its fire site on this path is not traced.
+pub(crate) fn show_stock_select(script: &mut UiScript) {
+    script.fire_event("CLOSE_STATUS_DIALOG", vec![]);
+    script.fire_event(
+        "SET_GLUE_SCREEN",
+        vec![ScriptValue::Str("charselect".into())],
+    );
 }
 
 /// The roster's rows onto the glue VM.
