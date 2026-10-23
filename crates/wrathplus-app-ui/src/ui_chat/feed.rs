@@ -9,10 +9,10 @@ use wrathplus_protocol::types::{channel_notice, ChannelNoticeTail, MACRO_EXPANDE
 use wrathplus_assets::{LockRecover, WorldAssets};
 use wrathplus_formats::{EmoteLine, EmoteTextCatalog};
 
-use crate::names::NameCache;
-use crate::net::{GuidIndex, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
+use crate::names::NameCache;
+use crate::net::{GuidIndex, NetCommands};
 
 use super::edit::ChannelState;
 use super::event::{flag_of_tag, kind_of_wire, language_name, ChatEvent, ChatEventKind};
@@ -139,27 +139,25 @@ pub(super) fn xp_gain_line(
 /// own table is untraced; rested is the only bonus state vmangos sets (`Player.cpp:17990-17993`).
 const RESTED_STATE: &str = "Rested";
 
-/// The honor line (`0x625270`): `COMBATLOG_HONORAWARD` with no victim, `COMBATLOG_HONORGAIN` for
-/// `honor > 0`, else `COMBATLOG_DISHONORGAIN`. No `rank_title` leaves the rank slot empty, as in
-/// the reference; vmangos floors a rankless player at rank 5 (`HonorMgr.cpp:1086-1087`).
+/// The honor line (12340 `0x50b6d0`): `COMBATLOG_HONORAWARD` with no victim, else
+/// `COMBATLOG_HONORGAIN` for a ranked victim (a signed rank of at least 0) and
+/// `COMBATLOG_HONORGAIN_NO_RANK` below that. No `rank_title` leaves the rank slot empty.
 pub(super) fn honor_gain_line(
     victim: Option<&str>,
     rank_title: Option<&str>,
+    ranked: bool,
     honor: i32,
     get: &dyn Fn(&str) -> Option<String>,
 ) -> Option<String> {
     use wrathplus_ui::strings::Arg;
+    let points = Arg::D(i64::from(honor));
     match victim {
-        None => keyed(get, "COMBATLOG_HONORAWARD", &[Arg::D(i64::from(honor))]),
-        Some(name) if honor <= 0 => keyed(get, "COMBATLOG_DISHONORGAIN", &[Arg::S(name)]),
+        None => keyed(get, "COMBATLOG_HONORAWARD", &[points]),
+        Some(name) if !ranked => keyed(get, "COMBATLOG_HONORGAIN_NO_RANK", &[Arg::S(name), points]),
         Some(name) => keyed(
             get,
             "COMBATLOG_HONORGAIN",
-            &[
-                Arg::S(name),
-                Arg::S(rank_title.unwrap_or_default()),
-                Arg::D(i64::from(honor)),
-            ],
+            &[Arg::S(name), Arg::S(rank_title.unwrap_or_default()), points],
         ),
     }
 }
@@ -795,22 +793,21 @@ pub fn feed_chat(
                     }
                     resolved
                 };
-                // The title's side is the victim's and its gender ours (`0x625270` genders against
-                // the local player). No name record means side 0: a creature, where only a racial
-                // leader is ranked (19, "Leader" either side, `HonorMgr.cpp:1075-1076`).
-                let team = names
-                    .player_traits(victim)
-                    .and_then(|(race, _, _)| crate::ui_unit::race_faction_group(race))
-                    .map_or(0, |group| u8::from(group == "Alliance"));
+                // The side was read off the victim at receipt; the gender is ours (unconfirmed for
+                // 12340: `0x7225e0` is called with gender -1).
                 let female = self_guid
                     .0
                     .and_then(|g| names.player_traits(g))
                     .is_some_and(|(_, _, gender)| gender == 1);
-                let title = (victim != 0).then(|| script.pvp_rank_title(rank, team, female));
+                let title = match rank {
+                    Some((rank, Some(side))) => script.pvp_rank_title(rank, side, female),
+                    _ => None,
+                };
                 let name = (victim != 0).then(|| name.unwrap_or_else(|| "Unknown".into()));
                 let line = honor_gain_line(
                     name.as_deref(),
-                    title.flatten().as_deref(),
+                    title.as_deref(),
+                    rank.is_some(),
                     honor,
                     &globals(&script),
                 );
