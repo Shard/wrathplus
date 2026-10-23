@@ -43,6 +43,8 @@ mod recruitment;
 /// The chat windows' saved look: tab tint, alpha and font size, read at login, saved at logout.
 pub(crate) mod settings;
 #[cfg(test)]
+mod slash_table_tests;
+#[cfg(test)]
 mod stock_print_tests;
 #[cfg(test)]
 mod tests;
@@ -108,8 +110,12 @@ impl Plugin for UiChatPlugin {
                 )
                     .after(wrathplus_assets::AssetSet::Open),
             )
-            // The slash-command table needs the VM's globals and the emote catalog, both `Startup`.
-            .add_systems(PostStartup, commands::build_slash_commands)
+            // The slash-command table, built per VM off its loaded globals, ahead of the chat drain.
+            .init_resource::<commands::SlashCommands>()
+            .add_systems(
+                Update,
+                commands::build_slash_commands.in_set(crate::app_core::schedule::UiFeed),
+            )
             // The language gate's feeds, ahead of the chat drain that reads them.
             .add_systems(
                 Update,

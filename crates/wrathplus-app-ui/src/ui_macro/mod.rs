@@ -49,6 +49,7 @@ impl Plugin for UiMacroPlugin {
                     // this frame reports its new spell's cooldown the same frame.
                     rebind_macro_spells
                         .in_set(crate::app_core::schedule::UiFeed)
+                        .after(crate::ui_chat::commands::build_slash_commands)
                         .before(crate::app_core::schedule::UnitFeed),
                     // In-world only: the per-character file needs the character.
                     load_macros
