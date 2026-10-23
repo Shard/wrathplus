@@ -324,7 +324,12 @@ fn feed_shapeshift_bar(
 /// makes it a silent no-op (`0x4b4963`, warrior stances); a force-admitted spell that is lit (its
 /// aura up) cancels, with no DBC guard since it has no form id. Anything else casts.
 pub(crate) fn cast_form(cast: &mut crate::spell::ScriptCast, spell_id: u32) {
-    let crate::spell::ScriptCast { targeting, ladder } = cast;
+    let crate::spell::ScriptCast {
+        targeting,
+        ladder,
+        recent,
+    } = cast;
+    let now = std::time::Instant::now();
     let store = targeting.self_store.iter().next();
     let form_byte = store.map(|s| s.0.unit_shapeshift_form()).unwrap_or(0);
     let d = ladder.spells.as_ref().and_then(|s| s.catalog.get(spell_id));
@@ -345,6 +350,11 @@ pub(crate) fn cast_form(cast: &mut crate::spell::ScriptCast, spell_id: u32) {
         }
     });
     match disposition {
+        // The `secureAbilityToggle` window and the charm guard hold the cancel (`0x80daec`).
+        Some(true)
+            if store.is_some_and(|s| {
+                crate::ui_action::toggle::press_again_held(recent, spell_id, s, now)
+            }) => {}
         Some(true) => {
             debug!("ui_shapeshift: cancel form aura {spell_id}");
             let _ = ladder
@@ -355,6 +365,7 @@ pub(crate) fn cast_form(cast: &mut crate::spell::ScriptCast, spell_id: u32) {
         Some(false) => {}
         None => {
             debug!("ui_shapeshift: cast form {spell_id}");
+            recent.record(spell_id, now);
             ladder.send(spell_id, &targeting.context(), CastCommit::Spell);
         }
     }

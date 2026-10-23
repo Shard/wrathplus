@@ -4,12 +4,10 @@
 //! or `CMSG_DISMISS_CRITTER` `0x48d` for a companion) instead of being cast. The form-match recast
 //! is [`form_recast_disposition`].
 //!
-//! Not built: `0x80da80` skips the cancel while the `secureAbilityToggle` CVar (`DAT_00bd097c`,
-//! registered at `0x51e3c9`, "…protected against accidentally double-clicking an aura") is set and
-//! the spell sits in the recent list at `0xd3f5ac` younger than 1500 ms (`0x807d40`; `0x809100`
-//! asks the same). Untraced: the default (the string at `0x9e1464`, shared with `lockActionBars`
-//! and `chatMouseScroll`) and the list's writer. Nor are `isActive`'s summoned-vehicle arm (`UNIT_FIELD_CREATEDBY`)
-//! and `0x802f80`'s mount-twin recursion, which cancels another aura of the same mount creature.
+//! The `secureAbilityToggle` guard holds a re-press inside 1500 ms of its cast request
+//! ([`crate::spell::secure_toggle`], whose list writer is inferred). Not built: `isActive`'s
+//! summoned-vehicle arm (`UNIT_FIELD_CREATEDBY`) and `0x802f80`'s mount-twin recursion, which
+//! cancels another aura of the same mount creature.
 
 use bevy::log::debug;
 use wrathplus_formats::{ShapeshiftForm, SpellDisplay};
@@ -19,6 +17,8 @@ use wrathplus_protocol::wrath_spell_control::Command;
 use crate::app_core::session::ObjectStore;
 use crate::net::wrath_auras::StampedAura;
 use crate::net::{ClientCommand, NetCommands, Objects};
+use crate::spell::secure_toggle::RecentCastRequests;
+use std::time::Instant;
 
 /// The packet aura flag `isActive` tests (`0x802e45`): `AFLAG_POSITIVE`.
 pub(crate) const AFLAG_POSITIVE: u8 = 0x10;
@@ -52,26 +52,46 @@ pub(crate) fn summoned_critter(d: &SpellDisplay, me: &ObjectStore) -> Option<u64
 
 /// The press-again cancel (`0x80da80`): a lit spell is not cast; `0x802f80` dismisses its critter
 /// (`CMSG_DISMISS_CRITTER`) or cancels its aura (`CMSG_CANCEL_AURA`), and sends nothing while we
-/// are charmed (`UNIT_FIELD_CHARMEDBY`, `0x802fd0`). True when the press was taken.
+/// are charmed (`UNIT_FIELD_CHARMEDBY`, `0x802fd0`) or the `secureAbilityToggle` guard holds the
+/// press ([`RecentCastRequests::blocks`]). True when the press was taken; false records it as a
+/// cast request, which the caller goes on to send.
 pub(crate) fn send_press_again(
     commands: &NetCommands,
+    recent: &mut RecentCastRequests,
     spell_id: u32,
     d: &SpellDisplay,
     objects: &Objects,
     me: &ObjectStore,
 ) -> bool {
+    let now = Instant::now();
     let command = if let Some(critter) = summoned_critter(d, me) {
         ClientCommand::NativeSpellControl(Command::DismissCritter { critter })
     } else if active_action_toggle(spell_id, d, unit_auras(objects, me)) {
         ClientCommand::CancelAura { spell_id }
     } else {
+        recent.record(spell_id, now);
         return false;
     };
-    if me.0.get_field_guid(Field::UnitCharmedby, 0).unwrap_or(0) == 0 {
+    if !press_again_held(recent, spell_id, me, now) {
         debug!("press-again: spell {spell_id} re-pressed, {command:?}");
         let _ = commands.0.send(command);
     }
     true
+}
+
+/// The lit press is taken but nothing is sent: the `secureAbilityToggle` window holds it
+/// (`0x80daec`), or we are charmed (`UNIT_FIELD_CHARMEDBY`, the `0x802f80` guard).
+pub(crate) fn press_again_held(
+    recent: &RecentCastRequests,
+    spell_id: u32,
+    me: &ObjectStore,
+    now: Instant,
+) -> bool {
+    if recent.blocks(spell_id, now) {
+        debug!("press-again: spell {spell_id} re-pressed inside secureAbilityToggle's window");
+        return true;
+    }
+    me.0.get_field_guid(Field::UnitCharmedby, 0).unwrap_or(0) != 0
 }
 
 /// A unit's packet auras (`SMSG_AURA_UPDATE`/`_ALL`), found by its descriptor guid.
