@@ -54,12 +54,13 @@ pub(super) fn seat_text_region(model: &mut Model, h: FrameHandle) {
     // `None` keeps the size: a multi-line box with no rect yet.
     let size = size.unwrap_or(data.size);
     let size_moved = !crate::script::region::size_bits_eq(data.size, size);
+    let old: Vec<u32> = data.anchors.iter().map(|a| a.relative_to).collect();
     if !same_anchors {
         data.anchors = anchors;
     }
     data.size = size;
     if !same_anchors {
-        model.touch_layout();
+        model.touch_layout_region_anchors(rh, &old);
     } else if size_moved {
         model.touch_layout_region(rh);
     }

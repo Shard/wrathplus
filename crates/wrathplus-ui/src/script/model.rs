@@ -5,12 +5,11 @@ use crate::widget::{FrameHandle, HandleMap, RegionHandle, WidgetArena};
 
 use super::{
     auction, backdrop, bank, bind_confirm, camera_view, char_stats, chat_window, colorselect,
-    container, cursor, death, duel, follow, gossip, guild, inspect, item_text, loot,
-    loot_roll, macros, mail, merchant, party, petition, pvp, quest, quest_log,
-    reputation, session, simplehtml, skills, slider, social, spellbook, stable, taxi, trade,
-    tradeskill, trainer, weapon_enchant, ActionSlot, AuraState, FontObject, ItemTemplateView,
-    MusicRequest, PlayerReqState, RegionData, ScriptValue, SoundRequest, UnitState,
-    UnitTokenParse,
+    container, cursor, death, duel, follow, gossip, guild, inspect, item_text, loot, loot_roll,
+    macros, mail, merchant, party, petition, pvp, quest, quest_log, reputation, session,
+    simplehtml, skills, slider, social, spellbook, stable, taxi, trade, tradeskill, trainer,
+    weapon_enchant, ActionSlot, AuraState, FontObject, ItemTemplateView, MusicRequest,
+    PlayerReqState, RegionData, ScriptValue, SoundRequest, UnitState, UnitTokenParse,
 };
 
 // ── The Rust-side model ──
@@ -21,8 +20,7 @@ pub type TextureProbe = Box<dyn Fn(&str) -> bool>;
 /// The host's world-to-map projection (`0x4a7360`): the displayed map's selection as
 /// [`super::UiScript::world_map_selection`] reads it, a map id and a world `(x, y)`, to the map UV,
 /// `None` where the reference's outputs stay at their `(0, 0)`.
-pub type WorldLocProjector =
-    Box<dyn Fn(super::MapSelection, u32, f32, f32) -> Option<(f32, f32)>>;
+pub type WorldLocProjector = Box<dyn Fn(super::MapSelection, u32, f32, f32) -> Option<(f32, f32)>>;
 
 /// The host's answer to a texture path's size in texels.
 pub type TextureSizeProbe = Box<dyn Fn(&str) -> Option<(u32, u32)>>;
@@ -167,7 +165,13 @@ pub(crate) struct Model {
     /// `0x7838c7`); read them only through `font_object`, where the fold lives.
     pub(crate) font_objects_by_lower: HashMap<String, FontObject>,
     /// Anchored regions' owner-relative rects from the last resolve; anchor-less ones are absent.
-    pub(crate) animation_transforms: std::collections::BTreeMap<usize, (crate::order::ZTarget, Vec<super::animation::transforms::Transform>)>,
+    pub(crate) animation_transforms: std::collections::BTreeMap<
+        usize,
+        (
+            crate::order::ZTarget,
+            Vec<super::animation::transforms::Transform>,
+        ),
+    >,
     pub(crate) region_resolved: HandleMap<RegionHandle, Rect>,
 
     /// The next object id to mint; ids start at 1, since 0 is `SCREEN`.
@@ -331,7 +335,8 @@ pub(crate) struct Model {
     /// Charter calls (`BuyGuildCharter`, `SignPetition`, `TurnInGuildCharter`, …) queued.
     pub(crate) petition_requests: Vec<petition::PetitionRequest>,
     /// Per chat window from `ChatFrame1`, the tint, alpha and font size its tab menu can change.
-    pub(crate) chat_window_looks: [chat_window::ChatWindowLook; chat_window::ENGINE_CHAT_WINDOW_SLOTS],
+    pub(crate) chat_window_looks:
+        [chat_window::ChatWindowLook; chat_window::ENGINE_CHAT_WINDOW_SLOTS],
     /// 0-based windows whose look Lua changed, the persist cue.
     pub(crate) chat_window_changes: HashSet<usize>,
     /// Chat-type colours (`0xb4e518`): 94 fixed and 10 `CHANNELn`, overlaid by `chat-cache.txt`.
@@ -908,8 +913,7 @@ pub(crate) struct Model {
     /// The vehicle view, the seat-indicator table and the vehicle verbs' requests
     /// (`wrath_vehicle`).
     pub(crate) wrath_vehicles: super::WrathVehicles,
-    pub(crate) vehicle_indicators:
-        std::collections::HashMap<u32, super::VehicleIndicatorView>,
+    pub(crate) vehicle_indicators: std::collections::HashMap<u32, super::VehicleIndicatorView>,
     pub(crate) vehicle_calls: Vec<super::VehicleCall>,
     /// `GetPetTalentTree` and `IsAtStableMaster` (`wrath_pet_stable`).
     pub(crate) pet_talent_tree: Option<String>,
@@ -1608,7 +1612,7 @@ impl Model {
         self.frame_to_id.insert(h, id);
         self.id_to_frame.insert(id, h);
         // Every creation path mints here, so a new frame always opens the layout gate.
-        self.touch_layout();
+        self.touch_layout_created_frame(h, id);
         id
     }
 
@@ -1622,7 +1626,7 @@ impl Model {
         self.region_to_id.insert(h, id);
         self.id_to_region.insert(id, h);
         // A new region can join the resolve's external set, so it opens the gate too.
-        self.touch_layout();
+        self.touch_layout_created_region(id);
         id
     }
 
@@ -1634,13 +1638,9 @@ impl Model {
         self.bump_layout_epoch();
     }
 
-    /// A write that moved one region's offsets, size or measured extent, not its targets or
-    /// liveness; a region missing from the cached graph falls back to `touch_layout`.
+    /// One region's offsets, size or measured extent moved: [`Self::touch_layout_region_write`].
     pub(crate) fn touch_layout_region(&mut self, rh: RegionHandle) {
-        match self.region_to_id.get(&rh) {
-            Some(&id) => self.touch_layout_node(id),
-            None => self.touch_layout(),
-        }
+        self.touch_layout_region_write(rh);
     }
 
     /// The same for a frame: an anchor offset or size, nothing that moves an edge or the roster.
@@ -1706,7 +1706,7 @@ impl Model {
             {
                 self.touch_layout_node(id);
             }
-            _ => self.touch_layout(),
+            _ => self.touch_layout_first_anchors(rh, old, new),
         }
     }
 
@@ -1754,7 +1754,7 @@ impl Model {
     }
 
     /// Names `id` as what this write moved, if the cached graph has it and naming is still on.
-    fn touch_layout_node(&mut self, id: u32) {
+    pub(crate) fn touch_layout_node(&mut self, id: u32) {
         let in_graph = self.layout_scope.has_node(id);
         match &mut self.layout_touched {
             // Already conservative: a precise touch cannot un-say an imprecise one.
@@ -1778,7 +1778,7 @@ impl Model {
     }
 
     /// Bumps tier 1's counter, reopening the gate; `layout_touched` decides how much it derives.
-    fn bump_layout_epoch(&mut self) {
+    pub(crate) fn bump_layout_epoch(&mut self) {
         self.layout_epoch = self.layout_epoch.wrapping_add(1);
         // `WOW_LAYOUT_TOUCH_TRACE=<secs>:<n>`: backtraces the first `n` touches after `secs`.
         use std::sync::atomic::{AtomicU32, Ordering};

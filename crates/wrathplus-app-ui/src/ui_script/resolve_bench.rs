@@ -268,7 +268,7 @@ fn a_region_moving_every_frame_costs_one_gate_walk_on_the_shipped_ui() {
 /// Those walks cost zero derivations of the layout graph: a moving region names its node, so the
 /// resolve re-hashes one node, not the roster; a derivation per frame means a write site fell back
 /// to the conservative `touch_layout`. The VM ticks, so the shipped handlers are held to it too,
-/// and a birth must derive, which proves the counter moves.
+/// and a forced full resolve must derive, which proves the counter moves; a birth does not.
 #[test]
 fn a_region_moving_every_frame_costs_no_graph_derivation_on_the_shipped_ui() {
     wrathplus_formats::wow_data_or_skip!();
@@ -290,18 +290,16 @@ fn a_region_moving_every_frame_costs_no_graph_derivation_on_the_shipped_ui() {
     )
     .unwrap();
 
-    // Positive control: a birth moves the roster, so it must derive.
+    // Births name their nodes (`layout_grow`) and derive nothing; a forced full resolve must.
     let born_at = s.layout_derivations();
     for _ in 0..6 {
         s.run("bench_spark2_frame()").unwrap();
         app_frame_ticked(&mut s, 1.0 / 144.0);
     }
-    assert!(
-        s.layout_derivations() > born_at,
-        "creating a frame and a texture must derive the graph — a birth moves the roster, which \
-         is the one thing the per-node ledger cannot describe. Reading zero here means \
-         `layout_derivations` never moves and the assertion below is vacuous."
-    );
+    assert_eq!(s.layout_derivations(), born_at, "a birth derived");
+    s.force_full_layout_resolve();
+    app_frame_ticked(&mut s, 1.0 / 144.0);
+    assert!(s.layout_derivations() > born_at, "the counter never moves");
 
     let derives_before = s.layout_derivations();
     let walks_before = s.layout_gate_walks();
@@ -435,7 +433,7 @@ fn a_tooltip_line_flipping_wrapped_to_plain_costs_no_graph_derivation() {
     )
     .unwrap();
 
-    // Positive control: the owner's birth and the line pool's growth move the roster and derive.
+    // Positive control: the line pool's growth is structural and derives (a birth names its node).
     let born_at = s.layout_derivations();
     for _ in 0..8 {
         s.run("flip_change()").unwrap();
@@ -493,7 +491,7 @@ fn a_hover_sweep_across_owners_costs_no_graph_derivation() {
     )
     .unwrap();
 
-    // Positive control: twelve births and the line pool's growth move the roster and derive.
+    // Positive control: the line pool's growth is structural and derives (births name their nodes).
     let born_at = s.layout_derivations();
     for _ in 0..40 {
         s.run("sweep_change()").unwrap();
@@ -556,7 +554,7 @@ fn an_action_bar_hover_sweep_costs_no_graph_derivation() {
     )
     .unwrap();
 
-    // Positive control: the births and the line pool's growth are structural.
+    // Positive control: the line pool's growth is structural (births name their nodes).
     let born_at = s.layout_derivations();
     for _ in 0..40 {
         s.run("bar_hover()").unwrap();
@@ -623,7 +621,7 @@ fn a_bag_addon_hover_sweep_costs_no_graph_derivation() {
     )
     .unwrap();
 
-    // Positive control: the births and the line pool's growth are structural.
+    // Positive control: the line pool's growth is structural (births name their nodes).
     let born_at = s.layout_derivations();
     for _ in 0..40 {
         s.run("bag_hover()").unwrap();
