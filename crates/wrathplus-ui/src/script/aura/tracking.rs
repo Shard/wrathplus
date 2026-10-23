@@ -3,13 +3,12 @@
 //! `0xa11c50` the player's class may use (`0x57e980`, `0x57eb00`): a row whose class mask is 0, or
 //! holds `1 << class`. One entry is active at a time. A spell is active while its aura is on the
 //! player (`0x727760` → `0x57ea30`, which also drops the selected row); a row is selected
-//! client-side (`0x57e070`) and is never sent to the server.
+//! client-side (`0x57e070`), never sent to the server, and kept in `minimapTrackedInfo` (registered
+//! with an empty default, `0x51f3a9`), whence the load restores it (`0x5128d0` → `0x57ea60`).
 //!
-//! Evidence: `measure/ghidra-tracking{,2,3,4}.log`. Labelled: the list's admission test is
+//! Evidence: `measure/ghidra-tracking{,2,..,11}.log`. Labelled: the list's admission test is
 //! untraced (the spellbook's adder pushes through a helper this round did not reach), so the app
-//! feeds the book's spells whose effect is a tracking aura; the selected row's write to the
-//! `minimapTrackedInfo` CVar is kept only when the host registers that CVar; and the minimap draws
-//! no blips for the town types yet, only the trivial-quest filter.
+//! feeds the book's spells whose effect is a tracking aura.
 
 use crate::script::model::Model;
 use mlua::{Lua, MultiValue, Value};
@@ -265,6 +264,24 @@ impl crate::script::UiScript {
     pub fn tracked_town_type(&self) -> Option<(u8, u32)> {
         let r = self.model_ref().wrath_tracking_selection?;
         (ROWS[r].kind != 3).then_some((ROWS[r].kind, ROWS[r].mask))
+    }
+
+    /// Restore the selected row from `minimapTrackedInfo` (`0x5128d0` → `0x57ea60`): the row whose
+    /// key the CVar names, if the player's class may use it; anything else selects nothing.
+    pub fn restore_tracking_from_cvar(&mut self) {
+        let Some(key) = self.cvar("minimapTrackedInfo").filter(|k| !k.is_empty()) else {
+            return;
+        };
+        let mut model = self.model_mut();
+        let row = rows_for(&model).find(|&r| ROWS[r].key.eq_ignore_ascii_case(&key));
+        if row.is_some() {
+            select_row(&mut model, row);
+        }
+    }
+
+    /// The minimap's view of the selection: the trivial-quest filter and the town type.
+    pub fn tracking_menu(&self) -> (bool, Option<(u8, u32)>) {
+        (self.track_trivial_quests(), self.tracked_town_type())
     }
 }
 
