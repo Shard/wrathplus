@@ -236,6 +236,36 @@ fn the_stock_arena_frames_follow_the_opponent_events() {
         (true, true, "Rogue".to_string())
     );
 
+    // The opponent's pet, `arenapet1`: the options' default shows enemy pets
+    // (`ArenaEnemyFrame_UpdatePet`, `SHOW_ARENA_ENEMY_PETS`).
+    s.run(r#"SHOW_ARENA_ENEMY_PETS = "1""#).unwrap();
+    s.set_arena_units([FOE1, 0, 0, 0, 0], [0xF140_0000_0000_0031, 0, 0, 0, 0]);
+    s.set_unit(
+        "arenapet1",
+        Some(UnitState {
+            exists: true,
+            has_object: true,
+            guid: 0xF140_0000_0000_0031,
+            name: Some("Felhunter".into()),
+            health: 300,
+            max_health: 400,
+            ..Default::default()
+        }),
+    );
+    s.fire_event(
+        "ARENA_OPPONENT_UPDATE",
+        vec![
+            ScriptValue::Str("arenapet1".into()),
+            ScriptValue::Str("seen".into()),
+        ],
+    );
+    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
+    assert!(
+        s.eval::<bool>("return ArenaEnemyFrame1PetFrame:IsShown()")
+            .unwrap(),
+        "the opponent's pet frame shows"
+    );
+
     update(&mut s, "unseen");
     assert!(
         s.eval::<bool>("return ArenaEnemyFrame1HealthBar.lockColor == true")
@@ -246,4 +276,80 @@ fn the_stock_arena_frames_follow_the_opponent_events() {
     update(&mut s, "cleared");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     assert!(!s.eval::<bool>("return ArenaEnemyFrame1:IsShown()").unwrap());
+}
+
+/// `FactionTemplate` rows for the two sides, each the other's enemy group.
+const OURS: u32 = 1;
+const THEIRS: u32 = 2;
+
+fn sides() -> Factions {
+    use wrathplus_formats::{FactionCatalog, FactionTemplate};
+    let side = |group_mask, enemy_group_mask| FactionTemplate {
+        group_mask,
+        enemy_group_mask,
+        ..Default::default()
+    };
+    Factions::from_catalog(FactionCatalog::from_rows(
+        std::collections::HashMap::from([(OURS, side(2, 4)), (THEIRS, side(4, 2))]),
+        std::collections::HashMap::new(),
+    ))
+}
+
+/// A pet (`UNIT_FIELD_PETNUMBER` set) of `template`, created by `owner`.
+fn pet(template: u32, owner: u64) -> ObjectStore {
+    ObjectStore(ObjectFields::from_pairs(&[
+        (Field::ObjectType.index(), 0x09),
+        (Field::UnitHealth.index(), 300),
+        (Field::UnitMaxHealth.index(), 400),
+        (Field::UnitFactionTemplate.index(), template),
+        (Field::UnitPetnumber.index(), 7),
+        (Field::UnitCreatedby.index(), owner as u32),
+        (Field::UnitCreatedby.index() + 1, (owner >> 32) as u32),
+    ]))
+}
+
+/// `0x73fcc0` → `0x54d1c0`: a hostile pet takes its owner's slot as `arenapetN`; a friendly one is
+/// no opponent's; 0x4C7 on the pet frees its slot.
+#[test]
+fn a_hostile_pet_joins_its_owners_slot() {
+    const FOE_PET: u64 = 0xF140_0000_0000_0031;
+    const ALLY_PET: u64 = 0xF140_0000_0000_0032;
+    let (mut world, id) = world();
+    world.insert_resource(sides());
+    let me = world.resource::<GuidIndex>().0[&ME];
+    let mut store = player(0);
+    store.0 = ObjectFields::from_pairs(&[
+        (Field::ObjectType.index(), 0x19),
+        (Field::UnitFactionTemplate.index(), OURS),
+    ]);
+    world.entity_mut(me).insert(store);
+    status(&mut world, Some(0));
+    spawn(&mut world, FOE2, player(1));
+    spawn(&mut world, FOE1, player(1));
+    assert_eq!(run(&mut world, id), ["arena1:seen", "arena2:seen"]);
+
+    spawn(&mut world, ALLY_PET, pet(OURS, ALLY));
+    spawn(&mut world, FOE_PET, pet(THEIRS, FOE1));
+    assert_eq!(run(&mut world, id), ["arenapet2:seen"], "FOE1 holds slot 2");
+    assert_eq!(
+        world.resource::<ArenaOpponents>().pets,
+        [0, FOE_PET, 0, 0, 0]
+    );
+    assert_eq!(
+        script_of(&world)
+            .eval::<(bool, i64)>("return UnitExists('arenapet2'), UnitHealth('arenapet2')")
+            .unwrap(),
+        (true, 300)
+    );
+
+    world
+        .resource_mut::<NativeBattlegroundRest>()
+        .0
+        .push_back(Packet::ArenaUnitDestroyed { guid: FOE_PET });
+    despawn(&mut world, FOE_PET);
+    assert_eq!(run(&mut world, id), ["arenapet2:destroyed"]);
+    assert_eq!(world.resource::<ArenaOpponents>().pets, [0; 5]);
+    assert!(!script_of(&world)
+        .eval::<bool>("return UnitExists('arenapet2')")
+        .unwrap());
 }
