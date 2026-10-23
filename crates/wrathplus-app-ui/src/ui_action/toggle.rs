@@ -1,32 +1,77 @@
 //! Press-again-to-cancel. Build 12340's cast entry (`0x80da80`, which `CastShapeshiftForm`
 //! `0x53c0f0` and the cast bindings reach) tests the spell with `isActive` (`0x802cb0`) first: an
-//! active spell is cancelled through `0x802f80`, whose aura arm sends `CMSG_CANCEL_AURA` (`0x136`),
-//! instead of being cast. The form-match recast is [`form_recast_disposition`].
+//! active spell is cancelled through `0x802f80` ([`send_press_again`]: `CMSG_CANCEL_AURA` `0x136`,
+//! or `CMSG_DISMISS_CRITTER` `0x48d` for a companion) instead of being cast. The form-match recast
+//! is [`form_recast_disposition`].
 //!
-//! Not built: `0x80da80` skips the cancel while the `secureAbilityToggle` CVar (`DAT_00bd097c`) is
-//! set and the spell was cast within 1500 ms (`0x807d40`); the CVar's default and what fills that
-//! recent list are untraced. `isActive`'s summon-pet (effect 28) and mount (aura 78) arms are not
-//! modelled either.
+//! Not built: `0x80da80` skips the cancel while the `secureAbilityToggle` CVar (`DAT_00bd097c`,
+//! registered at `0x51e3c9`, "…protected against accidentally double-clicking an aura") is set and
+//! the spell sits in the recent list at `0xd3f5ac` younger than 1500 ms (`0x807d40`; `0x809100`
+//! asks the same). Untraced: the default (the string at `0x9e1464`, shared with `lockActionBars`
+//! and `chatMouseScroll`) and the list's writer. Nor are `isActive`'s summoned-vehicle arm (`UNIT_FIELD_CREATEDBY`)
+//! and `0x802f80`'s mount-twin recursion, which cancels another aura of the same mount creature.
 
+use bevy::log::debug;
 use wrathplus_formats::{ShapeshiftForm, SpellDisplay};
 use wrathplus_protocol::types::Field;
+use wrathplus_protocol::wrath_spell_control::Command;
 
 use crate::app_core::session::ObjectStore;
 use crate::net::wrath_auras::StampedAura;
-use crate::net::Objects;
+use crate::net::{ClientCommand, NetCommands, Objects};
 
 /// The packet aura flag `isActive` tests (`0x802e45`): `AFLAG_POSITIVE`.
 pub(crate) const AFLAG_POSITIVE: u8 = 0x10;
+/// `SPELL_AURA_MOUNTED`: `isActive`'s gate admits a first effect applying it (`0x8009b0`).
+const AURA_MOUNTED: u32 = 78;
+/// `SPELL_EFFECT_SUMMON`, the critter arm's effect (`0x802d0b`).
+const EFFECT_SUMMON: u32 = 28;
 
 /// `isActive` (`0x802cb0`) for a spell with no form: its gate, a nonzero `ActiveIconID` (record
-/// `+0x218`), then the spell's own aura on the unit with [`AFLAG_POSITIVE`] (the aura loop,
-/// `0x802db0`-`0x802e49`). A lit paladin aura or hunter aspect passes; a warrior stance has
-/// `ActiveIconID` 0.
+/// `+0x218`) or a mount (first aura [`AURA_MOUNTED`]), then the spell's own aura on the unit with
+/// [`AFLAG_POSITIVE`] (the aura loop, `0x802db0`-`0x802e49`). A lit paladin aura, hunter aspect or
+/// the mount we ride passes; a warrior stance has `ActiveIconID` 0.
 pub(crate) fn active_action_toggle(spell_id: u32, d: &SpellDisplay, auras: &[StampedAura]) -> bool {
-    d.active_icon_id != 0
+    (d.active_icon_id != 0 || d.effect_apply_aura[0] == AURA_MOUNTED)
         && auras
             .iter()
             .any(|a| a.aura.spell_id == spell_id && a.aura.flags & AFLAG_POSITIVE != 0)
+}
+
+/// `isActive`'s critter arm: a SUMMON effect whose creature entry is the one in our
+/// `UNIT_FIELD_CRITTER` guid (bits 24-47, `0x802d4e`-`0x802d69`). That field holds only a slot-5
+/// summon, the `SummonProperties` test the arm makes (`0x8009b0`). Returns the critter's guid.
+pub(crate) fn summoned_critter(d: &SpellDisplay, me: &ObjectStore) -> Option<u64> {
+    let critter =
+        me.0.get_field_guid(Field::UnitCritter, 0)
+            .filter(|&g| g != 0)?;
+    let entry = ((critter >> 24) & 0xff_ffff) as i32;
+    let summons = (0..3).any(|i| d.effects[i] == EFFECT_SUMMON && d.effect_misc_value[i] == entry);
+    summons.then_some(critter)
+}
+
+/// The press-again cancel (`0x80da80`): a lit spell is not cast; `0x802f80` dismisses its critter
+/// (`CMSG_DISMISS_CRITTER`) or cancels its aura (`CMSG_CANCEL_AURA`), and sends nothing while we
+/// are charmed (`UNIT_FIELD_CHARMEDBY`, `0x802fd0`). True when the press was taken.
+pub(crate) fn send_press_again(
+    commands: &NetCommands,
+    spell_id: u32,
+    d: &SpellDisplay,
+    objects: &Objects,
+    me: &ObjectStore,
+) -> bool {
+    let command = if let Some(critter) = summoned_critter(d, me) {
+        ClientCommand::NativeSpellControl(Command::DismissCritter { critter })
+    } else if active_action_toggle(spell_id, d, unit_auras(objects, me)) {
+        ClientCommand::CancelAura { spell_id }
+    } else {
+        return false;
+    };
+    if me.0.get_field_guid(Field::UnitCharmedby, 0).unwrap_or(0) == 0 {
+        debug!("press-again: spell {spell_id} re-pressed, {command:?}");
+        let _ = commands.0.send(command);
+    }
+    true
 }
 
 /// A unit's packet auras (`SMSG_AURA_UPDATE`/`_ALL`), found by its descriptor guid.

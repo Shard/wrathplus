@@ -25,6 +25,7 @@ pub struct UnitTokens<'w, 's> {
     hovered: Option<Res<'w, Hovered>>,
     hovered_go: Option<Res<'w, HoveredObject>>,
     group: Res<'w, GroupState>,
+    arena: Option<Res<'w, crate::app_core::arena::ArenaOpponents>>,
     pub stores: Query<'w, 's, &'static ObjectStore>,
     me: Query<'w, 's, (Entity, &'static Guid), With<SelfPlayer>>,
 }
@@ -77,14 +78,12 @@ impl UnitTokens<'_, '_> {
                 .and_then(|member| self.pet_of(member, true)),
             UnitBase::Raid(row) => self.raid_member(row).and_then(|guid| self.held(guid)),
             UnitBase::Party(row) => self.party_member(row).and_then(|guid| self.held(guid)),
-            // The interaction NPC is unresolved here, a quiet nil; so are Wrath's bases, which
-            // this client does not yet track.
-            UnitBase::Npc
-            | UnitBase::Focus
-            | UnitBase::Vehicle
-            | UnitBase::Boss(_)
-            | UnitBase::Arena(_)
-            | UnitBase::ArenaPet(_) => None,
+            // The arena feed's slots (`0xbe9f48`, `0xbe9ef8`), held or nobody.
+            UnitBase::Arena(row) => self.arena_slot(row, false),
+            UnitBase::ArenaPet(row) => self.arena_slot(row, true),
+            // The interaction NPC is unresolved here, a quiet nil; so are the Wrath bases this
+            // client does not yet track.
+            UnitBase::Npc | UnitBase::Focus | UnitBase::Vehicle | UnitBase::Boss(_) => None,
         }
     }
 
@@ -94,6 +93,14 @@ impl UnitTokens<'_, '_> {
     fn target_of(&self, unit: Entity) -> Option<(Entity, u64)> {
         let store = self.stores.get(unit).ok().filter(|s| s.is_unit())?;
         self.held(store.0.unit_target()?)
+    }
+
+    /// The held opponent, or its stored pet, in 0-based arena slot `row`.
+    fn arena_slot(&self, row: u32, pet: bool) -> Option<(Entity, u64)> {
+        let table = self.arena.as_ref()?;
+        let slots = if pet { &table.pets } else { &table.arena };
+        let guid = *slots.get(usize::try_from(row).ok()?)?;
+        (guid != 0).then(|| self.held(guid)).flatten()
     }
 
     /// The guid in 0-based party slot `row`, the one `partyN` and `partypetN` share.

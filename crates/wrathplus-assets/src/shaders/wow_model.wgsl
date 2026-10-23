@@ -529,13 +529,12 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
 #endif
         }
         if (op == 3u || op == 7u) {
-            stage_add = t.rgb * select(1.0,t.a,m.stage2.w > 0.5);
-            if (op == 3u && m.stage2.w < 0.5) {
-                var opacity = pbr_bindings::material.base_color.a;
-#ifdef VERTEX_COLORS
-                opacity *= in.color.a;
-#endif
-                base_color.a += opacity * t.a;
+            // Combiners_*_Add and *_AddNA (Shaders\Pixel\arbfp1, patch-3.MPQ): `t0·primary + t1`,
+            // the second texel added as it is, outside the primary colour. Add also adds t1's
+            // alpha (`primary.a + t1.a`, Mod: `t0.a·primary.a + t1.a`); AddNA leaves it.
+            stage_add = t.rgb;
+            if (op == 3u) {
+                base_color.a += t.a;
             }
         } else {
             let scale = select(1.0, 2.0, op == 4u || op == 6u);
@@ -854,10 +853,6 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
         let unlit_sum = unlit_c * inst_tint + highlight;
         unlit_rgb = unlit_tex * clamp(unlit_sum, vec3<f32>(0.0), vec3<f32>(1.0));
     }
-    stage_add *= anim_tint * inst_tint;
-#ifdef VERTEX_COLORS
-    stage_add *= in.color.rgb;
-#endif
     var rgb = select(lit_rgb, unlit_rgb, is_emissive) + stage_add;
     // An M2 Mod or Mod2x batch draws the bare texel: the reference zeroes its tint·M2Color term and
     // forces the primary colour to the blend identity (`0x70c507`/`0x70c5b8`), so neither the
