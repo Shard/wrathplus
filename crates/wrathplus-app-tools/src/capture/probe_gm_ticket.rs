@@ -208,7 +208,7 @@ fn unique_text(suffix: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    format!("benilla probe {secs}{suffix}")
+    format!("wrathplus probe {secs}{suffix}")
 }
 
 fn gm_ticket_probe(
