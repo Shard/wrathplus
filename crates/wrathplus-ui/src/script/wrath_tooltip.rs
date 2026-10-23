@@ -292,10 +292,35 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         .set_name("=[AzerothBench SetFrameStack]")
         .call(())?;
     m.set("SetFrameStack", frame_stack)?;
-    // SetTracking() (Minimap.xml:497): the active tracking's hover, 3.3.5's name for 1.12's
-    // SetTrackingSpell, whose binding it shares (labelled: the 12340 binding is unread).
-    let tracking: mlua::Function = m.get("SetTrackingSpell")?;
-    m.set("SetTracking", tracking)?;
+    // SetTracking() (`0x625940`, Minimap.xml:497): the selected type's name, gold (`0xad2d2c`);
+    // with none, the tracking spell's tooltip (`0x625350`, our SetTrackingSpell); with neither,
+    // MINIMAP_TRACKING_TOOLTIP_NONE. Labelled: no OnTooltipSet* handler is evident in it.
+    let spell: mlua::Function = m.get("SetTrackingSpell")?;
+    m.set(
+        "SetTracking",
+        lua.create_function(move |lua, this: Table| {
+            let key = {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                match model.tracking_row_key() {
+                    Some(k) => Some(k),
+                    None if model.tracking.is_some() => None,
+                    None => Some("MINIMAP_TRACKING_TOOLTIP_NONE"),
+                }
+            };
+            let Some(key) = key else {
+                return spell.call::<()>(this);
+            };
+            let text = lua.globals().get::<Option<String>>(key)?;
+            let h = frame_handle_of(lua, &this)?;
+            super::tooltip::clear_content(&mut lua.app_data_mut::<Model>().expect("model"), h);
+            super::tooltip::fire_cleared(lua, h);
+            let gold = [1.0, 210.0 / 255.0, 0.0, 1.0];
+            let line = (text.unwrap_or_else(|| key.to_string()), gold);
+            super::tooltip::append_line(lua, &this, line, None, false)?;
+            super::tooltip::show_or_hide_empty(lua, h);
+            Ok(())
+        })?,
+    )?;
     // FontString:GetFieldSize() (`0x48bc70`): the text buffer's fixed size, 8191 (`0x9ead70`).
     let fontstrings: Table = lua.named_registry_value(super::REG_FONTSTRING_METHODS)?;
     fontstrings.set(
@@ -428,7 +453,7 @@ mod widget_tests {
             "E:HasFocus() == false",
             "F:GetFieldSize() == 8191",
             "A:GetRegionParent() == P",
-            "T.SetTracking == T.SetTrackingSpell",
+            "type(T.SetTracking) == 'function' and T.SetTracking ~= T.SetTrackingSpell",
         ] {
             assert!(
                 s.eval::<bool>(&format!("return {check}")).unwrap(),
