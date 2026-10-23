@@ -456,7 +456,7 @@ pub struct RepairPurse<'w, 's> {
     commands: Res<'w, NetCommands>,
     tables: Option<Res<'w, RepairTables>>,
     units: Query<'w, 's, (&'static Guid, &'static ObjectStore), Without<SelfPlayer>>,
-    reactions: crate::target::ReactionInputs<'w>,
+    relations: crate::target::RelationInputs<'w, 's>,
     sink: crate::ui_action::MessageSink<'w>,
 }
 
@@ -474,12 +474,7 @@ impl RepairPurse<'_, '_> {
     ) -> bool {
         // `0x4faf30` keeps the full price unless it resolves the vendor's unit.
         let discount = vendor_store(open, &self.units).map_or(0.0, |vendor| {
-            crate::target::vendor_price_discount(
-                self.reactions.factions.as_deref(),
-                &self.reactions.reputations,
-                vendor,
-                player,
-            )
+            crate::target::vendor_price_discount(&self.relations, vendor, player)
         });
         let cost = guids.into_iter().filter(|&g| g != 0).fold(0u32, |sum, g| {
             let item = self.tables.as_deref().map_or(0, |t| {
@@ -516,7 +511,7 @@ pub fn feed_repair_costs(
     items: Res<Items>,
     commands: Res<NetCommands>,
     units: Query<(&Guid, &ObjectStore), Without<SelfPlayer>>,
-    reactions: crate::target::ReactionInputs,
+    relations: crate::target::RelationInputs,
     tables: Option<Res<RepairTables>>,
     mut memo: Local<crate::app_core::vm_memo::VmMemo<RepairFeedMemo>>,
 ) {
@@ -531,12 +526,7 @@ pub fn feed_repair_costs(
     let vendor = vendor_store(&open, &units);
     // The open vendor's price discount (`0x4faf8a`), 0 with none open.
     let discount = vendor.map_or(0.0, |vendor| {
-        crate::target::vendor_price_discount(
-            reactions.factions.as_deref(),
-            &reactions.reputations,
-            vendor,
-            player,
-        )
+        crate::target::vendor_price_discount(&relations, vendor, player)
     });
     let repairer = vendor.is_some_and(can_repair_store);
     let objects_moved = inv.changes.moved();
