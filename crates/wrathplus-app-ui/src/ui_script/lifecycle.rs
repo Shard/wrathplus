@@ -81,7 +81,11 @@ fn seed_link_catalogs(world: &World, script: &mut UiScript) {
     if let Some(glyphs) = world.get_resource::<crate::spell::targeting::glyph::GlyphTables>() {
         script.set_glyph_link_catalog(wrathplus_ui::script::GlyphLinkCatalog {
             glyph_spells: glyphs.0.properties().map(|p| (p.id, p.spell_id)).collect(),
-            slots: glyphs.0.slots().map(|s| (s.id, (s.type_flags, s.order))).collect(),
+            slots: glyphs
+                .0
+                .slots()
+                .map(|s| (s.id, (s.type_flags, s.order)))
+                .collect(),
         });
     }
 }
@@ -177,7 +181,8 @@ fn install_addon_asset_resolvers(world: &mut World, script: &mut UiScript) {
         }
         let found = font_chain.lock_recover().contains(path)
             || font_root.as_deref().is_some_and(|r| {
-                wrathplus_assets::loose_addon_file(r, &wrathplus_assets::normalize_path(path)).is_some()
+                wrathplus_assets::loose_addon_file(r, &wrathplus_assets::normalize_path(path))
+                    .is_some()
             });
         seen.borrow_mut().insert(path.to_string(), found);
         found
@@ -206,10 +211,10 @@ pub(crate) fn arm_entry_ui_load(world: &mut World) {
 
 /// Retire the glue VM and build the one the entry load runs on: the reference re-makes its Lua
 /// state inside `UI_Init` (`0x48fe97`, in `0x48fbf0`), so no login shares a session id (and so a
-/// [`super::VmMemo`]) with the character screen before it. The glue VM's CVars fold first, since
+/// [`crate::app_core::vm_memo::VmMemo`]) with the character screen before it. The glue VM's CVars fold first, since
 /// the character screen can write one (the AddOns panel's out-of-date toggle) and this is the last
 /// moment its table exists. Everything else is re-seeded onto the new VM or is a
-/// [`super::VmMemo`], which is meant to reset here. It starts bare: `FrameXML.toc` runs
+/// [`crate::app_core::vm_memo::VmMemo`], which is meant to reset here. It starts bare: `FrameXML.toc` runs
 /// `GlobalStrings.lua` and `Fonts.xml` as its first rows, and `ChatFrame.lua` the emote tokens.
 fn mint_entry_vm(world: &mut World) {
     if let Some(script) = new_vm(world) {
@@ -653,29 +658,6 @@ pub(crate) fn run_pending_reload(world: &mut World) {
     load_ingame_ui_on_world_entry(world);
 }
 
-/// `AppExit`, the quit roots, read as a message because a quit from in-world never leaves
-/// `InWorld`. A quit from the character screen, or on a worldport's loading screen, finds the
-/// latch spent, so `PLAYER_LEAVING_WORLD` does not fire.
-pub(crate) fn shutdown_on_exit(
-    script: Option<NonSendMut<UiScript>>,
-    id: Res<AddOnIdentity>,
-    pending_entry: Option<Res<PendingEntryUiLoad>>,
-    mut armed: ResMut<LeavingWorldArmed>,
-    mut exits: MessageReader<AppExit>,
-) {
-    if exits.read().next().is_none() {
-        return;
-    }
-    // Same guard as [`end_ui_session`]: a quit inside the entry-load window has no UI to save.
-    if pending_entry.is_some() {
-        return;
-    }
-    let leaving_world = armed.spend();
-    if let Some(mut script) = script {
-        super::wrath_addons::shutdown(&mut script, id.0.as_ref(), leaving_world);
-    }
-}
-
 /// The load's ordered tail without the host seams, for tests; production runs
 /// [`finish_ui_load_with`]. The reference's `UI_Init` (`0x48fbf0`) loads every non-LoadOnDemand
 /// addon, each firing `ADDON_LOADED` at `0x51f5ad` (`0x4900a3` → `0x51f600`), reads the flat
@@ -768,7 +750,7 @@ mod tests {
     fn a_one_shot_spent_against_the_character_screens_vm_is_spent_again_after_the_entry() {
         let mut world = World::new();
         world.insert_non_send_resource(UiScript::new().expect("a glue VM"));
-        let mut told: super::super::VmMemo<bool> = Default::default();
+        let mut told: crate::app_core::vm_memo::VmMemo<bool> = Default::default();
 
         assert!(
             told.claim(world.non_send_resource::<UiScript>()),

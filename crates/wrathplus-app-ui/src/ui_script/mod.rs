@@ -6,10 +6,7 @@
 
 use bevy::prelude::*;
 
-use wrathplus_ui::script::{ActionSlot, ScriptValue, UiScript, UnitState};
-
-use crate::app_core::schedule::UnitFeed;
-use wrathplus_world::schedule::WorldStage;
+use wrathplus_ui::script::UiScript;
 
 /// The addon folder: discovery, manifests, the enable file and the load walk.
 pub mod addons;
@@ -36,9 +33,6 @@ pub use reference_ui::initialize_asset_overrides;
 /// The feed gate: a UI feed's input-side early-out, audited by `WOW_FEED_GATE_CHECK=1`.
 pub(crate) mod gate;
 
-/// What the host remembers per VM, so a seed or change-memo never outlives the VM it was for.
-pub(crate) use crate::app_core::vm_memo::VmMemo;
-
 // Not test-only: the addon harness loads the whole shipped interface under each addon.
 pub(crate) use manifest::default_bindings;
 pub use manifest::load_default_ui;
@@ -62,7 +56,7 @@ pub(crate) struct CapturePointerPinned(pub(crate) bool);
 pub struct EguiPointerOver(pub bool);
 
 pub(crate) use crate::app_core::ui_flags::{
-    InspectMode, PlayerUiClickConsumed, PlayerUiHover, UiClock, UiKeyboardCapture, UiScaleCvar,
+    PlayerUiClickConsumed, PlayerUiHover, UiClock, UiKeyboardCapture, UiScaleCvar,
 };
 /// One frame's UI-pass phase split in μs, as the `[ui-cost]` line prints it; owned by the
 /// producer so it exists whether or not its reader, `hover_log`, is compiled in.
@@ -182,145 +176,13 @@ const UI_SCALE_LEVER: crate::cvars::SessionLever = crate::cvars::SessionLever {
 
 impl Plugin for UiScriptPlugin {
     fn build(&self, app: &mut App) {
-        if uses_native_wrath_route(
-            app.world()
-                .get_resource::<wrathplus_assets::ClientDataProfile>()
-                .map(|profile| &profile.0),
-        ) {
-            info!("ui_script: Wrath profile selected — stock build-12340 FrameXML and addon host");
-            wrath_native::build(app);
-            wrath_addons::build(app);
-            return;
-        }
-        use crate::app_core::console::ConsoleCommandApp;
-        app.add_observer(on_cvar);
-        app.console_command("reloadUI", "Reload the interface.", console_reload_ui);
-        // The quit root runs in `Last`: the close button's `AppExit` is written in `PostUpdate`.
-        crate::shutdown::on_app_exit(app, shutdown_on_exit.into_configs());
+        // The one route: the stock build-12340 FrameXML and addon host. Its input feed serves
+        // the world and the stock glue screens alike.
+        info!("ui_script: stock build-12340 FrameXML and addon host");
+        wrath_native::build(app);
+        wrath_addons::build(app);
         crate::cvars::RegisterCvars::register_session_lever(app, UI_SCALE_LEVER);
-        app.insert_resource(UiScaleCvar(default_ui_scale()))
-            .init_resource::<UiFrameCost>()
-            .init_resource::<crate::bindings::WheelNotches>()
-            .init_resource::<UiCostWanted>()
-            .init_resource::<PointerOverUi>()
-            .init_resource::<SyntheticPointer>()
-            .insert_resource(CapturePointerPinned(
-                std::env::var_os("WOW_CAPTURE").is_some()
-                    || std::env::var_os("WOW_CAPTURE_UI").is_some(),
-            ))
-            .init_resource::<EguiPointerOver>()
-            .init_resource::<InspectMode>()
-            .init_resource::<PlayerUiHover>()
-            .init_resource::<UiKeyboardCapture>()
-            .init_resource::<PlayerUiClickConsumed>()
-            .init_resource::<CursorPayloadHeld>()
-            .init_resource::<UiClock>()
-            .init_resource::<AddOnIdentity>()
-            // After `AssetSet::Open`: the VM's first load is the chain's `GlobalStrings.lua`.
-            .add_systems(
-                Startup,
-                setup_script.after(wrathplus_assets::AssetSet::Open),
-            )
-            // The in-game UI loads on world entry, as the reference's does, once the loading cover
-            // has presented, so its ~0.5 s never stalls the cover's first frame.
-            .add_systems(
-                OnEnter(crate::app_core::state::ClientState::InWorld),
-                lifecycle::arm_entry_ui_load,
-            )
-            // The shutdown tail: events, then writes, in the reference's order.
-            .add_systems(
-                OnExit(crate::app_core::state::ClientState::InWorld),
-                end_ui_session,
-            )
-            // `init_` here and in `UiUnitPlugin`: either plugin may be built alone in a test.
-            .init_resource::<LeavingWorldArmed>()
-            .add_systems(Update, lifecycle::arm_leaving_world_on_self_create)
-            // A queued `ReloadUI()` runs in `PreUpdate`, a frame after its drain (the reference's
-            // deferral, `0x495590`) and before every `Update` seed or feed.
-            .init_resource::<ReloadUiPending>()
-            // Both are exclusive edges on the VM and must not interleave.
-            .add_systems(
-                PreUpdate,
-                (run_pending_reload, lifecycle::run_pending_entry_load).chain(),
-            )
-            // The three UI phases in order: feeds after the net drain, the tick, then the paint.
-            .configure_sets(
-                Update,
-                (
-                    UiFeed.after(WorldStage::Net),
-                    UiInput.before(WorldStage::Input),
-                    UiPaint,
-                )
-                    .chain(),
-            )
-            // In the feed phase, so an `OnUpdate` reads this frame's `GetFramerate()`.
-            .add_systems(Update, feed_framerate.in_set(UiFeed))
-            // The input pass hit-tests the rects the tick just resolved, in the world and on the
-            // stock glue screens.
-            .init_resource::<UiPassState>()
-            .init_resource::<PointerOverUiPanel>()
-            .add_systems(
-                Update,
-                (
-                    extract::tick_script,
-                    input::feed_ui_input.run_if(glue::ui_input_live),
-                )
-                    .chain()
-                    .in_set(UiInput)
-                    // So a key a focused box consumed never also fires a binding.
-                    .before(crate::app_core::schedule::BindingSet),
-            )
-            // After the plate driver seats this frame's nameplates, and before the append lane
-            // fills the widget slot this pass parks.
-            .add_systems(
-                Update,
-                extract::paint_script
-                    .in_set(UiPaint)
-                    .after(crate::vplates::VPlateSet)
-                    .before(crate::app_core::schedule::UiQuadAppend),
-            )
-            // After the hover is known and before gameplay reads `PointerOverUi`.
-            .add_systems(
-                Update,
-                arbitrate_pointer_over_ui
-                    .after(UiInput)
-                    .before(WorldStage::Input),
-            );
-
-        // A UI capture's synthetic unit snapshots, after the real feed so they win.
-        app.add_systems(
-            Update,
-            demo_unit_feed
-                .in_set(UiFeed)
-                .after(UnitFeed)
-                .run_if(capture_ui_active),
-        );
     }
-}
-
-fn uses_native_wrath_route(profile: Option<&wrathplus_formats::DataProfile>) -> bool {
-    matches!(profile, Some(wrathplus_formats::DataProfile::Wrath { .. }))
-}
-
-#[cfg(test)]
-mod profile_route_tests {
-    use super::*;
-
-    #[test]
-    fn the_wrath_profile_selects_the_wrath_route() {
-        assert!(!uses_native_wrath_route(None));
-        assert!(uses_native_wrath_route(Some(
-            &wrathplus_formats::DataProfile::Wrath {
-                locale: "enUS".into(),
-            }
-        )));
-    }
-}
-
-/// Whether a capture includes the player UI: world baselines stay UI-free unless
-/// [`crate::run_mode::capture_ui_opted_in`], which the UI load and window size also read.
-fn capture_ui_active(capture: Option<Res<crate::run_mode::CaptureMode>>) -> bool {
-    capture.is_some() && crate::run_mode::capture_ui_opted_in()
 }
 
 /// `PointerOverUi = egui dev overlay ∨ player-UI hover`; the dev half is optional.
@@ -347,7 +209,6 @@ pub(crate) use lifecycle::{
     PendingEntryUiLoad, ReloadUiPending,
 };
 // Test-only: other modules' tests consume these, and a plain re-export would warn unused.
-use lifecycle::shutdown_on_exit;
 #[cfg(test)]
 pub(crate) use lifecycle::{finish_ui_load, load_ingame_ui_on_world_entry};
 
@@ -374,209 +235,6 @@ fn feed_framerate(
         *smoothed + alpha * (instant - *smoothed)
     };
     script.set_framerate(*smoothed);
-}
-
-/// Synthetic player and target snapshots for a server-less UI capture, and its first events once.
-fn demo_unit_feed(script: Option<NonSendMut<UiScript>>, mut fired: Local<VmMemo<bool>>) {
-    /// The synthetic target's guid: a creature high part; only its distinctness matters.
-    const DEMO_TARGET_GUID: u64 = 0xF130_0000_0000_0001;
-
-    let Some(mut script) = script else {
-        return;
-    };
-    // Session-keyed: a fresh VM needs the one-shot events and bar seeds again.
-    let fired = fired.get(&script);
-    // Debug (`WOW_CAPTURE_REHOVER=1`): re-fire the world hover every frame, a flapping raycast.
-    if std::env::var("WOW_CAPTURE_REHOVER").as_deref() == Ok("1") {
-        script.world_tooltip_unit("mouseover");
-    }
-    script.set_unit(
-        "player",
-        Some(UnitState {
-            exists: true,
-            name: Some("Benilla".into()),
-            health: 72,
-            max_health: 100,
-            level: 12,
-            power_type: 0, // mana
-            power: 45,
-            max_power: 80,
-            dead: false,
-            reaction: 0, // own avatar: no reaction to itself
-            // Race/class so the ui-char capture's level line reads "Level 12 Night Elf Warrior".
-            race: Some("Night Elf".into()),
-            race_file: Some("NightElf".into()),
-            class: Some("Warrior".into()),
-            class_file: Some("WARRIOR".into()),
-            sex: 2,
-            is_player: true,
-            player_controlled: true,
-            ..Default::default()
-        }),
-    );
-    script.set_unit(
-        "target",
-        Some(UnitState {
-            exists: true,
-            name: Some("Young Wolf".into()),
-            health: 30,
-            max_health: 50,
-            level: 3,
-            // A powerless beast (maxPower 0): exercises the power-bar-hide path in the capture.
-            power_type: 0,
-            power: 0,
-            max_power: 0,
-            dead: false,
-            reaction: 4, // neutral: yellow (UnitReactionColor[4])
-            // A beast: no race/class tokens (UnitRace/UnitClass report the absent shape).
-            race: None,
-            race_file: None,
-            class: None,
-            class_file: None,
-            sex: 0,
-            // The tooltip's level line reads "Level 3 Beast".
-            creature_type_name: Some("Beast".into()),
-            // `GetComboPoints` reports only points banked on the current target's guid.
-            guid: DEMO_TARGET_GUID,
-            ..Default::default()
-        }),
-    );
-    // The combo dots need a rogue and banked points, seeded only for `ui-combopoints`.
-    if std::env::var("WOW_CAPTURE").as_deref() == Ok("ui-combopoints") {
-        script.set_player_req_state(wrathplus_ui::script::PlayerReqState {
-            level: 12,
-            class_id: 4, // rogue
-            ..Default::default()
-        });
-        script.set_combo_points(4, DEMO_TARGET_GUID);
-        let unit = wrathplus_ui::script::ScriptValue::Str("player".into());
-        script.fire_event("UNIT_COMBO_POINTS", vec![unit]);
-    }
-    if !*fired {
-        // Battle-stance page slots (actions 73..); slot 80 is a consumable stack of 5, since stock
-        // `ActionButton_UpdateCount` shows only a consumable's count (`ActionButton.lua:287`).
-        script.set_bonus_bar_offset(1);
-        // A macro on button 4; a capture has no character for `ui_macro::load_macros` to read.
-        script.set_macros(wrathplus_ui::script::MacroState {
-            account: vec![wrathplus_ui::script::MacroView {
-                name: "spawn".into(),
-                texture: Some("Interface\\Icons\\Ability_Racial_Cannibalize".into()),
-                body: ".spawn 16032".into(),
-                id: 1,
-            }],
-            character: Vec::new(),
-        });
-        for (action, icon, kind, id, count) in [
-            (
-                73,
-                "Interface\\Icons\\Ability_SteelMelee",
-                0x00u8,
-                100u32,
-                0u32,
-            ),
-            (74, "Interface\\Icons\\Ability_Rogue_Ambush", 0x00, 101, 0),
-            (
-                75,
-                "Interface\\Icons\\Ability_Warrior_BattleShout",
-                0x00,
-                102,
-                0,
-            ),
-            (
-                76,
-                "Interface\\Icons\\Ability_Racial_Cannibalize",
-                0x40,
-                1,
-                0,
-            ),
-            (80, "Interface\\Icons\\INV_Misc_Food_16", 0x80, 117, 5),
-            (84, "Interface\\Icons\\Spell_Holy_SealOfMight", 0x00, 103, 0),
-            // BottomLeft is actions 61..72, BottomRight 49..60; an empty multibar well hides.
-            (
-                61,
-                "Interface\\Icons\\Spell_Nature_Regenerate",
-                0x00,
-                104,
-                0,
-            ),
-            (62, "Interface\\Icons\\Spell_Shadow_Curse", 0x00, 105, 0),
-            (
-                72,
-                "Interface\\Icons\\Spell_Frost_FrostBolt02",
-                0x00,
-                106,
-                0,
-            ),
-            (49, "Interface\\Icons\\Spell_Fire_FlameBolt", 0x00, 107, 0),
-            (60, "Interface\\Icons\\Spell_Holy_Heal", 0x00, 108, 0),
-        ] {
-            script.set_action(
-                action,
-                Some(ActionSlot {
-                    texture: Some(icon.into()),
-                    kind,
-                    action: id,
-                    count,
-                    // The seed's only item slot is the food stack, which is consumable.
-                    consumable: kind == 0x80,
-                }),
-            );
-            // Server-less a slot has no usable state; a live bar's resting state is usable.
-            script.set_action_state(
-                action,
-                Some(wrathplus_ui::script::ActionState {
-                    usable: true,
-                    ..Default::default()
-                }),
-            );
-        }
-        // The stance bar: battle active (bonus offset 1), defensive uncastable, berserker cooling.
-        script.set_shapeshift_forms(vec![
-            wrathplus_ui::script::ShapeshiftFormView {
-                spell_id: 2457,
-                texture: Some("Interface\\Icons\\Ability_Warrior_OffensiveStance".into()),
-                name: "Battle Stance".into(),
-                active: true,
-                castable: true,
-                cooldown: None,
-            },
-            wrathplus_ui::script::ShapeshiftFormView {
-                spell_id: 71,
-                texture: Some("Interface\\Icons\\Ability_Warrior_DefensiveStance".into()),
-                name: "Defensive Stance".into(),
-                active: false,
-                castable: false,
-                cooldown: None,
-            },
-            wrathplus_ui::script::ShapeshiftFormView {
-                spell_id: 2458,
-                texture: Some("Interface\\Icons\\Ability_Racial_Avatar".into()),
-                name: "Berserker Stance".into(),
-                active: false,
-                castable: true,
-                cooldown: Some((900, 1500, true)),
-            },
-        ]);
-        script.fire_event("UPDATE_SHAPESHIFT_FORMS", vec![]);
-        // 70% XP, set before `PLAYER_ENTERING_WORLD` so the bar's first update reads it.
-        script.set_player_xp(4200, 6000);
-        script.fire_event("PLAYER_ENTERING_WORLD", vec![]);
-        // The bottom multibars ship off and a capture has no toggle byte, so raise them as the
-        // Options rows do; `WOW_DEMO_BOTTOM_BARS=0` leaves them down for the stance shelf art,
-        // which `ShapeshiftBar_UpdatePosition` hides under the bottom-left bar.
-        if std::env::var("WOW_DEMO_BOTTOM_BARS").as_deref() != Ok("0") {
-            let _ = script.run(
-                "SHOW_MULTI_ACTIONBAR_1 = 1 SHOW_MULTI_ACTIONBAR_2 = 1 \
-                 if MultiActionBar_Update then MultiActionBar_Update() end",
-            );
-        }
-        script.fire_event("PLAYER_XP_UPDATE", vec![]);
-        for token in ["player", "target"] {
-            script.fire_event("UNIT_HEALTH", vec![ScriptValue::Str(token.into())]);
-        }
-        script.fire_event("PLAYER_TARGET_CHANGED", vec![]);
-        *fired = true;
-    }
 }
 
 /// A test font engine: every character `.0` wide, 12 tall per line, greedily wrapped.

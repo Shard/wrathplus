@@ -47,6 +47,7 @@ mod ui_chat_ambiguous_tests;
 mod ui_chat_feed;
 mod ui_gm_response_tests;
 mod ui_guild_wrath_tests;
+mod ui_input_schedule_tests;
 mod ui_instance_native_tests;
 mod ui_items_currency_tests;
 mod ui_items_feed_descriptor_tests;
