@@ -163,14 +163,16 @@ fn wow_normalize(v: vec3<f32>) -> vec3<f32> {
     return select(vec3<f32>(0.0), normalize(v), l2 > 1e-12);
 }
 
-// The point lights at P: the reference commits at most three per draw, the nearest to the
-// receiving unit's own position `anchor` (`0x71bf90` gathers by squared distance, `0x71c730` seats
-// slots 1-3). Range bounds candidacy only; a selected light falls off as `1/(0.7·d + 0.03·d²)`,
+// The point lights at P. 12340 gathers the four nearest to the receiving unit's own position
+// `anchor` by squared distance into an ascending list (`0x834f60`), then seats GL slots 1-3 from
+// the farthest down and stops at slot 3 (`0x8353d0`): with four candidates the nearest is never
+// committed. Range bounds candidacy only; a seated light falls off as `1/(0.7·d + 0.03·d²)`,
 // diffuse only, on the submitted normal (no GL_LIGHT_MODEL_TWO_SIDE). Mirrored in terrain.wgsl.
 fn point_light_sum(P: vec3<f32>, N: vec3<f32>, anchor: vec3<f32>) -> vec3<f32> {
     let count = u32(wow_light.point_count.x);
-    var sel = array<u32, 3>(0u, 0u, 0u);
-    var sd = array<f32, 3>(1e30, 1e30, 1e30);
+    var sel = array<u32, 4>(0u, 0u, 0u, 0u);
+    var sd = array<f32, 4>(1e30, 1e30, 1e30, 1e30);
+    var n = 0u;
     for (var i = 0u; i < count; i = i + 1u) {
         let pos_range = wow_light.points[2u * i];
         let dv = pos_range.xyz - anchor;
@@ -178,22 +180,19 @@ fn point_light_sum(P: vec3<f32>, N: vec3<f32>, anchor: vec3<f32>) -> vec3<f32> {
         if (d2 > pos_range.w * pos_range.w) {
             continue;
         }
-        if (d2 < sd[0]) {
-            sd[2] = sd[1]; sel[2] = sel[1];
-            sd[1] = sd[0]; sel[1] = sel[0];
-            sd[0] = d2; sel[0] = i;
-        } else if (d2 < sd[1]) {
-            sd[2] = sd[1]; sel[2] = sel[1];
-            sd[1] = d2; sel[1] = i;
-        } else if (d2 < sd[2]) {
-            sd[2] = d2; sel[2] = i;
+        if (n == 4u && d2 >= sd[3]) {
+            continue;
         }
+        var k = min(n, 3u);
+        while (k > 0u && sd[k - 1u] >= d2) {
+            sd[k] = sd[k - 1u]; sel[k] = sel[k - 1u];
+            k = k - 1u;
+        }
+        sd[k] = d2; sel[k] = i;
+        n = min(n + 1u, 4u);
     }
     var sum = vec3<f32>(0.0);
-    for (var s = 0u; s < 3u; s = s + 1u) {
-        if (sd[s] > 9.9e29) {
-            break;
-        }
+    for (var s = n - min(n, 3u); s < n; s = s + 1u) {
         let pos_range = wow_light.points[2u * sel[s]];
         let to_light = pos_range.xyz - P;
         let d = length(to_light);
