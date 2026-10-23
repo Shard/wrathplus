@@ -22,7 +22,7 @@ fn probe_strings(key: &str) -> Option<String> {
     match key {
         "TRADESKILL_SERVICE_STEP" => Some("<STEP>".into()),
         "TRADESKILL_SERVICE_LEARN" => Some("<LEARN>".into()),
-        "KNOWN_TALENTS_HEADER" => Some("<KNOWN>".into()),
+        "TRADESKILL_SERVICE_PASSIVE" => Some("<PASSIVE>".into()),
         _ => None,
     }
 }
@@ -943,7 +943,7 @@ fn the_group_header_keys_resolve_in_the_real_global_strings() {
     for key in [
         "TRADESKILL_SERVICE_STEP",
         "TRADESKILL_SERVICE_LEARN",
-        "KNOWN_TALENTS_HEADER",
+        "TRADESKILL_SERVICE_PASSIVE",
     ] {
         let text = vm.lua().globals().get::<String>(key).unwrap_or_default();
         assert!(!text.is_empty(), "{key} missing");

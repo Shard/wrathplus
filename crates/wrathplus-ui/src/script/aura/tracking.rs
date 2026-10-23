@@ -152,6 +152,13 @@ fn select_row(model: &mut Model, row: Option<usize>) {
         .push(("MINIMAP_UPDATE_TRACKING".into(), Vec::new()));
 }
 
+impl Model {
+    /// The selected row's name global, `GameTooltip:SetTracking`'s line (`0x625940`).
+    pub(in crate::script) fn tracking_row_key(&self) -> Option<&'static str> {
+        self.wrath_tracking_selection.map(|r| ROWS[r].key)
+    }
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
 

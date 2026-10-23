@@ -533,91 +533,30 @@ fn tradeskill_trainer_matches_the_emulated_reference_order() {
     assert_eq!(got, expected);
 }
 
-/// At a mount trainer the known group's header sorts first (`0x4d7b90`), the rest by name.
+/// 12340's group order (`0x5941b0`): a group whose every service costs a profession point sorts
+/// after the rest, which go by name; one service without the cost clears the group's flag.
 #[test]
-fn mount_trainer_folds_known_services_into_my_talents() {
-    let known = |id: u32, name: &str| {
-        svc(
-            id,
-            name,
-            TrainerServiceCategory::Used,
-            TRAINER_GROUP_KNOWN,
-            "My Talents",
-        )
+fn a_group_of_profession_first_ranks_sorts_after_the_rest() {
+    let first_rank = |id: u32, name: &str, key: u32, group: &str| TrainerService {
+        prof_first_rank: true,
+        ..svc(id, name, TrainerServiceCategory::Available, key, group)
     };
     let services = vec![
+        first_rank(2259, "Alchemy", 171, "Alchemy"),
+        TrainerService {
+            description: String::new(),
+            ..svc(3, "Zap", TrainerServiceCategory::Available, 900, "Zeta")
+        },
+        first_rank(2018, "Blacksmithing", 164, "Blacksmithing"),
         svc(
-            33,
-            "Riding",
+            4,
+            "Mix",
             TrainerServiceCategory::Available,
-            762,
-            "Riding",
-        ),
-        known(6648, "Tiger Riding"),
-        svc(
-            824,
-            "Horse Riding",
-            TrainerServiceCategory::Unavailable,
-            148,
-            "Horse Riding",
-        ),
-        svc(
-            8394,
-            "Ram Riding",
-            TrainerServiceCategory::Available,
-            152,
-            "Ram Riding",
+            164,
+            "Blacksmithing",
         ),
     ];
     let mut s = every_state_shown();
-    s.set_trainer(Some(TrainerState {
-        greeting: "Ready to ride?".into(),
-        trainer_type: 1,
-        groups: Vec::new(),
-        services,
-    }));
-
-    let got: Vec<String> = visible(&mut s).into_iter().map(|(n, _)| n).collect();
-    assert_eq!(
-        got,
-        [
-            "My Talents",
-            "Tiger Riding",
-            "Horse Riding",
-            "Horse Riding",
-            "Ram Riding",
-            "Ram Riding",
-            "Riding",
-            "Riding",
-        ],
-        "the -1 group leads; every other header is name-ordered"
-    );
-    assert!(s.eval::<bool>("return IsTalentTrainer() == 1").unwrap());
-    assert!(s
-        .eval::<bool>("return IsTradeskillTrainer() == nil")
-        .unwrap());
-}
-
-/// Only at type 1 is the state byte a sort key (`0x4d8850`).
-#[test]
-fn talent_order_sorts_on_state_within_a_group() {
-    let one = |id: u32, name: &str, cat: TrainerServiceCategory| svc(id, name, cat, 762, "Riding");
-    let services = vec![
-        one(3, "Cee", TrainerServiceCategory::Available),
-        one(1, "Aye", TrainerServiceCategory::Used),
-        one(2, "Bee", TrainerServiceCategory::Unavailable),
-    ];
-    let mut s = every_state_shown();
-    s.set_trainer(Some(TrainerState {
-        greeting: String::new(),
-        trainer_type: 1,
-        groups: Vec::new(),
-        services: services.clone(),
-    }));
-    let got: Vec<String> = visible(&mut s).into_iter().map(|(n, _)| n).collect();
-    assert_eq!(got, ["Riding", "Cee", "Bee", "Aye"]);
-
-    // At a class trainer the same three sort by name: equal levels, no skill gates.
     s.set_trainer(Some(TrainerState {
         greeting: String::new(),
         trainer_type: 0,
@@ -625,5 +564,43 @@ fn talent_order_sorts_on_state_within_a_group() {
         services,
     }));
     let got: Vec<String> = visible(&mut s).into_iter().map(|(n, _)| n).collect();
-    assert_eq!(got, ["Riding", "Aye", "Bee", "Cee"]);
+    assert_eq!(
+        got,
+        [
+            "Blacksmithing",
+            "Blacksmithing",
+            "Mix",
+            "Zeta",
+            "Zap",
+            "Alchemy",
+            "Alchemy"
+        ]
+    );
+    // `005959d0` answers nil for a service with no description, never "".
+    assert!(s
+        .eval::<bool>("return GetTrainerServiceDescription(5) == nil")
+        .unwrap());
+}
+
+/// 12340's builder has no known-services group and one row order (`0x5947d0`) for every type
+/// but tradeskill: a mount trainer sorts as a class trainer does.
+#[test]
+fn a_mount_trainer_orders_rows_as_a_class_trainer() {
+    let one = |id: u32, name: &str, cat: TrainerServiceCategory| svc(id, name, cat, 762, "Riding");
+    let services = vec![
+        one(3, "Cee", TrainerServiceCategory::Available),
+        one(1, "Aye", TrainerServiceCategory::Used),
+        one(2, "Bee", TrainerServiceCategory::Unavailable),
+    ];
+    for trainer_type in [1, 0] {
+        let mut s = every_state_shown();
+        s.set_trainer(Some(TrainerState {
+            greeting: String::new(),
+            trainer_type,
+            groups: Vec::new(),
+            services: services.clone(),
+        }));
+        let got: Vec<String> = visible(&mut s).into_iter().map(|(n, _)| n).collect();
+        assert_eq!(got, ["Riding", "Aye", "Bee", "Cee"], "type {trainer_type}");
+    }
 }
