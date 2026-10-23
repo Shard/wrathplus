@@ -48,7 +48,7 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 438 | 61 | 190 | 689 |
+| S→C | 439 | 60 | 190 | 689 |
 | C→S | 419 | 0 | 305 | 724 |
 
 Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 419 admitted numeric opcodes, 78 of them transport-only (no UI producer) and 341 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
@@ -1334,7 +1334,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x04C4` | `CMSG_GM_GRANT_ACHIEVEMENT` | C→S | missing | GM-debug | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x04C5` | `CMSG_GM_REMOVE_ACHIEVEMENT` | C→S | missing | GM-debug | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x04C6` | `CMSG_GM_SET_CRITERIA_FOR_PLAYER` | C→S | missing | GM-debug | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x04C7` | `SMSG_ARENA_UNIT_DESTROYED` | S→C | capture-only | niche | proven_send_site: `game/Entities/Object/Object.cpp:284` | S→C: capture-only — P/wrath_battleground.rs → `ui_battlefield::NativeBattlegroundRest` FIFO (cleared on Connected/Disconnected); no arena-opponent model consumes it (`GetNumArenaOpponents` is a stub). See docs/WRATH-BATTLEGROUND.md. |
+| `0x04C7` | `SMSG_ARENA_UNIT_DESTROYED` | S→C | handled | niche | proven_send_site: `game/Entities/Object/Object.cpp:284` | S→C: semantic-consumer — P/wrath_battleground.rs → `ui_battlefield::NativeBattlegroundRest` → crates/wrathplus-app-ui/src/ui_native/wrath_arena.rs `feed_arena`: in an arena, `ARENA_OPPONENT_UPDATE(arenaN, "destroyed")` for the opponent slot (12340 `0x54b5e0` → `0x54ad10`), consumed and ignored elsewhere. The same feed owns the opponent table (`app_core::arena`, filled on creation of an other-faction player, `0x6e8280` → `0x54d100`), the `arenaN` tokens, `GetNumArenaOpponents` and the seen/unseen/cleared events; the `arenapetN` filler is untraced and labelled. See docs/WRATH-BATTLEGROUND.md. |
 | `0x04C8` | `SMSG_ARENA_TEAM_CHANGE_FAILED_QUEUED` | S→C | missing | common | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x04C9` | `CMSG_PROFILEDATA_REQUEST` | C→S | missing | core | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x04CA` | `SMSG_PROFILEDATA_RESPONSE` | S→C | missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |

@@ -75,7 +75,7 @@ pub struct BattlefieldQueue {
     active_map: u32,
     active_instance_type: u32,
     /// The arena faction byte of the last status 3 (`0xbea54a`).
-    arena_faction: u8,
+    pub(crate) arena_faction: u8,
     /// The instance's run-time stamp (`0xbea578`) and expiration (`0xbea574`): set by status 3,
     /// zeroed by any other status, as the handler does. The stamp is kept as the arrival and the
     /// wire's elapsed span, read forwards, so no `Instant` precedes the clock's origin.
