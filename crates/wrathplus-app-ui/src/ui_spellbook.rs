@@ -478,13 +478,8 @@ pub(crate) fn cast_spell(cast: &mut crate::spell::ScriptCast, spell_id: u32, on_
     // `0x802cb0`), then the form match, which `UseAction` lacks, with its silent no-op.
     if let (Some(sp), Some(store)) = (ladder.spells.as_ref(), targeting.self_store.iter().next()) {
         if let Some(d) = sp.catalog.get(spell_id) {
-            let auras = crate::ui_action::toggle::unit_auras(&ladder.objects, store);
-            if crate::ui_action::toggle::active_action_toggle(spell_id, d, auras) {
-                debug!("ui_spellbook: cast {spell_id} re-pressed — aura cancels");
-                let _ = ladder
-                    .commands
-                    .0
-                    .send(crate::net::ClientCommand::CancelAura { spell_id });
+            let (commands, objects) = (&ladder.commands, &ladder.objects);
+            if crate::ui_action::toggle::send_press_again(commands, spell_id, d, objects, store) {
                 return;
             }
             let form = store.0.unit_shapeshift_form();
