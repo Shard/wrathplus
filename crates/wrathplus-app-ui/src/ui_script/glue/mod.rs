@@ -2,13 +2,15 @@
 //! screens `GlueParent.lua` switches between (`AccountLogin`, `CharacterSelect`, …), on its own VM
 //! outside the world. The loader is FrameXML's ([`reference_ui::core_at`]) on the glue toc.
 
-use wrathplus_ui::script::{ScriptValue, UiScript};
 use bevy::prelude::*;
+use wrathplus_ui::script::{ScriptValue, UiScript};
 
 use super::reference_ui;
 
 mod host;
 pub(crate) use host::stock_glue;
+#[cfg(test)]
+mod click_tests;
 #[cfg(test)]
 mod host_tests;
 #[cfg(test)]
@@ -59,7 +61,9 @@ pub(crate) fn native_glue() -> bool {
 }
 
 /// UI input's run condition: the in-game UI in the world, or a screen the stock glue hosts.
-pub(crate) fn ui_input_live(state: Option<Res<State<crate::app_core::state::ClientState>>>) -> bool {
+pub(crate) fn ui_input_live(
+    state: Option<Res<State<crate::app_core::state::ClientState>>>,
+) -> bool {
     use crate::app_core::state::ClientState;
     let state = state.map(|s| *s.get());
     state == Some(ClientState::InWorld)
@@ -72,7 +76,9 @@ pub(crate) fn ui_input_live(state: Option<Res<State<crate::app_core::state::Clie
 
 /// Run condition: the stock glue hosts the screen (login, realm list, character select and, with
 /// Native UI's host, character create).
-pub(crate) fn stock_glue_up(state: Option<Res<State<crate::app_core::state::ClientState>>>) -> bool {
+pub(crate) fn stock_glue_up(
+    state: Option<Res<State<crate::app_core::state::ClientState>>>,
+) -> bool {
     use crate::app_core::state::ClientState;
     stock_glue_active()
         && state.is_some_and(|s| {

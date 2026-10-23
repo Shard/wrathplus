@@ -1,7 +1,7 @@
 //! Bounded Wrath 12340 addon host layered beside the native safety overlay.
 
-use wrathplus_ui::script::UiScript;
 use bevy::prelude::*;
+use wrathplus_ui::script::UiScript;
 
 use super::{UiFeed, UiInput, UiPaint};
 
@@ -52,7 +52,9 @@ pub(super) fn build(app: &mut App) {
             Update,
             (
                 super::extract::tick_script,
-                super::input::feed_ui_input.in_set(crate::app_core::schedule::InWorldGated),
+                // In the world and on the stock glue screens: the login VM's only pointer and
+                // key feed (`glue::ui_input_live`).
+                super::input::feed_ui_input.run_if(super::glue::ui_input_live),
             )
                 .chain()
                 .in_set(UiInput)
