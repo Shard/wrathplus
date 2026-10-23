@@ -34,9 +34,8 @@ pub(in crate::script) fn update(lua: &Lua, h: FrameHandle, dt: f32) {
 /// depends on it: it reads the `cursorOffset` its `OnCursorChanged` stored
 /// (`UIPanelTemplates.lua:338`–`365`). A focused box whose advance table is pending, with no
 /// inline measurer, holds `OnTextChanged` by keeping bit 0 up, so the relayout reruns and the
-/// event fires after the caret leg, on the flush where the host's table lands. Deviation: an
-/// unfocused box with no inline measurer never gets a table, so it fires `OnTextChanged` without
-/// the caret leg rather than never.
+/// event fires after the caret leg, on the flush where the host's table lands. An unfocused box
+/// never gets the host's table, so its caret leg places at a fallback ([`cursor_changed`]).
 pub(super) fn flush(lua: &Lua, h: FrameHandle) {
     let Some((entry, owed)) = with_eb(lua, h, |eb| (eb.dirty, eb.relayout_owed)) else {
         return;
@@ -84,8 +83,13 @@ fn caret(lua: &Lua, h: FrameHandle) -> bool {
 /// along its line, `y` minus the row index times the row pitch, `w` the constant 4.0 and `h` the
 /// line height. The arguments are computed only for a box with the script (`0x77dd8c`), from the
 /// box's advance table, which the installed font engine measures here when the text or font
-/// moved. `false` while that table is pending, with no engine installed: the host answers the
-/// focused box's a tick later.
+/// moved. `false` while that table is pending for the focused box, with no engine installed: the
+/// host answers it a tick later.
+///
+/// Deviation, only with no inline font engine (production's always answers): an unfocused box,
+/// whose table the host never measures, reports `(0, 0, 4, pitch)`, so stock
+/// `ScrollingEdit_OnTextChanged` still finds the `cursorOffset` its `OnCursorChanged` stores
+/// (`UIPanelTemplates.lua:345-365`), as the reference's always-inline leg guarantees.
 ///
 /// Deviation: `h` is the row pitch the advance answer carries, where the reference passes the line
 /// height (`0x7727b0`): 0 for a single-line box, whose answer has no pitch, and for a multi-line
@@ -95,10 +99,11 @@ fn cursor_changed(lua: &Lua, h: FrameHandle) -> bool {
     if !event::has_widget_handler(lua, id, "OnCursorChanged") {
         return true;
     }
-    if !super::seam::advances_current(lua, h) {
-        return false;
-    }
+    let measured = super::seam::advances_current(lua, h);
     let args = with_eb(lua, h, |eb| {
+        if !measured {
+            return None;
+        }
         let display = eb.display();
         if eb.advances.len() != display.len() + 1 {
             return None;
@@ -116,9 +121,12 @@ fn cursor_changed(lua: &Lua, h: FrameHandle) -> bool {
         Some((x, y, pitch))
     })
     .flatten();
-    let Some((x, y, pitch)) = args else {
-        return false;
+    let args = match args {
+        Some(args) => args,
+        None if focused(lua, h) => return false,
+        None => (0.0, 0.0, with_eb(lua, h, |eb| eb.cell_h).unwrap_or(0.0)),
     };
+    let (x, y, pitch) = args;
     if let Err(e) = event::fire_widget_handler(
         lua,
         id,
