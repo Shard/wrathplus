@@ -40,7 +40,7 @@ fn the_reads_answer_what_app_seeds() {
     s.set_glue_num_characters(3);
     s.run("local a, b, v, i, d = GetBuildInfo(); assert(a == 'Version' and v == '3.3.5' and i == '12340' and d == 'Jun 24 2010'); assert(GetSavedAccountName() == 'Alice'); assert(IsConnectedToServer() == 1); assert(GetServerName() == 'AzerothCore'); assert(GetNumCharacters() == 3); assert(GetClientExpansionLevel() == 2); assert(not IsStreamingTrial()); assert(not ShowTOSNotice()); assert(TOSAccepted() == 1 and EULAAccepted() == 1); SetCurrentScreen('login')")
         .unwrap();
-    assert_eq!(s.glue_current_screen(), "login");
+    assert_eq!(s.glue_current_screen().as_deref(), Some("login"));
 }
 
 #[test]
@@ -152,4 +152,17 @@ fn the_glue_backdrops_answer_the_model_ffx_verbs_only_on_the_glue_vm() {
 fn the_in_game_vm_has_no_glue_api() {
     let s = UiScript::new().unwrap();
     assert!(s.eval::<bool>("return DefaultServerLogin == nil").unwrap());
+}
+
+/// The in-world VM has no glue API: a glue setter scheduled across the world switch is a no-op and
+/// a getter answers nothing, never a panic.
+#[test]
+fn a_vm_without_the_glue_api_answers_nothing() {
+    let mut s = UiScript::new().unwrap();
+    s.set_glue_saved_account("Bob");
+    s.set_glue_connection(true, "x");
+    s.set_glue_num_characters(2);
+    s.set_glue_realmlist("127.0.0.1", false);
+    assert!(s.take_glue_requests().is_empty());
+    assert_eq!(s.glue_current_screen(), None);
 }

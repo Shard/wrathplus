@@ -4,6 +4,7 @@
 
 mod cvars;
 mod experience_console_tests;
+mod glue_world_switch_tests;
 mod names_native_pet_tests;
 mod net;
 mod net_apply_motion_seam_tests;
