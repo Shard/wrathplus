@@ -165,15 +165,10 @@ impl super::UiScript {
     /// Push the unit-token resolver's inputs, copied only when they moved.
     pub fn set_unit_guids(&mut self, guids: &super::UnitGuids) {
         let mut model = self.model_mut();
-        let wrath = model.unit_guids.wrath;
-        if model.unit_guids
-            != (super::UnitGuids {
-                wrath,
-                ..guids.clone()
-            })
-        {
-            model.unit_guids.clone_from(guids);
-            model.unit_guids.wrath = wrath;
+        // The dialect flag and the arena slots are not this push's (`UnitGuids::with_kept`).
+        let next = model.unit_guids.with_kept(guids);
+        if model.unit_guids != next {
+            model.unit_guids = next;
         }
     }
 
