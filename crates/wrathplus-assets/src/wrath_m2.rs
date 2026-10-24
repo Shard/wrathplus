@@ -459,10 +459,11 @@ fn build_animations(
             }
         }
     }
+    let keyed = crate::model::KeyedChannels::of(&semantic.animations);
     let mut clips = Vec::with_capacity(semantic.animations.len());
     let mut first_seq = None;
     for (index, animation) in semantic.animations.iter().enumerate() {
-        let (clip, pose_clip, poses_bones) = build_animation_clip(animation, skeleton);
+        let (clip, pose_clip, poses_bones) = build_animation_clip(animation, skeleton, &keyed);
         if first_seq.is_none() && animation.anim_id == 0 && !animation.is_rest_pose() {
             first_seq = Some(clips.len());
         }
