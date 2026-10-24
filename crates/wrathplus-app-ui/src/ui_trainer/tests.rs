@@ -559,11 +559,11 @@ fn every_list_packet_begins_a_window_session() {
 }
 
 mod re_derive {
-    //! The re-evaluator, one test per leg of `0x4d7d40`, on synthetic catalogs.
-    use super::super::reeval::{re_derive, PetView, PlayerView, SkillSlot};
+    //! The re-evaluator, one test per leg of `0x596b00`, on synthetic catalogs.
+    use super::super::reeval::{re_derive, PlayerView, SkillSlot};
     use super::*;
-    use wrathplus_formats::{LearnEffect, SlaInfo, SpellDisplay};
     use std::collections::HashMap;
+    use wrathplus_formats::{LearnEffect, SlaInfo, SpellDisplay};
 
     const BLACKSMITHING: u32 = 164;
     /// Wrapper 2020 teaches 2018 and steps Blacksmithing to 1, the real openers' shape.
@@ -573,19 +573,21 @@ mod re_derive {
     const RANK1_WRAPPER: u32 = 500;
     const RANK1: u32 = 100;
     const RANK2: u32 = 101;
-    /// A pet wrapper: teaches the pet 300.
-    const PET_WRAPPER: u32 = 700;
-    const PET_SPELL: u32 = 300;
-
-    /// A rank-2 wrapper: teaches RANK2 (whose previous rank is RANK1).
-    const RANK2_WRAPPER: u32 = 501;
+    /// A plain service spell, no learn effect: Summon Imp (688), whose effect is a summon (28).
+    const PLAIN: u32 = 688;
+    const SPELL_EFFECT_SUMMON: u32 = 28;
 
     fn catalog() -> SpellCatalog {
-        // Every wrapper has a record: the admission gate (`0x4d7dcd`) skips a row without one.
-        let displays = [OPENER, RANK1_WRAPPER, RANK2_WRAPPER, PET_WRAPPER]
+        // Every service has a record: a row without one keeps its wire state.
+        let mut displays: HashMap<u32, SpellDisplay> = [OPENER, RANK1_WRAPPER]
             .into_iter()
             .map(|id| (id, SpellDisplay::default()))
             .collect();
+        let summon = SpellDisplay {
+            effects: [SPELL_EFFECT_SUMMON, 0, 0],
+            ..Default::default()
+        };
+        displays.insert(PLAIN, summon);
         SpellCatalog::from_displays_and_effects(
             displays,
             HashMap::from([
@@ -600,8 +602,6 @@ mod re_derive {
                     ],
                 ),
                 (RANK1_WRAPPER, vec![LearnEffect::Spell(RANK1)]),
-                (RANK2_WRAPPER, vec![LearnEffect::Spell(RANK2)]),
-                (PET_WRAPPER, vec![LearnEffect::PetSpell(PET_SPELL)]),
             ]),
         )
     }
@@ -618,7 +618,7 @@ mod re_derive {
     }
 
     fn service(spell: u32) -> TrainerSpell {
-        // The wire state is RED on purpose: every case below must ignore it (`0x4d7dec`).
+        // The wire state is RED on purpose: every case below must ignore it.
         let mut w = wire(spell, trainer_spell_state::RED, 10, 1, 0);
         w.req_skill_value = 0;
         w
@@ -629,18 +629,17 @@ mod re_derive {
             known: BTreeSet::new(),
             level: 10,
             skills: Vec::new(),
-            pet: None,
         }
     }
 
-    fn state(wire: &TrainerSpell, trainer_type: u32, player: &PlayerView) -> u8 {
-        re_derive(wire, trainer_type, &catalog(), &skill_lines(), player)
+    fn state(wire: &TrainerSpell, player: &PlayerView) -> u8 {
+        re_derive(wire, &catalog(), &skill_lines(), player)
     }
 
     #[test]
     fn the_wire_state_is_discarded_and_a_met_service_reads_green() {
         assert_eq!(
-            state(&service(RANK1_WRAPPER), 0, &player()),
+            state(&service(RANK1_WRAPPER), &player()),
             trainer_spell_state::GREEN
         );
     }
@@ -650,31 +649,46 @@ mod re_derive {
         let mut p = player();
         p.known.insert(RANK1);
         assert_eq!(
-            state(&service(RANK1_WRAPPER), 0, &p),
+            state(&service(RANK1_WRAPPER), &p),
             trainer_spell_state::GRAY
         );
+    }
+
+    /// The playtest bug: Summon Imp stayed available after it was learned, because 1.12's walk
+    /// counted learn effects only.
+    #[test]
+    fn a_plain_service_spell_reads_gray_once_it_is_in_the_book() {
+        assert_eq!(
+            state(&service(PLAIN), &player()),
+            trainer_spell_state::GREEN
+        );
+        let mut p = player();
+        p.known.insert(PLAIN);
+        assert_eq!(state(&service(PLAIN), &p), trainer_spell_state::GRAY);
     }
 
     #[test]
     fn a_higher_known_rank_counts_as_known() {
-        // Rank 2 in the book, rank 1 offered: `KnownHigherRank` (0x60c8d0) says known.
         let mut p = player();
         p.known.insert(RANK2);
         assert_eq!(
-            state(&service(RANK1_WRAPPER), 0, &p),
+            state(&service(RANK1_WRAPPER), &p),
             trainer_spell_state::GRAY
         );
     }
 
     #[test]
-    fn a_skill_step_the_player_already_holds_reads_gray() {
+    fn a_skill_step_counts_with_the_taught_spell() {
         let mut p = player();
         p.skills.push(SkillSlot {
             skill_id: BLACKSMITHING,
             step: 1,
             value_plus_perm: 1,
         });
-        assert_eq!(state(&service(OPENER), 0, &p), trainer_spell_state::GRAY);
+        // The step alone is one of two counted effects.
+        assert_eq!(state(&service(OPENER), &p), trainer_spell_state::GREEN);
+        p.known.insert(TAUGHT);
+        assert_eq!(state(&service(OPENER), &p), trainer_spell_state::GRAY);
     }
 
     #[test]
@@ -689,102 +703,54 @@ mod re_derive {
             step: 1,
             value_plus_perm: 40,
         });
-        assert_eq!(state(&w, 0, &p), trainer_spell_state::RED);
+        assert_eq!(state(&w, &p), trainer_spell_state::RED);
         // Met (value plus permanent bonus reaches it): the leg leaves the state alone.
         p.skills[0].value_plus_perm = 75;
-        assert_eq!(state(&w, 0, &p), trainer_spell_state::GREEN);
+        assert_eq!(state(&w, &p), trainer_spell_state::GREEN);
     }
 
-    /// The reference's own quirk (`0x4d8082`): a line the player lacks entirely writes nothing,
-    /// so green where the server sends red.
+    /// A line the player lacks entirely writes nothing, so green where the server sends red.
     #[test]
     fn a_skill_line_the_player_lacks_entirely_reads_green() {
         let mut w = service(RANK1_WRAPPER);
         w.req_skill = BLACKSMITHING;
         w.req_skill_value = 75;
-        assert_eq!(state(&w, 0, &player()), trainer_spell_state::GREEN);
+        assert_eq!(state(&w, &player()), trainer_spell_state::GREEN);
     }
 
     #[test]
-    fn an_unknown_required_ability_reads_red_or_hidden_at_type_one() {
-        // The opener (its taught spell unknown, no skill slot held) with a prerequisite ability.
+    fn an_unknown_required_ability_reads_red() {
         let mut w = service(OPENER);
         w.req_spells = [RANK1, 0, 0];
-        assert_eq!(state(&w, 0, &player()), trainer_spell_state::RED);
-        assert_eq!(state(&w, 2, &player()), trainer_spell_state::RED);
-        // Type 1: RANK1 is not the rank before TAUGHT, so a plain miss, not hidden (`0x4d83a4`).
-        assert_eq!(state(&w, 1, &player()), trainer_spell_state::RED);
+        assert_eq!(state(&w, &player()), trainer_spell_state::RED);
         // Known, or known at a higher rank, satisfies it.
         let mut p = player();
         p.known.insert(RANK2);
-        assert_eq!(state(&w, 0, &p), trainer_spell_state::GREEN);
+        assert_eq!(state(&w, &p), trainer_spell_state::GREEN);
         let mut p = player();
         p.known.insert(RANK1);
-        assert_eq!(state(&w, 1, &p), trainer_spell_state::GREEN);
+        assert_eq!(state(&w, &p), trainer_spell_state::GREEN);
     }
 
     #[test]
     fn a_level_requirement_above_one_gates_on_the_players_level() {
         let mut w = service(RANK1_WRAPPER);
         w.req_level = 20;
-        assert_eq!(state(&w, 0, &player()), trainer_spell_state::RED);
+        assert_eq!(state(&w, &player()), trainer_spell_state::RED);
         let mut p = player();
         p.level = 20;
-        assert_eq!(state(&w, 0, &p), trainer_spell_state::GREEN);
-        // `req_level <= 1` is not a gate at all (`row[+0x14] > 1`).
+        assert_eq!(state(&w, &p), trainer_spell_state::GREEN);
+        // `req_level <= 1` is not a gate at all.
         w.req_level = 1;
         let mut p = player();
         p.level = 0;
-        assert_eq!(state(&w, 0, &p), trainer_spell_state::GREEN);
-    }
-
-    #[test]
-    fn a_pet_spell_needs_a_pet_of_the_rows_level_and_reads_off_the_pets_book() {
-        let mut w = service(PET_WRAPPER);
-        w.req_level = 12;
-        // The row's level binds the player too (`0x4d8239`), so the player clears it.
-        let player = || PlayerView {
-            level: 20,
-            ..player()
-        };
-        assert_eq!(state(&w, 3, &player()), trainer_spell_state::RED, "no pet");
-        let mut p = player();
-        p.pet = Some(PetView {
-            level: 11,
-            known: BTreeSet::new(),
-        });
-        assert_eq!(
-            state(&w, 3, &p),
-            trainer_spell_state::RED,
-            "pet below the row's level"
-        );
-        p.pet = Some(PetView {
-            level: 12,
-            known: BTreeSet::new(),
-        });
-        assert_eq!(state(&w, 3, &p), trainer_spell_state::GREEN);
-        // Known by the pet, not the player: gray.
-        p.pet = Some(PetView {
-            level: 12,
-            known: BTreeSet::from([PET_SPELL]),
-        });
-        assert_eq!(state(&w, 3, &p), trainer_spell_state::GRAY);
-        p.known.insert(PET_SPELL);
-        p.pet = Some(PetView {
-            level: 12,
-            known: BTreeSet::new(),
-        });
-        assert_eq!(
-            state(&w, 3, &p),
-            trainer_spell_state::GREEN,
-            "the player's own book is not the pet's"
-        );
+        assert_eq!(state(&w, &p), trainer_spell_state::GREEN);
     }
 
     #[test]
     fn the_legs_run_in_the_references_order() {
-        // A known service with an unmet skill line and level is gray: legs 4 and 5 run only while
-        // the state is still 0.
+        // A known service with an unmet skill line and level is gray: the later legs run only
+        // while the state is still available.
         let mut w = service(OPENER);
         w.req_skill = BLACKSMITHING;
         w.req_skill_value = 300;
@@ -796,136 +762,26 @@ mod re_derive {
             step: 1,
             value_plus_perm: 1,
         });
-        assert_eq!(state(&w, 2, &p), trainer_spell_state::GRAY);
+        assert_eq!(state(&w, &p), trainer_spell_state::GRAY);
     }
 
-    /// The admission gate (`0x4d7dcd`).
     #[test]
     fn a_row_without_a_spell_record_keeps_its_wire_state() {
         let w = wire(999_999, trainer_spell_state::RED, 10, 1, 0);
-        assert_eq!(state(&w, 0, &player()), trainer_spell_state::RED);
+        assert_eq!(state(&w, &player()), trainer_spell_state::RED);
         let w = wire(999_999, trainer_spell_state::GRAY, 10, 1, 0);
-        assert_eq!(state(&w, 0, &player()), trainer_spell_state::GRAY);
-    }
-
-    /// `0x4d7e3e`: the hidden row counts as a learn effect, never a known one, so it stays hidden.
-    #[test]
-    fn a_higher_rank_known_at_a_type_one_trainer_hides_the_row() {
-        let mut p = player();
-        p.known.insert(RANK2);
-        assert_eq!(state(&service(RANK1_WRAPPER), 1, &p), 3);
-        assert_eq!(
-            state(&service(RANK1_WRAPPER), 0, &p),
-            trainer_spell_state::GRAY
-        );
-        // Knowing exactly the taught rank is not "higher": gray at every type.
-        let mut p = player();
-        p.known.insert(RANK1);
-        assert_eq!(
-            state(&service(RANK1_WRAPPER), 1, &p),
-            trainer_spell_state::GRAY
-        );
-    }
-
-    /// `0x4d83a4`: hidden only when the missing ability is the rank before what the row teaches;
-    /// any other miss, and every miss at another type, is unavailable.
-    #[test]
-    fn a_missing_previous_rank_at_a_type_one_trainer_hides_the_row() {
-        let mut w = service(RANK2_WRAPPER);
-        w.req_spells = [RANK1, 0, 0];
-        assert_eq!(
-            state(&w, 1, &player()),
-            3,
-            "the missing ability is the previous rank"
-        );
-        assert_eq!(state(&w, 0, &player()), trainer_spell_state::RED);
-        let mut w = service(RANK2_WRAPPER);
-        w.req_spells = [RANK1 + 500, 0, 0];
-        assert_eq!(
-            state(&w, 1, &player()),
-            trainer_spell_state::RED,
-            "an unrelated ability"
-        );
-    }
-
-    /// A missing or under-level pet leaves the loop (`0x4d803c`/`0x4d7fac`), and a pet that knows
-    /// the spell is never level-tested.
-    #[test]
-    fn the_pet_legs_leave_the_loop_and_a_knowing_pet_skips_the_level_test() {
-        let spells = SpellCatalog::from_displays_and_effects(
-            HashMap::from([(PET_WRAPPER, SpellDisplay::default())]),
-            HashMap::from([(
-                PET_WRAPPER,
-                vec![
-                    LearnEffect::PetSpell(PET_SPELL),
-                    LearnEffect::SkillStep {
-                        skill: BLACKSMITHING,
-                        step: 1,
-                    },
-                ],
-            )]),
-        );
-        let mut w = service(PET_WRAPPER);
-        w.req_level = 12;
-        let mut p = player();
-        p.level = 20;
-        p.skills.push(SkillSlot {
-            skill_id: BLACKSMITHING,
-            step: 1,
-            value_plus_perm: 1,
-        });
-        // No pet: the step effect after it is never reached, so the row stays unavailable.
-        assert_eq!(
-            re_derive(&w, 3, &spells, &skill_lines(), &p),
-            trainer_spell_state::RED
-        );
-        // A pet that knows the spell, below the row's level: known, not level-tested.
-        p.pet = Some(PetView {
-            level: 5,
-            known: BTreeSet::from([PET_SPELL]),
-        });
-        assert_eq!(
-            re_derive(&w, 3, &spells, &skill_lines(), &p),
-            trainer_spell_state::GRAY
-        );
-    }
-
-    #[test]
-    fn a_pet_rows_required_abilities_are_the_pets_and_never_hide() {
-        let mut w = service(PET_WRAPPER);
-        w.req_spells = [RANK1, 0, 0];
-        let mut p = player();
-        p.level = 20;
-        p.known.insert(RANK1); // the player knows it, which a pet row ignores
-        p.pet = Some(PetView {
-            level: 20,
-            known: BTreeSet::new(),
-        });
-        assert_eq!(state(&w, 3, &p), trainer_spell_state::RED);
-        assert_eq!(
-            state(&w, 1, &p),
-            trainer_spell_state::RED,
-            "no hidden state on the pet path"
-        );
-        p.pet = Some(PetView {
-            level: 20,
-            known: BTreeSet::from([RANK2]),
-        });
-        assert_eq!(
-            state(&w, 3, &p),
-            trainer_spell_state::GREEN,
-            "the pet knows a higher rank"
-        );
+        assert_eq!(state(&w, &player()), trainer_spell_state::GRAY);
     }
 
     #[test]
     fn re_derive_all_rewrites_every_row_in_place() {
-        let mut list = vec![service(RANK1_WRAPPER), service(OPENER)];
+        let mut list = vec![service(RANK1_WRAPPER), service(OPENER), service(PLAIN)];
         let mut p = player();
-        p.known.insert(RANK1);
-        super::super::reeval::re_derive_all(&mut list, 0, &catalog(), &skill_lines(), &p);
+        p.known.extend([RANK1, PLAIN]);
+        super::super::reeval::re_derive_all(&mut list, &catalog(), &skill_lines(), &p);
         assert_eq!(list[0].state, trainer_spell_state::GRAY);
         assert_eq!(list[1].state, trainer_spell_state::GREEN);
+        assert_eq!(list[2].state, trainer_spell_state::GRAY);
     }
 }
 

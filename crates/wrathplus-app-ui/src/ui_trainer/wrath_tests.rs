@@ -11,6 +11,7 @@ use wrathplus_formats::{
 use super::describe::service_description;
 use super::{service_group, TRAINER_TYPE_TRADESKILL};
 use crate::app_core::state::Spells;
+use wrathplus_ui::script::UiScript;
 
 fn labels(key: &str) -> Option<String> {
     Some(format!("<{key}>"))
@@ -285,4 +286,120 @@ fn the_stock_trainer_groups_a_tradeskill_and_shows_a_recipes_item_description() 
     );
     assert_eq!(shown, expected);
     assert!(!shown.is_empty() && !shown.contains('$'), "{shown:?}");
+}
+
+/// One bought service through [`super::feed_trainer`] and the stock `ClassTrainerFrame`: shown
+/// under the default filter, then learned (the `SMSG_LEARNED_SPELL` trigger `0x596b00` runs on),
+/// then used, hidden by the default filter, with one `TRAINER_UPDATE`.
+fn buy_on_real_data(service: u32, learned: u32) {
+    use bevy::prelude::{Messages, World};
+    let data = std::path::PathBuf::from(std::env::var("WOW_DATA").unwrap());
+    let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
+    let catalog = wrathplus_formats::load_spell_catalog(&mut chain).expect("Spell.dbc");
+    let lines = wrathplus_formats::load_skill_line_catalog(&mut chain).expect("SkillLine");
+    let deps = crate::items::TestDeps::default();
+    let mut world = World::new();
+    let mut open = crate::app_core::interaction::TrainerOpen::default();
+    open.open(0xF130_0000_0000_0001, 0, vec![wire(service)], String::new());
+    world.insert_resource(open);
+    world.insert_resource(Spells {
+        catalog,
+        ..Spells::empty_for_tests()
+    });
+    world.insert_resource(crate::app_core::state::SkillLines { catalog: lines });
+    world.init_resource::<crate::app_core::state::PlayerActions>();
+    world.init_resource::<super::TrainerErrors>();
+    world.init_resource::<super::TrainerTooltipSubjects>();
+    world.init_resource::<crate::names::NameCache>();
+    world.init_resource::<Messages<crate::net::FieldChanged>>();
+    world.insert_resource(deps.items);
+    world.insert_resource(deps.commands);
+    let script = crate::ui_script::trainer_tests::trainer_script();
+    // The fixture shows used services; the stock default (`"3"`) hides them.
+    script
+        .run("SetTrainerServiceTypeFilter('used', 0)")
+        .unwrap();
+    world.insert_non_send_resource(script);
+    // One registered system, so its memo of the last snapshot persists between frames.
+    let system = world.register_system(super::feed_trainer);
+    let feed = |world: &mut World| {
+        world.run_system(system).expect("feed");
+        let s = world.non_send_resource::<UiScript>();
+        assert!(s.errors().is_empty(), "{:?}", s.errors());
+    };
+    let rows = |world: &World| {
+        let s = world.non_send_resource::<UiScript>();
+        s.eval::<Vec<String>>(
+            "local t = {} for i = 1, GetNumTrainerServices() do \
+             local _, _, k = GetTrainerServiceInfo(i) t[i] = k end return t",
+        )
+        .unwrap()
+    };
+    feed(&mut world);
+    assert_eq!(rows(&world), ["header", "available"], "{service} offered");
+    world
+        .non_send_resource::<UiScript>()
+        .run(
+            "TU = 0 local f = CreateFrame('Frame') f:RegisterEvent('TRAINER_UPDATE') \
+             f:SetScript('OnEvent', function() TU = TU + 1 end)",
+        )
+        .unwrap();
+    // The buy itself moves nothing: 12340 has no `SMSG_TRAINER_BUY_SUCCEEDED` handler.
+    world
+        .resource_mut::<crate::app_core::state::PlayerActions>()
+        .spells
+        .insert(learned);
+    world
+        .resource_mut::<crate::app_core::interaction::TrainerOpen>()
+        .trigger_re_derive();
+    feed(&mut world);
+    let s = world.non_send_resource::<UiScript>();
+    assert_eq!(s.eval::<i64>("return TU").unwrap(), 1, "one TRAINER_UPDATE");
+    assert_eq!(
+        world
+            .resource::<crate::app_core::interaction::TrainerOpen>()
+            .services[0]
+            .state,
+        wrathplus_protocol::types::trainer_spell_state::GRAY
+    );
+    let hidden = rows(&world);
+    assert!(hidden.is_empty(), "the default filter hides it: {hidden:?}");
+    world
+        .non_send_resource::<UiScript>()
+        .run("SetTrainerServiceTypeFilter('used', 1)")
+        .unwrap();
+    assert_eq!(rows(&world), ["header", "used"]);
+}
+
+/// The playtest's Summon Imp (688): AzerothCore's warlock trainers list the spell itself, whose
+/// only effect is the summon, so it goes used once it is in the book. Skips without client data.
+#[test]
+fn a_bought_plain_spell_goes_used_and_the_default_filter_hides_it() {
+    let _data = wrathplus_formats::wow_data_or_skip!();
+    buy_on_real_data(688, 688);
+    // A plain rank: Immolate rank 2.
+    buy_on_real_data(707, 707);
+}
+
+/// A learn wrapper (the lowest-id shipped spell whose only effect teaches one spell) goes used once
+/// its taught spell is known. Skips without client data.
+#[test]
+fn a_bought_learn_wrapper_goes_used_and_the_default_filter_hides_it() {
+    let data = wrathplus_formats::wow_data_or_skip!();
+    let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
+    let catalog = wrathplus_formats::load_spell_catalog(&mut chain).expect("Spell.dbc");
+    let (wrapper, taught) = catalog
+        .iter()
+        .filter_map(|(id, d)| match catalog.learn_effects(id) {
+            [wrathplus_formats::LearnEffect::Spell(t)]
+                if !d.name.is_empty() && catalog.get(*t).is_some() =>
+            {
+                Some((id, *t))
+            }
+            _ => None,
+        })
+        .min()
+        .expect("a learn wrapper");
+    assert_ne!(wrapper, taught);
+    buy_on_real_data(wrapper, taught);
 }

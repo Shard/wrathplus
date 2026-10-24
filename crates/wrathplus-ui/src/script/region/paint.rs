@@ -8,12 +8,15 @@ use crate::script::{BlendMode, Model, TexCoords};
 
 use super::region_handle_of;
 
+#[path = "gradient.rs"]
+mod gradient;
 #[path = "rotation.rs"]
 mod rotation;
 
 /// Install the paint methods into `m`.
 pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
     rotation::install(lua, m)?;
+    gradient::install(lua, m)?;
     // SetAlpha/GetAlpha: the region's own alpha, not the owner frame's; stock
     // `CastingBarFrame.lua:133` reads it back to ramp its flash. `RegionData::alpha` has the draw.
     m.set(
@@ -272,20 +275,6 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
                 Some(i) => t[..i].to_string(),
                 None => t.clone(),
             }))
-        })?,
-    )?;
-
-    // SetAlphaGradient(start, length), a FontString's write-on reveal: answers whether `start` is
-    // still inside the text in chars, and stock `QuestFrame.lua:558` advances until it is not.
-    m.set(
-        "SetAlphaGradient",
-        lua.create_function(|lua, (this, start, length): (Table, f32, f32)| {
-            let rh = region_handle_of(lua, &this)?;
-            let mut model = lua.app_data_mut::<Model>().expect("model");
-            let data = model.region_data.entry(rh).or_default();
-            data.alpha_gradient = Some((start, length));
-            let chars = data.text.as_deref().map_or(0, |t| t.chars().count());
-            Ok(start < chars as f32)
         })?,
     )?;
 

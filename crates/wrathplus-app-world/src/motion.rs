@@ -14,6 +14,8 @@ mod relay;
 mod remote;
 mod spline;
 #[cfg(test)]
+mod slope_tests;
+#[cfg(test)]
 mod tests;
 
 pub use facing::drive_display_facing;

@@ -5,6 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+#[path = "framexml_bool.rs"]
+mod xml_bool;
 
 /// An owned XML element, attributes in document order. Lookups fold case, as the reference's
 /// `GetAttribute 0x6f2cf0` and element-name compares (`0x64a4c0`) do.
@@ -51,16 +53,14 @@ impl Element {
             .map(|(_, v)| v.as_str())
     }
 
-    /// True only for a case-insensitive `"true"` (`0x6f1b30`); there is no `"false"` branch.
+    /// The reference's XML boolean of the value, false when absent (`0x815400`, `framexml_bool`).
     pub fn attr_bool(&self, name: &str) -> bool {
-        self.attr(name)
-            .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+        self.attr(name).is_some_and(xml_bool::xml_bool)
     }
 
-    /// [`attr_bool`](Self::attr_bool), but `None` when absent, for a flag whose default is on
-    /// (`<EditBox autoFocus="false">`).
+    /// [`attr_bool`](Self::attr_bool), `None` absent or empty (skipped, `0x967290`): `autoFocus`.
     pub fn attr_bool_opt(&self, name: &str) -> Option<bool> {
-        self.attr(name).map(|v| v.eq_ignore_ascii_case("true"))
+        self.attr(name).and_then(xml_bool::xml_flag)
     }
 
     pub fn name(&self) -> Option<&str> {

@@ -31,7 +31,8 @@ fn a_boneless_sequence_still_yields_a_clock_clip() {
         spine_bone: None,
         head_bone: None,
     };
-    let (clip, _pose, poses_bones) = build_animation_clip(&sequence(1.333, Vec::new()), &skeleton);
+    let (clip, _pose, poses_bones) =
+        build_animation_clip(&sequence(1.333, Vec::new()), &skeleton, &Default::default());
     assert!(!poses_bones, "no bone track ⇒ nothing to skin to");
     assert!(
         (clip.duration() - 1.333).abs() < 1e-4,
@@ -45,7 +46,8 @@ fn a_boneless_sequence_still_yields_a_clock_clip() {
         rotation: Vec::new(),
         scale: Vec::new(),
     };
-    let (_, _, poses_bones) = build_animation_clip(&sequence(1.0, vec![moving]), &skeleton);
+    let (_, _, poses_bones) =
+        build_animation_clip(&sequence(1.0, vec![moving]), &skeleton, &Default::default());
     assert!(poses_bones, "a keyed track ⇒ a real pose");
 }
 
