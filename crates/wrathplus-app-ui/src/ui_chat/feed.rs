@@ -463,6 +463,9 @@ pub fn feed_chat(
                             .map_or((0, 1, 1), |t| t.date());
                         Some((name, date))
                     },
+                    &mut |guid, kind, text| {
+                        speaker.bubbles.push(&speaker.bubble_cfg, guid, kind, text)
+                    },
                 ) {
                     still.push(Pending::Native {
                         msg,
