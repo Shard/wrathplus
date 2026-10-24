@@ -21,11 +21,12 @@ use crate::overlay::UvRect;
 
 use super::{party_member_pos, BlipCtx, MinimapBlipHover, TrackedCandidates, BLIP_BASIS_PX};
 
-/// The quest dot's quad, 8 px (`0xbc82a8`, frozen by the ctor); the per-cell scale table
-/// `{1,1,1,1,1.3}` scales only the party cell 4.
-const QUEST_DOT_PX: f32 = 8.0;
-/// The party dot's quad: the same 8-px base at the cell table's 1.3× party scale.
-const PARTY_DOT_PX: f32 = 8.0 * 1.3;
+/// Every ObjectIcons and PartyRaidBlips dot's quad, quest, tracking and party alike: 12340 draws
+/// them all (`0x580380`, `0x57ff70`) as the corner set `0xbf7fc8` × the frame's `+0x7c`, and the
+/// minimap ctor (`0x57dca0`) sizes that set `0.0125 × 0.6⁻¹·[0xac0cb8]`, 2.083 % of the screen
+/// height whatever the aspect (`0x47bf90`): 16 px on the 768-px basis. Labelled: `+0x7c` is
+/// taken as 1, the frame's scale at the default UI scale.
+pub(super) const OBJECT_ICON_PX: f32 = 16.0;
 /// `UNIT_DYNAMIC_FLAGS` bit 0x2, set per viewer on a Hunter's Mark victim for its caster; one of
 /// `0x5ed210`'s two always-show clauses (`+0x224 & 0x2`).
 const UNIT_DYNFLAG_TRACK_UNIT: u32 = 0x2;
@@ -199,7 +200,7 @@ pub(in crate::minimap) fn emit_quest_dots(
         let tint = if grey { 0xb0 as f32 / 255.0 } else { 1.0 };
         let rect = Rect::from_center_size(
             ctx.center + ctx.offset(w),
-            Vec2::splat(ctx.side * (QUEST_DOT_PX / BLIP_BASIS_PX)),
+            Vec2::splat(ctx.side * (OBJECT_ICON_PX / BLIP_BASIS_PX)),
         );
         quads.overlays.push(UiQuad {
             rect,
@@ -312,7 +313,7 @@ pub(in crate::minimap) fn emit_tracking_dots(
         let tint = if grey { 0xb0 as f32 / 255.0 } else { 1.0 };
         let rect = Rect::from_center_size(
             ctx.center + ctx.offset(w),
-            Vec2::splat(ctx.side * (QUEST_DOT_PX / BLIP_BASIS_PX)),
+            Vec2::splat(ctx.side * (OBJECT_ICON_PX / BLIP_BASIS_PX)),
         );
         quads.overlays.push(UiQuad {
             rect,
@@ -433,7 +434,7 @@ pub(in crate::minimap) fn emit_party_dots(
         quads.overlays.push(UiQuad {
             rect: Rect::from_center_size(
                 ctx.center + ctx.offset([x, y, 0.0]),
-                Vec2::splat(ctx.side * (PARTY_DOT_PX / BLIP_BASIS_PX)),
+                Vec2::splat(ctx.side * (OBJECT_ICON_PX / BLIP_BASIS_PX)),
             ),
             z_key: ctx.z,
             texture: Some(icons.clone()),
