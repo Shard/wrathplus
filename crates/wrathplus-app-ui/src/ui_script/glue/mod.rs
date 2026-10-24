@@ -16,6 +16,8 @@ mod host_tests;
 #[cfg(test)]
 mod installed_tests;
 #[cfg(test)]
+mod character_select_installed_tests;
+#[cfg(test)]
 mod measure_tests;
 
 /// The glue load list, which `CGlueMgr` walks as `UI_Init` walks FrameXML's.

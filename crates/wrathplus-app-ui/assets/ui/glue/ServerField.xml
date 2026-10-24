@@ -1,7 +1,7 @@
 <!--
 	AzerothBench's own addition to the stock 3.3.5 login screen, its only non-stock element: a
-	"Server" field, bottom left, holding the address the login dials (host or host:port; the
-	port defaults to 3724). Stock 3.3.5 has no such control; its realmlist is realmlist.wtf.
+	"Server" field, the row under Password in the stock boxes' style, holding the address the
+	login dials (host or host:port; the port defaults to 3724). Stock 3.3.5 has no such control; its realmlist is realmlist.wtf.
 	Leaving the field after an edit keeps it in $BENILLA_HOME/realmlist.wtf, searched before the
 	install's; an address the client cannot use is refused with a dialog and the field reverts.
 	A launch with the server flag (or WOW_HOST) pins the address for the session: the field then
@@ -35,20 +35,26 @@
 	</Script>
 	<EditBox name="AccountLoginServerEdit" parent="AccountLoginUI" letters="64" autoFocus="false">
 		<Size x="200" y="37"/>
+		<!-- The stock column's next row: the account-to-password gap (33) below the password box,
+		     which stock re-anchors on every show (AccountLogin_SetupAccountListDDL). -->
 		<Anchors>
-			<Anchor point="BOTTOMLEFT">
+			<Anchor point="TOP" relativeTo="AccountLoginPasswordEdit" relativePoint="BOTTOM">
 				<Offset>
-					<AbsDimension x="16" y="40"/>
+					<AbsDimension x="0" y="-33"/>
 				</Offset>
 			</Anchor>
 		</Anchors>
 		<Layers>
 			<Layer level="BACKGROUND">
-				<FontString name="$parentLabel" inherits="GlueFontNormal" justifyH="LEFT" text="Server">
+				<!-- AccountLoginAccountEdit's label, as stock draws it. -->
+				<FontString name="$parentLabel" inherits="GlueFontNormal" justifyH="CENTER" text="Server">
+					<Size>
+						<AbsDimension x="600" y="64"/>
+					</Size>
 					<Anchors>
-						<Anchor point="BOTTOMLEFT" relativePoint="TOPLEFT">
+						<Anchor point="BOTTOM" relativePoint="TOP">
 							<Offset>
-								<AbsDimension x="8" y="-4"/>
+								<AbsDimension x="0" y="-23"/>
 							</Offset>
 						</Anchor>
 					</Anchors>
@@ -103,4 +109,16 @@
 			<AbsInset left="12" right="5" bottom="5"/>
 		</TextInsets>
 	</EditBox>
+	<!-- The stock Login button under the Server row, after stock places it on each show
+	     (AccountLogin_SetupAccountListDDL sets it 60 below the password box). 20 below the field,
+	     not stock's 60: the Remember Account Name checkbox hangs off the button's bottom and would
+	     otherwise sit on the Blizzard logo at the foot of the screen. -->
+	<Script>
+		local stockSetup = AccountLogin_SetupAccountListDDL;
+		function AccountLogin_SetupAccountListDDL(...)
+			stockSetup(...);
+			AccountLoginLoginButton:ClearAllPoints();
+			AccountLoginLoginButton:SetPoint("TOP", AccountLoginServerEdit, "BOTTOM", 0, -20);
+		end
+	</Script>
 </Ui>
