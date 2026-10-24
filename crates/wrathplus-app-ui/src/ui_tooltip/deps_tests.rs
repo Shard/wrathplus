@@ -1011,7 +1011,7 @@ fn a_pet_view_reads_no_player_form_equipment_reach_or_unit_field_but_the_ranged_
                 && !deps.range_units
                 && deps.worn == 0
                 && !deps.disarm
-                && deps.unit & !UnitField::RangedTime.bit() == 0,
+                && deps.unit & !(UnitField::RangedTime.bit() | UnitField::Tokens.bit()) == 0,
             "the pet view of spell {id} reads the player's side: {deps:?}"
         );
         expands_home += usize::from(deps.home);
@@ -1527,13 +1527,13 @@ fn the_seen_diff_names_each_input_it_saw_move() {
         (at(Field::UnitFlags), 0x0000_0008),
     ]);
     assert!(seen(&now).changes_since(&seen(&base)).is_empty());
-    // Each unit field on its own bit: level, base mana, base health, ranged attack time; max
-    // health and the max pools on none, which no cost reads.
+    // One bit per unit field, the level and ranged time also `Tokens`; the max pools none.
+    let (tokens, ranged) = (UnitField::Tokens.bit(), UnitField::RangedTime.bit());
     let unit = [
-        (at(Field::UnitLevel), UnitField::Level.bit()),
+        (at(Field::UnitLevel), UnitField::Level.bit() | tokens),
         (at(Field::UnitBaseMana), UnitField::BaseMana.bit()),
         (at(Field::UnitBaseHealth), UnitField::BaseHealth.bit()),
-        (at(Field::UnitRangedattacktime), UnitField::RangedTime.bit()),
+        (at(Field::UnitRangedattacktime), ranged | tokens),
         (at(Field::UnitMaxHealth), 0),
         (at(Field::UnitMaxPower), 0),
         (at(Field::UnitMaxPower) + 4, 0),

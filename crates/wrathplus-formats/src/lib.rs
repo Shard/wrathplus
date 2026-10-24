@@ -244,7 +244,7 @@ mod wmo_area;
 pub use wmo_area::{load_wmo_area_catalog, WmoArea, WmoAreaCatalog};
 mod spells;
 pub use spells::{
-    cc_exemption, grants_immunity, load_shapeshift_forms, load_spell_cast_times,
+    cc_exemption, grants_immunity, load_shapeshift_forms, load_spell_cast_times, PlayerTokens,
     load_spell_catalog, load_spell_dispel_types, load_spell_durations, load_spell_radii,
     load_spell_ranges, min_max_range, min_max_range_reads_units, soft_modify, substitute,
     CcExemption, FormRefusal, LearnAnnouncement, LearnEffect, OpenLock, RangeTargets, RangeUnit,

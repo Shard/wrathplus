@@ -1,10 +1,14 @@
-//! The spell-description `$`-token engine the 1.12 client runs over `Spell.dbc` description and
-//! aura text (`0x5075f0` → `0x507710`), effect values from `GetEffectPoints 0x6e3800`. Effect
-//! point values print unsigned, as the client's do. `$g` takes the first form without gender
-//! input. `$c` and `$p` (`507dde`, `507ded`), which no shipped text uses, and unknown or
-//! unresolved tokens stay raw.
+//! The spell-description `$`-token engine over `Spell.dbc` description and aura text, the letter
+//! arms as 1.12 built them (`0x5075f0` → `0x507710`; 12340's `0x579e50` keeps them) and 12340's
+//! `${…}`, `$<name>` and `$?` arms ([`wrath`]), effect values from `GetEffectPoints 0x6e3800`.
+//! Effect point values print unsigned, as the client's do. `$c` and `$p` (`507dde`, `507ded`),
+//! which no shipped text uses, and unknown or unresolved tokens stay raw.
 
 use super::soft_float;
+#[path = "tokens_wrath.rs"]
+mod wrath;
+use wrath::scale_prefix;
+pub use wrath::PlayerTokens;
 use super::{SpellDisplay, SpellDurationCatalog, SpellRadiusCatalog, SpellRangeCatalog};
 
 /// The caster's spell-modifier appliers over its tables (`GetSpellModifiers 0x6e6b30`): the
@@ -48,6 +52,8 @@ pub struct TokenContext<'a> {
     pub global: &'a dyn Fn(&str) -> Option<String>,
     /// `SStrPrintf 0x64a7f0`: a template's `%` holes filled, as the CRT formats them.
     pub printf: &'a dyn Fn(&str, &[TokenNumber]) -> String,
+    /// The active player the 12340 arms read: `$?`, `$g` and an expression's player values.
+    pub player: Option<&'a dyn PlayerTokens>,
 }
 
 /// A `GlobalStrings` template, filled.
@@ -396,60 +402,12 @@ fn token_value(
     }
 }
 
-/// `$/N;` or `$*N;` just after the `$` (`507738`-`507790`): the text up to the `;` (at most seven
-/// characters) read by `atoi` (`0x64ac60`), the scale its value or, for `/`, its reciprocal in
-/// single precision (`507784`); a zero leaves 1.0 (`507774`). Returns the scale and the index past
-/// the `;`, or `None` without a `;`, where the reference consumes nothing.
-fn scale_prefix(text: &str, at: usize) -> Option<(f32, usize)> {
-    let op = *text.as_bytes().get(at)?;
-    if op != b'/' && op != b'*' {
-        return None;
-    }
-    let semi = at + text[at..].find(';')?;
-    let digits = &text.as_bytes()[at + 1..semi.min(at + 8)];
-    let n = atoi(digits);
-    let scale = match (n, op) {
-        (0, _) => 1.0,
-        (n, b'/') => (1.0 / f64::from(n)) as f32,
-        (n, _) => n as f32,
-    };
-    Some((scale, semi + 1))
-}
-
-/// The CRT's `atoi`: leading whitespace, an optional sign, then decimal digits up to the first
-/// other character; nothing parsed is 0.
-fn atoi(bytes: &[u8]) -> i32 {
-    let mut rest = bytes
-        .iter()
-        .copied()
-        .skip_while(u8::is_ascii_whitespace)
-        .peekable();
-    let negative = match rest.peek() {
-        Some(b'-') => {
-            rest.next();
-            true
-        }
-        Some(b'+') => {
-            rest.next();
-            false
-        }
-        _ => false,
-    };
-    let n = rest.take_while(u8::is_ascii_digit).fold(0i32, |n, b| {
-        n.wrapping_mul(10).wrapping_add(i32::from(b - b'0'))
-    });
-    if negative {
-        n.wrapping_neg()
-    } else {
-        n
-    }
-}
-
 /// Substitute every `$`-token in `text` against `spell`.
 pub fn substitute(text: &str, spell: &SpellDisplay, ctx: &TokenContext) -> String {
     // `0x5075f0`'s level: its caller's, which only the player-buff tooltip passes (the aura's
     // `AURALEVELS` byte, `0x532bc3`, not built), else the expanded spell's own (`50764a`).
     let level = skill_level(ctx, spell);
+    let vars = wrath::define(spell, ctx, level);
     let bytes = text.as_bytes();
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
@@ -463,6 +421,22 @@ pub fn substitute(text: &str, spell: &SpellDisplay, ctx: &TokenContext) -> Strin
         }
         let start = i;
         i += 1;
+        // `0x579e50` tests `{` and `<` first; `?` is read here too, ahead of its scale and id.
+        let expand = |t: &str| Some(substitute(t, spell, ctx));
+        match wrath::arm(text, i, spell, ctx, level, &vars, &expand) {
+            Some(wrath::Arm::Text(sub, value, next)) => {
+                out.push_str(&sub);
+                last_value = value.unwrap_or(last_value);
+                i = next;
+                continue;
+            }
+            Some(wrath::Arm::Failed(next)) => {
+                out.push('$');
+                i = next;
+                continue;
+            }
+            None => {}
+        }
         let mut scale = 1.0f32;
         if let Some((s, next)) = scale_prefix(text, i) {
             scale = s;
@@ -473,6 +447,7 @@ pub fn substitute(text: &str, spell: &SpellDisplay, ctx: &TokenContext) -> Strin
         while i < bytes.len() && bytes[i].is_ascii_digit() {
             i += 1;
         }
+        let id_end = i;
         let ref_spell: Option<u32> = if i > id_start {
             text[id_start..i].parse().ok()
         } else {
@@ -494,7 +469,8 @@ pub fn substitute(text: &str, spell: &SpellDisplay, ctx: &TokenContext) -> Strin
                                 b
                             }
                         }
-                        _ => a, // $g: the first form, as there is no gender input
+                        _ if ctx.player.map_or(0, |p| p.gender()) == 0 => a,
+                        _ => b,
                     };
                     out.push_str(pick);
                     i = i + 1 + end + 1;
@@ -508,6 +484,12 @@ pub fn substitute(text: &str, spell: &SpellDisplay, ctx: &TokenContext) -> Strin
             continue;
         };
         let letter = letter_b as char;
+        // A failed token after an id prints `$` and resumes past the id (`0x579e50`'s fail).
+        if ref_spell.is_some() && !letter.is_ascii_alphabetic() {
+            out.push('$');
+            i = id_end;
+            continue;
+        }
         if !letter.is_ascii_alphabetic() {
             // Not a token: keep `$` and the next char raw, stepping by its UTF-8 width (`$é`).
             let ch_len = utf8_len(letter_b);
@@ -530,7 +512,8 @@ pub fn substitute(text: &str, spell: &SpellDisplay, ctx: &TokenContext) -> Strin
                 Some(s) if s.max_level > 0 => (s, level.min(s.max_level)),
                 Some(s) => (s, level),
                 None => {
-                    out.push_str(&text[start..i]);
+                    out.push('$');
+                    i = id_end;
                     continue;
                 }
             },
@@ -659,6 +642,7 @@ mod tests {
             unmodified_points: false,
             global: &global,
             printf: &printf,
+            player: None,
         }
     }
 
@@ -1250,6 +1234,7 @@ mod tests {
         );
         assert_eq!(substitute("stacks $u times", &d, &c), "stacks 0 times");
         assert_eq!(substitute("unknown $j", &d, &c), "unknown $j");
+        assert_eq!(substitute("as $9999s1 is", &d, &c), "as $s1 is", "a missing row");
         assert_eq!(
             substitute("Returns you to $z.", &d, &c),
             "Returns you to Goldshire."

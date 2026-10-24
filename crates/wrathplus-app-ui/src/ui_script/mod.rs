@@ -13,6 +13,8 @@ pub mod addons;
 mod content;
 pub(crate) mod extract;
 pub(crate) mod glue;
+mod token_player;
+pub(crate) use token_player::{watched_inputs, SelfTokens};
 pub mod glue_create;
 mod input;
 mod load_log;
