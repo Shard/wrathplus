@@ -13,8 +13,7 @@ pub struct OpenLock {
 
 /// One spell's `Spell.dbc` row, as the display, tooltip and cast gates read it.
 pub struct SpellDisplay {
-    /// `ID` (column 0): the row's own id, which `GetEffectPoints` hands the level lookup
-    /// `0x6e3130` (`0x6e384b`).
+    /// `ID` (column 0), which `GetEffectPoints` hands the level lookup `0x6e3130` (`0x6e384b`).
     pub id: u32,
     pub name: String,
     /// `SpellNameSubtext` enUS (column 129): "Rank N", even "Rank 1", or a word such as "Racial".
@@ -66,10 +65,8 @@ pub struct SpellDisplay {
     /// `PreventionType` (column 165): 1 silence, 2 pacify, 0 neither; the crowd control that
     /// refuses the spell locally (`0x6094f0`, from `TryCast` `0x6e4b60`). A stun refuses all.
     pub prevention_type: u32,
-    /// `modalNextSpell` (column 38): cast by the client itself (`0x6e74aa`), at no target, when
-    /// `SMSG_CAST_RESULT` for this in-flight spell arrives, success or failure (`0x6e7330`); if
-    /// it is the running auto-repeat, that is only re-armed (`0x6e745d`). Every hunter shot
-    /// names 75, Auto Shot: that is how shooting starts.
+    /// `modalNextSpell` (column 38): cast at no target once this spell's `SMSG_CAST_RESULT` lands
+    /// (`0x6e74aa`, `0x6e7330`), a running auto-repeat only re-armed; hunter shots name 75.
     pub modal_next_spell: u32,
     /// `Attributes & 0x40`, `SPELL_ATTR_PASSIVE`: the spellbook grays it.
     pub passive: bool,
@@ -79,8 +76,7 @@ pub struct SpellDisplay {
     pub effects: [u32; 3],
     /// The `SPELL_EFFECT_OPEN_LOCK` effect the GameObject interact-cast matches against a lock.
     pub open_lock: Option<OpenLock>,
-    /// `baseLevel` (column 28, not `spellLevel`): the level effect values are quoted at, read by
-    /// the effect-value walk (`0x6e3854`) and the cast-time scaling (`0x6e3340`).
+    /// `baseLevel` (column 28): the level effect values are quoted at (`0x6e3854`, `0x6e3340`).
     pub base_level: u32,
     /// `maxLevel` (column 27): caps an opener's skill at `maxLevel × 5`, unless 0 (`0x5ea6e3`).
     pub max_level: u32,
@@ -177,6 +173,8 @@ pub struct SpellDisplay {
     pub description: Option<String>,
     /// `AuraDescription` enUS (column 147): the buff or debuff icon's tooltip.
     pub aura_description: Option<String>,
+    /// `SpellDescriptionVariables.dbc`'s row text: the `$<name>` definitions (`0x579d60`).
+    pub description_variables: Option<String>,
     /// `DurationIndex` (column 30): the `SpellDuration.dbc` row; 0 for no duration.
     pub duration_index: u32,
     /// `CastingTimeIndex` (column 18): the `SpellCastTimes.dbc` row; row 1 is instant.
@@ -196,8 +194,7 @@ pub struct SpellDisplay {
     pub max_affected_targets: u32,
     /// `EffectBasePoints[3]` (columns 76-78, signed): each roll's floor; -1 on weapon damage.
     pub effect_base_points: [i32; 3],
-    /// `EffectDieSides[3]` (columns 64-66, signed): with n dice, the value runs base + n to
-    /// base + sides × n (`0x6e3800`), n being `EffectBaseDice` plus its per-level term.
+    /// `EffectDieSides[3]` (columns 64-66, signed): n dice run base + n to base + sides × n.
     pub effect_die_sides: [i32; 3],
     /// `EffectBaseDice[3]` (columns 67-69).
     pub effect_base_dice: [i32; 3],
@@ -218,6 +215,8 @@ pub struct SpellDisplay {
     pub damage_multiplier: [f32; 3],
     /// `EffectPointsPerComboPoint[3]` (columns 112-114, float): `$b` prints it chopped (`507ed4`).
     pub effect_points_per_combo_point: [f32; 3],
+    /// `EffectBonusMultiplier[3]` (3.3.5 columns 229-231): `$bc1` (`0x5782d0`, op 24).
+    pub effect_bonus_multiplier: [f32; 3],
     /// `EffectTriggerSpell[3]` (columns 109-111): each effect's triggered spell, 0 for none.
     pub effect_trigger_spell: [u32; 3],
     /// `EffectItemType[3]` (columns 103-105): the item a `SPELL_EFFECT_CREATE_ITEM` effect makes.
@@ -226,114 +225,12 @@ pub struct SpellDisplay {
     pub effect_misc_value: [i32; 3],
     /// `EffectMiscValueB[3]`: a SUMMON effect's `SummonProperties.dbc` row (Wrath data only).
     pub effect_misc_value_b: [i32; 3],
+    /// `RequiredAuraVision` (file column 221): one more than the viewer's aura-vision bit.
+    pub required_aura_vision: u32,
     /// `EffectDicePerLevel[3]` (columns 70-72): the integer per-level term (`0x6e3871`).
     pub effect_dice_per_level: [i32; 3],
-    /// `EffectRealPointsPerLevel[3]` (columns 73-75): the float per-level term (`0x6e3889`); 5.0
-    /// on Pick Lock, Mining and Herb Gathering, so the skill they provide tracks the player's.
+    /// `EffectRealPointsPerLevel[3]` (columns 73-75): the float per-level term (`0x6e3889`).
     pub effect_real_points_per_level: [f32; 3],
-}
-
-/// Written out so `equipped_item_class` defaults to -1, no requirement: 0 is a real class.
-impl Default for SpellDisplay {
-    fn default() -> Self {
-        SpellDisplay {
-            id: 0,
-            name: String::new(),
-            rank: None,
-            icon: None,
-            visual: 0,
-            speed: 0.0,
-            attributes: 0,
-            school: 0,
-            mechanic: 0,
-            attributes_ex: 0,
-            attributes_ex2: 0,
-            modal_next_spell: 0,
-            attributes_ex3: 0,
-            attributes_ex4: 0,
-            attributes_ex5: 0,
-            attributes_ex7: 0,
-            attributes_ex6: 0,
-            school_mask: 0,
-            spell_family: 0,
-            spell_family_flags: 0,
-            spell_family_flags_2: 0,
-            effect_spell_class_mask: [[0; 3]; 3],
-            prevention_type: 0,
-            passive: false,
-            cast_ui: 0,
-            effects: [0, 0, 0],
-            open_lock: None,
-            base_level: 0,
-            max_level: 0,
-            spell_level: 0,
-            dispel: 0,
-            category: 0,
-            category_wildcard: false,
-            category_weapon_speed: false,
-            recovery_ms: 0,
-            interrupt_flags: 0,
-            aura_interrupt_flags: 0,
-            channel_interrupt_flags: 0,
-            category_recovery_ms: 0,
-            start_recovery_category: 0,
-            start_recovery_ms: 0,
-            power_type: 0,
-            mana_cost: 0,
-            mana_cost_pct: 0,
-            mana_cost_per_level: 0,
-            mana_per_second: 0,
-            rune_cost_id: 0,
-            power_display_id: 0,
-            range_index: 0,
-            targets: 0,
-            target_creature_type: 0,
-            implicit_target_a1: 0,
-            stances: 0,
-            stances_not: 0,
-            caster_aura_state: 0,
-            target_aura_state: 0,
-            totems: [0; 2],
-            reagents: [(0, 0); 8],
-            equipped_item_class: -1,
-            equipped_item_subclass_mask: 0,
-            equipped_item_inventory_type_mask: 0,
-            requires_spell_focus: 0,
-            shapeshift_form: None,
-            stance_bar_order: 0,
-            active_icon: None,
-            active_icon_id: 0,
-            description: None,
-            aura_description: None,
-            duration_index: 0,
-            casting_time_index: 0,
-            proc_flags: 0,
-            proc_chance: 0,
-            proc_charges: 0,
-            stack_amount: 0,
-            max_target_level: 0,
-            max_affected_targets: 0,
-            effect_base_points: [0; 3],
-            effect_die_sides: [0; 3],
-            effect_base_dice: [0; 3],
-            effect_dice_per_level: [0; 3],
-            effect_real_points_per_level: [0.0; 3],
-            effect_amplitude: [0; 3],
-            effect_apply_aura: [0; 3],
-            effect_implicit_target_a: [0; 3],
-            effect_implicit_target_b: [0; 3],
-            effect_mechanic: [0; 3],
-            effect_radius_index: [0; 3],
-            effect_chain_targets: [0; 3],
-            effect_multiple_value: [0.0; 3],
-            damage_multiplier: [0.0; 3],
-            effect_points_per_combo_point: [0.0; 3],
-            effect_trigger_spell: [0; 3],
-            effect_item_type: [0; 3],
-            effect_misc_value: [0; 3],
-            effect_misc_value_b: [0; 3],
-        }
-    }
 }
 
 impl SpellDisplay {
@@ -724,6 +621,9 @@ impl FormRefusal {
         }
     }
 }
+
+#[path = "display_impls.rs"]
+mod impls;
 
 #[cfg(test)]
 #[path = "display_tests.rs"]

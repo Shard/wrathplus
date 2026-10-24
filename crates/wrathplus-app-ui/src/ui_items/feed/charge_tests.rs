@@ -75,9 +75,11 @@ fn an_undescribed_spell_prints_no_trigger_line_on_real_data() {
     let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
     let spells = crate::app_core::state::Spells {
         catalog: wrathplus_formats::load_spell_catalog(&mut chain).expect("Spell.dbc"),
-        forms: wrathplus_formats::load_shapeshift_forms(&mut chain).expect("SpellShapeshiftForm.dbc"),
+        forms: wrathplus_formats::load_shapeshift_forms(&mut chain)
+            .expect("SpellShapeshiftForm.dbc"),
         ranges: wrathplus_formats::load_spell_ranges(&mut chain).expect("SpellRange.dbc"),
-        cast_times: wrathplus_formats::load_spell_cast_times(&mut chain).expect("SpellCastTimes.dbc"),
+        cast_times: wrathplus_formats::load_spell_cast_times(&mut chain)
+            .expect("SpellCastTimes.dbc"),
         durations: wrathplus_formats::load_spell_durations(&mut chain).expect("SpellDuration.dbc"),
         radii: wrathplus_formats::load_spell_radii(&mut chain).expect("SpellRadius.dbc"),
     };
@@ -107,4 +109,29 @@ fn an_undescribed_spell_prints_no_trigger_line_on_real_data() {
         fireball.contains("damage"),
         "expected the substituted Fireball description, got {fireball:?}"
     );
+}
+
+/// Refreshing Spring Water's `Use:` line (item 159, spell Drink 430, `"Restores ${$m2/5*18} mana
+/// over $d."`), with the shipped `GlobalStrings`: the expression prints through `%.0f`, so 151.2
+/// is 151. Skips without client data.
+#[test]
+fn refreshing_spring_water_evaluates_its_mana_expression() {
+    let data = wrathplus_formats::wow_data_or_skip!();
+    let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
+    let spells = crate::app_core::state::Spells {
+        catalog: wrathplus_formats::load_spell_catalog(&mut chain).expect("Spell.dbc"),
+        durations: wrathplus_formats::load_spell_durations(&mut chain).expect("SpellDuration"),
+        radii: wrathplus_formats::load_spell_radii(&mut chain).expect("SpellRadius"),
+        ..crate::app_core::state::Spells::empty_for_tests()
+    };
+    let strings = chain
+        .read_file("Interface\\FrameXML\\GlobalStrings.lua")
+        .expect("GlobalStrings.lua");
+    let vm = wrathplus_ui::script::UiScript::new().expect("VM");
+    vm.run(&String::from_utf8_lossy(&strings))
+        .expect("runs clean");
+    let global = |key: &str| wrathplus_ui::strings::global(vm.lua(), key);
+    let text = super::spell_desc_text(Some(&spells), 430, &|_| 0, None, None, &global)
+        .expect("a description");
+    assert!(text.starts_with("Restores 151 mana over 18 sec."), "{text}");
 }

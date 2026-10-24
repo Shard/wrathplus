@@ -405,3 +405,20 @@ fn creature_type_mask_rule() {
     );
     assert!(masked(1).admits_creature_type(33), "bit 32 wraps to bit 0");
 }
+
+/// The aura-vision mask (`0x7fe3e0`) off the shipped rows: Den Grunt's detection passive asks for
+/// stealth or invisibility vision, a `RequiredAuraVision` row for its own bit, a plain buff none.
+#[test]
+fn installed_aura_vision_masks() {
+    let data = crate::wow_data_or_skip!();
+    let mut chain = crate::Chain::open_wrath(&data, "enUS").expect("chain");
+    let cat = load_spell_catalog(&mut chain).expect("load Spell/SpellIcon");
+    let mask = |id: u32| cat.get(id).expect("spell").aura_vision_mask();
+    // "Invisibility and Stealth Detection": auras 19 (misc 0) and 17.
+    assert_eq!(mask(18950), 0x60);
+    // "Frenzied Bloodthirst Visual": RequiredAuraVision 3.
+    assert_eq!(cat.get(71949).expect("spell").required_aura_vision, 3);
+    assert_eq!(mask(71949), 0x4);
+    // Power Word: Shield.
+    assert_eq!(mask(17), 0);
+}

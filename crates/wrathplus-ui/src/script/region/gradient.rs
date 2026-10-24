@@ -11,8 +11,9 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
     // SetAlphaGradient(start, length) (12340 `0x48d0f0` → `0x6c78f0`), the quest text's write-on:
     // both truncate to integers, and the answer is whether the reveal is still inside the DRAWN
     // glyphs (`start * 4` against the laid-out vertex count): spaces, line breaks and markup have
-    // no quad. A repeated pair, or a string with no layout yet, answers true; stock
-    // `QuestInfo.lua:5-15` advances until false.
+    // no quad. A repeated pair answers true; a string with no drawn glyph (empty, or all spaces
+    // and markup) has a vertex count of 0, so `start * 4 < 0` fails and it answers false, done.
+    // Stock `QuestInfo.lua:5-15` advances until false, then enables Accept.
     m.set(
         "SetAlphaGradient",
         lua.create_function(|lua, (this, start, length): (Table, f64, f64)| {
@@ -29,7 +30,7 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
             }
             data.alpha_gradient = Some(pair);
             let glyphs = data.text.as_deref().map_or(0, drawn_glyphs);
-            Ok(glyphs == 0 || start < glyphs as f64)
+            Ok(start < glyphs as f64)
         })?,
     )?;
     Ok(())

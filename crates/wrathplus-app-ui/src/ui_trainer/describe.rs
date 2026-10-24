@@ -44,6 +44,7 @@ pub(super) fn service_description(
             home_area: &|| None,
             global: &global,
             printf: &crate::ui_script::token_printf,
+            player: Some(&crate::ui_script::SelfTokens::new(me, None)),
         };
         let mut out = wrathplus_formats::substitute(text, d, &ctx);
         let mut end = out.len().min(1_023);

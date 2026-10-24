@@ -1,17 +1,9 @@
 //! `Spell.dbc` joined with `SpellIcon.dbc`: a spell id resolves to the display record the action
 //! bar, spellbook, tooltips and cast gates read.
 //!
-//! A `Spell.dbc` record is 173 fields, 692 bytes (the loader's header checks, `0x55007e`,
-//! `0x5500bb`), and the client's `SpellRec` holds the row as stored: offset = column × 4, so
-//! `SpellVisual` is `+0x1cc` (column 115) and the name `+0x1e0` (column 120). The client's reads
-//! agree, such as Speed `+0x94` at `0x6e814b`, `Attributes` and `AttributesEx2` at `0x6e5922` and
-//! `0x6e591c`, `castUI` at `0x4b29bf`. Most columns were also matched by value against the
-//! vmangos `spell_template` of build 5875: only column 115 equals `spellVisual1` on 1309 rows.
-//!
-//! A localized string is eight locale dwords and a flags dword: name 120-128, subtext 129-137,
-//! description 138-146, aura description 147-155, then `ManaCostPercentage` at 156. The
-//! per-effect fields are `[3]` arrays in consecutive columns from `Effect` at 61.
-//! `SpellIcon.dbc` is `ID`, `TextureFilename` (no extension).
+//! The loader declares 1.12's column numbers plus slots for the 3.3.5-only columns, which
+//! `wrath_layouts::spell` maps onto the build-12340 file's 234; a localized string is read at its
+//! enUS head. `SpellIcon.dbc` is `ID`, `TextureFilename` (no extension).
 
 mod cast_times;
 /// The cost cell's 3.3.5-only tables: `SpellRuneCost.dbc` and `PowerDisplay.dbc`.
@@ -19,11 +11,14 @@ mod cost;
 mod dispel_types;
 mod display;
 mod duration;
+/// Build 12340's `${…}` expressions.
+mod expr;
 mod forms;
 mod radius;
 mod ranges;
 mod soft_float;
 mod tokens;
+mod variables;
 
 pub use cast_times::{load_spell_cast_times, SpellCastTime, SpellCastTimeCatalog};
 pub use cost::RuneCost;
@@ -41,7 +36,7 @@ pub use ranges::{
     MOVING_BONUS_FLAGS, MOVING_RANGE_BONUS, ON_NEXT_SWING_RANGE,
 };
 pub use soft_float::modify as soft_modify;
-pub use tokens::{substitute, SpellMods, TokenContext, TokenNumber};
+pub use tokens::{substitute, PlayerTokens, SpellMods, TokenContext, TokenNumber};
 
 use std::collections::HashMap;
 
@@ -55,7 +50,7 @@ const SPELL: &str = "DBFilesClient\\Spell.dbc";
 
 /// The 1.12 record's 173 fields plus slots for the 3.3.5-only columns the build-12340 layout
 /// maps in (`wrath_layouts::spell`); a 1.12 file no longer parses.
-const SPELL_FIELDS: usize = 191;
+const SPELL_FIELDS: usize = 195;
 /// `SpellFamilyFlags[2]`, family bits 64-95 (3.3.5 column 211; AzerothCore `flag96
 /// SpellFamilyFlags`, 209-211).
 const COL_SPELL_FAMILY_FLAGS_2: usize = 173;
@@ -75,6 +70,10 @@ const COL_POWER_DISPLAY_ID: usize = 189;
 /// `AttributesEx6` (3.3.5 column 10, `+0x28`): bit `0x1` hides the tooltip's cooldown cell and
 /// `0x80000000` keeps spell-mod op 11 off the category recovery (`006238a0`, `007fef60`).
 const COL_ATTRIBUTES_EX6: usize = 190;
+/// `EffectBonusMultiplier[3]` (3.3.5 columns 229-231, floats read as bits) and
+/// `SpellDescriptionVariableID` (232): `$bc1`, and the row of `$<name>` definitions.
+const COL_EFFECT_BONUS_MULTIPLIER_1: usize = 191;
+const COL_DESCRIPTION_VARIABLES: usize = 194;
 /// `Category` (`+0x8`): the shared-cooldown `SpellCategory.dbc` id, such as potions 4.
 const COL_CATEGORY: usize = 2;
 const COL_CAST_UI: usize = 3;
@@ -145,26 +144,8 @@ const COL_EFFECT_MISC_1: usize = 106;
 const COL_EFFECT_MISC_B_1: usize = 183;
 /// `EffectTriggerSpell[0]`, `61 + 16 × 3`.
 const COL_EFFECT_TRIGGER_1: usize = 109;
-/// `SPELL_EFFECT_LEARN_SPELL`: teaches its `EffectTriggerSpell`, as a trainer's wrapper does.
-pub const SPELL_EFFECT_LEARN_SPELL: u32 = 36;
-
-/// One learn effect, in the slot order the trainer's state re-evaluator reads (`0x4d7d40`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LearnEffect {
-    /// `SPELL_EFFECT_LEARN_SPELL`: teaches `EffectTriggerSpell`.
-    Spell(u32),
-    /// `SPELL_EFFECT_SKILL_STEP`: raises skill line `skill` (`EffectMiscValue`) to `step`,
-    /// `EffectBasePoints + EffectDieSides`.
-    SkillStep { skill: u32, step: u32 },
-    /// `SPELL_EFFECT_LEARN_PET_SPELL`: teaches the pet `EffectTriggerSpell`.
-    PetSpell(u32),
-}
-/// `SPELL_EFFECT_LEARN_PET_SPELL`: the trainer's icon accepts it or 36 in any slot (`0x4d8ff5`),
-/// but [`SpellCatalog::learned_spell`] follows 36 only.
-pub const SPELL_EFFECT_LEARN_PET_SPELL: u32 = 57;
-/// `SPELL_EFFECT_SKILL_STEP`: raises a profession's cap; a tradeskill trainer's tree partitions
-/// on it alone, in the wire spell's three slots (`0x4d77b6`).
-pub const SPELL_EFFECT_SKILL_STEP: u32 = 44;
+mod learn_effect;
+pub use learn_effect::*;
 
 /// `SPELL_EFFECT_OPEN_LOCK`, which the GameObject interact-cast matches (`0x5f84a1`).
 const SPELL_EFFECT_OPEN_LOCK: u32 = 0x21;
@@ -199,6 +180,8 @@ const COL_PROC_CHARGES: usize = 26;
 const COL_STACK_AMOUNT: usize = 39;
 const COL_MAX_TARGET_LEVEL: usize = 159;
 const COL_MAX_AFFECTED_TARGETS: usize = 163;
+/// The last slot of the `MaxAffectedTargets..RequiredAuraVision` run (file column 221).
+const COL_REQUIRED_AURA_VISION: usize = 172;
 const COL_DAMAGE_MULTIPLIER_1: usize = 167;
 const COL_EFFECT_POINTS_PER_COMBO_POINT_1: usize = 112;
 
@@ -484,15 +467,9 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
         let bytes = chain
             .read_file("DBFilesClient\\SpellCategory.dbc")
             .context("reading SpellCategory.dbc")?;
-        let mut s = wrathplus_dbc::Schema::new("SpellCategory");
-        s.add_field(wrathplus_dbc::SchemaField::new(
-            "ID",
-            wrathplus_dbc::FieldType::UInt32,
-        ));
-        s.add_field(wrathplus_dbc::SchemaField::new(
-            "Flags",
-            wrathplus_dbc::FieldType::UInt32,
-        ));
+        let mut s = Schema::new("SpellCategory");
+        s.add_field(SchemaField::new("ID", FieldType::UInt32));
+        s.add_field(SchemaField::new("Flags", FieldType::UInt32));
         let rs = parse(&bytes, s, "SpellCategory.dbc")?;
         let with = |bit: u32| -> std::collections::HashSet<u32> {
             rs.records()
@@ -507,6 +484,7 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
     let spell_bytes = chain.read_file(SPELL).context("reading Spell.dbc")?;
     let spells_set = parse(&spell_bytes, spell_schema(), "Spell.dbc")?;
     let mut spells: HashMap<u32, SpellDisplay> = HashMap::new();
+    let variables = variables::load(chain);
     let mut learned_spell: HashMap<u32, u32> = HashMap::new();
     let mut learn_effects: HashMap<u32, Vec<LearnEffect>> = HashMap::new();
     let mut declared_language: HashMap<u32, u32> = HashMap::new();
@@ -672,6 +650,11 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                     .filter(|&i| i != 0)
                     .and_then(|i| icons.get(&i).cloned()),
                 description: str_at(&spells_set, r, COL_DESCRIPTION_ENUS),
+                description_variables: u32_at(r, COL_DESCRIPTION_VARIABLES)
+                    .and_then(|v| variables.get(&v).cloned()),
+                effect_bonus_multiplier: std::array::from_fn(|i| {
+                    f32::from_bits(u32_at(r, COL_EFFECT_BONUS_MULTIPLIER_1 + i).unwrap_or(0))
+                }),
                 aura_description: str_at(&spells_set, r, COL_AURA_DESCRIPTION_ENUS),
                 duration_index: u32_at(r, COL_DURATION_INDEX).unwrap_or(0),
                 casting_time_index: u32_at(r, COL_CASTING_TIME_INDEX).unwrap_or(0),
@@ -681,6 +664,7 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 stack_amount: u32_at(r, COL_STACK_AMOUNT).unwrap_or(0),
                 max_target_level: u32_at(r, COL_MAX_TARGET_LEVEL).unwrap_or(0),
                 max_affected_targets: u32_at(r, COL_MAX_AFFECTED_TARGETS).unwrap_or(0),
+                required_aura_vision: u32_at(r, COL_REQUIRED_AURA_VISION).unwrap_or(0),
                 effect_base_points: std::array::from_fn(|i| {
                     i32_at(r, COL_EFFECT_BASE_POINTS_1 + i).unwrap_or(0)
                 }),

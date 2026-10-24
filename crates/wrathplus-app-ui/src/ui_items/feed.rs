@@ -58,10 +58,9 @@ pub struct SlotGuids {
     pub vault: [u64; 28],
 }
 
-/// A spell's `$`-substituted description, for item trigger and set-bonus lines. An empty one
-/// yields `None` and the caller drops the whole line, prefix included: the item builder
-/// (`0x52d8a0`) expands it (`0x5075f0`), tests the first byte (`0x52da29`) and on zero skips the
-/// trigger block (`0x52da31`), so an undescribed spell such as a key's `Opening` prints no line.
+/// A spell's `$`-substituted description, for item trigger and set-bonus lines, read with no
+/// player. An empty one yields `None` and the caller drops the whole line, prefix included, as
+/// the item builder (`0x52d8a0`) skips its trigger block on an empty text (`0x52da31`).
 fn spell_desc_text(
     spells: Option<&crate::app_core::state::Spells>,
     id: u32,
@@ -88,6 +87,7 @@ fn spell_desc_text(
                 home_area: &|| home_area,
                 global,
                 printf: &crate::ui_script::token_printf,
+                player: None,
             };
             Some(wrathplus_formats::substitute(desc, d, &ctx)).filter(|t| !t.is_empty())
         }

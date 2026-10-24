@@ -455,8 +455,7 @@ fn feed_trade_skill(
             .map(|l| l.name.clone())
             .unwrap_or_else(|| format!("Skill {line}"));
         let now = Instant::now();
-        // Build 12340's `GetTradeSkillDescription` (`0x5dbe10` → `0x57abc0`): the spell's own
-        // description with its tokens filled. Labelled: no caster spell modifiers apply.
+        // 12340's `GetTradeSkillDescription` (`0x5dbe10` → `0x57abc0`), no caster modifiers.
         let global = |key: &str| wrathplus_ui::strings::global(script.lua(), key);
         let ctx = wrathplus_formats::TokenContext {
             durations: &spells.durations,
@@ -471,6 +470,7 @@ fn feed_trade_skill(
             home_area: &|| None,
             global: &global,
             printf: &crate::ui_script::token_printf,
+            player: Some(&crate::ui_script::SelfTokens::new(Some(store), None)),
         };
         let describe = |d: &wrathplus_formats::SpellDisplay| {
             d.description

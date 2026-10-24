@@ -9,9 +9,9 @@
 
 use std::sync::OnceLock;
 
+use bevy::prelude::*;
 use wrathplus_formats::Chain;
 use wrathplus_ui::toc::Toc;
-use bevy::prelude::*;
 
 use super::addons::{Addon, Source};
 
@@ -173,6 +173,8 @@ pub(super) mod fixture {
 }
 
 #[cfg(test)]
+#[path = "reference_ui_producers.rs"]
+mod producers;
 #[cfg(test)]
 mod tests {
     use wrathplus_ui::script::UiScript;
@@ -1135,25 +1137,6 @@ mod tests {
             stale.join("\n  ")
         );
     }
-    /// `text` with every whitespace run before a `.` removed, so a chain rustfmt split across lines
-    /// reads as one call.
-    fn glue_chains(text: &str) -> String {
-        let mut out = String::with_capacity(text.len());
-        let mut pending = String::new();
-        for c in text.chars() {
-            if c.is_whitespace() {
-                pending.push(c);
-            } else {
-                if c != '.' {
-                    out.push_str(&pending);
-                }
-                pending.clear();
-                out.push(c);
-            }
-        }
-        out.push_str(&pending);
-        out
-    }
 
     /// Every event a chain file registers is fired by something here or listed in `UNPRODUCED`. An
     /// event name is a plain string at both ends, so a listener nothing feeds is silent; a new one
@@ -1189,20 +1172,6 @@ mod tests {
             (
                 "MACRO_ACTION_FORBIDDEN",
                 "UIParent.lua — the macro half of ADDON_ACTION_FORBIDDEN, same reason",
-            ),
-            (
-                "AUTOEQUIP_BIND_CONFIRM",
-                "UIParent.lua — the bind-on-equip confirm for an AUTOEQUIP (right-click) path; \
-                 benilla's equip path fires the EQUIP_BIND_CONFIRM sibling only",
-            ),
-            (
-                "EQUIP_BIND_CONFIRM",
-                "UIParent.lua — the bind-on-equip confirm; benilla's inventory feed does not \
-                 derive the server's confirm ask yet",
-            ),
-            (
-                "USE_BIND_CONFIRM",
-                "UIParent.lua — the bind-on-use confirm, the same gap from the use path",
             ),
             (
                 "BILLING_NAG_DIALOG",
@@ -1277,118 +1246,13 @@ mod tests {
             ),
         ];
 
-        let mut fired: std::collections::HashSet<String> =
-            CONSTRUCTED.iter().map(|s| (*s).to_string()).collect();
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
             .expect("workspace root")
             .join("crates");
-        let caps = |lit: &str| {
-            !lit.is_empty()
-                && lit
-                    .chars()
-                    .all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit())
-        };
-        // The event-name table an indirect fire reads: `"EVENT", vec!`, a match arm
-        // `=> "EVENT",`, or a lone `"EVENT"` as a block arm's value.
-        let scan_arms = |text: &str, fired: &mut std::collections::HashSet<String>| {
-            const SHAPE: &str = "\", vec!";
-            for (i, _) in text.match_indices(SHAPE) {
-                let before = &text[..i];
-                let Some(q) = before.rfind('"') else { continue };
-                let lit = &before[q + 1..];
-                if caps(lit) {
-                    fired.insert(lit.to_string());
-                }
-            }
-            let lines: Vec<&str> = text.lines().map(str::trim).collect();
-            for (i, t) in lines.iter().enumerate() {
-                let (t, arm_value) = match t.find("=> \"") {
-                    Some(k) => (t[k + 3..].trim_end_matches(','), true),
-                    None => (*t, false),
-                };
-                let Some(lit) = t.strip_prefix('"').and_then(|x| x.strip_suffix('"')) else {
-                    continue;
-                };
-                if arm_value && caps(lit) {
-                    fired.insert(lit.to_string());
-                    continue;
-                }
-                let arm = i > 0
-                    && lines[i - 1].ends_with('{')
-                    && lines.get(i + 1).is_some_and(|n| n.starts_with('}'));
-                if arm && caps(lit) {
-                    fired.insert(lit.to_string());
-                }
-            }
-        };
-        // An indirect fire names a const or a function, whose literal may live in another file
-        // (`ui_chat::event::event_name`, for the fire in `ui_chat::frames`).
-        let mut indirect: std::collections::HashSet<String> = std::collections::HashSet::new();
-        let mut texts: Vec<String> = Vec::new();
-        let mut stack = vec![root];
-        while let Some(dir) = stack.pop() {
-            for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
-                let p = e.path();
-                if p.is_dir() {
-                    stack.push(p);
-                } else if p.extension().is_some_and(|x| x == "rs") {
-                    let text = std::fs::read_to_string(&p).unwrap_or_default();
-                    // rustfmt splits a long chain at its dots, so the three shapes are matched
-                    // with the whitespace before each `.` removed.
-                    let text = glue_chains(&text);
-                    // The engine's deferred lane, `pending_events.push((name, args))`, fires too.
-                    const CALLS: [&str; 3] = [
-                        concat!("fire_event", "("),
-                        concat!("fire_event_into", "("),
-                        concat!("pending_events.push", "(("),
-                    ];
-                    let mut fires_indirectly = false;
-                    for call in CALLS {
-                        let mut from = 0;
-                        while let Some(i) = text[from..].find(call) {
-                            let at = from + i + call.len();
-                            from = at;
-                            let rest = text[at..].trim_start();
-                            let rest = rest.strip_prefix("lua,").map_or(rest, str::trim_start);
-                            if let Some(body) = rest.strip_prefix('"') {
-                                if let Some(end) = body.find('"') {
-                                    fired.insert(body[..end].to_string());
-                                }
-                            } else {
-                                fires_indirectly = true;
-                                let ident: String = rest
-                                    .chars()
-                                    .take_while(|c| c.is_alphanumeric() || *c == '_')
-                                    .collect();
-                                if !ident.is_empty() {
-                                    indirect.insert(ident);
-                                }
-                            }
-                        }
-                    }
-                    if fires_indirectly {
-                        scan_arms(&text, &mut fired);
-                    }
-                    texts.push(text);
-                }
-            }
-        }
-        for text in &texts {
-            for ident in &indirect {
-                let decl = format!("const {ident}: &str = \"");
-                if let Some(k) = text.find(&decl) {
-                    let body = &text[k + decl.len()..];
-                    if let Some(end) = body.find('"') {
-                        fired.insert(body[..end].to_string());
-                    }
-                }
-                if text.contains(&format!("fn {ident}(")) {
-                    scan_arms(text, &mut fired);
-                }
-            }
-        }
+        // Production fires only: test files and inline test modules are no producer.
+        let fired = super::producers::produced(&root, CONSTRUCTED);
 
         let mut dead: std::collections::BTreeMap<String, String> =
             std::collections::BTreeMap::new();

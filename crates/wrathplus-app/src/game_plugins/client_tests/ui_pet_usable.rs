@@ -6,6 +6,7 @@
 //! toggles and the drag's writes, while a pet that trips none of them takes all of it as before.
 
 use super::ui_pet_press_tests::{latched, rig, Rig};
+use crate::app_core::state::PetBar;
 use crate::net::{ClientCommand, Guid, GuidIndex};
 use crate::target::UNIT_FLAG_POSSESSED;
 use crate::ui_pet::press_tests::{
@@ -13,14 +14,13 @@ use crate::ui_pet::press_tests::{
     SUMMONEDBY,
 };
 use crate::ui_pet::usable_tests::{FARSIGHT, OTHER};
-use crate::app_core::state::PetBar;
+use bevy::ecs::system::RunSystemOnce;
+use bevy::prelude::*;
 use wrathplus_protocol::types::Field;
 use wrathplus_protocol::types::{
     PetActionEntry, PET_ACT_COMMAND, PET_ACT_ENABLED, PET_ACT_REACTION, PET_COMMAND_ATTACK,
     PET_COMMAND_FOLLOW, PET_COMMAND_STAY, PET_REACT_AGGRESSIVE, PET_STATE_BAR_DISABLED,
 };
-use bevy::ecs::system::RunSystemOnce;
-use bevy::prelude::*;
 
 /// A foe the Attack order can be aimed at.
 const FOE: u64 = 0x77;
@@ -63,7 +63,7 @@ const CLAW_WORD: u32 = CLAW | ((PET_ACT_ENABLED as u32) << 24);
 
 /// A usable pet on a bar with Claw (autocast on) in slot 1, and in the pet's book, with the foe
 /// selected for the Attack order. Fed once, so the VM holds what the bar last pushed.
-fn scene() -> Rig {
+pub(super) fn scene() -> Rig {
     let mut rig = rig(vec![(CLAW, claw())], &[CLAW], Some(owned_pet()));
     set_player(&mut rig, &[]);
     set_pet(&mut rig, &[]);
@@ -73,18 +73,18 @@ fn scene() -> Rig {
         .spawn((
             Guid(FOE),
             Transform::default(),
-            crate::app_core::session::ObjectStore(wrathplus_protocol::ObjectFields::from_fields(&[
-                (Field::UnitHealth, 100),
-                (Field::UnitMaxHealth, 100),
-            ])),
+            crate::app_core::session::ObjectStore(wrathplus_protocol::ObjectFields::from_fields(
+                &[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
+            )),
         ))
         .id();
     world.resource_mut::<GuidIndex>().0.insert(FOE, foe);
-    *world.resource_mut::<crate::app_core::state::Selection>() = crate::app_core::state::Selection {
-        target: Some(foe),
-        guid: Some(FOE),
-        ..Default::default()
-    };
+    *world.resource_mut::<crate::app_core::state::Selection>() =
+        crate::app_core::state::Selection {
+            target: Some(foe),
+            guid: Some(FOE),
+            ..Default::default()
+        };
     rig.frame();
     rig
 }
@@ -515,7 +515,7 @@ fn a_held_action_stays_held_while_the_pet_is_out_of_view() {
 
 /// The whole default UI on the rig's world in place of its listening VM: the stock pet bar, and
 /// the fed pet under it.
-fn with_stock_ui(rig: &mut Rig) {
+pub(super) fn with_stock_ui(rig: &mut Rig) {
     // The in-game UI loads on world entry, so a player exists.
     let (mut script, failures) = super::ui_pet_press_tests::stock_session_ui();
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
@@ -533,7 +533,7 @@ fn with_stock_ui(rig: &mut Rig) {
 }
 
 /// The feeds, then the VM's clock and layout, so the bar's slide and repaint have happened.
-fn settle(rig: &mut Rig) {
+pub(super) fn settle(rig: &mut Rig) {
     rig.feed.run(rig.app.world_mut());
     ui(rig, |s| {
         for _ in 0..3 {

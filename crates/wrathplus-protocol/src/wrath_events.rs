@@ -901,9 +901,7 @@ fn adapt_loot(packet: ServerLootPacket) -> WrathDispatch {
             Vec::new(),
         ),
         ServerLootPacket::Money(money) => handled(
-            vec![SessionEvent::LootMoneyNotify {
-                amount: money.amount,
-            }],
+            vec![SessionEvent::LootMoneyNotify { amount: money.amount, sole_looter: money.sole_looter }],
             vec![WrathEvent::LootMoneyNotify(money)],
             Vec::new(),
         ),
