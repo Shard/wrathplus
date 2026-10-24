@@ -21,7 +21,7 @@ use wrathplus_protocol::types::PLAYER_SKILL_SLOTS;
 use wrathplus_protocol::types::{Field, ObjectType};
 use bevy::ecs::system::SystemParam;
 
-use crate::net::{ClientCommand, FieldChanged, GuidIndex, NetCommands};
+use crate::net::{ClientCommand, FieldChanged, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::PlayerActions;
@@ -219,13 +219,10 @@ fn profession_slot_available(wire: &TrainerSpell, free: Option<u32>) -> bool {
 }
 
 /// The re-evaluator's inputs and its descriptor triggers: the player's descriptor and its field
-/// edges (money, level, a skill slot), the pet bar, and the stores that resolve the pet.
+/// edges (money, level, a skill slot).
 #[derive(SystemParam)]
 pub struct ReEvalInputs<'w, 's> {
     self_player: Query<'w, 's, (Entity, &'static ObjectStore), With<SelfPlayer>>,
-    stores: Query<'w, 's, &'static ObjectStore>,
-    index: Res<'w, GuidIndex>,
-    pet_bar: Res<'w, crate::app_core::state::PetBar>,
     edges: MessageReader<'w, 's, FieldChanged>,
 }
 
@@ -307,7 +304,7 @@ pub fn feed_trainer(
                         .map(|s| reeval::SkillSlot {
                             skill_id: u32::from(s.skill_id),
                             step: u32::from(s.step),
-                            // The permanent bonus counts only on a non-zero value (`0x4d8087`).
+                            // The permanent bonus counts only on a non-zero value (`0x596b00`).
                             value_plus_perm: if s.value == 0 {
                                 0
                             } else {
@@ -317,30 +314,9 @@ pub fn feed_trainer(
                         .collect()
                 })
                 .unwrap_or_default(),
-            pet: (re_eval.pet_bar.guid() != 0)
-                .then(|| re_eval.index.0.get(&re_eval.pet_bar.guid()))
-                .flatten()
-                .and_then(|&e| re_eval.stores.get(e).ok())
-                .map(|store| reeval::PetView {
-                    level: store.0.unit_level().unwrap_or(0),
-                    known: re_eval
-                        .pet_bar
-                        .spells
-                        .spells
-                        .iter()
-                        .filter(|e| e.is_spell())
-                        .map(|e| e.action())
-                        .collect(),
-                }),
         };
-        let TrainerOpen {
-            services,
-            trainer_type,
-            ..
-        } = &mut *open;
         reeval::re_derive_all(
-            services,
-            *trainer_type,
+            &mut open.services,
             &spells.catalog,
             &skill_lines.catalog,
             &player,

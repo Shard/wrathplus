@@ -418,19 +418,74 @@ fn keyframe_curve<T: Animatable + Clone>(
     }
 }
 
+/// The bone channels any sequence of a model keys: `[translation, rotation, scale]` by bone.
+#[derive(Default)]
+pub(crate) struct KeyedChannels(std::collections::BTreeMap<u16, [bool; 3]>);
+
+impl KeyedChannels {
+    pub(crate) fn of(animations: &[ModelAnimation]) -> Self {
+        let mut keyed = std::collections::BTreeMap::<u16, [bool; 3]>::new();
+        for bk in animations.iter().flat_map(|a| &a.bones) {
+            let c = keyed.entry(bk.bone).or_default();
+            c[0] |= !bk.translation.is_empty();
+            c[1] |= !bk.rotation.is_empty();
+            c[2] |= !bk.scale.is_empty();
+        }
+        Self(keyed)
+    }
+}
+
+/// `anim`'s keys plus a bind-pose key on every channel another sequence keys and this one does
+/// not. An M2 track with no keys in the playing sequence reads its default (no offset, identity,
+/// unit scale); a Bevy channel with no curve keeps the last sequence's value instead, which left
+/// the Mottled Boar's Run on Stand's root pitch and an orc's Walk on Swim's (2026-10-24).
+fn with_rest_keys(
+    anim: &ModelAnimation,
+    keyed: &KeyedChannels,
+) -> Vec<wrathplus_formats::BoneKeys> {
+    let mut bones = anim.bones.clone();
+    for (&bone, &[t, r, s]) in &keyed.0 {
+        let i = bones
+            .iter()
+            .position(|b| b.bone == bone)
+            .unwrap_or_else(|| {
+                bones.push(wrathplus_formats::BoneKeys {
+                    bone,
+                    translation: Vec::new(),
+                    rotation: Vec::new(),
+                    scale: Vec::new(),
+                });
+                bones.len() - 1
+            });
+        let b = &mut bones[i];
+        if t && b.translation.is_empty() {
+            b.translation.push((0.0, [0.0; 3]));
+        }
+        if r && b.rotation.is_empty() {
+            b.rotation.push((0.0, [0.0, 0.0, 0.0, 1.0]));
+        }
+        if s && b.scale.is_empty() {
+            b.scale.push((0.0, [1.0; 3]));
+        }
+    }
+    bones
+}
+
 /// Build one sequence's [`AnimationClip`] and its [`PoseClip`] in one walk. The M2 translation
 /// track is a delta on the rest offset, a rotation converts as `r·q·r⁻¹`, and scale permutes axes.
 /// A sequence that poses no bone still gets a clip of its own duration, since the clip is the
 /// instance's sequence clock; the flag says whether any channel made a curve for a rig to pose.
+/// `keyed` is [`KeyedChannels::of`] the model's sequences ([`with_rest_keys`]).
 pub(crate) fn build_animation_clip(
     anim: &ModelAnimation,
     skeleton: &ModelSkeleton,
+    keyed: &KeyedChannels,
 ) -> (AnimationClip, PoseClip, bool) {
     let r = wow_to_bevy_quat();
     let mut clip = AnimationClip::default();
     let mut pose = PoseClip::default();
     let mut any = false;
-    for bk in &anim.bones {
+    for bk in &with_rest_keys(anim, keyed) {
         let target = bone_target_id(bk.bone);
         let rest = skeleton
             .joints
