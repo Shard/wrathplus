@@ -238,6 +238,33 @@ fn doll_hover_renders_the_live_instance() {
     assert!(s.errors().is_empty(), "errors: {:?}", s.errors());
 }
 
+/// Shift over a bag item raises the worn item's plate: `GameTooltip`'s `OnTooltipSetItem` checks
+/// `IsModifiedClick("COMPAREITEMS")` (`GameTooltip.xml:21`); without shift no plate shows.
+#[test]
+fn shift_over_a_bag_item_raises_the_worn_compare_plate() {
+    let _data = wrathplus_formats::wow_data_or_skip!();
+    let mut s = harness_with_bags();
+    s.set_unit("player", Some(player()));
+    seed_items(&mut s);
+    s.run("MainMenuBarBackpackButton:Click()").unwrap();
+    s.take_sounds();
+    let btn = bag_slot_button(&mut s, 0, 1);
+    let plate = "return GameTooltipTextLeft1:GetText() == \"Another Helm\" \
+                 and ShoppingTooltip1:IsShown() \
+                 and ShoppingTooltip1TextLeft1:GetText() == \"Currently Equipped\" \
+                 and ShoppingTooltip1TextLeft2:GetText() == \"Test Helm\"";
+    hover(&mut s, &btn);
+    assert!(!s.eval::<bool>(plate).unwrap(), "no plate without shift");
+    hover(&mut s, "UIParent");
+    s.set_modifiers(true, false, false);
+    hover(&mut s, &btn);
+    assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
+    assert!(
+        s.eval::<bool>(plate).unwrap(),
+        "shift raises the worn helm's plate"
+    );
+}
+
 /// In repair mode a damaged item's hover adds `REPAIR_COST` and its coins, worn
 /// (`PaperDollFrame.lua:757-760`) or bagged (`ContainerFrame.lua:274-277`); out of it, neither.
 #[test]
