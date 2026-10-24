@@ -300,6 +300,26 @@ fn the_server_field_sits_under_password_in_the_stock_style() {
             "the field overlaps {name}: {field:?} {other:?}"
         );
     }
+    // The backdrop, textures and colours alike: stock colours its boxes in `AccountLogin_OnLoad`
+    // (`DEFAULT_TOOLTIP_COLOR`), so the field's XML backdrop alone drew a lighter grey.
+    let backdrop = |name: &str| {
+        script
+            .eval::<String>(&format!(
+                "local f = {name} local b = f:GetBackdrop() local i = b.insets \
+                 return string.format('%s %s %s %s %s %s %s %s %s ' .. string.rep('%.3f ', 4), \
+                 b.bgFile, b.edgeFile, tostring(b.tile), b.tileSize, b.edgeSize, \
+                 i.left, i.right, i.top, i.bottom, f:GetBackdropColor())
+                 .. string.format(string.rep('%.3f ', 4), f:GetBackdropBorderColor())"
+            ))
+            .unwrap_or_else(|e| panic!("{name}: {e}"))
+    };
+    let stock = backdrop("AccountLoginAccountEdit");
+    assert_eq!(backdrop("AccountLoginPasswordEdit"), stock);
+    assert_eq!(
+        backdrop("AccountLoginServerEdit"),
+        stock,
+        "the stock boxes' backdrop"
+    );
     assert!(login[3] <= field[2], "Login sits below the field");
     for (name, r) in [("the Remember checkbox", check), ("its label", check_text)] {
         assert!(
@@ -307,6 +327,82 @@ fn the_server_field_sits_under_password_in_the_stock_style() {
             "{name} overlaps the Blizzard logo: {r:?} {logo:?}"
         );
     }
+    assert!(
+        script.errors().is_empty(),
+        "script errors: {:?}",
+        script.errors()
+    );
+}
+
+/// A VPS's non-default logon port through the Server field (Shannon's 10-24 pass): typed, kept in
+/// `realmlist.wtf` with its port, and dialled on it; the field's tooltip says a port may follow.
+#[test]
+fn a_server_field_address_keeps_its_port_from_field_to_file_to_dial() {
+    let _data = wrathplus_formats::wow_data_or_skip!();
+    let mut script = UiScript::new().unwrap();
+    script.install_glue_api().unwrap();
+    script.set_screen_size(1600.0, 1000.0);
+    assert!(load_glue_ui(&script).is_empty());
+    script.fire_event("FRAMES_LOADED", vec![]);
+    script.fire_event("SET_GLUE_SCREEN", vec![ScriptValue::Str("login".into())]);
+    script.tick(0.1);
+    script.set_glue_realmlist("127.0.0.1", false);
+    script.fire_event("BENILLA_REALMLIST_CHANGED", vec![]);
+
+    // Hovering the field explains the syntax.
+    let hint = script
+        .eval::<(bool, String)>(
+            "local f = AccountLoginServerEdit f:GetScript('OnEnter')(f) \
+             local shown, text = GlueTooltip:IsShown(), GlueTooltipTextLeft1:GetText() \
+             f:GetScript('OnLeave')(f) return shown and not GlueTooltip:IsShown(), text",
+        )
+        .unwrap();
+    assert!(hint.0, "the hint shows on hover and hides on leave");
+    assert!(hint.1.contains("host or host:port"), "{}", hint.1);
+
+    script
+        .run(
+            "AccountLoginServerEdit:SetFocus() AccountLoginServerEdit:SetText('192.168.1.1:1337') \
+             AccountLoginServerEdit:ClearFocus()",
+        )
+        .unwrap();
+    let typed = match script.take_glue_requests().as_slice() {
+        [GlueRequest::SetRealmlist(typed)] => typed.clone(),
+        other => panic!("one SetRealmlist, got {other:?}"),
+    };
+    assert_eq!(typed, "192.168.1.1:1337");
+
+    // The host's arm for that request (`host.rs`), into a scratch `BENILLA_HOME`.
+    let _l = crate::local_state::test_env::ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let dir = std::env::temp_dir().join(format!("azb-server-port-{}", std::process::id()));
+    let _home = crate::local_state::test_env::EnvGuard::set("BENILLA_HOME", dir.to_str().unwrap());
+    let mut realmlist = crate::realmlist::Realmlist::unpinned("127.0.0.1");
+    assert!(crate::login::accept_realmlist(
+        &typed,
+        &mut realmlist,
+        Some(&mut script)
+    ));
+    let saved = std::fs::read_to_string(dir.join("realmlist.wtf")).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        saved.contains("192.168.1.1:1337"),
+        "realmlist.wtf: {saved:?}"
+    );
+    // The next attempt's `LoginRequest::host`, split as `wrath_auth::logon` dials it.
+    assert_eq!(
+        wrathplus_protocol::host_port(realmlist.address(), wrathplus_protocol::AUTH_PORT),
+        ("192.168.1.1", 1337)
+    );
+    script.set_glue_realmlist(realmlist.address(), false);
+    script.fire_event("BENILLA_REALMLIST_CHANGED", vec![]);
+    assert_eq!(
+        script
+            .eval::<String>("return AccountLoginServerEdit:GetText()")
+            .unwrap(),
+        "192.168.1.1:1337"
+    );
     assert!(
         script.errors().is_empty(),
         "script errors: {:?}",
