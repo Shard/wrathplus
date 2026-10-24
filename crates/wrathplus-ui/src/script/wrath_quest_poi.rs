@@ -84,13 +84,9 @@ fn incomplete_mask(m: &Model, quest_id: u32) -> Option<u32> {
     if e.complete == 1 {
         return Some(u32::MAX);
     }
-    Some(
-        e.objectives
-            .iter()
-            .enumerate()
-            .filter(|(_, o)| !o.finished)
-            .fold(0, |mask, (i, _)| mask | 1 << (i & 31)),
-    )
+    // Bits are template slots (`0x5e2950`): an empty or source-item slot shifts rows, not bits.
+    let open = e.objectives.iter().filter(|o| !o.finished);
+    Some(open.filter_map(|o| o.poi_bit).fold(0, |mask, b| mask | 1 << b))
 }
 
 /// The blob a quest's icon marks on the displayed map, projected: the turn-in when complete,
@@ -207,20 +203,15 @@ fn arg(args: &MultiValue, i: usize) -> Value {
     args.get(i).cloned().unwrap_or(Value::Nil)
 }
 
+#[path = "wrath_quest_poi_order.rs"]
+mod order;
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // QuestMapUpdateAllQuests() (`0x5e63d0` → `0x5e5a50`) → how many log quests have a POI on the
-    // displayed map, which become the visible list.
+    // displayed map, which become the visible list, in [`order::visible_quests`]' order.
     set(lua, "QuestMapUpdateAllQuests", |lua, _| {
         let mut m = lua.app_data_mut::<Model>().expect("model app_data");
-        let visible: Vec<u32> = m
-            .quest_log
-            .entries
-            .iter()
-            .filter(|e| !e.is_header)
-            .map(|e| e.quest_id)
-            .take(25)
-            .filter(|&q| icon(&m, q).is_some())
-            .collect();
+        let visible = order::visible_quests(&m);
         let n = visible.len() as i64;
         m.wrath_quest_poi.visible = visible;
         Ok(MultiValue::from_vec(vec![Value::Integer(n)]))
@@ -385,8 +376,8 @@ mod tests {
                     quest_id: 10,
                     title: "Kill".into(),
                     objectives: vec![
-                        QuestLogObjectiveView { text: "Wolves: 2/5".into(), kind: "monster".into(), finished: false, ..Default::default() },
-                        QuestLogObjectiveView { text: "Bears: 5/5".into(), kind: "monster".into(), finished: true, ..Default::default() },
+                        QuestLogObjectiveView { text: "Wolves: 2/5".into(), kind: "monster".into(), finished: false, poi_bit: Some(0), ..Default::default() },
+                        QuestLogObjectiveView { text: "Bears: 5/5".into(), kind: "monster".into(), finished: true, poi_bit: Some(1), ..Default::default() },
                     ],
                     ..Default::default()
                 },
@@ -417,8 +408,8 @@ mod tests {
         let s = vm();
         for check in [
             "QuestMapUpdateAllQuests() == 2",
-            "select(1, QuestPOIGetQuestIDByVisibleIndex(1)) == 10 and select(2, QuestPOIGetQuestIDByVisibleIndex(1)) == 2",
-            "select(1, QuestPOIGetQuestIDByVisibleIndex(2)) == 11 and select('#', QuestPOIGetQuestIDByVisibleIndex(3)) == 0",
+            "select(1, QuestPOIGetQuestIDByVisibleIndex(1)) == 11 and select(2, QuestPOIGetQuestIDByVisibleIndex(1)) == 3",
+            "select(1, QuestPOIGetQuestIDByVisibleIndex(2)) == 10 and select('#', QuestPOIGetQuestIDByVisibleIndex(3)) == 0",
             "select(1, QuestPOIGetIconInfo(10)) == false and math.abs(select(2, QuestPOIGetIconInfo(10)) - 0.3) < 1e-6 and select(4, QuestPOIGetIconInfo(10)) == 0",
             "select(1, QuestPOIGetIconInfo(11)) == true and select(4, QuestPOIGetIconInfo(11)) == -1",
             "select('#', QuestPOIGetIconInfo(12)) == 0",
@@ -429,6 +420,14 @@ mod tests {
             assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
         }
         assert!(s.run("QuestPOIGetIconInfo()").is_err() && s.run("GetQuestPOILeaderBoard()").is_err());
+    }
+
+    #[test]
+    fn blob_objectives_are_template_slots_not_leaderboard_rows() {
+        let s = vm();
+        s.model_mut().quest_log.entries[1].objectives.iter_mut().zip([1, 0]).for_each(|(o, b)| o.poi_bit = Some(b));
+        let (x, objective) = s.eval::<(f64, i64)>("QuestMapUpdateAllQuests() local _, x, _, o = QuestPOIGetIconInfo(10) return x, o").unwrap();
+        assert!((x - 0.1).abs() < 1e-6 && objective == 1, "{x} {objective}");
     }
 
     #[test]

@@ -20,14 +20,14 @@
 //! The wire has no map; the record takes the current map, as the reference does at `set_blip`
 //! (`+0x1c ContinentID <- [0x86f694]`).
 
-use wrathplus_formats::AreaPoi;
 use bevy::prelude::*;
 use bevy::time::Real;
+use wrathplus_formats::AreaPoi;
 
 use wrathplus_assets::coords::bevy_to_wow;
 
-use crate::net::{LoggedOutMessage, WorldportMessage};
 use crate::app_core::player::Player;
+use crate::net::{LoggedOutMessage, WorldportMessage};
 
 /// The arrival radius squared, `0x806b10` = 100 yd^2, compared strictly.
 const ARRIVE_CLEAR_YD_SQ: f32 = 100.0;
@@ -40,6 +40,11 @@ const MARKER_TTL_SECS: f64 = 480.0;
 pub struct PoiMarker {
     /// Its z is 0: the wire carries x/y only, and the reference leaves `+0x18 Z` unwritten.
     pub poi: Option<AreaPoi>,
+    /// The selected quest's point, special POI 0 ahead of the directions' slot 1: Lua
+    /// `SelectQuestLogEntry` (`0x5e02f0` → `0x5dffa0` → `0x5deb60`) writes it through `0x7f4930`
+    /// from the quest record (`+0xa8`/`+0xac`/`+0xb0`/`+0xb4`, taken as `PointX`, `PointY`,
+    /// `PointOpt` and the title; untraced), and a header or no selection clears it.
+    pub quest: Option<AreaPoi>,
     /// `Time<Real>` seconds at which the marker expires.
     expires_at: f64,
 }
@@ -68,6 +73,32 @@ impl PoiMarker {
             description: String::new(),
             world_state_id: 0,
         });
+    }
+
+    /// The selected quest's point as `0x7f4930` writes the slot: icon 6, `PointOpt` the rank key,
+    /// no flags (so no in-range icon, only the rim's guide arrow), on the current map.
+    pub fn set_quest_point(&mut self, point: Option<(f32, f32, u32, &str)>, map_id: u32) {
+        self.quest = point.map(|(x, y, opt, title)| AreaPoi {
+            importance: opt,
+            icon: 6,
+            faction_id: 0,
+            pos: [x, y, 0.0],
+            continent_id: map_id,
+            flags: 0,
+            area_id: 0,
+            name: title.to_string(),
+            description: String::new(),
+            world_state_id: 0,
+        });
+    }
+
+    /// The minimap's static slots on `map_id`, in slot order: the quest's point, then the
+    /// directions.
+    pub fn markers_on_map(&self, map_id: u32) -> impl Iterator<Item = &AreaPoi> {
+        self.quest
+            .iter()
+            .chain(self.poi.iter())
+            .filter(move |p| p.continent_id == map_id)
     }
 
     /// The marker, if it is on `map_id`.
@@ -102,6 +133,7 @@ fn clear_on_world_entry(
 ) {
     if worldports.read().next().is_some() || logged_out.read().next().is_some() {
         marker.poi = None;
+        marker.quest = None; // the rebuild `0x7f6730` zeroes every static slot
     }
 }
 
@@ -136,6 +168,10 @@ fn gossip_poi(
     marker.set(poi, map_id, now_secs);
 }
 
+/// The slot upkeep (expiry and world entry), which a writer of the slots orders itself after.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PoiMarkerUpkeep;
+
 pub struct PoiMarkerPlugin;
 
 impl Plugin for PoiMarkerPlugin {
@@ -145,8 +181,10 @@ impl Plugin for PoiMarkerPlugin {
             use wrathplus_protocol::SessionEventKind as K;
             app.net_handler(K::GossipPoi, on_gossip_poi);
         }
-        app.init_resource::<PoiMarker>()
-            .add_systems(Update, (expire_marker, clear_on_world_entry));
+        app.init_resource::<PoiMarker>().add_systems(
+            Update,
+            (expire_marker, clear_on_world_entry).in_set(PoiMarkerUpkeep),
+        );
     }
 }
 

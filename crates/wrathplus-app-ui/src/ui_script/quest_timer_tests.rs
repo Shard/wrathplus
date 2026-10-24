@@ -46,6 +46,7 @@ fn quest(id: u32, title: &str, timer: u32) -> QuestLogEntryView {
             finished: false,
             cur: 0,
             req: 8,
+            poi_bit: None,
         }],
         ..Default::default()
     }

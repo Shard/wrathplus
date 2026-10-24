@@ -234,3 +234,6 @@ fn installed_wrath_framexml_load_timing() {
     times.sort_by(f64::total_cmp);
     eprintln!("LOAD-TIMING median {:.0} ms of {reps}", times[times.len() / 2]);
 }
+
+#[path = "wrath_worldmap_poi_tests.rs"]
+mod worldmap_poi;
