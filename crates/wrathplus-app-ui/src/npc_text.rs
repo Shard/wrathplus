@@ -1,10 +1,11 @@
 //! The `$`-token expansion of server-authored NPC text (gossip, questgiver panels, the quest log),
-//! which the client does, not the server; every feed that pushes NPC text into the VM runs it, as
-//! the reference routes its fourteen call sites through one expander (`0x506f70`, token handler
-//! `0x5070a0`).
+//! which the client does, not the server; every feed that pushes NPC text into the VM runs it, and
+//! the chat feed for its monster, boss, BG system and achievement lines ([`chat_macros`]), as 12340
+//! routes them through one expander (`0x579590`, `QuestTextParser.cpp`, token handler `0x578f20`).
 //!
 //! - The accepted set is `B C E G N R T W` in either case; anything else re-emits the `$` and
-//!   leaves the letter as text.
+//!   leaves the letter as text. `0x578f20` also takes `A` (chat's achievement link, built in
+//!   `ui_chat::native_message`), `D` (a duration) and `K`; `D` and `K` are not built.
 //! - A decimal prefix is consumed ahead of every token, but only `W` and `E` read it.
 //! - Case is the output switch: `$r` is `$R` through `_strlwr`, and likewise `$c` and `$t`.
 //!
@@ -44,9 +45,8 @@ pub(crate) fn substitute(text: &str, ctx: &MacroContext) -> String {
     substitute_checked(text, ctx).0
 }
 
-/// [`substitute`] plus `0x506f70`'s return flag, `true` when no token failed (no subject, or a
-/// token outside the set). Panels ignore it; chat must not, since the reference's chat path drops
-/// or defers a line rather than show a `$`.
+/// [`substitute`] plus `0x579590`'s return flag, `false` when a token failed (no subject, or a
+/// token outside the set). Panels ignore it; chat then shows the wire text (`0x509dd0`).
 pub(crate) fn substitute_checked(text: &str, ctx: &MacroContext) -> (String, bool) {
     let subject = ctx.subject;
     let mut clean = true;
@@ -183,7 +183,7 @@ pub(crate) fn player_identity(
 }
 
 /// The chat feed's [`Subject`] for any guid: the object manager's descriptors, else the name
-/// cache (`0x506f70`). Guid 0 has no subject.
+/// cache (`0x579590`). Guid 0 has no subject.
 pub(crate) fn subject_for_guid(
     guid: u64,
     index: &GuidIndex,
@@ -204,8 +204,8 @@ pub(crate) fn subject_for_guid(
             gender: store.0.unit_gender().unwrap_or(0),
         });
     }
-    // A creature lands on zeros, so `$R` and `$C` emit nothing; the reference's non-player arm
-    // emits the unit's name (`0x50716b`, `0x5071f7`), which is not built.
+    // A creature lands on zeros, so `$R` and `$C` emit nothing; `0x578f20`'s non-player arm
+    // (`0x72aa70`/`0x72aab0`, untraced) is not built.
     let (race, class, gender) = names.player_traits(guid).unwrap_or((0, 0, 0));
     Some(Subject {
         name,
@@ -213,6 +213,25 @@ pub(crate) fn subject_for_guid(
         class,
         gender,
     })
+}
+
+/// The chat lines' expansion (`0x579590`), the quest panels' expander against `guid`'s subject;
+/// `None` when a token failed.
+pub(crate) fn chat_macros(
+    text: &str,
+    guid: u64,
+    (index, stores): (&GuidIndex, &Query<&ObjectStore>),
+    names: &NameCache,
+    commands: &NetCommands,
+    states: &crate::app_core::state::WorldStates,
+) -> Option<String> {
+    let subject = subject_for_guid(guid, index, stores, names, commands);
+    let ctx = MacroContext {
+        subject: subject.as_ref(),
+        states,
+    };
+    let (text, clean) = substitute_checked(text, &ctx);
+    clean.then_some(text)
 }
 
 #[cfg(test)]
