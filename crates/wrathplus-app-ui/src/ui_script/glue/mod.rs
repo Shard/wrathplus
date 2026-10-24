@@ -15,6 +15,8 @@ mod click_tests;
 mod host_tests;
 #[cfg(test)]
 mod installed_tests;
+#[cfg(test)]
+mod measure_tests;
 
 /// The glue load list, which `CGlueMgr` walks as `UI_Init` walks FrameXML's.
 pub(super) const GLUE_TOC: &str = r"Interface\GlueXML\GlueXML.toc";
@@ -105,6 +107,9 @@ fn ensure_glue_vm(world: &mut World) -> bool {
     if current.is_some() && world.get_resource::<GlueVm>().and_then(|g| g.0) == current {
         return true;
     }
+    if !text_measure_ready(world) {
+        return false;
+    }
     let Some(mut script) = super::lifecycle::new_vm(world) else {
         return false;
     };
@@ -131,6 +136,51 @@ fn ensure_glue_vm(world: &mut World) -> bool {
     true
 }
 
+/// Whether a VM built now can measure text. The reference measures synchronously, and GlueXML
+/// sizes from it in `OnLoad` (`CharSelectChangeRealmButton`: `SetWidth(GetTextWidth() + 50)`,
+/// `CharacterSelect.xml:475`), but the font atlas arrives an `Update` after the first screen's
+/// `OnEnter`, once the window reports its scale. A windowed client waits for it; a world with no
+/// window (a headless test) has no atlas to wait for.
+fn text_measure_ready(world: &mut World) -> bool {
+    let windowed = world
+        .query_filtered::<(), With<bevy::window::PrimaryWindow>>()
+        .iter(world)
+        .next()
+        .is_some();
+    !windowed || world.contains_resource::<crate::ui_text::UiFontAtlas>()
+}
+
+/// A glue screen entry deferred until the text measure is ready ([`text_measure_ready`]).
+#[derive(Resource, Default)]
+pub(crate) struct DeferredGlueEntry(Option<crate::app_core::state::ClientState>);
+
+/// Finish a deferred entry once the measure is ready, for the screen the client is still on.
+pub(crate) fn finish_deferred_entry(world: &mut World) {
+    use crate::app_core::state::ClientState;
+    let Some(wanted) = world.get_resource::<DeferredGlueEntry>().and_then(|d| d.0) else {
+        return;
+    };
+    if !text_measure_ready(world) {
+        return;
+    }
+    world.resource_mut::<DeferredGlueEntry>().0 = None;
+    let now = world.get_resource::<State<ClientState>>().map(|s| *s.get());
+    match (wanted, now) {
+        (ClientState::Login, Some(ClientState::Login)) => enter_stock_login(world),
+        (ClientState::CharSelect, Some(ClientState::CharSelect)) => enter_stock_select(world),
+        _ => {}
+    }
+}
+
+/// Record an entry that could not build its VM yet.
+fn defer_entry(world: &mut World, state: crate::app_core::state::ClientState) {
+    if !text_measure_ready(world) {
+        world
+            .get_resource_or_insert_with(DeferredGlueEntry::default)
+            .0 = Some(state);
+    }
+}
+
 /// `SET_GLUE_SCREEN name` on the glue VM in the world.
 fn set_glue_screen(world: &mut World, name: &str) {
     if let Some(mut script) = world.get_non_send_resource_mut::<UiScript>() {
@@ -142,8 +192,11 @@ fn set_glue_screen(world: &mut World, name: &str) {
 /// `SET_GLUE_SCREEN "login"` and the login's backdrop, AccountLogin's ModelFFX pane sampling the
 /// glue booth's `UI_MainMenu_Northrend` (`portrait::glue_booth`).
 pub(crate) fn enter_stock_login(world: &mut World) {
-    if !stock_glue_active() || !ensure_glue_vm(world) {
+    if !stock_glue_active() {
         return;
+    }
+    if !ensure_glue_vm(world) {
+        return defer_entry(world, crate::app_core::state::ClientState::Login);
     }
     set_glue_screen(world, "login");
     // `--fill-only`: the launch's credentials wait in the boxes for the player's Login.
@@ -166,8 +219,11 @@ pub(crate) fn enter_stock_login(world: &mut World) {
 /// it reads, then `SET_GLUE_SCREEN "charselect"`; the stage comes from the stock Lua's own
 /// `SetCharSelectBackground`.
 pub(crate) fn enter_stock_select(world: &mut World) {
-    if !stock_glue_active() || !ensure_glue_vm(world) {
+    if !stock_glue_active() {
         return;
+    }
+    if !ensure_glue_vm(world) {
+        return defer_entry(world, crate::app_core::state::ClientState::CharSelect);
     }
     push_characters(world);
     if let Some(mut script) = world.get_non_send_resource_mut::<UiScript>() {
