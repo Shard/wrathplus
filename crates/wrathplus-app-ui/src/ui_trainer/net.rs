@@ -109,9 +109,9 @@ fn trainer_list(
     trainer_open.open(trainer, trainer_type, services, greeting);
 }
 
-/// `SMSG_TRAINER_BUY_SUCCEEDED`, logged only: the reference registers no handler for it
-/// (`0x5ab650`/`0x537a60`), the bought row repaints on `SMSG_LEARNED_SPELL`'s re-evaluation, and
-/// vmangos sends no fresh list (`NPCHandler.cpp:262-343`).
+/// `SMSG_TRAINER_BUY_SUCCEEDED`, logged only: 12340's NPC dispatcher (`0x6d8410`) takes `0x1b1`
+/// and `0x1b4` only, the bought row repaints on `SMSG_LEARNED_SPELL`'s re-evaluation (`0x596b00`),
+/// and AzerothCore sends no fresh list (`Trainer::TeachSpell`).
 fn trainer_buy_succeeded(trainer: u64, spell_id: u32) {
     debug!("net: trainer {trainer:#x} taught spell {spell_id}");
 }

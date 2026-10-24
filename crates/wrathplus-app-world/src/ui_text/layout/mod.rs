@@ -240,8 +240,8 @@ fn layout_text_quads_inner(
         color: [f32; 4],
     }
 
-    // `SetAlphaGradient`'s character index counts drawn characters, markup stripped; it trails the
-    // engine's source count by at most the newline count, a frame or two on the reveal's tail.
+    // `SetAlphaGradient`'s index counts drawn glyphs, as the reference's vertex walk does
+    // (`0x6c78f0`): markup, spaces and line breaks have no quad, so they never advance it.
     let mut char_index: usize = 0;
     for line in &render_lines {
         // First pass: lay the line at origin 0 and measure its width.
@@ -260,7 +260,6 @@ fn layout_text_quads_inner(
             for ch in run.text.chars() {
                 let Some(cc) = e.char_cell(r.face, r.ppem, ch) else {
                     // No face shapes it: it draws and steps nothing, as the measure says.
-                    char_index += 1;
                     continue;
                 };
                 let mut color = run.color;
@@ -280,7 +279,7 @@ fn layout_text_quads_inner(
                     }
                     pen_dev += client_step(g.advance, r.step_extra);
                 }
-                char_index += 1;
+                char_index += usize::from(!ch.is_whitespace());
             }
             if let Some(info) = &run.link {
                 match line_links

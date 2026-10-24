@@ -363,7 +363,7 @@ fn highlight_text(lua: &Lua, h: FrameHandle, start: i64, end: i64) {
 // ── text-region sync ─────────────────────────────────────────────────────────────────────────
 
 /// Write the display string into the text region; a `password` box shows one `*` per character.
-fn sync_text_region(lua: &Lua, h: FrameHandle) {
+pub(super) fn sync_text_region(lua: &Lua, h: FrameHandle) {
     let Some(rh) = ensure_text_region(lua, h) else {
         return;
     };

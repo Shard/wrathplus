@@ -10,15 +10,17 @@ use super::reference_ui;
 mod host;
 pub(crate) use host::stock_glue;
 #[cfg(test)]
+mod character_select_installed_tests;
+#[cfg(test)]
 mod click_tests;
 #[cfg(test)]
 mod host_tests;
 #[cfg(test)]
 mod installed_tests;
 #[cfg(test)]
-mod character_select_installed_tests;
-#[cfg(test)]
 mod measure_tests;
+#[cfg(test)]
+mod password_tests;
 
 /// The glue load list, which `CGlueMgr` walks as `UI_Init` walks FrameXML's.
 pub(super) const GLUE_TOC: &str = r"Interface\GlueXML\GlueXML.toc";

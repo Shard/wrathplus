@@ -177,3 +177,44 @@ fn installed_glue_stages_load_with_a_stage_point_and_lights() {
         }
     }
 }
+
+/// A channel some sequence keys reads its bind pose in a sequence that does not, so a gait never
+/// keeps the last clip's pose (2026-10-24). The Mottled Boar's Stand pitches its root bone 0 and
+/// its Run and Walk key it not at all; an orc male's Swim lays bone 1 horizontal and his Walk and
+/// Run leave it unkeyed.
+#[test]
+fn installed_gaits_hold_the_bind_pose_where_another_sequence_keys_a_bone() {
+    let Some(models) = load_installed(&[
+        "Creature\\Boar\\Boar.m2",
+        "Character\\Orc\\Male\\OrcMale.m2",
+    ]) else {
+        return;
+    };
+    // The bone's rotation in the clip playing `anim_id`, at `t`.
+    let rotation = |model: &M2Model, anim_id: u16, bone: u16, t: f32| -> Option<Quat> {
+        let anims = model.animations.as_ref().expect("a rig");
+        let clip = anims.clips.iter().find(|c| c.anim_id == anim_id)?;
+        let pose = &anims.pose.clips[anims.pose.node(clip.node)?.clip as usize];
+        pose.bones
+            .iter()
+            .find(|b| b.bone == bone)?
+            .rotation
+            .sample(t)
+    };
+    let level = |q: Option<Quat>| q.is_some_and(|q| q.angle_between(Quat::IDENTITY) < 1e-4);
+    let [boar, orc] = &models[..] else {
+        unreachable!()
+    };
+    for t in [0.0, 0.2, 0.5] {
+        assert!(level(rotation(boar, 5, 0, t)), "boar Run root at {t}");
+        assert!(level(rotation(boar, 4, 0, t)), "boar Walk root at {t}");
+        assert!(level(rotation(orc, 4, 1, t)), "orc Walk bone 1 at {t}");
+        assert!(level(rotation(orc, 5, 1, t)), "orc Run bone 1 at {t}");
+    }
+    // The sequences that do key them still pose them as authored.
+    let swim_tilt = (0..20)
+        .filter_map(|i| rotation(orc, 42, 1, i as f32 * 0.05))
+        .map(|q| q.angle_between(Quat::IDENTITY))
+        .fold(0.0f32, f32::max);
+    assert!(swim_tilt > 0.5, "Swim lays the body down: {swim_tilt}");
+}
