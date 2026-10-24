@@ -145,26 +145,8 @@ const COL_EFFECT_MISC_1: usize = 106;
 const COL_EFFECT_MISC_B_1: usize = 183;
 /// `EffectTriggerSpell[0]`, `61 + 16 × 3`.
 const COL_EFFECT_TRIGGER_1: usize = 109;
-/// `SPELL_EFFECT_LEARN_SPELL`: teaches its `EffectTriggerSpell`, as a trainer's wrapper does.
-pub const SPELL_EFFECT_LEARN_SPELL: u32 = 36;
-
-/// One learn effect, in the slot order the trainer's state re-evaluator reads (`0x4d7d40`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LearnEffect {
-    /// `SPELL_EFFECT_LEARN_SPELL`: teaches `EffectTriggerSpell`.
-    Spell(u32),
-    /// `SPELL_EFFECT_SKILL_STEP`: raises skill line `skill` (`EffectMiscValue`) to `step`,
-    /// `EffectBasePoints + EffectDieSides`.
-    SkillStep { skill: u32, step: u32 },
-    /// `SPELL_EFFECT_LEARN_PET_SPELL`: teaches the pet `EffectTriggerSpell`.
-    PetSpell(u32),
-}
-/// `SPELL_EFFECT_LEARN_PET_SPELL`: the trainer's icon accepts it or 36 in any slot (`0x4d8ff5`),
-/// but [`SpellCatalog::learned_spell`] follows 36 only.
-pub const SPELL_EFFECT_LEARN_PET_SPELL: u32 = 57;
-/// `SPELL_EFFECT_SKILL_STEP`: raises a profession's cap; a tradeskill trainer's tree partitions
-/// on it alone, in the wire spell's three slots (`0x4d77b6`).
-pub const SPELL_EFFECT_SKILL_STEP: u32 = 44;
+mod learn_effect;
+pub use learn_effect::*;
 
 /// `SPELL_EFFECT_OPEN_LOCK`, which the GameObject interact-cast matches (`0x5f84a1`).
 const SPELL_EFFECT_OPEN_LOCK: u32 = 0x21;
@@ -199,6 +181,8 @@ const COL_PROC_CHARGES: usize = 26;
 const COL_STACK_AMOUNT: usize = 39;
 const COL_MAX_TARGET_LEVEL: usize = 159;
 const COL_MAX_AFFECTED_TARGETS: usize = 163;
+/// The last slot of the `MaxAffectedTargets..RequiredAuraVision` run (file column 221).
+const COL_REQUIRED_AURA_VISION: usize = 172;
 const COL_DAMAGE_MULTIPLIER_1: usize = 167;
 const COL_EFFECT_POINTS_PER_COMBO_POINT_1: usize = 112;
 
@@ -681,6 +665,7 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 stack_amount: u32_at(r, COL_STACK_AMOUNT).unwrap_or(0),
                 max_target_level: u32_at(r, COL_MAX_TARGET_LEVEL).unwrap_or(0),
                 max_affected_targets: u32_at(r, COL_MAX_AFFECTED_TARGETS).unwrap_or(0),
+                required_aura_vision: u32_at(r, COL_REQUIRED_AURA_VISION).unwrap_or(0),
                 effect_base_points: std::array::from_fn(|i| {
                     i32_at(r, COL_EFFECT_BASE_POINTS_1 + i).unwrap_or(0)
                 }),

@@ -1,6 +1,9 @@
 //! The spell-visual data (`SpellVisual.dbc` × `SpellVisualKit.dbc`) and the cast-edge router, the
 //! one place spell ids resolve to animations, sounds and effect models.
 
+mod aura_state;
+#[cfg(test)]
+mod aura_vision_tests;
 #[cfg(test)]
 mod tests;
 
@@ -13,11 +16,11 @@ use wrathplus_formats::{SpellVisualCatalog, VisualKit, VisualStages, MISSILE_ATT
 use wrathplus_protocol::types::{Field, ObjectType};
 use wrathplus_protocol::EntityKind;
 
+use crate::app_core::session::ObjectStore;
 use crate::aura_visual::AuraProc;
 use crate::entities::ItemDisplays;
 use crate::items::{ItemObject, Items};
 use crate::net::{FieldChanged, NetCommands, NetEntity};
-use crate::app_core::session::ObjectStore;
 use wrathplus_assets::{LockRecover, WorldAssets};
 
 use super::{
@@ -937,15 +940,6 @@ pub(super) fn route_cast_visuals(
     channel_cache.retain(|e, _| units.contains(*e));
 }
 
-fn state_aura_ids(
-    guid: Option<&crate::net::Guid>,
-    packets: Option<&crate::net::wrath_auras::PacketAuras>,
-) -> Vec<u32> {
-    guid.and_then(|g| packets?.by_guid.get(&g.0))
-        .map(|snapshot| snapshot.iter().map(|a| a.aura.spell_id).collect())
-        .unwrap_or_default()
-}
-
 /// Arm and reap each aura's state kit (stage 2) off the unit's `UNIT_AURA` slots: a spell entering
 /// the slots begins its kit's models persistent, also on a unit streamed in mid-aura, and leaving
 /// reaps them (`0x604d00` → `0x5ff350`; remove `0x612320` → `0x614150(spellId, force=1)`). The add
@@ -966,9 +960,12 @@ pub(crate) fn arm_aura_state_fx(
     mut sounds: MessageWriter<SpellKitSound>,
     mut recomputes: MessageWriter<BaseAnimRecompute>,
     mut armed: Local<EntityHashMap<Vec<u32>>>,
+    (selves, mut seen_vision): (aura_state::Selves, Local<u8>),
 ) {
+    let (vision, vision_changed) = aura_state::vision(&selves, &mut seen_vision);
     let full_sweep = visuals.as_ref().is_some_and(|v| v.is_changed())
-        || spells.as_ref().is_some_and(|s| s.is_changed());
+        || spells.as_ref().is_some_and(|s| s.is_changed())
+        || vision_changed;
     let (Some(visuals), Some(spells)) = (visuals.as_deref(), spells.as_deref()) else {
         return; // no client data
     };
@@ -981,7 +978,8 @@ pub(crate) fn arm_aura_state_fx(
     for (entity, _, guid) in scan {
         let prev = armed.entry(entity).or_default();
         // Occupied slots, deduped: one state instance per spell however many casters hold it.
-        let mut cur = state_aura_ids(guid, packets.as_deref());
+        let mut cur = aura_state::state_aura_ids(guid, packets.as_deref());
+        cur.retain(|&id| aura_state::admits(spells, id, vision));
         cur.sort_unstable();
         cur.dedup();
         for &spell_id in prev.iter() {
