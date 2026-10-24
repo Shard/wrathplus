@@ -47,6 +47,12 @@ pub(super) fn build(app: &mut App) {
             )
                 .chain(),
         )
+        // A glue screen entry the font atlas was not ready for builds its VM a frame later.
+        .init_resource::<super::glue::DeferredGlueEntry>()
+        .add_systems(
+            PreUpdate,
+            super::glue::finish_deferred_entry.run_if(super::glue::stock_glue_up),
+        )
         .add_systems(Update, super::feed_framerate.in_set(UiFeed))
         .add_systems(
             Update,
