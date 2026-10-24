@@ -478,6 +478,8 @@ mod raid_tests;
 mod quest_share_tests;
 
 #[cfg(test)]
+mod quest_fade_tests;
+#[cfg(test)]
 mod quest_tests;
 
 #[cfg(test)]
