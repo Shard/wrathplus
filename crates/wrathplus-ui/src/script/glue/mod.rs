@@ -131,6 +131,9 @@ pub(crate) struct GlueState {
     pub(crate) saved_account: String,
     pub(crate) connected: bool,
     pub(crate) server_name: String,
+    /// `GetServerName`'s PvP and RP flags, the connected realm's type.
+    pub(crate) server_pvp: bool,
+    pub(crate) server_rp: bool,
     pub(crate) current_screen: String,
     pub(crate) num_characters: u32,
     /// The realm list: every tab, 1-based by ordinal; the first answers an ordinal past the last
@@ -189,6 +192,14 @@ impl super::UiScript {
         if let Some(mut m) = self.glue_mut() {
             m.connected = connected;
             m.server_name = server_name.to_string();
+        }
+    }
+
+    /// `GetServerName`'s second and third answers: whether the connected realm is PvP and RP.
+    pub fn set_glue_server_type(&mut self, pvp: bool, rp: bool) {
+        if let Some(mut m) = self.glue_mut() {
+            m.server_pvp = pvp;
+            m.server_rp = rp;
         }
     }
 

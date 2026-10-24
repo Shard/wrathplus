@@ -145,6 +145,15 @@ pub(crate) fn enter_stock_login(world: &mut World) {
     if !stock_glue_active() || !ensure_glue_vm(world) {
         return;
     }
+    // Back at the login, the realm connection is gone.
+    let address = world
+        .get_resource::<crate::realmlist::Realmlist>()
+        .map(|r| r.address().to_string())
+        .unwrap_or_default();
+    if let Some(mut script) = world.get_non_send_resource_mut::<UiScript>() {
+        script.set_glue_connection(false, &address);
+        script.set_glue_server_type(false, false);
+    }
     set_glue_screen(world, "login");
     // `--fill-only`: the launch's credentials wait in the boxes for the player's Login.
     if let Some((account, password)) = crate::launch_plan::plan().fill() {
@@ -170,7 +179,25 @@ pub(crate) fn enter_stock_select(world: &mut World) {
         return;
     }
     push_characters(world);
+    // The character list arrived over the realm connection: `IsConnectedToServer` answers it
+    // (stock shows Create New Character only connected, `UpdateCharacterList`) and
+    // `GetServerName` the realm's name and type (`CharSelectRealmName`), not the logon address.
+    let realm = world
+        .get_resource::<crate::app_core::state::Roster>()
+        .and_then(|r| r.realm.clone());
+    let fallback = world
+        .get_resource::<crate::realmlist::Realmlist>()
+        .map(|r| r.address().to_string())
+        .unwrap_or_default();
     if let Some(mut script) = world.get_non_send_resource_mut::<UiScript>() {
+        match realm {
+            Some(realm) => {
+                let (pvp, rp) = crate::realm_select::load::pvp_rp(realm.realm_type);
+                script.set_glue_connection(true, &realm.name);
+                script.set_glue_server_type(pvp, rp);
+            }
+            None => script.set_glue_connection(true, &fallback),
+        }
         show_stock_select(&mut script);
     }
     info!("ui_script: stock glue — CharacterSelect up");

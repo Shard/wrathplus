@@ -268,6 +268,78 @@ fn character_select_closes_the_connect_status_dialog() {
     );
 }
 
+/// Stock character select with two characters on a connected realm: Create New Character shows
+/// (`UpdateCharacterList` shows it only while `IsConnectedToServer`), with Enter World, the stage's
+/// rotate buttons, Delete and Back, and the realm label is the realm's name (`GetServerName`), not
+/// the logon address. Shannon's 10-24 session had neither: the glue never said it was connected.
+#[test]
+fn character_select_shows_create_and_names_the_realm() {
+    let _data = wrathplus_formats::wow_data_or_skip!();
+    let mut script = UiScript::new().unwrap();
+    script.install_glue_api().unwrap();
+    script.set_screen_size(1600.0, 1000.0);
+    let failures = load_glue_ui(&script);
+    assert!(failures.is_empty(), "{failures:#?}");
+    script.fire_event("FRAMES_LOADED", vec![]);
+    script.fire_event("SET_GLUE_SCREEN", vec![ScriptValue::Str("login".into())]);
+    let character = |name: &str| wrathplus_ui::script::glue::GlueCharacter {
+        name: name.into(),
+        race: "Human".into(),
+        class: "Warrior".into(),
+        level: 7,
+        zone: "Elwynn Forest".into(),
+        stage: "Human".into(),
+        ..Default::default()
+    };
+    script.set_glue_characters(vec![character("Benchone"), character("Locktest")], "Human");
+    // What `enter_stock_select` now tells the glue: connected, to the realm by name and type.
+    script.set_glue_connection(true, "AzerothCore");
+    script.set_glue_server_type(true, false);
+    show_stock_select(&mut script);
+    for _ in 0..20 {
+        script.tick(0.1);
+    }
+    // Connected, `CharacterSelect_OnShow` asks for the list (`GetCharacterListUpdate`); the
+    // host's answer when it lands.
+    script.fire_event("UPDATE_SELECTED_CHARACTER", vec![ScriptValue::Number(1.0)]);
+    script.fire_event("CHARACTER_LIST_UPDATE", vec![]);
+    let shown: String = script
+        .eval(
+            "local out = {} for _, n in ipairs({'CharSelectCreateCharacterButton', \
+             'CharSelectEnterWorldButton', 'CharacterSelectRotateLeft', 'CharacterSelectRotateRight', \
+             'CharacterSelectDeleteButton', 'CharacterSelectBackButton'}) do \
+             out[#out + 1] = n .. '=' .. tostring(_G[n]:IsVisible()) end \
+             return table.concat(out, ' ')",
+        )
+        .unwrap();
+    assert_eq!(
+        shown,
+        "CharSelectCreateCharacterButton=1 CharSelectEnterWorldButton=1 \
+         CharacterSelectRotateLeft=1 CharacterSelectRotateRight=1 \
+         CharacterSelectDeleteButton=1 CharacterSelectBackButton=1"
+    );
+    assert_eq!(
+        script
+            .eval::<String>("return CharSelectRealmName:GetText()")
+            .unwrap(),
+        format!(
+            "AzerothCore {}",
+            script.eval::<String>("return PVP_PARENTHESES").unwrap()
+        )
+    );
+    // Not connected, as the glue answered before: no Create New Character.
+    script.set_glue_connection(false, "127.0.0.1");
+    script.fire_event("CHARACTER_LIST_UPDATE", vec![]);
+    assert!(!script
+        .eval::<bool>("return CharSelectCreateCharacterButton:IsVisible() == 1")
+        .unwrap());
+    assert!(
+        script.errors().is_empty(),
+        "script errors: {:?}",
+        script.errors()
+    );
+}
+
 /// Shannon's 10-24 session: a click on the second row, then Enter World, logged in the first
 /// character. Through the host and the stock CharacterSelect Lua, frame by frame: the click's
 /// `SelectCharacter(2)` moves the pick (1-based, as stock passes it), no list replay re-selects the
