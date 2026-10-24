@@ -1280,8 +1280,8 @@ struct AskLog(crossbeam_channel::Receiver<crate::net::ClientCommand>);
 fn real_shooter(weapon: &RealRanged) -> Option<(App, Entity)> {
     let data = wrathplus_formats::wow_data_or_skip!(None);
     let mut chain = wrathplus_formats::open_chain(&data).expect("open the install's MPQ chain");
-    let visuals =
-        wrathplus_formats::load_spell_visual_catalog(&mut chain).expect("SpellVisual/SpellVisualKit");
+    let visuals = wrathplus_formats::load_spell_visual_catalog(&mut chain)
+        .expect("SpellVisual/SpellVisualKit");
     let spells = wrathplus_formats::load_spell_catalog(&mut chain).expect("Spell.dbc");
     let displays =
         wrathplus_formats::load_item_display_catalog(&mut chain).expect("ItemDisplayInfo.dbc");
@@ -1333,10 +1333,9 @@ fn real_shooter(weapon: &RealRanged) -> Option<(App, Entity)> {
                 display_id: Some(49), // HumanMale, which authors 46/49/105/106
                 scale: 1.0,
             },
-            crate::app_core::session::ObjectStore(wrathplus_protocol::ObjectFields::from_pairs(&[(
-                VISIBLE_RANGED_ENTRY_FIELD,
-                weapon.entry,
-            )])),
+            crate::app_core::session::ObjectStore(wrathplus_protocol::ObjectFields::from_pairs(&[
+                (VISIBLE_RANGED_ENTRY_FIELD, weapon.entry),
+            ])),
         ))
         .id();
     app.add_systems(Update, route_cast_visuals);
@@ -1717,7 +1716,7 @@ fn state_aura_ids_read_packet_snapshots_including_authoritative_empty() {
     use wrathplus_protocol::wrath_auras::NativeAura;
     let guid = crate::net::Guid(42);
     let mut packets = crate::net::wrath_auras::PacketAuras::default();
-    assert!(super::state_aura_ids(Some(&guid), Some(&packets)).is_empty());
+    assert!(super::aura_state::state_aura_ids(Some(&guid), Some(&packets)).is_empty());
     packets.by_guid.insert(
         42,
         vec![crate::net::wrath_auras::StampedAura {
@@ -1735,11 +1734,11 @@ fn state_aura_ids_read_packet_snapshots_including_authoritative_empty() {
         }],
     );
     assert_eq!(
-        super::state_aura_ids(Some(&guid), Some(&packets)),
+        super::aura_state::state_aura_ids(Some(&guid), Some(&packets)),
         vec![456]
     );
     packets.by_guid.insert(42, vec![]);
-    assert!(super::state_aura_ids(Some(&guid), Some(&packets)).is_empty());
+    assert!(super::aura_state::state_aura_ids(Some(&guid), Some(&packets)).is_empty());
 }
 
 #[test]

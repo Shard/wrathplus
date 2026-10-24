@@ -220,6 +220,8 @@ fn native_status_packets_emit_a_wrath_question_mark_quad() {
             };
             let quad = &quads.overlays[0];
             assert_eq!(quad.rect.center(), ctx.center);
+            // The stock dot size at the stock widget: 16 px, the size of every other dot.
+            assert_eq!(quad.rect.size(), Vec2::splat(OBJECT_ICON_PX));
             assert!(
                 quad.uv
                     == UvRect::from_tex_coords([
@@ -333,6 +335,18 @@ fn installed_wrath_question_mark_cell_is_nonempty() {
             }
         }
         crops.push(crop);
+    }
+    // Every cell draws at one quad (`OBJECT_ICON_PX`), so the glyph's drawn height is its share of
+    // the 32-px cell: the yellow ? (28 rows) stands taller than any tracking or party dot.
+    let rows = |crop: &[u8]| {
+        (0..32usize)
+            .filter(|y| (0..32usize).any(|x| crop[(y * 32 + x) * 4 + 3] > 64))
+            .count()
+    };
+    let quest = rows(&crops[4]);
+    assert!(quest >= 24, "the ? fills its cell: {quest} rows");
+    for (i, crop) in crops.iter().enumerate().take(4) {
+        assert!(rows(crop) < quest, "cell {i} outdraws the ?");
     }
     assert_eq!(atlas.cell(10), Some([0.25, 0.375, 0.5, 1.0]));
     assert_eq!(atlas.cell(5), None);
