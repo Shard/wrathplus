@@ -71,6 +71,9 @@ pub struct QuestLogObjectiveView {
     pub cur: u32,
     /// See [`Self::cur`].
     pub req: u32,
+    /// The line's bit in the POI incomplete mask (`0x5e2950`): creature/GameObject slot i is bit
+    /// i, item slot i bit 4 + i. `None` for the PvP line, whose branch is unread.
+    pub poi_bit: Option<u8>,
 }
 
 /// A quest's detail pane, from the app's template and name caches.
@@ -730,6 +733,7 @@ mod tests {
                         finished: false,
                         cur: 3,
                         req: 10,
+                        poi_bit: None,
                     }],
                     detail: Some(QuestLogDetail {
                         description: "Speak with Marshal McBride.".into(),
@@ -762,6 +766,7 @@ mod tests {
                         finished: true,
                         cur: 10,
                         req: 10,
+                        poi_bit: None,
                     }],
                     detail: Some(QuestLogDetail {
                         description: "The kobolds have overrun the camp.".into(),

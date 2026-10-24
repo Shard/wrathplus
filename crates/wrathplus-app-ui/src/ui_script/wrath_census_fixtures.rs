@@ -161,6 +161,7 @@ pub(super) fn seed(s: &mut UiScript) {
                     text: "Marshal Dughan: 0/1".into(),
                     kind: "monster".into(),
                     finished: false,
+                    poi_bit: Some(0),
                     ..Default::default()
                 }],
                 ..Default::default()
@@ -911,10 +912,9 @@ fn quest_poi(s: &mut UiScript) {
         quest_id: 1,
         blobs: vec![WrathQuestPoiBlob {
             objective_index: 0,
-            map_id: 0,
             area_id: 12,
-            floor: 0,
             points: vec![(-9_460, 60), (-9_440, 80)],
+            ..Default::default()
         }],
     }]);
     s.set_world_loc_projector(Box::new(|_, _, _, _| Some((0.4, 0.6))));

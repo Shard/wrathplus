@@ -1107,8 +1107,7 @@ fn seat_a_session(script: &mut UiScript) {
     // A spellbook (seated below) and a quest log. An empty book fails `TheoryCraftEngine.lua:306`
     // (`for i=1, numSpells` off `GetSpellTabInfo(1)`); two tabs, four spells, `Attack` in slot 1.
     // The quest log is a zone header row (`isHeader`), an in-progress quest with one objective done
-    // and one not, and a complete one (`complete = 1`); failed (-1) and timed quests are not
-    // seated.
+    // and one not, and a complete one (`complete = 1`); failed (-1) and timed ones are not seated.
     {
         use wrathplus_ui::script::{QuestLogEntryView, QuestLogObjectiveView, QuestLogState};
         let objective = |text: &str, cur: u32, req: u32| QuestLogObjectiveView {
@@ -1117,6 +1116,7 @@ fn seat_a_session(script: &mut UiScript) {
             finished: cur >= req,
             cur,
             req,
+            poi_bit: None,
         };
         let header = QuestLogEntryView {
             quest_id: 0,

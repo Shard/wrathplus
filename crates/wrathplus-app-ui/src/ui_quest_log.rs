@@ -310,6 +310,7 @@ fn creature_line(
         finished: cur >= req,
         cur,
         req,
+        poi_bit: None,
     })
 }
 
@@ -328,18 +329,14 @@ fn item_line(
     }
     let req = obj.item_count;
     let cur = bag_count.min(req);
+    let name = item_name.unwrap_or(NAME_PLACEHOLDER);
     Some(QuestLogObjectiveView {
-        text: leaderboard_text(
-            get,
-            "QUEST_ITEMS_NEEDED",
-            item_name.unwrap_or(NAME_PLACEHOLDER),
-            cur,
-            req,
-        ),
+        text: leaderboard_text(get, "QUEST_ITEMS_NEEDED", name, cur, req),
         kind: "item".into(),
         finished: cur >= req,
         cur,
         req,
+        poi_bit: None,
     })
 }
 
@@ -368,6 +365,7 @@ fn player_line(
         finished: cur >= players_slain,
         cur,
         req: players_slain,
+        poi_bit: None,
     })
 }
 
@@ -440,11 +438,11 @@ fn build_objectives(
             .flatten();
         if let Some(line) = creature_line(obj, log_slot.counters[i], creature_name.as_deref(), get)
         {
-            objectives.push(line);
+            objectives.push(QuestLogObjectiveView { poi_bit: Some(i as u8), ..line });
         }
     }
     // Item.
-    for obj in template.objectives.iter() {
+    for (i, obj) in template.objectives.iter().enumerate() {
         if obj.item_id == 0 {
             continue;
         }
@@ -459,7 +457,7 @@ fn build_objectives(
             bag_count,
             get,
         ) {
-            objectives.push(line);
+            objectives.push(QuestLogObjectiveView { poi_bit: Some(4 + i as u8), ..line });
         }
     }
     let players_slain = template.wrath.as_ref().map_or(0, |w| w.players_slain);
@@ -500,10 +498,9 @@ fn build_detail(
         // the honor table, so do not present the raw addition as a resolved reward.
         reward_talents: template.wrath.as_ref().map_or(0, |w| w.bonus_talents),
         reward_arena_points: template.wrath.as_ref().map_or(0, |w| w.arena_points),
-        completion_text: template.wrath.as_ref().and_then(|_| {
-            (!template.end_text.is_empty())
-                .then(|| crate::npc_text::substitute(&template.end_text, macros))
-        }),
+        // Empty end text is still a string: stock concatenates it (`WorldMapFrame.lua:1872`).
+        completion_text: (template.wrath.is_some())
+            .then(|| crate::npc_text::substitute(&template.end_text, macros)),
         choices,
         rewards,
         reward_spell: crate::ui_quest::reward_spell_view(template.reward_spell, spells),
@@ -1927,6 +1924,7 @@ mod tests {
                 finished: cur >= req,
                 cur,
                 req,
+                poi_bit: None,
             }],
             ..Default::default()
         }

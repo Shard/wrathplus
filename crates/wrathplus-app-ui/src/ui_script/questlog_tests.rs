@@ -123,6 +123,7 @@ fn entries(n: u32) -> QuestLogState {
                     finished: false,
                     cur: 3,
                     req: 10,
+                    poi_bit: None,
                 }]
             } else {
                 vec![]
@@ -604,6 +605,7 @@ fn overflowing_entry() -> QuestLogState {
             finished: false,
             cur: 0,
             req: 5,
+            poi_bit: None,
         })
         .collect();
     QuestLogState {
