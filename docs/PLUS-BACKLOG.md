@@ -11,3 +11,4 @@ scheduled yet.
 | Stat-change summary on comparison ("If you replace this item…") | Absent (added in Cataclysm) | Playtest 2026-10-24 |
 | Sell price shown on every item tooltip | Shown only while a vendor window is open | Playtest 2026-10-24 |
 | Loot window shown for a minimum time with auto-loot (items visibly land) | Stock sends every take at once; the window closes when the last removal arrives, near-instant on a low-latency server | Playtest 2026-10-24 |
+| Quest detail text appears instantly (no write-on) | Description writes on at 70 glyphs/s (~6-7 s for a long quest), objectives then fade in over 0.5 s; the stock "Instant Quest Text" option (questFadingDisable) skips it | Playtest 2026-10-24 |
