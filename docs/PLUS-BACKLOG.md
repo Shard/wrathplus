@@ -10,3 +10,4 @@ scheduled yet.
 | Item tooltips always compare with the equipped item(s) | Comparison plates only while Shift is held | Playtest 2026-10-24 |
 | Stat-change summary on comparison ("If you replace this item…") | Absent (added in Cataclysm) | Playtest 2026-10-24 |
 | Sell price shown on every item tooltip | Shown only while a vendor window is open | Playtest 2026-10-24 |
+| Loot window shown for a minimum time with auto-loot (items visibly land) | Stock sends every take at once; the window closes when the last removal arrives, near-instant on a low-latency server | Playtest 2026-10-24 |
