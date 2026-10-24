@@ -4,19 +4,19 @@
 
 use std::collections::HashSet;
 
-use wrathplus_assets::ModelAnimations;
-use wrathplus_protocol::EntityKind;
 use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use wrathplus_assets::ModelAnimations;
+use wrathplus_protocol::EntityKind;
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::PointerOverUi;
 use crate::creature_anim::AnimDriver;
 use crate::entities::HeldAttached;
 use crate::net::{Guid, NetEntity};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::player::CameraControl;
-use crate::app_core::state::PointerOverUi;
 use wrathplus_world::billboard::BillboardCard;
 use wrathplus_world::collision::PickOccluder;
 use wrathplus_world::interact::{
@@ -527,6 +527,7 @@ fn net_entity_of(
 pub(crate) struct GoGateInputs<'w> {
     pub(crate) templates: Res<'w, crate::go_templates::GameObjectTemplates>,
     pub(crate) factions: Option<Res<'w, super::ring::Factions>>,
+    pub(crate) locks: Option<Res<'w, crate::go_templates::Locks>>,
 }
 
 impl GoGateInputs<'_> {
@@ -535,6 +536,17 @@ impl GoGateInputs<'_> {
     /// 12340's own MEETINGSTONE highlight term is untraced.
     pub(crate) fn queued_area(&self) -> u32 {
         0
+    }
+
+    /// The GameObject `guid`'s gate overrides ([`super::cursor_mode::GoOverrides::of`]).
+    pub(crate) fn overrides(
+        &self,
+        self_store: Option<&ObjectStore>,
+        guid: Option<u64>,
+    ) -> super::cursor_mode::GoOverrides {
+        let tmpl = guid.and_then(|g| self.templates.get(g));
+        let (area, locks) = (self.queued_area(), self.locks.as_deref());
+        super::cursor_mode::GoOverrides::of(self_store, guid, tmpl, area, locks)
     }
 }
 
@@ -645,9 +657,38 @@ pub(super) fn update_hovered_object(
         );
     }
 
+    // Build 12340's hit list (`0x4f9550`): an object joins only past its mouseover slot (`+0xa4`,
+    // `0x70f580`, the type's `+0xc`), so a refused one never shadows what stands behind it, as
+    // Thazz'ril's lockless Aura trap over his Pick. Labelled: `0x801b10`'s admit-all switch is
+    // read as clear. A store or template not yet streamed reads eligible.
+    let eligible = |net: Entity| {
+        let (Ok(store), Ok(guid)) = (stores.get(net), guids.get(net)) else {
+            return true;
+        };
+        let faction = store.0.gameobject_faction();
+        let reaction = crate::target::cursor_mode::go_reaction(
+            go_gate.factions.as_deref(),
+            faction,
+            self_store,
+        );
+        crate::target::cursor_mode::mouseover_eligible(
+            store.0.gameobject_type_id(),
+            store.0.gameobject_flags(),
+            store.0.gameobject_dynamic_flags(),
+            go_gate.templates.get(guid.0).map(|t| t.highlight_column),
+            reaction,
+            go_gate.overrides(self_store, Some(guid.0)),
+        )
+    };
+    let candidates: bevy::platform::collections::HashSet<Entity> = pickable
+        .iter()
+        .copied()
+        .filter(|&e| eligible(resolve_net(e)))
+        .collect();
+
     // Pass 1: the exact resident geometry, nearest wins.
     let mut best: Option<(f32, Entity)> =
-        wrathplus_world::interact::cast_pick_ray(ray, pickable, &parts, false)
+        wrathplus_world::interact::cast_pick_ray(ray, &candidates, &parts, false)
             .into_iter()
             .next()
             .map(|(e, h)| (h.distance, e));
@@ -663,7 +704,9 @@ pub(super) fn update_hovered_object(
             return;
         }
         let mut best2: Option<(f32, u32, Entity)> = None;
-        for (part, hit) in wrathplus_world::interact::cast_pick_ray_inflated(ray, pickable, &parts) {
+        for (part, hit) in
+            wrathplus_world::interact::cast_pick_ray_inflated(ray, &candidates, &parts)
+        {
             let net = resolve_net(part);
             let prio = if *last_pick == Some(net) {
                 u32::MAX // the sticky-hover cache outranks everything
@@ -677,17 +720,7 @@ pub(super) fn update_hovered_object(
                         self_store,
                     );
                     let go_guid = guids.get(net).ok().map(|g| g.0);
-                    let overrides = crate::target::cursor_mode::GoOverrides {
-                        channel_owned: crate::target::cursor_mode::fishing_channel_owned(
-                            self_store, go_guid,
-                        ),
-                        meeting_stone_queued: crate::target::cursor_mode::meeting_stone_queued(
-                            go_guid
-                                .and_then(|g| go_gate.templates.get(g)?.meeting_stone)
-                                .map(|m| m.area),
-                            go_gate.queued_area(),
-                        ),
-                    };
+                    let overrides = go_gate.overrides(self_store, go_guid);
                     u32::from(crate::target::cursor_mode::go_highlightable(
                         s, reaction, overrides,
                     ))
@@ -720,46 +753,9 @@ pub(super) fn update_hovered_object(
     let Ok(guid) = guids.get(net_entity) else {
         return;
     };
-    // The mouseover-eligibility gate (vtable `+0x54` at `0x482982`): an ineligible object
-    // publishes the null mouseover, so no tooltip, brighten or cursor; the reference reaches
-    // `0x492890`, `0x52aa20` and `0x4945e0` only past it. Its null mouseover also hides a unit
-    // behind the object, which our split picks leave hoverable.
+    // The hit list held only eligible objects, so the pick publishes (`0x4f8190` re-asks `+0xa4`).
     if let Ok(store) = stores.get(net_entity) {
         let tmpl = go_gate.templates.get(guid.0);
-        let reaction = crate::target::cursor_mode::go_reaction(
-            go_gate.factions.as_deref(),
-            store.0.gameobject_faction(),
-            self_store,
-        );
-        if !crate::target::cursor_mode::mouseover_eligible(
-            store.0.gameobject_type_id(),
-            store.0.gameobject_flags(),
-            store.0.gameobject_dynamic_flags(),
-            tmpl.map(|t| t.highlight_column),
-            reaction,
-            crate::target::cursor_mode::GoOverrides {
-                channel_owned: crate::target::cursor_mode::fishing_channel_owned(
-                    self_store,
-                    Some(guid.0),
-                ),
-                meeting_stone_queued: crate::target::cursor_mode::meeting_stone_queued(
-                    tmpl.and_then(|t| t.meeting_stone).map(|m| m.area),
-                    go_gate.queued_area(),
-                ),
-            },
-        ) {
-            if probing {
-                cache.report.say(format!(
-                    "guid {:#x} type {} at {distance:.1} yd — hover ✗ (tmpl {:?}, highlight {:?}): \
-                     the eligibility gate refused it, so there is no tooltip BY DESIGN",
-                    guid.0,
-                    store.0.gameobject_type_id(),
-                    tmpl.map(|t| t.name.as_str()),
-                    tmpl.map(|t| t.highlight_column),
-                ));
-            }
-            return;
-        }
         if probing {
             cache.report.say(format!(
                 "guid {:#x} type {} at {distance:.1} yd — hover ✓, published (tmpl {:?}, highlight \
@@ -785,6 +781,14 @@ pub(super) fn update_hovered_object(
     hovered.guid = Some(guid.0);
     hovered.distance = distance;
 }
+
+#[cfg(test)]
+#[path = "hover_pick_tests.rs"]
+mod pick_tests;
+
+#[cfg(test)]
+#[path = "hover_go_tests.rs"]
+mod go_tests;
 
 #[cfg(test)]
 mod tests {
@@ -902,7 +906,7 @@ mod tests {
 
     /// The picker's inputs with a camera ten yards up the Z axis, looking down it through a
     /// 100-pixel square with the cursor at its centre, over whatever stands at the origin.
-    fn pick_world() -> World {
+    pub(super) fn pick_world() -> World {
         use bevy::camera::RenderTargetInfo;
         use bevy::window::WindowResolution;
 
@@ -1253,9 +1257,17 @@ mod tests {
             (wrathplus_protocol::types::Field::UnitFactionTemplate, 0, 2),
             (wrathplus_protocol::types::Field::UnitFlags, 0, flags),
             (wrathplus_protocol::types::Field::UnitHealth, 0, 100),
-            (wrathplus_protocol::types::Field::UnitCharmedby, 0, charmed_by),
+            (
+                wrathplus_protocol::types::Field::UnitCharmedby,
+                0,
+                charmed_by,
+            ),
             (wrathplus_protocol::types::Field::UnitCharmedby, 1, 0),
-            (wrathplus_protocol::types::Field::UnitCreatedby, 0, created_by),
+            (
+                wrathplus_protocol::types::Field::UnitCreatedby,
+                0,
+                created_by,
+            ),
             (wrathplus_protocol::types::Field::UnitCreatedby, 1, 0),
         ]))
     }
@@ -1401,44 +1413,5 @@ mod tests {
             .run_system_cached(latch_press_pick)
             .expect("the press latches");
         assert_eq!(world.resource::<PressPick>().hovered.target, Some(rear));
-    }
-
-    /// Naxxramas's "Unholy Axe" is an `InvisibleStalker` body with no vertices holding a real axe,
-    /// which is its whole pick surface.
-    #[test]
-    fn a_units_pick_geometry_is_every_model_chained_to_it() {
-        let unit = Entity::from_raw_u32(1).unwrap();
-        let main_hand = Entity::from_raw_u32(2).unwrap();
-        let helm = Entity::from_raw_u32(3).unwrap();
-        let mount = Entity::from_raw_u32(4).unwrap();
-
-        let bare: Vec<_> = pick_model_roots(unit, &[], None).collect();
-        assert_eq!(bare, vec![unit], "a unit wearing nothing is just its body");
-
-        // Empty slots, as in the real `HeldAttached` (main, off, ranged, helm, both shoulders,
-        // ammo, quiver), are not candidates.
-        let worn = [
-            Some(main_hand),
-            None,
-            None,
-            Some(helm),
-            None,
-            None,
-            None,
-            None,
-        ];
-        let dressed: Vec<_> = pick_model_roots(unit, &worn, Some(mount)).collect();
-        assert_eq!(
-            dressed,
-            vec![unit, main_hand, helm, mount],
-            "body, then every worn model, then the mount — all one unit's geometry"
-        );
-
-        // A body that draws nothing: the axe is the whole hit surface.
-        let trigger: Vec<_> = pick_model_roots(unit, &worn[..1], None).collect();
-        assert!(
-            trigger.contains(&main_hand),
-            "a body with no geometry of its own still offers what it holds"
-        );
     }
 }
