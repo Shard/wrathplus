@@ -35,6 +35,7 @@ fn app() -> (App, crossbeam_channel::Receiver<crate::net::LoginRequest>) {
         .add_message::<LoginStageMessage>()
         .add_message::<LoginFailedMessage>()
         .add_message::<AppExit>()
+        .add_message::<crate::net::CharListMessage>()
         .add_systems(Update, stock_glue);
     app.insert_non_send_resource(vm());
     (app, rx)
@@ -224,6 +225,11 @@ fn the_stock_character_select_drives_the_roster_pick_and_booth() {
         roster.chars = vec![test_character(11, "Benchone"), test_character(12, "Second")];
         roster.select(Some(0));
     }
+    // The list as the server sent it, which the roster above stands for.
+    app.world_mut().write_message(crate::net::CharListMessage {
+        characters: vec![],
+        realm: None,
+    });
     app.update();
     let (sel, second) = {
         let s = app.world_mut().non_send_resource_mut::<UiScript>();
@@ -233,9 +239,10 @@ fn the_stock_character_select_drives_the_roster_pick_and_booth() {
             s.eval::<String>("return (GetCharacterInfo(2))").unwrap(),
         )
     };
+    // The engine's order: the selection, then the list (`announce_roster`).
     assert_eq!(
         sel,
-        "CHARACTER_LIST_UPDATE:nil;UPDATE_SELECTED_CHARACTER:1;"
+        "UPDATE_SELECTED_CHARACTER:1;CHARACTER_LIST_UPDATE:nil;"
     );
     assert_eq!(second, "Second");
     app.world_mut()

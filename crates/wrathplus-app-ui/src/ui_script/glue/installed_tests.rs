@@ -267,3 +267,117 @@ fn character_select_closes_the_connect_status_dialog() {
         script.errors()
     );
 }
+
+/// Shannon's 10-24 session: a click on the second row, then Enter World, logged in the first
+/// character. Through the host and the stock CharacterSelect Lua, frame by frame: the click's
+/// `SelectCharacter(2)` moves the pick (1-based, as stock passes it), no list replay re-selects the
+/// old row, and Enter World sends the second character's guid.
+#[test]
+fn character_select_enters_the_clicked_character() {
+    use crate::app_core::state::{ClientState, Roster};
+    use crate::char_select::test_character;
+    let _data = wrathplus_formats::wow_data_or_skip!();
+    let mut script = UiScript::new().unwrap();
+    script.install_glue_api().unwrap();
+    script.set_screen_size(1600.0, 1000.0);
+    assert!(load_glue_ui(&script).is_empty());
+    script.fire_event("FRAMES_LOADED", vec![]);
+    script.set_glue_connection(true, "AzerothCore");
+
+    let (login_tx, _login_rx) = crossbeam_channel::unbounded();
+    let (realm_tx, _realm_rx) = crossbeam_channel::unbounded();
+    let (pick_tx, pick_rx) = crossbeam_channel::unbounded();
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, bevy::state::app::StatesPlugin))
+        .insert_state(ClientState::CharSelect)
+        .init_resource::<crate::app_core::ui_flags::LoginIntent>()
+        .insert_resource(crate::net::LoginSubmit(login_tx))
+        .insert_resource(crate::net::LoginAbandon(Default::default()))
+        .insert_resource(crate::realmlist::Realmlist::unpinned("127.0.0.1"))
+        .init_resource::<crate::app_core::ui_flags::Realms>()
+        .insert_resource(crate::net::RealmChoice(realm_tx))
+        .init_resource::<Roster>()
+        .insert_resource(crate::net::CharPick(pick_tx))
+        .init_resource::<crate::portrait::GluePreview>()
+        .add_message::<crate::net::LoginStageMessage>()
+        .add_message::<crate::net::LoginFailedMessage>()
+        .add_message::<AppExit>()
+        .add_message::<crate::net::CharListMessage>()
+        .add_systems(Update, stock_glue);
+    app.insert_non_send_resource(script);
+    {
+        let mut roster = app.world_mut().resource_mut::<Roster>();
+        roster.chars = vec![
+            test_character(101, "Benchone"),
+            test_character(102, "Locktest"),
+        ];
+        roster.select(Some(0));
+    }
+    let frames = |app: &mut App, n: usize| {
+        for _ in 0..n {
+            app.update();
+            app.world_mut()
+                .non_send_resource_mut::<UiScript>()
+                .tick(0.1);
+        }
+    };
+    let list_arrives = |app: &mut App| {
+        app.world_mut().write_message(crate::net::CharListMessage {
+            characters: vec![],
+            realm: None,
+        });
+    };
+    frames(&mut app, 2);
+    show_stock_select(&mut app.world_mut().non_send_resource_mut::<UiScript>());
+    frames(&mut app, 20);
+    // The list `CharacterSelect_OnShow` asked for lands.
+    list_arrives(&mut app);
+    app.world_mut().resource_mut::<Roster>().set_changed();
+    frames(&mut app, 3);
+
+    // The row click, as the stock button runs it.
+    app.world_mut()
+        .non_send_resource_mut::<UiScript>()
+        .run("CharacterSelectButton_OnClick(CharSelectCharacterButton2)")
+        .unwrap();
+    frames(&mut app, 6);
+    assert_eq!(app.world().resource::<Roster>().selected(), Some(1));
+    assert_eq!(
+        app.world()
+            .non_send_resource::<UiScript>()
+            .eval::<i64>("return CharacterSelect.selectedIndex")
+            .unwrap(),
+        2,
+        "stock's selectedIndex agrees, and stays"
+    );
+    // A list update after the click (a fresh list, a row's data moved): the selection holds.
+    list_arrives(&mut app);
+    app.world_mut().resource_mut::<Roster>().chars[0].level += 1;
+    frames(&mut app, 6);
+    assert_eq!(app.world().resource::<Roster>().selected(), Some(1));
+    assert_eq!(
+        app.world()
+            .non_send_resource::<UiScript>()
+            .eval::<i64>("return CharacterSelect.selectedIndex")
+            .unwrap(),
+        2,
+        "and across a list update"
+    );
+    app.world_mut()
+        .non_send_resource_mut::<UiScript>()
+        .run("CharacterSelect_EnterWorld()")
+        .unwrap();
+    frames(&mut app, 2);
+    let sent: Vec<_> = pick_rx.try_iter().collect();
+    assert!(
+        matches!(sent[..], [crate::net::CharRequest::Enter(102)]),
+        "{} requests, not one Enter(102)",
+        sent.len()
+    );
+    let script = app.world().non_send_resource::<UiScript>();
+    assert!(
+        script.errors().is_empty(),
+        "script errors: {:?}",
+        script.errors()
+    );
+}
