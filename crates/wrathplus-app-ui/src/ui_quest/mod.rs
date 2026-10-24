@@ -3,25 +3,25 @@
 
 #[cfg(test)]
 use crate::app_core::errors::UiError;
+use bevy::prelude::*;
+use wrathplus_protocol::types::{quest_flags, QuestRewardItem, QuestShareMsg};
 #[cfg(test)]
 use wrathplus_protocol::types::{QuestDetails, QuestGiverList, QuestRequestItems};
-use wrathplus_protocol::types::{QuestRewardItem, QuestShareMsg};
-use bevy::prelude::*;
 
 use wrathplus_ui::script::{
     QuestAction, QuestItemView, QuestPanel, QuestRewardSpell, QuestState, UiScript,
 };
 
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Spells;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::ui_action::{show_messages, ui_error_text, MessageSink, Shown};
-use crate::app_core::state::Spells;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 
 pub(crate) use crate::app_core::state::{QuestGiver, QuestView};
@@ -258,7 +258,7 @@ fn snapshot(
         QuestView::Greeting(_) => None,
     };
     if let Some(q) = native {
-        state.auto_accept = q.auto_accept;
+        state.auto_accept = q.flags & quest_flags::AUTO_ACCEPT != 0;
         state.suggested_group_num = q.suggested_players;
         state.reward_xp = q.reward_xp;
         state.reward_honor = q.reward_honor / 10;
@@ -719,7 +719,7 @@ mod tests {
         );
         if let Some(QuestView::Detail(d)) = giver.view.as_mut() {
             d.wrath = Some(wrathplus_protocol::types::WrathQuestInfo {
-                auto_accept: true,
+                flags: quest_flags::AUTO_ACCEPT,
                 reward_xp: 900,
                 reward_honor: 250,
                 bonus_talents: 2,
