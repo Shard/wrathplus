@@ -67,6 +67,7 @@ mod ui_party_saved_instances;
 mod ui_party_wrath;
 mod ui_pet_flush_tests;
 mod ui_pet_press_tests;
+mod ui_pet_stock_wire_tests;
 mod ui_pet_usable;
 mod ui_session_order_tests;
 mod ui_social_feed;
