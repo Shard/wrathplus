@@ -4,13 +4,14 @@
 //! Each re-exports the moved capture types under its old path.
 
 pub(crate) mod wrath_achievements;
-pub(crate) mod wrath_arena;
 pub(crate) mod wrath_appearance;
+pub(crate) mod wrath_arena;
 pub(crate) mod wrath_death_capture;
 pub(crate) mod wrath_difficulty;
 pub(crate) mod wrath_equipment_sets;
 pub(crate) mod wrath_item_refunds;
 pub(crate) mod wrath_movie;
+pub mod wrath_quest_marker;
 pub mod wrath_quest_pois;
 pub mod wrath_quests_completed_capture;
 pub(crate) mod wrath_raid_browser_feed;
@@ -35,6 +36,7 @@ impl bevy::prelude::Plugin for NativeFeedsPlugin {
         wrath_appearance::register(app);
         wrath_raid_browser_feed::register(app);
         wrath_quest_pois::register(app);
+        wrath_quest_marker::register(app);
         wrath_death_capture::register(app);
         wrath_movie::register(app);
         wrath_threat::register(app);
