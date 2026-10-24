@@ -95,11 +95,7 @@ pub const fn deviates(
 }
 
 /// A row the reference has no counterpart for.
-pub const fn ours(
-    name: &'static str,
-    default: &'static str,
-    why: &'static str,
-) -> Registered {
+pub const fn ours(name: &'static str, default: &'static str, why: &'static str) -> Registered {
     Registered {
         name,
         default,
@@ -107,6 +103,11 @@ pub const fn ours(
         latched: false,
     }
 }
+
+/// Why a renderer row keeps its tested 1.12 value over build 12340's (`docs/WRATH-CVARS.md`).
+const RENDERER_TESTED: &str =
+    "a renderer setting kept at the value its passes and thresholds were \
+     tuned at; 12340's is untried here, its first-run hardware detection untraced";
 
 /// The host-backed CVars, one row per knob that has a reader: a host knob, or a Lua consumer
 /// such as the stock Video Options window's verbs.
@@ -198,21 +199,16 @@ pub const REGISTERED: &[Registered] = &[
     // `wrathplus_world::view::stamp_near_clip` is that.
     // The callback's derived global `[0xc7b480]` has no reader. pfUI's `hdgraphic` writes
     // 0.06..0.30, inside `[0.01, 0.33]`.
-    same("nearclip", "0.1"),
+    deviates("nearclip", "0.1", "0.2", RENDERER_TESTED), // 12340: `0x78e53f`
     // `deselectOnClick` and `mouseInvertPitch` are 1.12's own (`UIOptionsFrame.lua:8,4`);
     // `autoLootDefault` is the later-era name, 1.12 having only the shift gesture.
     same("deselectOnClick", "1"),
     // `autoSelfCast` (register site `0x6e731d`, record `[0xceac34]`, read at `0x6e53d7`; `0x870dc0`
     // is its name string): a friendly cast that binds nothing falls back to the caster.
     // `TOGGLEAUTOSELFCAST` toggles it.
-    same("autoSelfCast", "0"),
+    same("autoSelfCast", "1"), // build 12340's, `0x51dbf8`
     same("mouseInvertPitch", "0"),
-    ours(
-        "autoLootDefault",
-        "0",
-        "1.12 has no auto-loot CVar at all — vanilla offers only the shift gesture, so OFF \
-         IS the reference's own behaviour; the spelling is era's",
-    ),
+    same("autoLootDefault", "0"), // build 12340's, `0x51db43`
     // The overhead-name gates, registered at `0x7e6150` with callback `0x7e60e0`, which folds
     // each into its bit of the mask `[0xd380a0]`; defaults are `0x9e1464` "1" and `0x9e14a0`
     // "0". Bits: Own 0x1, NPC 0x2, PlayerGuild 0x4, PlayerPVPTitle 0x8, EnemyPlayerName 0x10,
@@ -326,9 +322,11 @@ pub const REGISTERED: &[Registered] = &[
     // character. The engine's enum is 0 Never, 1 Smart, 2 Always, as the stock dropdown writes it
     // (`UIOptionsFrame.lua:525,536,547`); 3, the Never entry's position, is the validator's upper
     // bound (`0x50b330(v, 0, 3)`). See `FollowStyle`.
-    same("cameraSmoothStyle", "1"),
+    // Build 12340 registers both from `[0xad1c2c]`, "4" (`0x5fdd4b`, `0x5fdd71`): 3.3.5's "Only when
+    // moving" (`CAMERA_SMARTER`). Labelled: `FollowStyle` runs 4 as Smart, without its vertical return.
+    same("cameraSmoothStyle", "4"),
     // Read instead of `cameraSmoothStyle` while the state mask holds Track or Fear; no panel row.
-    same("cameraSmoothTrackingStyle", "1"),
+    same("cameraSmoothTrackingStyle", "4"),
     // AUTO_FOLLOW_SPEED (`UIOptionsFrame.lua:88`), deg/s, registered "180.0" (`[0xbe1070]`): it
     // sets the transition's duration (`|dyaw| / rate * factor`), an average rate, not a slew. The
     // knob clamps it to `FOLLOW_SPEED_RANGE`. The stock Save also writes `cameraPitchSmoothSpeed`
@@ -374,9 +372,10 @@ pub const REGISTERED: &[Registered] = &[
     // Enhanced Tooltips (`UIOptionsFrame.lua:15`), registered "1" at `0x48fddd` (`0x82e748`); read
     // only by the stock interface.
     same("UberTooltips", "1"),
-    // Registered at `0x603280`: `ChatBubbles` "1", `ChatBubblesParty` "0".
+    // Registered at `0x603280`: `ChatBubbles` "1"; build 12340 registers `ChatBubblesParty` "1"
+    // (`0x51e192`).
     same("ChatBubbles", "1"),
-    same("ChatBubblesParty", "0"),
+    same("ChatBubblesParty", "1"),
     // Load out of date AddOns, inverted (`0x402c3b`): "1" enforces the check. Read by the load walk
     // ([`Cvars::addon_version_check`]) and live by the VM's gate.
     same("checkAddonVersion", "1"),
@@ -445,8 +444,9 @@ pub const REGISTERED: &[Registered] = &[
     // `ffx` as Enable All Shaders (`OptionsFrame.lua:202-204`). The knob is
     // [`wrathplus_world::ffx_glow::FfxSwitches`].
     same("ffx", "1"),
-    same("ffxGlow", "1"),
-    same("ffxDeath", "1"),
+    // Build 12340 registers both "0" (`0x8bfecf`, `0x7ea29d`).
+    deviates("ffxGlow", "1", "0", RENDERER_TESTED),
+    deviates("ffxDeath", "1", "0", RENDERER_TESTED),
     // `pixelShaders` (`0x688712`: name `0x869560`, "0", flags 1, callback `0x688f40`, record
     // `[0xc7f360]`) and `specular` (`0x6886a0`: name `0x8695d8`, "0", flags 1, callback `0x688e20`,
     // record `[0xc7f2cc]`), Enable All Shaders and Terrain Highlights. Both callbacks act only on a
@@ -479,7 +479,7 @@ pub const REGISTERED: &[Registered] = &[
     // `lod` (`0x68848c`: name `0x8697d0`, "1", flags 1, callback `0x688920`, record `[0xc7f314]`),
     // World LOD: bit 2 of `[0xc7b2a4]`, which gates the doodad LOD distance test at `0x6afb11`. No
     // effect here: benilla has no doodad LOD swap, as `lodDist` above has no row.
-    same("lod", "1"),
+    same("lod", "0"), // build 12340's, `0x78e446`
     // `movieSubtitle` (`0x402c18`: name `0x82e9d8`, "0", flags 0, record `[0x882640]`), Cinematic
     // Subtitles: the pre-rendered movies' subtitles, read by the glue's `GetMovieSubtitles`
     // (`0x46dbc0`). No effect here: benilla plays no pre-rendered movie.

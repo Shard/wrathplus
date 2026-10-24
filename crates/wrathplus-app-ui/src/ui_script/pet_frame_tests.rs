@@ -15,6 +15,7 @@ use wrathplus_protocol::types::Field;
 fn load_pet_frame() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
+    super::test_ui::event_driven_bars(&s);
     load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
     load_xml(&mut s, "Interface\\FrameXML\\BasicControls.xml");
     load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
@@ -126,7 +127,6 @@ fn the_pet_frame_appears_on_a_summon_and_leaves_on_a_dismiss() {
         !s.eval::<bool>("return PetFrame:IsVisible()").unwrap(),
         "no pet, no frame"
     );
-
     s.set_unit("pet", Some(pet("Grimjaw", 72, 45, 80, 0)));
     s.fire_event("UNIT_PET", vec![ScriptValue::Str("player".into())]);
 

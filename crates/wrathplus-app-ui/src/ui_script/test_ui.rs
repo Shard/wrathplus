@@ -604,6 +604,22 @@ pub(crate) fn seat_chain_addon(s: &mut UiScript, name: &str) {
     s.register_addons(vec![info], None, None, None);
 }
 
+/// The stock unit frames' event-driven bars: build 12340 registers `predictedHealth` and
+/// `predictedPower` "1", whose bars poll on `OnUpdate` instead (`UnitFrame.lua:211`, `:327`). Run
+/// before the frames load, which read them there.
+#[cfg(test)]
+pub(crate) fn event_driven_bars(s: &UiScript) {
+    s.run("SetCVar('predictedHealth', '0') SetCVar('predictedPower', '0')")
+        .unwrap();
+}
+
+/// The loot window at its left UI-panel slot: build 12340 registers `lootUnderMouse` "1", which
+/// opens it at the cursor (`LootFrame_Show`).
+#[cfg(test)]
+pub(crate) fn loot_at_left_slot(s: &UiScript) {
+    s.run("SetCVar('lootUnderMouse', '0')").unwrap();
+}
+
 #[cfg(test)]
 mod tests {
     /// The merged kit runs toc rows in the toc's order, each once.
