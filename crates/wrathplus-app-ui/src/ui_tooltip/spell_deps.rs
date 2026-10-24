@@ -53,6 +53,8 @@ pub(super) enum UnitField {
     RangedTime,
     /// `UNIT_MOD_CAST_SPEED`, the cast cell's haste.
     CastSpeed,
+    /// The descriptors the description's 12340 arms read ([`crate::ui_script::SelfTokens`]).
+    Tokens,
 }
 
 impl UnitField {
@@ -63,6 +65,7 @@ impl UnitField {
             UnitField::BaseHealth => 1 << 2,
             UnitField::RangedTime => 1 << 3,
             UnitField::CastSpeed => 1 << 4,
+            UnitField::Tokens => 1 << 5,
         }
     }
 }
@@ -76,6 +79,7 @@ struct UnitFields {
     base_health: u32,
     ranged_time: u32,
     cast_speed: u32,
+    tokens: [u32; 30],
 }
 
 impl UnitFields {
@@ -89,6 +93,7 @@ impl UnitFields {
             base_health: p.unit_base_health().unwrap_or(0),
             ranged_time: p.unit_ranged_attack_time().unwrap_or(0),
             cast_speed: super::cast_cells::cast_speed(p).to_bits(),
+            tokens: crate::ui_script::watched_inputs(player),
         }
     }
 
@@ -106,6 +111,11 @@ impl UnitFields {
             | moved(UnitField::BaseHealth, self.base_health, prev.base_health)
             | moved(UnitField::RangedTime, self.ranged_time, prev.ranged_time)
             | moved(UnitField::CastSpeed, self.cast_speed, prev.cast_speed)
+            | if self.tokens != prev.tokens {
+                UnitField::Tokens.bit()
+            } else {
+                0
+            }
     }
 }
 

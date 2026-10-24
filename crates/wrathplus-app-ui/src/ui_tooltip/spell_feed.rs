@@ -122,8 +122,7 @@ pub(crate) fn build_view(
 ) -> Option<(wrathplus_ui::script::SpellTooltipView, Deps)> {
     let d = spells.catalog.get(spell_id)?;
     let deps = RefCell::new(Deps::default());
-    // The cost, cast, cooldown and range cells and the description's tokens all modify through
-    // the spell's own family mask.
+    // Every cell and the description's tokens modify through the spell's own family mask.
     deps.borrow_mut().mod_bits |= vctx.spell_mods.read_bits(d);
     let form = vctx.form;
     let caster = vctx.caster;
@@ -145,6 +144,7 @@ pub(crate) fn build_view(
         deps.borrow_mut().mod_bits |= vctx.spell_mods.read_bits(t);
         Some(t)
     };
+    let player_read = || deps.borrow_mut().unit(UnitField::Tokens);
     let home = vctx.home_area;
     let home_area = || {
         deps.borrow_mut().home = true;
@@ -163,6 +163,7 @@ pub(crate) fn build_view(
         home_area: &home_area,
         global: vctx.get,
         printf: &crate::ui_script::token_printf,
+        player: Some(&crate::ui_script::SelfTokens::new(vctx.store, None).watched(&player_read)),
     };
     // The aura tooltip `0x52f880` expands the aura text with the points' modifiers off (`52f940`).
     let aura_ctx = wrathplus_formats::TokenContext {
@@ -181,8 +182,7 @@ pub(crate) fn build_view(
             usable::power_cost_at(d, p, pet_level(Some(p)), vctx.spell_mods)
         }),
     };
-    // The player's cost reads its level, and the field a percentage scales by; the pet's reads the
-    // pet's own, which are pet inputs.
+    // The player's cost reads its own level and percentage field; the pet's reads the pet's.
     if matches!(caster, ViewCaster::Player) {
         let mut deps = deps.borrow_mut();
         if usable::cost_reads_level(d) {
