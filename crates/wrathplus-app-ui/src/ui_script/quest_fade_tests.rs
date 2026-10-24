@@ -10,9 +10,8 @@ use super::test_ui::load_ui as load_xml;
 const BODY: &str = "The kobolds in the Fargodeep Mine have grown bold. Slay ten of the vermin and \
                     return to me before nightfall, and the town will remember your name.";
 
-#[test]
-fn the_write_on_completes_at_seventy_drawn_glyphs_a_second_and_accept_wakes() {
-    wrathplus_formats::wow_data_or_skip!();
+/// The stock questgiver window, loaded and settled, with the write-on fade on.
+fn questgiver() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     for file in [
@@ -36,6 +35,13 @@ fn the_write_on_completes_at_seventy_drawn_glyphs_a_second_and_accept_wakes() {
     for _ in 0..3 {
         s.tick(1.0);
     }
+    s
+}
+
+#[test]
+fn the_write_on_completes_at_seventy_drawn_glyphs_a_second_and_accept_wakes() {
+    wrathplus_formats::wow_data_or_skip!();
+    let mut s = questgiver();
     s.set_quest(Some(QuestState {
         panel: QuestPanel::Detail,
         title: "Bold Kobolds".into(),
@@ -68,4 +74,26 @@ fn the_write_on_completes_at_seventy_drawn_glyphs_a_second_and_accept_wakes() {
         t <= (chars + 30.0) / 70.0,
         "within (len + gradient length) / CPS: {t:.3}s"
     );
+}
+
+/// A quest with an empty description has no drawn glyph: the first advance answers false and
+/// Accept wakes within a frame or two (`QuestInfo.lua:5-15`), never a locked button.
+#[test]
+fn an_empty_description_ends_the_write_on_at_once() {
+    wrathplus_formats::wow_data_or_skip!();
+    let mut s = questgiver();
+    s.set_quest(Some(QuestState {
+        panel: QuestPanel::Detail,
+        title: "No Words".into(),
+        body: String::new(),
+        ..QuestState::default()
+    }));
+    s.fire_event("QUEST_DETAIL", vec![]);
+    for _ in 0..2 {
+        s.tick(1.0 / 60.0);
+    }
+    assert!(s.errors().is_empty(), "{:?}", s.errors());
+    assert!(s
+        .eval::<bool>("return QuestFrameAcceptButton:IsEnabled() ~= 0")
+        .unwrap());
 }
