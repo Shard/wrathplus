@@ -110,3 +110,30 @@ fn a_channels_join_and_leave_notices_print_their_numbered_link() {
         ]
     );
 }
+
+/// 12340's coin string (`0x7e7d80`) with the shipped `*_AMOUNT` templates, as the quest reward
+/// line uses it, and the loot-money line (`0x6ceca0`) through the stock frame as
+/// `CHAT_MSG_MONEY`. Skips without client data.
+#[test]
+fn coin_lines_name_each_coin_in_the_shipped_words() {
+    let _data = wrathplus_formats::wow_data_or_skip!();
+    let mut s = printing_vm();
+    let get = |k: &str| wrathplus_ui::strings::global(s.lua(), k);
+    let coins = |copper| crate::ui_quest::lines::coin_text(copper, &|k| get(k).unwrap_or_default());
+    assert_eq!(coins(150), "1 Silver, 50 Copper");
+    assert_eq!(coins(10_005), "1 Gold, 5 Copper");
+    let reward = wrathplus_ui::strings::fill(
+        &get("ERR_QUEST_REWARD_MONEY_S").unwrap(),
+        &[wrathplus_ui::strings::Arg::S(&coins(150))],
+    );
+    assert_eq!(reward, "Received 1 Silver, 50 Copper.");
+    let line = super::feed::loot_money_line(5, true, &get).expect("YOU_LOOT_MONEY");
+    let mut windows = super::frames::ChatWindows::default();
+    super::frames::route(&mut s, &mut windows, &line_of(K::Money, &line));
+    assert!(s.errors().is_empty(), "{:?}", s.errors());
+    assert_eq!(printed(&s), ["You loot 5 Copper"]);
+}
+
+fn line_of(kind: K, text: &str) -> ChatEvent {
+    ChatEvent::text_only(kind, text.into())
+}

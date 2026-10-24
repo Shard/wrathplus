@@ -155,16 +155,16 @@ fn quest<'a>(
     }
 }
 
-/// The turn-in's coin string (`0x5dc511`-`0x5dc5fd`): each paid denomination as `"%d %s"` with
-/// its `GOLD`, `SILVER` or `COPPER` global, gold first. The reference's separator test yields
-/// `", , "` with a zero middle coin; this joins only the paid ones, with `", "`.
+/// 12340's coin string (`0x7e7d80`, the quest reward, loot and refund lines' composer): each
+/// non-zero coin, gold first, filling its `GOLD_AMOUNT`, `SILVER_AMOUNT` or `COPPER_AMOUNT`
+/// template (`0xaf491c` down), joined by `", "` (`0x9fc494`).
 pub(crate) fn coin_text(copper: u32, get: &dyn Fn(&str) -> String) -> String {
-    // `0x6c6260`'s split by 10000, 100 and 1.
+    use wrathplus_ui::strings::{fill, Arg};
     let (g, s, c) = (copper / 10000, copper / 100 % 100, copper % 100);
-    [(g, "GOLD"), (s, "SILVER"), (c, "COPPER")]
+    [(g, "GOLD_AMOUNT"), (s, "SILVER_AMOUNT"), (c, "COPPER_AMOUNT")]
         .into_iter()
         .filter(|&(n, _)| n != 0)
-        .map(|(n, key)| format!("{n} {}", get(key)))
+        .map(|(n, key)| fill(&get(key), &[Arg::D(n.into())]))
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -233,7 +233,7 @@ mod tests {
                 ERR_QUEST_REWARD_EXP_I = "Experience gained: %d."
                 ERR_QUEST_REWARD_MONEY_S = "Received %s."
                 ERR_QUEST_REWARD_ITEM_S = "Received item: %s."
-                GOLD = "Gold"; SILVER = "Silver"; COPPER = "Copper"
+                GOLD_AMOUNT = "%d Gold"; SILVER_AMOUNT = "%d Silver"; COPPER_AMOUNT = "%d Copper"
                 "#,
             )
             .unwrap();
@@ -341,9 +341,9 @@ mod tests {
 
     fn words(key: &str) -> String {
         match key {
-            "GOLD" => "Gold",
-            "SILVER" => "Silver",
-            "COPPER" => "Copper",
+            "GOLD_AMOUNT" => "%d Gold",
+            "SILVER_AMOUNT" => "%d Silver",
+            "COPPER_AMOUNT" => "%d Copper",
             _ => "",
         }
         .into()

@@ -103,6 +103,22 @@ fn keyed(
     (!text.is_empty()).then_some(text)
 }
 
+/// `0x6ceca0`'s line: the coin string (`0x7e7d80`) in `YOU_LOOT_MONEY` for the only looter, else
+/// `LOOT_MONEY_SPLIT`, which the drain prints as `CHAT_MSG_MONEY`.
+pub(super) fn loot_money_line(
+    amount: u32,
+    sole: bool,
+    get: &dyn Fn(&str) -> Option<String>,
+) -> Option<String> {
+    let coins = crate::ui_quest::lines::coin_text(amount, &|k| get(k).unwrap_or_default());
+    let key = if sole {
+        "YOU_LOOT_MONEY"
+    } else {
+        "LOOT_MONEY_SPLIT"
+    };
+    keyed(get, key, &[wrathplus_ui::strings::Arg::S(&coins)])
+}
+
 /// The XP line: `COMBATLOG_XPGAIN_FIRSTPERSON`, the `_UNNAMED` form, or the rested
 /// `_EXHAUSTION1`, whose last two arguments are the signed bonus and the state word.
 pub(super) fn xp_gain_line(
@@ -857,6 +873,13 @@ pub fn feed_chat(
                         &mut windows,
                         &ChatEvent::text_only(line.kind, text),
                     );
+                }
+            }
+            Pending::LootMoney { amount, sole } => {
+                let text = loot_money_line(amount, sole, &globals(&script));
+                if let Some(text) = text {
+                    let event = ChatEvent::text_only(ChatEventKind::Money, text);
+                    route(&mut script, &mut windows, &event);
                 }
             }
             Pending::Discovery { area, xp } => {
