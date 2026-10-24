@@ -50,6 +50,12 @@ pub(crate) fn stock_glue(
         MessageReader<LoginFailedMessage>,
     ),
     mut exit: MessageWriter<AppExit>,
+    // A character list from the server not yet announced, and the selection last announced, so
+    // a click's selection never replays the list ([`announce_roster`]).
+    (mut lists, mut memo): (
+        MessageReader<crate::net::CharListMessage>,
+        Local<crate::app_core::vm_memo::VmMemo<(bool, u64)>>,
+    ),
 ) {
     use crate::app_core::state::ClientState;
     let Some(mut script) = script else {
@@ -116,8 +122,14 @@ pub(crate) fn stock_glue(
             }
             // ── Character select, onto the native roster and pick ──
             GlueRequest::SelectCharacter(index) => {
+                // 1-based, as every stock call site passes it (`CharacterSelect.lua`).
                 let n = roster.chars.len();
-                roster.select(index.checked_sub(1).filter(|&i| i < n));
+                let row = index.checked_sub(1).filter(|&i| i < n);
+                if row != roster.selected() {
+                    let who = row.and_then(|i| roster.chars.get(i)).map(|c| c.name.as_str());
+                    info!("char select: stock glue selects row {row:?} ({who:?})");
+                }
+                roster.select(row);
             }
             GlueRequest::EnterWorld => {
                 if let Some(guid) = roster.selected_char().map(|c| c.guid) {
@@ -173,8 +185,11 @@ pub(crate) fn stock_glue(
         script.set_glue_realms(tabs, selected, crate::realm_select::GLUE_UPDATE_RATE);
         script.fire_event("OPEN_REALM_LIST", vec![]);
     }
-    // A roster or a selection change: the rows, the stage's character, and the engine's
-    // `CHARACTER_LIST_UPDATE` then `UPDATE_SELECTED_CHARACTER` on character select.
+    // A roster or a selection change: the rows, the stage's character, and the engine's events.
+    // The engine's `CHARACTER_LIST_UPDATE` follows each list the server sends (`SMSG_CHAR_ENUM`),
+    // which `char_select` applies to the roster; it is announced once character select is up.
+    let shown = memo.get(&script);
+    shown.0 |= lists.read().count() > 0;
     if roster.is_changed() {
         let rows = crate::char_select::glue_rows::glue_characters(&roster, areas.as_deref());
         script.set_glue_characters(rows, crate::char_select::glue_rows::EMPTY_SELECT_STAGE);
@@ -185,13 +200,34 @@ pub(crate) fn stock_glue(
             preview.look = look;
         }
         if *state.get() == ClientState::CharSelect {
-            script.fire_event("CHARACTER_LIST_UPDATE", vec![]);
-            if let Some(i) = roster.selected() {
-                script.fire_event(
-                    "UPDATE_SELECTED_CHARACTER",
-                    vec![ScriptValue::Number((i + 1) as f64)],
-                );
-            }
+            let list = std::mem::take(&mut shown.0);
+            let selection = shown.1 != roster.select_seq;
+            shown.1 = roster.select_seq;
+            announce_roster(&mut script, roster.selected(), list, selection);
         }
+    }
+}
+
+/// Character select's events for a roster change, in the engine's order. The selection goes
+/// first, `UPDATE_SELECTED_CHARACTER` being the only writer of stock's `selectedIndex`; then, only
+/// when the rows themselves changed, `CHARACTER_LIST_UPDATE`, whose `UpdateCharacterList` re-selects
+/// `selectedIndex` through `SelectCharacter`, so it must already be the new row (the reference
+/// pushes the remembered row before the list, `0x472563`). A click's selection alone never replays
+/// the list: replaying it re-selected the old row a frame later, which Enter World then sent, and
+/// the two rows took turns, a flicker.
+pub(crate) fn announce_roster(
+    script: &mut UiScript,
+    selected: Option<usize>,
+    list_changed: bool,
+    selection_changed: bool,
+) {
+    if let Some(i) = selected.filter(|_| list_changed || selection_changed) {
+        script.fire_event(
+            "UPDATE_SELECTED_CHARACTER",
+            vec![ScriptValue::Number((i + 1) as f64)],
+        );
+    }
+    if list_changed {
+        script.fire_event("CHARACTER_LIST_UPDATE", vec![]);
     }
 }

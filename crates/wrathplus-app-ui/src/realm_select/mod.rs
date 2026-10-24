@@ -22,7 +22,7 @@
 mod category;
 mod glue;
 mod input;
-mod load;
+pub(crate) mod load;
 mod screen;
 mod smoke;
 

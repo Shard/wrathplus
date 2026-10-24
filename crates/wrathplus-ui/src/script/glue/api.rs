@@ -99,9 +99,17 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         let connected = glue(lua).connected;
         one(crate::script::binding_abi::flag(connected))
     })?;
+    // `serverName, isPVP, isRP`, which CharacterSelect's realm label reads.
     set(lua, "GetServerName", |lua, _| {
-        let name = glue(lua).server_name.clone();
-        one(Value::String(lua.create_string(&name)?))
+        let (name, pvp, rp) = {
+            let g = glue(lua);
+            (g.server_name.clone(), g.server_pvp, g.server_rp)
+        };
+        Ok(MultiValue::from_vec(vec![
+            Value::String(lua.create_string(&name)?),
+            crate::script::binding_abi::flag(pvp),
+            crate::script::binding_abi::flag(rp),
+        ]))
     })?;
     set(lua, "SetCurrentScreen", |lua, args| {
         let name = text(lua, args.front())?;
