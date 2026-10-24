@@ -917,8 +917,8 @@ pub enum SessionEvent {
     LootError { guid: u64, error: u8 },
     /// A loot row was taken, by anyone (`SMSG_LOOT_REMOVED`).
     LootRemoved { slot: u8 },
-    /// Our share of the coin (`SMSG_LOOT_MONEY_NOTIFY`), answering `CMSG_LOOT_MONEY`.
-    LootMoneyNotify { amount: u32 },
+    /// Our coin share (`SMSG_LOOT_MONEY_NOTIFY`); its final byte says we looted alone.
+    LootMoneyNotify { amount: u32, sole_looter: bool },
     /// The coin line disappears for every current looter (`SMSG_LOOT_CLEAR_MONEY`).
     LootClearMoney,
     /// The loot window closes (`SMSG_LOOT_RELEASE_RESPONSE`), answering our `CMSG_LOOT_RELEASE`.

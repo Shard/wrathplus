@@ -10,8 +10,8 @@ use super::{LootLatch, LootState};
 use crate::net::{ClientCommand, NetHandlerApp};
 use crate::app_core::session::SelfGuid;
 use crate::pending_item_ops::{LockTransitions, PendingItemOps};
-use crate::app_core::errors::UiError;
-use crate::app_core::errors::UiErrorKeys;
+use crate::app_core::errors::{UiError, UiErrorKeys};
+use crate::app_core::chat::{ChatLog, Pending};
 
 pub(super) fn register(app: &mut App) {
     use SessionEventKind as K;
@@ -178,12 +178,16 @@ fn on_removed(In(ev): In<SessionEvent>, mut loot: ResMut<LootState>) {
     }
 }
 
-fn on_money_notify(In(ev): In<SessionEvent>, loot: Res<LootState>) {
-    if let SessionEvent::LootMoneyNotify { amount } = ev {
+/// `SMSG_LOOT_MONEY_NOTIFY` (`0x6ceca0`): a nonzero coin prints as a `CHAT_MSG_MONEY` line the feed
+/// fills, `YOU_LOOT_MONEY` for the only looter, else `LOOT_MONEY_SPLIT`.
+fn on_money_notify(In(ev): In<SessionEvent>, loot: Res<LootState>, mut chat: ResMut<ChatLog>) {
+    if let SessionEvent::LootMoneyNotify { amount, sole_looter } = ev {
         if !loot.wrath.acknowledge_money_notify() {
             return;
         }
-        loot_money_notify(amount);
+        if amount != 0 {
+            chat.pending.push(Pending::LootMoney { amount, sole: sole_looter });
+        }
     }
 }
 
@@ -304,12 +308,6 @@ fn loot_removed(slot: u8, loot: &mut LootState) {
     loot.remove_slot(slot);
 }
 
-/// `SMSG_LOOT_MONEY_NOTIFY`, our share of a group's coin: only logged, as the coin row drops on
-/// `SMSG_LOOT_CLEAR_MONEY` and the purse rides the coinage field. vmangos sends none for a solo
-/// loot (`LootHandler.cpp:331`).
-fn loot_money_notify(amount: u32) {
-    debug!("net: loot money {amount}");
-}
 
 /// `SMSG_LOOT_CLEAR_MONEY`: the coin row goes, for every looter.
 fn loot_clear_money(loot: &mut LootState) {
