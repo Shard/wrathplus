@@ -29,15 +29,15 @@ use wrathplus_ui::layout::Rect as GxRect;
 use wrathplus_ui::script::{inset_atlas_bleed, pieces, Backdrop, Insets};
 use wrathplus_ui::script::{JustifyH, JustifyV, Outline};
 
-use crate::entities::StandBoxHeight;
-use crate::net::{Guid, NetEntity};
-use crate::app_core::session::Embodied;
-use crate::app_core::session::SelfGuid;
 use crate::app_core::chat::default_color;
 use crate::app_core::chat::ChatEventKind;
+use crate::app_core::schedule::UiQuadAppend;
+use crate::app_core::session::Embodied;
+use crate::app_core::session::SelfGuid;
+use crate::entities::StandBoxHeight;
+use crate::net::{Guid, NetEntity};
 use crate::overlay::overlay_z;
 use crate::overlay::UiQuad;
-use crate::app_core::schedule::UiQuadAppend;
 use crate::overlay::UiQuads;
 use crate::overlay::UvRect;
 use crate::ui_text::{layout_text_quads, measure_text, FontSpec, Justify, TextSeat, UiFontAtlas};
@@ -45,7 +45,8 @@ use crate::vplates::{device_snap, gx_px, plate_basis, text_px, VPlateSet, VPlate
 use wrathplus_assets::{AssetSet, WorldAssets};
 use wrathplus_world::view::WorldCamera;
 
-/// The two bubble CVars (registrar `0x603280`), booting at the reference's defaults.
+/// The two bubble CVars, booting at build 12340's defaults ("1" and "1", `ChatBubblesParty` at
+/// `0x51e192`).
 #[derive(Resource)]
 pub struct BubbleConfig {
     /// `ChatBubbles`: say, yell and their monster variants.
@@ -58,7 +59,7 @@ impl Default for BubbleConfig {
     fn default() -> Self {
         Self {
             all: true,
-            party: false,
+            party: true,
         }
     }
 }
@@ -202,13 +203,7 @@ pub struct BubbleQueue(Vec<(u64, ChatEventKind, String)>);
 
 impl BubbleQueue {
     /// Queue a routed line; kind, CVar and sender filter here, unit, plate and range in the driver.
-    pub fn push(
-        &mut self,
-        cfg: &BubbleConfig,
-        sender_guid: u64,
-        kind: ChatEventKind,
-        text: &str,
-    ) {
+    pub fn push(&mut self, cfg: &BubbleConfig, sender_guid: u64, kind: ChatEventKind, text: &str) {
         if sender_guid == 0 || !bubble_cvar(kind, cfg).unwrap_or(false) {
             if wrathplus_assets::trace::enabled_for("bub") {
                 let why = match (sender_guid, bubble_cvar(kind, cfg)) {
@@ -757,13 +752,16 @@ mod tests {
             assert_eq!(bubble_cvar(k, &on), None, "{k:?} must not bubble in v1");
         }
 
-        // Party off with say on is the default pair, so this also pins the boot state.
-        let no_party = BubbleConfig::default();
-        assert!(no_party.all && !no_party.party, "the shipped pair");
+        // Build 12340 boots both on; party off with say on is the player's choice.
+        assert!(BubbleConfig::default().all && BubbleConfig::default().party);
+        let no_party = BubbleConfig {
+            all: true,
+            party: false,
+        };
         assert_eq!(
             bubble_cvar(K::Party, &no_party),
             Some(false),
-            "/p does not bubble out of the box"
+            "/p does not bubble with its CVar off"
         );
         assert_eq!(
             bubble_cvar(K::Say, &no_party),

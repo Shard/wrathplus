@@ -93,6 +93,7 @@ fn shipped_loot_frame_drives_end_to_end() {
         load_xml(&mut s, f);
     }
     load_xml(&mut s, "Interface\\FrameXML\\LootFrame.xml");
+    super::test_ui::loot_at_left_slot(&s);
     // The stock file's own shape, by name: the harness seats the whole 3.3.5 session, so a
     // per-file frame count measures nothing.
     assert!(s
@@ -101,7 +102,6 @@ fn shipped_loot_frame_drives_end_to_end() {
              and LootFrameUpButton and LootFrameDownButton and LootCloseButton and true"
         )
         .unwrap());
-
     s.resolve();
     let has_icon = |quads: &[ExtractedQuad], needle: &str| {
         quads.iter().any(|q| {

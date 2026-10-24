@@ -1,12 +1,15 @@
 //! Whole-client tests of `crate::script_calls`, from `script_calls.rs` (`tests`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
-use crate::script_calls::*;
 use crate::app_core::state::Selection;
+use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
+use crate::script_calls::*;
+use bevy::ecs::system::RunSystemOnce;
+use bevy::prelude::*;
+use crossbeam_channel::Receiver;
 use wrathplus_protocol::types::Field;
 use wrathplus_protocol::types::{
     ActionButton, GroupMemberEntry, ACTION_KIND_MACRO, ACTION_KIND_SPELL,
@@ -14,9 +17,6 @@ use wrathplus_protocol::types::{
 use wrathplus_ui::script::ScriptCall;
 use wrathplus_ui::script::UiScript;
 use wrathplus_ui::script::{PetBookState, SpellBookState, SpellSlotView, SpellTabView};
-use bevy::ecs::system::RunSystemOnce;
-use bevy::prelude::*;
-use crossbeam_channel::Receiver;
 
 const ME: u64 = 0x10;
 
@@ -76,12 +76,14 @@ fn frame(selected: bool) -> Frame {
     let me = world.spawn((SelfPlayer, unit(ME, 0.0))).id();
     world
         .entity_mut(me)
-        .insert(ObjectStore(wrathplus_protocol::ObjectFields::from_fields(&[
-            (Field::ObjectType, 0x19),
-            (Field::UnitHealth, 100),
-            (Field::UnitMaxHealth, 100),
-            (Field::UnitFlags, 0x8),
-        ])));
+        .insert(ObjectStore(wrathplus_protocol::ObjectFields::from_fields(
+            &[
+                (Field::ObjectType, 0x19),
+                (Field::UnitHealth, 100),
+                (Field::UnitMaxHealth, 100),
+                (Field::UnitFlags, 0x8),
+            ],
+        )));
     let old = world.spawn(unit(OLD, 5.0)).id();
     let new = world.spawn(unit(NEW, 6.0)).id();
     let index = &mut world.resource_mut::<GuidIndex>().0;
@@ -184,8 +186,8 @@ fn spawn_mob(f: &mut Frame, fields: &[(u16, u32)]) {
 /// Give the world a faction table, us [`OURS`] and `OLD` the `old` template with `fields`
 /// over it.
 fn with_factions(f: &mut Frame, old: u32, fields: &[(u16, u32)]) {
-    use wrathplus_formats::{FactionCatalog, FactionTemplate};
     use std::collections::HashMap;
+    use wrathplus_formats::{FactionCatalog, FactionTemplate};
     let tpl = |faction, group_mask, friend_group_mask, enemy_group_mask| FactionTemplate {
         faction,
         group_mask,
@@ -208,13 +210,15 @@ fn with_factions(f: &mut Frame, old: u32, fields: &[(u16, u32)]) {
     let (me, old_unit) = (index[&ME], index[&OLD]);
     world
         .entity_mut(me)
-        .insert(ObjectStore(wrathplus_protocol::ObjectFields::from_pairs(&[
-            (2, 0x19),
-            (HEALTH, 100),
-            (28, 100),
-            (FLAGS, 0x8),
-            (TEMPLATE, OURS),
-        ])));
+        .insert(ObjectStore(wrathplus_protocol::ObjectFields::from_pairs(
+            &[
+                (2, 0x19),
+                (HEALTH, 100),
+                (28, 100),
+                (FLAGS, 0x8),
+                (TEMPLATE, OURS),
+            ],
+        )));
     let mut pairs = vec![(HEALTH, 100), (28, 100), (TEMPLATE, old)];
     pairs.extend_from_slice(fields);
     world
@@ -327,6 +331,16 @@ fn on_self_binds_the_player_where_the_selection_is_not_assistable() {
         // `CanAssist` passes a friendly player-controlled unit (`UNIT_FLAG_PLAYER_CONTROLLED`).
         with_factions(&mut f, selected_template, &[(FLAGS, 0x8)]);
         with_fortitude(&mut f);
+        // Off, as the doc says: build 12340 registers it "1".
+        let world = f.app.world_mut();
+        let events = {
+            let mut cvars = world.resource_mut::<crate::cvars::Cvars>();
+            cvars.set("autoSelfCast", "0");
+            cvars.take_events()
+        };
+        for event in events {
+            world.trigger(event);
+        }
         run(&mut f, lua);
         let sent: Vec<_> = target.into_iter().map(|t| (FORTITUDE, Some(t))).collect();
         assert_eq!(casts(&f), sent, "{lua} at template {selected_template}");
@@ -729,7 +743,9 @@ fn a_strike_with_nothing_to_attack_says_so_and_sends_nothing() {
     let world = f.app.world();
     assert_eq!(
         world.resource::<crate::app_core::errors::UiErrorKeys>().0,
-        vec![crate::app_core::errors::UiError::key("ERR_NO_ATTACK_TARGET")]
+        vec![crate::app_core::errors::UiError::key(
+            "ERR_NO_ATTACK_TARGET"
+        )]
     );
     assert!(world
         .resource::<crate::app_core::errors::CastErrors>()
@@ -779,54 +795,5 @@ fn start_attack_and_target_last_friend_apply_in_call_order() {
     );
 }
 
-/// `DismissCompanion("CRITTER")` sends `CMSG_DISMISS_CRITTER` with the critter's guid.
-#[test]
-fn dismiss_critter_sends_the_native_command() {
-    let mut f = frame(false);
-    apply(
-        &mut f,
-        vec![ScriptCall::DismissCritter {
-            critter: 0xf130_0000_0000_0042,
-        }],
-    );
-    assert!(f.rx.try_iter().any(|c| matches!(
-        c,
-        ClientCommand::NativeSpellControl(
-            wrathplus_protocol::wrath_spell_control::Command::DismissCritter {
-                critter: 0xf130_0000_0000_0042
-            }
-        )
-    )));
-}
-
-/// `Dismount()` sends `CMSG_CANCEL_MOUNT_AURA` off a flight path; `SetActiveTalentGroup` of the
-/// active group or one past the count sends nothing.
-#[test]
-fn dismount_sends_and_the_active_talent_group_does_not_recast() {
-    let group = || wrathplus_protocol::events::TalentGroup {
-        talents: Vec::new(),
-        glyphs: Vec::new(),
-    };
-    let mut f = frame(false);
-    apply(&mut f, vec![ScriptCall::Dismount]);
-    assert!(f.rx.try_iter().any(|c| matches!(
-        c,
-        ClientCommand::NativeSpellControl(
-            wrathplus_protocol::wrath_spell_control::Command::CancelMountAura
-        )
-    )));
-    f.app
-        .world_mut()
-        .resource_mut::<crate::net::wrath_notices::WrathProgress>()
-        .talents
-        .insert(false, (0, 0, vec![group(), group()]));
-    apply(
-        &mut f,
-        vec![
-            ScriptCall::ActivateTalentGroup { group: 1 },
-            ScriptCall::ActivateTalentGroup { group: 3 },
-            ScriptCall::ActivateTalentGroup { group: 0 },
-        ],
-    );
-    assert!(casts(&f).is_empty());
-}
+#[path = "script_calls_service_tests.rs"]
+mod service_tests;

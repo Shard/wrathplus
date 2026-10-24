@@ -44,6 +44,7 @@ impl Seat for UiScript {
 
 /// The unit frames' load prefix, in the production order.
 fn load_unit_frames(s: &mut UiScript) {
+    super::test_ui::event_driven_bars(s);
     const UNIT_FRAMES: &[&str] = &[
         // Stock `GlobalStrings.lua` first, as the app runs it: the unit-frame files read it at load
         // (`CombatFeedback.lua:6-17`, `UnitFrame.lua:2-7`).
@@ -81,7 +82,6 @@ fn shipped_unit_frames_drive_end_to_end() {
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&mut s);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-
     // Only the target frame hides: `PlayerFrame_Update` has no else arm (`PlayerFrame.lua:29-37`),
     // `TargetFrame_Update` does (`TargetFrame.lua:37-56`).
     let shape: bool = s

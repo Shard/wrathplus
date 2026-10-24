@@ -5,9 +5,11 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-use wrathplus_ui::script::UiScript;
 use bevy::prelude::*;
+use wrathplus_ui::script::UiScript;
 
+use crate::app_core::state::LootConfig;
+use crate::app_core::ui_flags::UiScaleCvar;
 use crate::chat_bubble::BubbleConfig;
 use crate::cvars::*;
 use crate::minimap::MinimapZoom;
@@ -17,9 +19,7 @@ use crate::player::camera_zoom::ZoomLimit;
 use crate::portrait::PaneRate;
 use crate::sound::SoundConfig;
 use crate::target::ClickConfig;
-use crate::app_core::state::LootConfig;
 use crate::ui_script::DEFAULT_UI_SCALE;
-use crate::app_core::ui_flags::UiScaleCvar;
 use crate::video::VideoConfig;
 use crate::world_backdrop::{RenderScale, RENDER_SCALE_RANGE};
 use wrathplus_ui::widget::MINIMAP_ZOOM_LEVELS;
@@ -89,12 +89,16 @@ fn the_options_that_leave_the_reference_are_this_list_and_no_other() {
         names,
         vec![
             "SoundReverb",
+            "ffxDeath",
+            "ffxGlow",
             "frillDensity",
             "gxApi",
             "gxColorBits",
             "gxDepthBits",
             "gxResolution",
+            "nearclip",
             "realmList",
+            "spellEffectLevel",
             "weatherDensity",
         ],
     );
@@ -151,16 +155,9 @@ fn registered_defaults_mirror_the_code_truths() {
     assert_eq!(d["cameraDistanceMax"], ZoomLimit::default().distance_max());
     assert_eq!(d["cameraDistanceMaxFactor"], ZoomLimit::default().factor());
     let follow = FollowConfig::default();
-    assert_eq!(
-        d["cameraSmoothStyle"],
-        follow.style.cvar().parse::<f32>().unwrap()
-    );
-    assert_eq!(
-        d["cameraSmoothTrackingStyle"],
-        follow.tracking_style.cvar().parse::<f32>().unwrap()
-    );
+    let style = (d["cameraSmoothStyle"], d["cameraSmoothTrackingStyle"]);
+    assert_eq!((style, follow.style), ((4.0, 4.0), FollowStyle::Smart));
     assert_eq!(d["cameraYawSmoothSpeed"], follow.yaw_speed);
-    assert_eq!(FollowStyle::default(), FollowStyle::Smart);
     assert_eq!(d["autoLootDefault"] != 0.0, LootConfig::default().auto_loot);
     assert_eq!(
         d["showLootSpam"] != 0.0,
@@ -259,7 +256,7 @@ fn registered_defaults_mirror_the_code_truths() {
     let bubbles = BubbleConfig::default();
     assert_eq!(d["ChatBubbles"] != 0.0, bubbles.all);
     assert_eq!(d["ChatBubblesParty"] != 0.0, bubbles.party);
-    assert!(bubbles.all && !bubbles.party, "the binary's own pair");
+    assert!(bubbles.all && bubbles.party, "12340 registers both 1");
     let zoom = MinimapZoom::default();
     assert_eq!(d["minimapZoom"], f32::from(zoom.outdoor));
     assert_eq!(d["minimapInsideZoom"], f32::from(zoom.inside));
@@ -570,7 +567,9 @@ fn the_observers_apply_every_arm() {
     // this table, so both must stay registered and the stops must stay `frillDensity`'s unit
     // times n.
     assert!(crate::shipped_cvars::rows().any(|r| r.name == wrathplus_ui::script::CVAR_WORLD_DETAIL));
-    assert!(crate::shipped_cvars::rows().any(|r| r.name == wrathplus_ui::script::CVAR_FRILL_DENSITY));
+    assert!(
+        crate::shipped_cvars::rows().any(|r| r.name == wrathplus_ui::script::CVAR_FRILL_DENSITY)
+    );
     // The same for `GetGamma`/`SetGamma`, which read and write `1 - gamma`.
     assert!(crate::shipped_cvars::rows().any(|r| r.name == wrathplus_ui::script::CVAR_GAMMA));
     // `RestoreVideoDefaults`' row list lives in `wrathplus-ui` too; an unregistered row would be

@@ -2058,9 +2058,9 @@ mod tests {
         assert_eq!(FollowStyle::from_cvar(1.0), FollowStyle::Smart);
         assert_eq!(FollowStyle::from_cvar(2.0), FollowStyle::Always);
         assert_eq!(FollowStyle::from_cvar(3.0), FollowStyle::Never);
-        // Off the ladder: the default, Smart.
+        // Off the ladder, 3.3.5's 4 (Only when moving, 12340's default) included: Smart.
         assert_eq!(FollowStyle::from_cvar(-1.0), FollowStyle::Smart);
-        assert_eq!(FollowStyle::from_cvar(9.0), FollowStyle::Smart);
+        assert_eq!(FollowStyle::from_cvar(4.0), FollowStyle::Smart);
         for style in [FollowStyle::Never, FollowStyle::Smart, FollowStyle::Always] {
             assert_eq!(
                 FollowStyle::from_cvar(style.cvar().parse::<f32>().unwrap()),
