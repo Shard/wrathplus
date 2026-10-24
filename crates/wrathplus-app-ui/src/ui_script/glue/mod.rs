@@ -15,6 +15,8 @@ mod click_tests;
 mod host_tests;
 #[cfg(test)]
 mod installed_tests;
+#[cfg(test)]
+mod character_select_installed_tests;
 
 /// The glue load list, which `CGlueMgr` walks as `UI_Init` walks FrameXML's.
 pub(super) const GLUE_TOC: &str = r"Interface\GlueXML\GlueXML.toc";
