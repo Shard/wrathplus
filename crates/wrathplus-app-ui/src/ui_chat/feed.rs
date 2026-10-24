@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 
-use wrathplus_protocol::types::{channel_notice, ChannelNoticeTail, MACRO_EXPANDED_TYPES};
+use wrathplus_protocol::types::{channel_notice, ChannelNoticeTail};
 
 use wrathplus_assets::{LockRecover, WorldAssets};
 use wrathplus_formats::{EmoteLine, EmoteTextCatalog};
@@ -13,6 +13,7 @@ use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::names::NameCache;
 use crate::net::{GuidIndex, NetCommands};
+use crate::npc_text::chat_macros;
 
 use super::edit::ChannelState;
 use super::event::{flag_of_tag, kind_of_wire, language_name, ChatEvent, ChatEventKind};
@@ -408,7 +409,7 @@ pub fn feed_chat(
     // The text-emote tables, and our guid for the "are you the performer?" test.
     emote_texts: Option<Res<EmoteTexts>>,
     self_guid: Res<SelfGuid>,
-    // The `$`-macro subject: monster and BG lines expand against their addressee's descriptors.
+    // The `$`-macro subject: `0x579590` expands against the receiver's descriptors.
     guids: Res<GuidIndex>,
     stores: Query<&ObjectStore>,
     states: Res<crate::app_core::state::WorldStates>,
@@ -450,6 +451,9 @@ pub fn feed_chat(
                     state,
                     &msg,
                     tries >= NAME_MAX_TRIES,
+                    &|text, guid| {
+                        chat_macros(text, guid, (&guids, &stores), &names, &commands, &states)
+                    },
                     &|id| {
                         let name = speaker.achievements.as_deref()?.name(id)?.to_string();
                         let date = speaker
@@ -513,53 +517,7 @@ pub fn feed_chat(
                 }
                 // The base name; `stamp_channel` adds arg4's number and arg7-arg9 below.
                 let channel_base = msg.channel.clone().unwrap_or_default();
-                // `$`-macros expand for the monster, boss and BG system types only, against the
-                // addressee. A failed expansion (`0x49dac2`-`0x49db1e`, `0x49d9c9`) with a zero
-                // subject or a known name drops the line, one with an unknown name holds it for
-                // the name query (`tries`), and only a second failure shows the raw text.
-                let expanded = if MACRO_EXPANDED_TYPES.contains(&msg.chat_type) {
-                    // The addressee, else the sender: the BG system lines carry one guid only.
-                    let subject_guid = if msg.target_guid != 0 {
-                        msg.target_guid
-                    } else {
-                        msg.sender_guid
-                    };
-                    let subject = crate::npc_text::subject_for_guid(
-                        subject_guid,
-                        &guids,
-                        &stores,
-                        &names,
-                        &commands,
-                    );
-                    let (text, clean) = crate::npc_text::substitute_checked(
-                        &msg.text,
-                        &crate::npc_text::MacroContext {
-                            subject: subject.as_ref(),
-                            states: &states,
-                        },
-                    );
-                    if clean {
-                        Some(text)
-                    } else if subject_guid == 0 || names.peek(subject_guid).is_some() {
-                        debug!(
-                            "chat: dropping unexpandable [{:#04x}] {:?} (subject {subject_guid:#x})",
-                            msg.chat_type, msg.text
-                        );
-                        continue; // the reference prints no line
-                    } else if tries < NAME_MAX_TRIES {
-                        // `subject_for_guid` sent the name query: hold the raw line until it lands.
-                        still.push(Pending::Wire {
-                            msg,
-                            tries: tries + 1,
-                        });
-                        continue;
-                    } else {
-                        None // the second failure: show the raw text
-                    }
-                } else {
-                    None
-                };
-                let plain = expanded.unwrap_or_else(|| msg.text.clone());
+                let plain = msg.text.clone();
                 // The language gate: the garble writes the one buffer the line, `arg1` and the
                 // bubble read, as `0x49a870` fills `[ebp-0xd0c]` once (`0x49a9f0` copy, `0x49aa7c`
                 // garble) and never reads the wire text again.

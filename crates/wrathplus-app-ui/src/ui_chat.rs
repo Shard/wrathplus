@@ -30,6 +30,8 @@ mod input;
 mod language;
 /// `LoggingChat`/`LoggingCombat`: the two log files `/chatlog` and `/combatlog` toggle.
 pub(crate) mod logging;
+#[cfg(test)]
+mod macro_tests;
 mod native_feed;
 pub(crate) mod native_message;
 mod native_membership;
