@@ -1,14 +1,14 @@
 //! Whole-client tests of `crate::net::objects`, from `net/objects.rs` (`tests`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
+use crate::app_core::session::SelfGuid;
 use crate::motion::Spline;
 use crate::motion::SplineStopped;
 use crate::net::GuidIndex;
-use crate::app_core::session::SelfGuid;
+use bevy::prelude::*;
 use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_protocol::ObjectFields;
 use wrathplus_protocol::SessionEvent;
-use bevy::prelude::*;
 
 /// `0x1EB` for an unheld item waits on the active player and replays at its create; `0x1EA`
 /// for one is dropped; the destroy takes the cells.
@@ -110,9 +110,9 @@ fn item_countdowns_live_on_the_item_and_a_queued_enchant_waits_for_it() {
 /// shared spline sampler supplies movement, facing, and a later stop.
 #[test]
 fn wrath_monster_move_adapter_drives_and_stops_the_ecs_spline() {
-    use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter, SMSG_MONSTER_MOVE};
     use bevy::ecs::system::RunSystemOnce;
     use std::time::Duration;
+    use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter, SMSG_MONSTER_MOVE};
 
     const MOB: u64 = 0x2a;
     fn packet(move_type: u8, spline_id: u32) -> Vec<u8> {
@@ -174,4 +174,65 @@ fn wrath_monster_move_adapter_drives_and_stops_the_ecs_spline() {
     crate::net::handlers::dispatch(app.world_mut(), events(&mut adapter, &packet(1, 18)));
     assert!(app.world().get::<Spline>(entity).is_none());
     assert_eq!(app.world().get::<SplineStopped>(entity).unwrap().0, 18);
+}
+
+/// Thazz'ril's Pick after its loot (session 152357, 06:25:19): the server's despawn animation and
+/// then its destroy take the chest away. AzerothCore respawns it two seconds later (spawn 12605,
+/// `spawntimesecs` 2) under the same guid, which is the model seen standing again: server data,
+/// as stock 3.3.5 would show it too.
+#[test]
+fn a_looted_chest_goes_on_its_destroy_and_returns_on_the_servers_respawn() {
+    use crate::net::NetEvents;
+    use wrathplus_protocol::types::ObjectType;
+    use wrathplus_protocol::EntityKind;
+    const PICK: u64 = 0xF110_02B7_A700_1160;
+    let create = || SessionEvent::ObjectCreate {
+        guid: PICK,
+        kind: EntityKind::GameObject,
+        display_id: Some(4992),
+        position: [-87.7195, -4274.56, 65.9037],
+        orientation: -1.48353,
+        rotation: Some([0.0, 0.0, -0.675_589_56, 0.737_277_9]),
+        scale: 2.0,
+        speeds: None,
+        mover: None,
+        transport_progress: None,
+        transport: None,
+        spline: None,
+        fields: ObjectFields::from_pairs(&[]).into_created(ObjectType::GameObject),
+    };
+    let mut app = crate::game_plugins::schedule_tests::headless_client();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    app.insert_resource(NetEvents(rx));
+    let world = app.world_mut();
+    tx.send(create()).unwrap();
+    crate::net::apply::apply_net_updates(world);
+    let e = world.resource::<GuidIndex>().0[&PICK];
+
+    crate::net::handlers::dispatch(
+        world,
+        vec![
+            SessionEvent::GameObjectDespawnAnim { guid: PICK },
+            SessionEvent::ObjectDestroyed(PICK),
+        ],
+    );
+    assert!(
+        !world.resource::<GuidIndex>().0.contains_key(&PICK),
+        "the chest is gone"
+    );
+    // The announced despawn pins it (`0x464920` sets the pending-destroy bit); `go_anim` tears it
+    // down, fading, when the despawn animation ends, or at once without one.
+    assert!(
+        world
+            .get::<crate::app_core::anim::PendingDestroy>(e)
+            .is_some(),
+        "the destroy waits for the despawn animation"
+    );
+
+    tx.send(create()).unwrap();
+    crate::net::apply::apply_net_updates(world);
+    assert!(
+        world.resource::<GuidIndex>().0.contains_key(&PICK),
+        "the respawn streams it back"
+    );
 }

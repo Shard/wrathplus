@@ -5,9 +5,9 @@
 
 use bevy::prelude::*;
 
-use crate::net::Reputations;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::net::Reputations;
 
 use super::ring::Factions;
 use super::{go_is_nearest, Hovered, HoveredObject};
@@ -274,6 +274,9 @@ pub struct GoOverrides {
     pub channel_owned: bool,
     /// MEETINGSTONE: this stone's area is the one we are queued at.
     pub meeting_stone_queued: bool,
+    /// TRAP: its template's lock id names no `Lock.dbc` row, so 12340's gate (`0x7112a0` via
+    /// `0x70ef30`) refuses it, cursor and mouseover alike. False while either is unknown.
+    pub trap_lockless: bool,
 }
 
 /// `GAMEOBJECT_TYPE_MEETINGSTONE` (23): its `+0x14` (`0x5f6990`) is only
@@ -305,8 +308,9 @@ fn highlightable_flags(
     // unresolved reaction passes, so a data gap never blanks the world.
     let ordinary_faction_ok = |r: Option<u8>| r.is_none_or(|r| r > 1);
     if type_id == GO_TYPE_TRAP {
-        // TRAP inverts it (`0x5f2fc6`): highlightable only to whoever it is hostile to.
-        if !reaction.is_none_or(|r| r == 1) {
+        // TRAP (12340 `0x7112a0`) needs a lock row, then inverts the term: highlightable only to
+        // whoever it is hostile to. Labelled: a player-made trap's PvP and party terms are not.
+        if overrides.trap_lockless || !reaction.is_none_or(|r| r == 1) {
             return false;
         }
     } else if !ordinary_faction_ok(reaction) {
@@ -372,11 +376,7 @@ pub fn mouseover_eligible(
 /// wire default 0, DOOR. This slot gates the cursor, the right-click use (`OnUse 0x5f8660`) and
 /// the pick's pass-2 priority (`0x480c90` via `0x5f8800`); the tooltip and the brighten follow the
 /// mouseover slot, [`mouseover_eligible`].
-pub fn go_highlightable(
-    store: &ObjectStore,
-    reaction: Option<u8>,
-    overrides: GoOverrides,
-) -> bool {
+pub fn go_highlightable(store: &ObjectStore, reaction: Option<u8>, overrides: GoOverrides) -> bool {
     highlightable_flags(
         store.0.gameobject_type_id(),
         store.0.gameobject_flags(),
@@ -384,6 +384,36 @@ pub fn go_highlightable(
         reaction,
         overrides,
     )
+}
+
+impl GoOverrides {
+    /// One GameObject's overrides: its guid and template (`None` while unanswered), our player,
+    /// the meeting-stone queue's area and `Lock.dbc`.
+    pub fn of(
+        self_store: Option<&ObjectStore>,
+        guid: Option<u64>,
+        tmpl: Option<&crate::go_templates::GoTemplate>,
+        queued_area: u32,
+        locks: Option<&crate::go_templates::Locks>,
+    ) -> Self {
+        GoOverrides {
+            channel_owned: fishing_channel_owned(self_store, guid),
+            meeting_stone_queued: meeting_stone_queued(
+                tmpl.and_then(|t| t.meeting_stone).map(|m| m.area),
+                queued_area,
+            ),
+            trap_lockless: trap_lockless(tmpl.map(|t| t.lock_id), locks),
+        }
+    }
+}
+
+/// [`GoOverrides::trap_lockless`] from a template's lock id (`None` unanswered) and `Lock.dbc`.
+pub fn trap_lockless(lock_id: Option<u32>, locks: Option<&crate::go_templates::Locks>) -> bool {
+    match lock_id {
+        Some(0) => true,
+        Some(id) => locks.is_some_and(|l| l.0.slots(id).is_none()),
+        None => false,
+    }
 }
 
 /// MEETINGSTONE's override for one stone, 1.12's `template.data[2] == [0xb72038]`. `queued_area`
@@ -395,10 +425,7 @@ pub fn meeting_stone_queued(area: Option<u32>, queued_area: u32) -> bool {
 
 /// The FISHINGNODE override's input (`0x5f6710`): our `UNIT_FIELD_CHANNEL_OBJECT` is this
 /// GameObject. False when either is unknown, as the reference answers false with no active player.
-pub fn fishing_channel_owned(
-    self_store: Option<&ObjectStore>,
-    go_guid: Option<u64>,
-) -> bool {
+pub fn fishing_channel_owned(self_store: Option<&ObjectStore>, go_guid: Option<u64>) -> bool {
     match (self_store, go_guid) {
         (Some(s), Some(g)) => s.0.unit_channel_object() == Some(g),
         _ => false,
@@ -630,14 +657,9 @@ pub(super) fn classify(
         );
         // Read before the gate: MEETINGSTONE's override is a template slot.
         let tmpl = hovered_object.guid.and_then(|g| go_inputs.templates.get(g));
-        let overrides = GoOverrides {
-            channel_owned: fishing_channel_owned(Some(self_store), hovered_object.guid),
-            meeting_stone_queued: meeting_stone_queued(
-                tmpl.and_then(|t| t.meeting_stone).map(|m| m.area),
-                // No queue in 3.3.5: the unqueued 0 (`GoGateInputs::queued_area`).
-                0,
-            ),
-        };
+        // No queue in 3.3.5: the unqueued 0 (`GoGateInputs::queued_area`).
+        let locks = go_inputs.locks.as_deref();
+        let overrides = GoOverrides::of(Some(self_store), hovered_object.guid, tmpl, 0, locks);
         if !go_highlightable(store, reaction, overrides) {
             return None;
         }
@@ -758,6 +780,10 @@ pub(super) fn classify(
     let (kind, unable) = resolved.unwrap_or((CursorKind::Point, false));
     (WorldCursor { kind, unable }, AttackFork(attack_fork.get()))
 }
+
+#[cfg(test)]
+#[path = "cursor_mode_gate_tests.rs"]
+mod gate_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1130,139 +1156,6 @@ mod tests {
             None,
             GoOverrides::default()
         )); // mailbox
-    }
-
-    #[test]
-    fn highlightable_gates_the_quest_object_but_not_the_plain_door() {
-        assert!(highlightable_flags(0, 0, 0, None, GoOverrides::default())); // DOOR, no flags
-        assert!(!highlightable_flags(
-            GO_TYPE_GENERIC,
-            0,
-            0,
-            None,
-            GoOverrides::default()
-        ));
-        for t in [GO_TYPE_TRANSPORT, GO_TYPE_MAP_OBJECT, GO_TYPE_MO_TRANSPORT] {
-            assert!(!highlightable_flags(
-                t,
-                0,
-                GO_DYNFLAG_ACTIVATE,
-                None,
-                GoOverrides::default()
-            ));
-        }
-        for t in [
-            GO_TYPE_SPELL_FOCUS,
-            GO_TYPE_DUEL_ARBITER,
-            GO_TYPE_FISHINGHOLE,
-            GO_TYPE_AURA_GENERATOR,
-        ] {
-            assert!(!highlightable_flags(t, 0, 0, None, GoOverrides::default()));
-            assert!(!highlightable_flags(
-                t,
-                0,
-                GO_DYNFLAG_ACTIVATE,
-                Some(3),
-                GoOverrides::default()
-            ));
-        }
-        // The marker set's two slots disagree: a tooltip, but no interact cursor.
-        assert!(mouseover_eligible(
-            GO_TYPE_SPELL_FOCUS,
-            0,
-            0,
-            None,
-            Some(3),
-            GoOverrides::default()
-        ));
-        assert!(!highlightable_flags(
-            GO_TYPE_SPELL_FOCUS,
-            0,
-            0,
-            Some(3),
-            GoOverrides::default()
-        ));
-        for t in [GO_TYPE_GUARDPOST, GO_TYPE_MAX + 1, 99, -1] {
-            assert!(strategy_is_default(t), "type {t} takes the default arm");
-            assert!(!highlightable_flags(t, 0, 0, None, GoOverrides::default()));
-            assert!(!mouseover_eligible(
-                t,
-                0,
-                0,
-                None,
-                None,
-                GoOverrides::default()
-            ));
-        }
-        for t in (0..=GO_TYPE_MAX).filter(|t| *t != GO_TYPE_GUARDPOST) {
-            assert!(!strategy_is_default(t), "type {t} has its own strategy");
-        }
-        assert!(!highlightable_flags(
-            GO_TYPE_AUCTIONHOUSE,
-            0,
-            GO_DYNFLAG_ACTIVATE,
-            Some(3),
-            GoOverrides::default()
-        ));
-        assert!(!mouseover_eligible(
-            GO_TYPE_AUCTIONHOUSE,
-            0,
-            0,
-            None,
-            Some(3),
-            GoOverrides::default()
-        ));
-        assert!(!highlightable_flags(
-            GO_TYPE_CAPTURE_POINT,
-            0,
-            0,
-            Some(3),
-            GoOverrides::default()
-        ));
-        assert!(mouseover_eligible(
-            GO_TYPE_CAPTURE_POINT,
-            0,
-            0,
-            Some(true),
-            Some(3),
-            GoOverrides::default()
-        ));
-        assert!(!mouseover_eligible(
-            GO_TYPE_CAPTURE_POINT,
-            0,
-            0,
-            Some(false),
-            Some(3),
-            GoOverrides::default()
-        ));
-        assert!(!highlightable_flags(
-            3,
-            0x1,
-            0,
-            None,
-            GoOverrides::default()
-        )); // CHEST, IN_USE
-        assert!(!highlightable_flags(
-            3,
-            0x10,
-            0,
-            None,
-            GoOverrides::default()
-        )); // CHEST, NO_INTERACT
-        assert!(!highlightable_flags(
-            3,
-            GO_FLAG_INTERACT_COND,
-            0,
-            None,
-            GoOverrides::default()
-        )); // quest chest, no quest → clear
-        assert!(highlightable_flags(
-            3,
-            GO_FLAG_INTERACT_COND,
-            GO_DYNFLAG_ACTIVATE,
-            None,
-            GoOverrides::default()
-        )); // quest chest, quest held → usable
     }
 
     #[test]

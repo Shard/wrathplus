@@ -8,8 +8,8 @@ use bevy_egui::{egui, EguiContexts};
 
 use super::{overlay_text, OVERLAY_FILL, OVERLAY_TEXT_DIM};
 use crate::app_core::session::ObjectStore;
-use crate::app_core::ui_flags::InspectMode;
 use crate::app_core::state::PointerOverUi;
+use crate::app_core::ui_flags::InspectMode;
 use wrathplus_world::interact::{WorldObject, WorldPick};
 use wrathplus_world::model_render::ModelKind;
 use wrathplus_world::modkeys::DEV_CHORD;
@@ -342,15 +342,14 @@ pub(super) fn inspect_ui(
             let reaction =
                 crate::target::cursor_mode::go_reaction(factions, s.0.gameobject_faction(), self_store);
             let go_guid = net_entity.and_then(|p| guids.get(p).ok()).map(|g| g.0);
-            let overrides = crate::target::cursor_mode::GoOverrides {
-                channel_owned: crate::target::cursor_mode::fishing_channel_owned(
-                    self_store, go_guid,
-                ),
-                meeting_stone_queued: crate::target::cursor_mode::meeting_stone_queued(
-                    go_guid.and_then(|g| Some(go_templates.get(g)?.meeting_stone?.area)),
-                    queued_area,
-                ),
-            };
+            let tmpl = go_guid.and_then(|g| go_templates.get(g));
+            let overrides = crate::target::cursor_mode::GoOverrides::of(
+                self_store,
+                go_guid,
+                tmpl,
+                queued_area,
+                None,
+            );
             let interact = if crate::target::cursor_mode::go_highlightable(s, reaction, overrides) {
                 "interact ✓"
             } else {
