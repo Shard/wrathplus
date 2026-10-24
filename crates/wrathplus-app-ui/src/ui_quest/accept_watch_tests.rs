@@ -262,7 +262,7 @@ fn accept_sends_the_accept_unless_the_server_auto_accepted_the_quest() {
                 npc: NPC,
                 quest_id,
                 title: format!("Quest {quest_id}"),
-                details: String::new(),
+                details: "The Kolkar raid Sen'jin.".into(),
                 objectives: String::new(),
                 auto_finish: 0,
                 choices: Vec::new(),
