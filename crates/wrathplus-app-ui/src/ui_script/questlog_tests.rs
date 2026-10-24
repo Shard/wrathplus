@@ -308,11 +308,9 @@ fn shift_click_toggles_the_watch_check_and_the_tracker() {
     open_log(&mut s, eight_entries());
     let check = format!("{}.check", row(1));
     assert!(!shown(&s, &check), "no check before any watch");
-    // The fixture feeds no quest POIs, so no quest is on the current map; the tracker's default
-    // `trackerFilter` 0 shows local quests only (WatchFrame.lua:280, :814-816). Its menu's
-    // remote-zones toggle (:1441) lets this one through.
-    s.run("WATCHFRAME_FILTER_TYPE = WATCHFRAME_FILTER_REMOTE_ZONES")
-        .unwrap();
+    // The fixture feeds no quest POIs, so no quest is on the current map; build 12340's
+    // `trackerFilter` "7", read at `VARIABLES_LOADED` (WatchFrame.lua:280), shows remote zones.
+    s.fire_event("VARIABLES_LOADED", vec![]);
 
     shift_click(&mut s, &row(1));
     assert!(

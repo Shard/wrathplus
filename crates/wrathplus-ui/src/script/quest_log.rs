@@ -14,9 +14,9 @@ use mlua::{Lua, MultiValue, Value};
 use super::Model;
 
 mod quest_watch;
-pub(crate) use quest_watch::QuestWatches;
 use super::binding_abi::{flag, number_arg};
 use super::quest::QuestItemView;
+pub(crate) use quest_watch::QuestWatches;
 
 /// One quest-log row; its 1-based position in [`QuestLogState::entries`] is the index every verb
 /// takes.
@@ -234,7 +234,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let Some(e) = entry else {
                 // `0x5e5cc0` out of range: no title, level 0, no tag, group 0, then nils and quest 0.
                 let mut v = vec![Value::Nil, Value::Integer(0), Value::Nil, Value::Integer(0)];
-                v.extend([Value::Nil, Value::Nil, Value::Nil, Value::Nil, Value::Integer(0)]);
+                v.extend([
+                    Value::Nil,
+                    Value::Nil,
+                    Value::Nil,
+                    Value::Nil,
+                    Value::Integer(0),
+                ]);
                 return Ok(MultiValue::from_vec(v));
             };
             let tag = match &e.tag {
@@ -260,7 +266,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 flag(e.is_header && e.collapsed),
                 complete,
                 flag(e.daily),
-                Value::Integer(if e.is_header { 0 } else { i64::from(e.quest_id) }),
+                Value::Integer(if e.is_header {
+                    0
+                } else {
+                    i64::from(e.quest_id)
+                }),
             ]))
         })?,
     )?;
@@ -340,6 +350,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
 
     // ── Detail counts + money ────────────────────────────────────────────────────────────────────
+    // An optional log row, else the selection: stock's tracker passes the row it draws
+    // (`GetQuestLogRequiredMoney(questIndex)`, `GetQuestLogCompletionText(questIndex)`,
+    // `WatchFrame.lua:802`, `:827`), the detail pane nothing. Labelled: inferred from those calls.
+    fn detail_at(model: &Model, row: Option<u32>) -> Option<&QuestLogDetail> {
+        let index = row.unwrap_or(model.quest_log_selection).checked_sub(1)?;
+        model.quest_log.entries.get(index as usize)?.detail.as_ref()
+    }
     fn install_detail_count(
         lua: &Lua,
         name: &str,
@@ -347,9 +364,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     ) -> mlua::Result<()> {
         lua.globals().set(
             name,
-            lua.create_function(move |lua, ()| {
+            lua.create_function(move |lua, row: Option<u32>| {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                Ok(model.selected_quest_detail().map(pick).unwrap_or(0))
+                Ok(detail_at(&model, row).map(pick).unwrap_or(0))
             })?,
         )
     }
@@ -381,9 +398,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     ] {
         g.set(
             name,
-            lua.create_function(move |lua, ()| {
+            lua.create_function(move |lua, row: Option<u32>| {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                Ok(model.selected_quest_detail().and_then(|d| {
+                Ok(detail_at(&model, row).and_then(|d| {
                     if title {
                         d.reward_title.clone()
                     } else {
@@ -833,12 +850,9 @@ mod tests {
         s.eval::<()>("SelectQuestLogEntry(0); RemoveQuestWatch(1)")
             .unwrap();
         assert_eq!(s.eval::<u32>("return GetQuestLogRewardXP()").unwrap(), 0);
-        assert!(
-            s.eval::<bool>(
-                "return GetQuestLogRewardTitle() == nil and GetQuestWatchIndex(1) == nil"
-            )
-            .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("return GetQuestLogRewardTitle() == nil and GetQuestWatchIndex(1) == nil")
+            .unwrap());
     }
 
     #[test]
@@ -857,21 +871,19 @@ mod tests {
                 .unwrap(),
             (2, 2)
         );
-        assert!(
-            s.eval::<bool>(
+        assert!(s
+            .eval::<bool>(
                 "local t, l, tag, _, h, c, done = GetQuestLogTitle(1)\n\
                  return t == 'A Threat Within' and l == 1 and tag == nil\n\
                     and h == nil and c == nil and done == nil"
             )
-            .unwrap()
-        );
-        assert!(
-            s.eval::<bool>(
+            .unwrap());
+        assert!(s
+            .eval::<bool>(
                 "local t, _, _, _, _, _, done = GetQuestLogTitle(2)\n\
                  return t == 'Kobold Camp Cleanup' and done == 1"
             )
-            .unwrap()
-        );
+            .unwrap());
     }
 
     /// Build 12340's shape (`0x5e5cc0`).
@@ -879,10 +891,9 @@ mod tests {
     fn out_of_range_is_nine_values_with_a_zero_level_and_a_bad_arg_raises() {
         let mut s = UiScript::new().unwrap();
         assert_eq!(s.arity("GetQuestLogTitle(1)").unwrap(), 9);
-        assert!(
-            s.eval::<bool>("local t, l = GetQuestLogTitle(1) return t == nil and l == 0")
-                .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("local t, l = GetQuestLogTitle(1) return t == nil and l == 0")
+            .unwrap());
 
         s.set_quest_log(two_quests());
         for i in ["0", "-1", "99"] {
@@ -895,10 +906,9 @@ mod tests {
             );
         }
         // `_ftol` truncates toward zero: 1.9 is entry 1.
-        assert!(
-            s.eval::<bool>("return GetQuestLogTitle(1.9) == 'A Threat Within'")
-                .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("return GetQuestLogTitle(1.9) == 'A Threat Within'")
+            .unwrap());
 
         for bad in ["", "nil", "{}", "print"] {
             let e = format!(
@@ -937,23 +947,20 @@ mod tests {
         );
         s.set_quest_log(state);
 
-        assert!(
-            s.eval::<bool>(
+        assert!(s
+            .eval::<bool>(
                 "local _, l, _, _, h, c = GetQuestLogTitle(1) return h == 1 and c == 1 and l == 0"
             )
-            .unwrap()
-        );
-        assert!(
-            s.eval::<bool>("local _, _, _, _, h, c = GetQuestLogTitle(2) return h == 1 and c == nil")
-                .unwrap()
-        );
-        assert!(
-            s.eval::<bool>(
+            .unwrap());
+        assert!(s
+            .eval::<bool>("local _, _, _, _, h, c = GetQuestLogTitle(2) return h == 1 and c == nil")
+            .unwrap());
+        assert!(s
+            .eval::<bool>(
                 "local _, _, _, _, h, c = GetQuestLogTitle(3)\n\
                  return h == nil and c == nil and type(h) ~= 'boolean'"
             )
-            .unwrap()
-        );
+            .unwrap());
     }
 
     #[test]
@@ -962,14 +969,12 @@ mod tests {
         let mut state = two_quests();
         state.entries[1].tag = Some("Elite".into());
         s.set_quest_log(state);
-        assert!(
-            s.eval::<bool>("local _, _, tag = GetQuestLogTitle(1) return tag == nil")
-                .unwrap()
-        );
-        assert!(
-            s.eval::<bool>("local _, _, tag = GetQuestLogTitle(2) return tag == 'Elite'")
-                .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("local _, _, tag = GetQuestLogTitle(1) return tag == nil")
+            .unwrap());
+        assert!(s
+            .eval::<bool>("local _, _, tag = GetQuestLogTitle(2) return tag == 'Elite'")
+            .unwrap());
     }
 
     #[test]
@@ -1040,12 +1045,11 @@ mod tests {
             },
         );
         s.set_quest_log(state);
-        assert!(
-            s.eval::<bool>(
+        assert!(s
+            .eval::<bool>(
                 "SelectQuestLogEntry(1); local d = GetQuestLogQuestText(); return d == ''"
             )
-            .unwrap()
-        );
+            .unwrap());
     }
 
     #[test]
@@ -1053,13 +1057,12 @@ mod tests {
         let mut s = UiScript::new().unwrap();
         s.set_quest_log(two_quests());
         s.run("SelectQuestLogEntry(1)").unwrap();
-        assert!(
-            s.eval::<bool>(
+        assert!(s
+            .eval::<bool>(
                 "local d, o = GetQuestLogQuestText()\n\
                  return d == 'Speak with Marshal McBride.' and o == 'Report to Marshal McBride.'"
             )
-            .unwrap()
-        );
+            .unwrap());
         assert_eq!(
             s.eval::<i64>("return GetNumQuestLeaderBoards()").unwrap(),
             1
@@ -1072,20 +1075,18 @@ mod tests {
             s.eval::<i64>("return GetNumQuestLeaderBoards(2)").unwrap(),
             1
         );
-        assert!(
-            s.eval::<bool>(
+        assert!(s
+            .eval::<bool>(
                 "local t, k, f = GetQuestLogLeaderBoard(1, 2)\n\
                  return t == 'Kobold Worker slain: 10/10' and k == 'monster' and f == true"
             )
-            .unwrap()
-        );
-        assert!(
-            s.eval::<bool>(
+            .unwrap());
+        assert!(s
+            .eval::<bool>(
                 "local t, k, f = GetQuestLogLeaderBoard(1)\n\
                  return t == 'Kobold Vermin slain: 3/10' and k == 'monster' and f == false"
             )
-            .unwrap()
-        );
+            .unwrap());
         assert_eq!(
             s.eval::<i64>("return GetQuestLogRewardMoney()").unwrap(),
             40
@@ -1093,13 +1094,12 @@ mod tests {
         assert_eq!(s.eval::<i64>("return GetNumQuestLogRewards()").unwrap(), 1);
         // Five values, `isUsable` 1 or nil (`0x4e0b00`).
         assert_eq!(s.arity("GetQuestLogRewardInfo(1)").unwrap(), 5);
-        assert!(
-            s.eval::<bool>(
+        assert!(s
+            .eval::<bool>(
                 "local n, _, c, q, u = GetQuestLogRewardInfo(1)\n\
                  return n == 'Militia Hammer' and c == 1 and q == 1 and u == 1"
             )
-            .unwrap()
-        );
+            .unwrap());
         // No row answers the miss, `nil, nil, 1, 0, nil` (`0x4e0ca8`), from either getter.
         for call in [
             "GetQuestLogChoiceInfo(1)",
@@ -1130,18 +1130,15 @@ mod tests {
                 .unwrap(),
             "|cffffffff|Hitem:2024:0:0:0|h[Militia Hammer]|h|r"
         );
-        assert!(
-            s.eval::<bool>("return GetQuestLogItemLink(\"choice\", 1) == nil")
-                .unwrap()
-        );
-        assert!(
-            s.eval::<bool>("return GetQuestLogItemLink(\"reward\", 9) == nil")
-                .unwrap()
-        );
-        assert!(
-            s.eval::<bool>("return GetQuestLogItemLink(\"bogus\", 1) == nil")
-                .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("return GetQuestLogItemLink(\"choice\", 1) == nil")
+            .unwrap());
+        assert!(s
+            .eval::<bool>("return GetQuestLogItemLink(\"reward\", 9) == nil")
+            .unwrap());
+        assert!(s
+            .eval::<bool>("return GetQuestLogItemLink(\"bogus\", 1) == nil")
+            .unwrap());
     }
 
     #[test]
@@ -1169,10 +1166,9 @@ mod tests {
         s.set_quest_log(state);
         s.run("SelectQuestLogEntry(1)").unwrap();
         assert!(s.eval::<bool>("return IsCurrentQuestFailed()").unwrap());
-        assert!(
-            s.eval::<bool>("local _, _, _, _, _, _, done = GetQuestLogTitle(1)\nreturn done == -1")
-                .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("local _, _, _, _, _, _, done = GetQuestLogTitle(1)\nreturn done == -1")
+            .unwrap());
         s.run("SelectQuestLogEntry(2)").unwrap();
         assert!(!s.eval::<bool>("return IsCurrentQuestFailed()").unwrap());
     }
@@ -1255,25 +1251,22 @@ mod tests {
 
         // No server clock yet.
         assert_eq!(s.arity("GetQuestTimers()").unwrap(), 0);
-        assert!(
-            s.eval::<bool>("return GetQuestLogTimeLeft() == nil")
-                .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("return GetQuestLogTimeLeft() == nil")
+            .unwrap());
 
         s.set_server_unix_time(1_000_400.0);
         assert_eq!(s.arity("GetQuestTimers()").unwrap(), 1);
         assert_eq!(s.eval::<i64>("return (GetQuestTimers())").unwrap(), 499);
         assert_eq!(s.eval::<i64>("return GetQuestIndexForTimer(1)").unwrap(), 2);
-        assert!(
-            s.eval::<bool>("return GetQuestIndexForTimer(2) == nil")
-                .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("return GetQuestIndexForTimer(2) == nil")
+            .unwrap());
 
         s.run("SelectQuestLogEntry(1)").unwrap();
-        assert!(
-            s.eval::<bool>("return GetQuestLogTimeLeft() == nil")
-                .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("return GetQuestLogTimeLeft() == nil")
+            .unwrap());
         s.run("SelectQuestLogEntry(2)").unwrap();
         assert_eq!(s.eval::<i64>("return GetQuestLogTimeLeft()").unwrap(), 499);
 
@@ -1289,10 +1282,9 @@ mod tests {
         s.set_server_unix_time(1_000_910.0);
         assert_eq!(s.eval::<i64>("return GetQuestLogTimeLeft()").unwrap(), 0);
         assert_eq!(s.arity("GetQuestTimers()").unwrap(), 0);
-        assert!(
-            s.eval::<bool>("return GetQuestIndexForTimer(1) == nil")
-                .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("return GetQuestIndexForTimer(1) == nil")
+            .unwrap());
     }
 
     /// vmangos sets a failed quest's timer to 1 and leaves it in the log (`Player::FailQuest`).
@@ -1310,10 +1302,9 @@ mod tests {
         assert_eq!(s.eval::<i64>("return (GetQuestTimers())").unwrap(), 499);
         assert_eq!(s.eval::<i64>("return GetQuestIndexForTimer(1)").unwrap(), 1);
         s.run("SelectQuestLogEntry(2)").unwrap();
-        assert!(
-            s.eval::<bool>("return GetQuestLogTimeLeft() == nil")
-                .unwrap()
-        );
+        assert!(s
+            .eval::<bool>("return GetQuestLogTimeLeft() == nil")
+            .unwrap());
     }
 
     #[test]
@@ -1503,7 +1494,9 @@ mod tests {
             )
             .unwrap());
         assert!(s
-            .eval::<bool>("local _, l, _, _, _, _, _, _, id = GetQuestLogTitle(2) return l == 1 and id == 55")
+            .eval::<bool>(
+                "local _, l, _, _, _, _, _, _, id = GetQuestLogTitle(2) return l == 1 and id == 55"
+            )
             .unwrap());
         assert_eq!(s.arity("GetQuestLogTitle(3)").unwrap(), 9);
         assert!(s

@@ -251,6 +251,9 @@ mod tests {
         assert_eq!(plan.character.as_deref(), Some("Hero"));
         assert!(!plan.enter_world, "a character is selected, not entered");
         assert!(run(&["--enter-world"], &[], None).unwrap().enter_world);
+        // A non-default logon port rides along verbatim (`realmlist::Realmlist`'s pin).
+        let plan = run(&["--server=vps.example.org:2337"], &[], None).unwrap();
+        assert_eq!(plan.server.as_deref(), Some("vps.example.org:2337"));
         // `--fill-only`: the credentials fill the boxes and nothing submits.
         let fill = run(
             &["--account", "Bob", "--password-env", "V", "--fill-only"],
