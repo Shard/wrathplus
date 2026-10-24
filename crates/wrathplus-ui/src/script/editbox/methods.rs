@@ -37,10 +37,7 @@ pub(in crate::script) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, this: Table| {
             with_editbox(lua, &this, |eb| {
                 let at = eb.cursor.min(eb.text.len());
-                eb.text
-                    .char_indices()
-                    .take_while(|(i, _)| *i < at)
-                    .count() as i64
+                eb.text.char_indices().take_while(|(i, _)| *i < at).count() as i64
             })
         })?,
     )?;
@@ -355,11 +352,16 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
 
     for (name, set) in flag_setters() {
         let refresh_text = name == "SetMultiLine";
+        let remask = name == "SetPassword";
         m.set(
             name,
             lua.create_function(move |lua, (this, v): (Table, Value)| {
                 let on = !matches!(v, Value::Nil | Value::Boolean(false));
                 with_editbox(lua, &this, |eb| set(eb, on))?;
+                if remask {
+                    // The drawn and measured string follows the mask now (`E+0x334`).
+                    super::sync_text_region(lua, frame_handle_of(lua, &this)?);
+                }
                 if refresh_text {
                     // A multi-line box seats its text TOP and as tall as the text, a single-line
                     // one MIDDLE between the inset corners, and the loader wires the
@@ -367,6 +369,17 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
                     super::refresh_text_region(lua, &this)?;
                 }
                 Ok(())
+            })?,
+        )?;
+    }
+
+    // IsAutoFocus / IsNumeric / IsPassword / IsMultiLine: the four flags read back, 1 or nil.
+    for (name, get) in flag_getters() {
+        m.set(
+            name,
+            lua.create_function(move |lua, this: Table| {
+                let on = with_editbox(lua, &this, |eb| get(eb))?;
+                Ok(crate::script::binding_abi::flag(on))
             })?,
         )?;
     }
@@ -436,6 +449,19 @@ fn install_font_block(lua: &Lua, m: &Table) -> mlua::Result<()> {
 
 /// A `Set<Flag>` method name and the field write it drives.
 type FlagSetter = (&'static str, fn(&mut EditBoxState, bool));
+
+/// An `Is<Flag>` method name and the field it reads.
+type FlagGetter = (&'static str, fn(&EditBoxState) -> bool);
+
+/// The four config-flag getters, beside [`flag_setters`].
+fn flag_getters() -> [FlagGetter; 4] {
+    [
+        ("IsAutoFocus", |eb| eb.auto_focus),
+        ("IsNumeric", |eb| eb.numeric),
+        ("IsPassword", |eb| eb.password),
+        ("IsMultiLine", |eb| eb.multi_line),
+    ]
+}
 
 /// The four config-flag setters, each taking Lua truthiness.
 fn flag_setters() -> [FlagSetter; 4] {
