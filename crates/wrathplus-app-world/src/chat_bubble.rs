@@ -1,8 +1,8 @@
 //! Chat bubbles, `CGChatBubbleFrame`: the speech bubble a chat line spawns over the speaker, a
 //! 2-D overlay like the V-plate ([`crate::vplates`]).
 //!
-//! - Spawn (`0x608ac0`, from the `SMSG_MESSAGECHAT` display path): the sender resolves to a live
-//!   unit, its CVar is on, the text is non-empty, the unit carries no V-plate (`0x608adc`; a live
+//! - Spawn (12340 `0x720010`, from the `SMSG_MESSAGECHAT` display path `0x509dd0`): a live sender
+//!   unit, its CVar on, the text non-empty, the unit carrying no V-plate (`0x608adc`; a live
 //!   bubble in turn hides the overhead name, [`BubblesActive`]), and the local player is within
 //!   20 yd (3-D). Self is not excluded. A new line replaces the old bubble, never queues.
 //! - Anchor (`0x4b0c30`): unit z + height × model scale + 0.7, bottom-seated, growing upward. The
@@ -11,8 +11,8 @@
 //! - Stacking (`0x4b1060`): every frame the bubbles sort farthest-first by camera distance and
 //!   take frame levels 2, 3, 4…, so whole cards stack with the nearest speaker's on top.
 //!
-//! Only say, yell, party and monster say/yell bubble: the reference's gate is "sender resolves",
-//! but the wire-type remap (`0x49a870`) that would admit other kinds is untraced.
+//! `0x720010` bubbles say, party, yell, monster say/yell and party leader (1, 2, 6, 0x0c, 0x0e,
+//! 0x33): party and party leader under `chatBubblesParty` (`0xbd0968`), the rest `chatBubbles`.
 //!
 //! Deviation: sizes ride the plates' damped diagonal basis ([`plate_basis`]), not the unbounded
 //! reference law, so bubble text and plate text keep one em at every window size.
@@ -97,7 +97,7 @@ fn level_z(rank: usize) -> u64 {
     overlay_z::BUBBLE + level * overlay_z::BUBBLE_STRIDE
 }
 
-/// The CVar gating this kind's bubble (`0x608b0d`); `None` for a kind that does not bubble.
+/// The CVar gating this kind's bubble (`0x720010`, party leader as `Party`); `None`: no bubble.
 fn bubble_cvar(kind: ChatEventKind, cfg: &BubbleConfig) -> Option<bool> {
     use ChatEventKind as K;
     match kind {
