@@ -5,12 +5,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use wrathplus_protocol::SessionEvent;
 use crossbeam_channel::{Receiver, Sender};
+use wrathplus_protocol::SessionEvent;
 
 use super::{CharRequest, RealmRequest, SessionCommand, SessionCommandSender};
 
 pub(super) mod wrath;
+mod wrath_spell_control;
+
+pub use wrath_spell_control::spell_control_packet;
 
 /// The inbound census: every packet off the world socket, and the unix ms of the latest, which
 /// tell a silent server from a dead socket for the runaway watch ([`crate::motion`]).

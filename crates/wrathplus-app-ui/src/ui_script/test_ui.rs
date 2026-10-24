@@ -279,7 +279,7 @@ pub(crate) const GOSSIP_UI: &[&str] = &[
 /// `ItemButtonTemplate.xml` because a missing template only warns, and `PartyFrame.xml` because
 /// `LootFrame.lua:217` reads `MAX_PARTY_MEMBERS` at load. Needs client data.
 #[cfg(test)]
-pub(super) const LOOT_UI: &[&str] = &[
+pub(crate) const LOOT_UI: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml", // `TEXT`, which UnitPopup.lua reads at file scope

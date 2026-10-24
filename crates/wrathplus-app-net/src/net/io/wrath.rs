@@ -2238,8 +2238,11 @@ fn writer_loop(
                         active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeSpellControl => {
-                        match wrathplus_protocol::wrath_spell_control::encode(&spell_control_command(command)) {
-                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                        match super::spell_control_packet(command) {
+                            Ok((opcode, body)) => {
+                                super::wrath_spell_control::log_pet_send(opcode, &body);
+                                active.writer.send_raw(opcode, &body)
+                            }
                             Err(error) => {
                                 bevy::log::warn!("net(wrath): invalid spell-control command rejected before send: {error}");
                                 continue;
@@ -2315,6 +2318,7 @@ fn writer_loop(
                     }
                     WrathRoute::NativeSession => {
                         let (opcode, body) = session_packet(command);
+                        super::wrath_spell_control::log_pet_send(opcode, &body);
                         if *crate::net::CAST_TRACE {
                             bevy::log::info!("net(wrath) SEND 0x{opcode:04x} {body:02x?}");
                         }
@@ -2634,26 +2638,6 @@ fn quest_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
 }
 
 /// The native trade, auction and master-loot body for a [`WrathRoute::NativeExchange`] command.
-/// The native request for a [`WrathRoute::NativeSpellControl`] command.
-fn spell_control_command(command: ClientCommand) -> wrathplus_protocol::wrath_spell_control::Command {
-    use wrathplus_protocol::wrath_spell_control::Command as C;
-    match command {
-        ClientCommand::NativeSpellControl(command) => command,
-        ClientCommand::PetAction { pet_guid, packed, target_guid } => C::PetAction { pet: pet_guid, word: packed, target: target_guid },
-        ClientCommand::PetSetAction { pet_guid, entries } => C::PetSetAction { pet: pet_guid, entries },
-        ClientCommand::PetStopAttack { pet_guid } => C::PetStopAttack { pet: pet_guid },
-        ClientCommand::PetCancelAura { pet_guid, spell_id } => C::PetCancelAura { pet: pet_guid, spell_id },
-        ClientCommand::PetSpellAutocast { pet_guid, spell_id, enabled } => C::PetSpellAutocast { pet: pet_guid, spell_id, enabled },
-        ClientCommand::PetAbandon { pet_guid } => C::PetAbandon { pet: pet_guid },
-        ClientCommand::PetRename { pet_guid, name } => C::PetRename { pet: pet_guid, name },
-        ClientCommand::CancelAutoRepeat => C::CancelAutoRepeatSpell,
-        ClientCommand::CancelChannelling { spell_id } => C::CancelChannelling { spell_id },
-        ClientCommand::ResurrectResponse { caster, accept } => C::ResurrectResponse { caster, accept },
-        ClientCommand::FarSight { engage } => C::FarSight { engage },
-        _ => unreachable!("not a spell-control route"),
-    }
-}
-
 fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use wrathplus_protocol::wrath_exchange::{encode, Command as X};
     use wrathplus_protocol::wrath_trade::Command as T;
