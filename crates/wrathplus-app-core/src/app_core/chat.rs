@@ -289,9 +289,8 @@ pub enum Pending {
         rank: Option<(u8, Option<u8>)>,
         tries: u16,
     },
-    /// A text emote waiting on its performer's name: the reference's `PENDINGTEXTEMOTE` node
-    /// (`0x49cc00`), queued when `0x49dbe0` finds no cached name and drained by `0x49d0d0`.
-    /// `target` is the wire's name, empty when untargeted, used as sent.
+    /// A text emote waiting on its performer's name (`PENDINGTEXTEMOTE`, `0x49cc00`, drained by
+    /// `0x49d0d0`); `target` is the wire's name, empty when untargeted, used as sent.
     TextEmote {
         performer: u64,
         text_id: u32,
@@ -300,6 +299,8 @@ pub enum Pending {
     },
     /// An area discovery (`SMSG_EXPLORATION_EXPERIENCE`), fired at the drain, which holds the VM.
     Discovery { area: String, xp: u32 },
+    /// `SMSG_LOOT_MONEY_NOTIFY`'s line (`0x6ceca0`), resolved at the drain, which holds the VM.
+    LootMoney { amount: u32, sole: bool },
     /// One combat-log line, classified at the packet, waiting on its two endpoint names; the
     /// reference's deferred queue (`0xc4e208`) waits only on an item name.
     Combat(Box<PendingCombat>),

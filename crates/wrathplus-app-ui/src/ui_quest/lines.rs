@@ -3,16 +3,16 @@
 //! line whose quest or item record is not cached waits for it, as the reference's cache callbacks
 //! (`0x5ddeb0`, `0x5dc710`, `0x5dc7b0`) print on the record's arrival.
 
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
-use wrathplus_ui::script::UiScript;
+use wrathplus_ui::script::{ScriptValue, UiScript};
 
+use crate::app_core::errors::FillArg;
+use crate::app_core::errors::UiError;
 use crate::items::Items;
 use crate::net::{NetCommands, NetHandlerApp};
 use crate::ui_action::{show_messages, ui_error_text, MessageSink, Shown};
-use crate::app_core::errors::FillArg;
-use crate::app_core::errors::UiError;
 use crate::ui_quest_log::QuestLog;
 
 /// One quest chat line, raised in order.
@@ -88,11 +88,15 @@ fn feed_quest_lines(
     }
     let get = |key: &str| wrathplus_ui::strings::global(script.lua(), key);
     let mut shown = Vec::new();
+    let mut accepted = Vec::new();
     lines.0.retain(
         |&line| match resolve(line, &quest_log, &items, &commands, &get) {
             Resolved::Show(msg) => {
                 if let Some(text) = ui_error_text(&msg, &get) {
                     shown.push(Shown::keyed(msg.key, text));
+                }
+                if let QuestLine::Accepted(id) = line {
+                    accepted.push(id);
                 }
                 false
             }
@@ -101,6 +105,28 @@ fn feed_quest_lines(
         },
     );
     show_messages(&mut script, &mut sink, "ui_quest", shown);
+    // The slot watcher's event (`0x6df370`, or `0x6df2b0` once the record lands): after its line,
+    // `QUEST_ACCEPTED` with the quest's 1-based log row (`0x5deeb0`), which stock
+    // `QuestLog_OnEvent` hands to `AddQuestWatch` under `AUTO_QUEST_WATCH`
+    // (`QuestLogFrame.lua:260-264`). The log was pushed earlier this frame (`feed_quest_log`).
+    // Labelled: a quest folded under a collapsed header has no row and fires 0, which
+    // `AddQuestWatch` (`0x5e67c0`) refuses; the reference's row search there is not traced.
+    for &id in &accepted {
+        let row = script
+            .eval::<i64>(&format!(
+                "for i = 1, GetNumQuestLogEntries() do \
+                 local _, _, _, _, header, _, _, _, id = GetQuestLogTitle(i) \
+                 if not header and id == {id} then return i end end return 0"
+            ))
+            .unwrap_or(0);
+        script.fire_event("QUEST_ACCEPTED", vec![ScriptValue::Int(row)]);
+    }
+    // The log update after it, which redraws the tracker the watch just grew: `AddQuestWatch`
+    // (`0x5e64d0`) fires nothing, and the slot watcher marks the log dirty (`0x5e6940(1)`) ahead
+    // of its event. Labelled: that flag's drain to `QUEST_LOG_UPDATE` is not traced.
+    if !accepted.is_empty() {
+        script.fire_event("QUEST_LOG_UPDATE", vec![]);
+    }
 }
 
 fn resolve(
@@ -155,19 +181,23 @@ fn quest<'a>(
     }
 }
 
-/// The turn-in's coin string (`0x5dc511`-`0x5dc5fd`): each paid denomination as `"%d %s"` with
-/// its `GOLD`, `SILVER` or `COPPER` global, gold first. The reference's separator test yields
-/// `", , "` with a zero middle coin; this joins only the paid ones, with `", "`.
+/// 12340's coin string (`0x7e7d80`, the quest reward, loot and refund lines' composer): each
+/// non-zero coin, gold first, filling its `GOLD_AMOUNT`, `SILVER_AMOUNT` or `COPPER_AMOUNT`
+/// template (`0xaf491c` down), joined by `", "` (`0x9fc494`).
 pub(crate) fn coin_text(copper: u32, get: &dyn Fn(&str) -> String) -> String {
-    // `0x6c6260`'s split by 10000, 100 and 1.
+    use wrathplus_ui::strings::{fill, Arg};
     let (g, s, c) = (copper / 10000, copper / 100 % 100, copper % 100);
-    [(g, "GOLD"), (s, "SILVER"), (c, "COPPER")]
+    [(g, "GOLD_AMOUNT"), (s, "SILVER_AMOUNT"), (c, "COPPER_AMOUNT")]
         .into_iter()
         .filter(|&(n, _)| n != 0)
-        .map(|(n, key)| format!("{n} {}", get(key)))
+        .map(|(n, key)| fill(&get(key), &[Arg::D(n.into())]))
         .collect::<Vec<_>>()
         .join(", ")
 }
+
+#[cfg(test)]
+#[path = "accept_watch_tests.rs"]
+mod accept_watch_tests;
 
 #[cfg(test)]
 mod tests {
@@ -176,7 +206,7 @@ mod tests {
 
     use crate::net::ClientCommand;
 
-    fn template(quest_id: u32, title: &str, next_quest_in_chain: u32) -> QuestTemplate {
+    pub(super) fn template(quest_id: u32, title: &str, next_quest_in_chain: u32) -> QuestTemplate {
         let objective = || QuestObjective {
             creature_or_go: 0,
             required_count: 0,
@@ -233,7 +263,7 @@ mod tests {
                 ERR_QUEST_REWARD_EXP_I = "Experience gained: %d."
                 ERR_QUEST_REWARD_MONEY_S = "Received %s."
                 ERR_QUEST_REWARD_ITEM_S = "Received item: %s."
-                GOLD = "Gold"; SILVER = "Silver"; COPPER = "Copper"
+                GOLD_AMOUNT = "%d Gold"; SILVER_AMOUNT = "%d Silver"; COPPER_AMOUNT = "%d Copper"
                 "#,
             )
             .unwrap();
@@ -341,9 +371,9 @@ mod tests {
 
     fn words(key: &str) -> String {
         match key {
-            "GOLD" => "Gold",
-            "SILVER" => "Silver",
-            "COPPER" => "Copper",
+            "GOLD_AMOUNT" => "%d Gold",
+            "SILVER_AMOUNT" => "%d Silver",
+            "COPPER_AMOUNT" => "%d Copper",
             _ => "",
         }
         .into()

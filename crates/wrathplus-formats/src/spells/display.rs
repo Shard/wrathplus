@@ -13,8 +13,7 @@ pub struct OpenLock {
 
 /// One spell's `Spell.dbc` row, as the display, tooltip and cast gates read it.
 pub struct SpellDisplay {
-    /// `ID` (column 0): the row's own id, which `GetEffectPoints` hands the level lookup
-    /// `0x6e3130` (`0x6e384b`).
+    /// `ID` (column 0), which `GetEffectPoints` hands the level lookup `0x6e3130` (`0x6e384b`).
     pub id: u32,
     pub name: String,
     /// `SpellNameSubtext` enUS (column 129): "Rank N", even "Rank 1", or a word such as "Racial".
@@ -66,10 +65,8 @@ pub struct SpellDisplay {
     /// `PreventionType` (column 165): 1 silence, 2 pacify, 0 neither; the crowd control that
     /// refuses the spell locally (`0x6094f0`, from `TryCast` `0x6e4b60`). A stun refuses all.
     pub prevention_type: u32,
-    /// `modalNextSpell` (column 38): cast by the client itself (`0x6e74aa`), at no target, when
-    /// `SMSG_CAST_RESULT` for this in-flight spell arrives, success or failure (`0x6e7330`); if
-    /// it is the running auto-repeat, that is only re-armed (`0x6e745d`). Every hunter shot
-    /// names 75, Auto Shot: that is how shooting starts.
+    /// `modalNextSpell` (column 38): cast at no target once this spell's `SMSG_CAST_RESULT` lands
+    /// (`0x6e74aa`, `0x6e7330`), a running auto-repeat only re-armed; hunter shots name 75.
     pub modal_next_spell: u32,
     /// `Attributes & 0x40`, `SPELL_ATTR_PASSIVE`: the spellbook grays it.
     pub passive: bool,
@@ -79,8 +76,7 @@ pub struct SpellDisplay {
     pub effects: [u32; 3],
     /// The `SPELL_EFFECT_OPEN_LOCK` effect the GameObject interact-cast matches against a lock.
     pub open_lock: Option<OpenLock>,
-    /// `baseLevel` (column 28, not `spellLevel`): the level effect values are quoted at, read by
-    /// the effect-value walk (`0x6e3854`) and the cast-time scaling (`0x6e3340`).
+    /// `baseLevel` (column 28): the level effect values are quoted at (`0x6e3854`, `0x6e3340`).
     pub base_level: u32,
     /// `maxLevel` (column 27): caps an opener's skill at `maxLevel × 5`, unless 0 (`0x5ea6e3`).
     pub max_level: u32,
@@ -177,6 +173,8 @@ pub struct SpellDisplay {
     pub description: Option<String>,
     /// `AuraDescription` enUS (column 147): the buff or debuff icon's tooltip.
     pub aura_description: Option<String>,
+    /// `SpellDescriptionVariables.dbc`'s row text: the `$<name>` definitions (`0x579d60`).
+    pub description_variables: Option<String>,
     /// `DurationIndex` (column 30): the `SpellDuration.dbc` row; 0 for no duration.
     pub duration_index: u32,
     /// `CastingTimeIndex` (column 18): the `SpellCastTimes.dbc` row; row 1 is instant.
@@ -196,8 +194,7 @@ pub struct SpellDisplay {
     pub max_affected_targets: u32,
     /// `EffectBasePoints[3]` (columns 76-78, signed): each roll's floor; -1 on weapon damage.
     pub effect_base_points: [i32; 3],
-    /// `EffectDieSides[3]` (columns 64-66, signed): with n dice, the value runs base + n to
-    /// base + sides × n (`0x6e3800`), n being `EffectBaseDice` plus its per-level term.
+    /// `EffectDieSides[3]` (columns 64-66, signed): n dice run base + n to base + sides × n.
     pub effect_die_sides: [i32; 3],
     /// `EffectBaseDice[3]` (columns 67-69).
     pub effect_base_dice: [i32; 3],
@@ -218,6 +215,8 @@ pub struct SpellDisplay {
     pub damage_multiplier: [f32; 3],
     /// `EffectPointsPerComboPoint[3]` (columns 112-114, float): `$b` prints it chopped (`507ed4`).
     pub effect_points_per_combo_point: [f32; 3],
+    /// `EffectBonusMultiplier[3]` (3.3.5 columns 229-231): `$bc1` (`0x5782d0`, op 24).
+    pub effect_bonus_multiplier: [f32; 3],
     /// `EffectTriggerSpell[3]` (columns 109-111): each effect's triggered spell, 0 for none.
     pub effect_trigger_spell: [u32; 3],
     /// `EffectItemType[3]` (columns 103-105): the item a `SPELL_EFFECT_CREATE_ITEM` effect makes.
@@ -230,8 +229,7 @@ pub struct SpellDisplay {
     pub required_aura_vision: u32,
     /// `EffectDicePerLevel[3]` (columns 70-72): the integer per-level term (`0x6e3871`).
     pub effect_dice_per_level: [i32; 3],
-    /// `EffectRealPointsPerLevel[3]` (columns 73-75): the float per-level term (`0x6e3889`); 5.0
-    /// on Pick Lock, Mining and Herb Gathering, so the skill they provide tracks the player's.
+    /// `EffectRealPointsPerLevel[3]` (columns 73-75): the float per-level term (`0x6e3889`).
     pub effect_real_points_per_level: [f32; 3],
 }
 

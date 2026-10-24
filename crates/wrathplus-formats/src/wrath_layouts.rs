@@ -29,7 +29,7 @@ pub(crate) fn columns(
         "PetPersonality" => (19, 24, |m| {
             m.same(0, 1).loc(1, 1).run(10, 18, 6);
         }),
-        "Spell" => (191, 234, spell),
+        "Spell" => (195, 234, spell),
         "SpellDispelType" => (12, 21, spell_dispel_type),
         "SkillLine" => (32, 56, skill_line),
         "TalentTab" => (16, 24, talent_tab),
@@ -133,8 +133,9 @@ impl Map {
 
 /// `Spell.dbc` 173 → 234. 1.12's `School` (1) is an index; 3.3.5 keeps a `SchoolMask` (225),
 /// which the spell loader converts. `CastUI` (3) and the per-effect dice (67-72) are gone. Slots
-/// 173-189 are the loader's 3.3.5-only columns: the family mask's third word, the per-effect
-/// class masks, `EffectMiscValueB`, `AttributesEx5`, `AttributesEx7`, `RuneCostID` and `PowerDisplayId`.
+/// 173-194 are the loader's 3.3.5-only columns: the family mask's third word, the per-effect
+/// class masks, `EffectMiscValueB`, `AttributesEx5`, `AttributesEx7`, `RuneCostID`,
+/// `PowerDisplayId`, `AttributesEx6`, `EffectBonusMultiplier` and `SpellDescriptionVariableID`.
 fn spell(m: &mut Map) {
     m.run(0, 0, 1)
         .run(1, 225, 1)
@@ -165,7 +166,8 @@ fn spell(m: &mut Map) {
         .run(187, 11, 1) // AttributesEx7
         .run(188, 226, 1) // RuneCostID
         .run(189, 228, 1) // PowerDisplayId
-        .run(190, 10, 1); // AttributesEx6
+        .run(190, 10, 1) // AttributesEx6
+        .run(191, 229, 4); // EffectBonusMultiplier[3], SpellDescriptionVariableID
 }
 
 /// `SpellDispelType.dbc` 12 → 21: id, name, then ImmunityPossible (the aura name gate), not DispelMask,
@@ -303,7 +305,7 @@ mod tests {
         ("AreaPOI", 29, 54),
         ("CreatureModelData", 16, 28),
         ("PetPersonality", 19, 24),
-        ("Spell", 191, 234),
+        ("Spell", 195, 234),
         ("SpellDispelType", 12, 21),
         ("SkillLine", 32, 56),
         ("TalentTab", 16, 24),
@@ -339,7 +341,7 @@ mod tests {
                 assert!(seen.insert(*c), "{table}: column {c} mapped twice");
             }
         }
-        assert!(columns("Spell.dbc", 191, 234).is_some());
+        assert!(columns("Spell.dbc", 195, 234).is_some());
         assert!(
             columns("Spell.dbc", 173, 234).is_none(),
             "the 3.3.5-only slots are required"
@@ -402,7 +404,7 @@ mod tests {
 
     #[test]
     fn spell_columns_land_on_the_build_12340_fields() {
-        let m = columns("Spell", 191, 234).unwrap();
+        let m = columns("Spell", 195, 234).unwrap();
         for (vanilla, wrath) in [
             (18, 28),   // CastingTimeIndex
             (36, 46),   // rangeIndex
@@ -423,6 +425,8 @@ mod tests {
             (188, 226), // RuneCostID
             (189, 228), // PowerDisplayId
             (185, 115), // EffectMiscValueB[2]
+            (191, 229), // EffectBonusMultiplier[0]
+            (194, 232), // SpellDescriptionVariableID
         ] {
             assert_eq!(m[vanilla], Some(wrath), "slot {vanilla}");
         }

@@ -444,7 +444,7 @@ fn adapter_emits_success_only_after_server_ack() {
         assert_eq!(session_events.len(), 1, "{expected}");
         match (expected, &session_events[0]) {
             ("removed", SessionEvent::LootRemoved { slot: 4 })
-            | ("money", SessionEvent::LootMoneyNotify { amount: 9 })
+            | ("money", SessionEvent::LootMoneyNotify { amount: 9, sole_looter: true })
             | ("clear", SessionEvent::LootClearMoney)
             | ("release", SessionEvent::LootReleaseResponse { guid: CORPSE }) => {}
             _ => panic!("wrong event for {expected}: {:?}", session_events[0]),

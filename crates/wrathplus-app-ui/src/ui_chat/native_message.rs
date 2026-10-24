@@ -5,7 +5,7 @@
 //! those and the monster, boss and BG system lines then expand their other `$` tokens ([`Macros`]).
 use super::{
     edit::ChannelState,
-    event::{language_name, ChatEvent},
+    event::{language_name, ChatEvent, ChatEventKind},
     frames::ChatWindows,
 };
 use crate::ui_chat::event::ChatEventScript;
@@ -168,6 +168,23 @@ const MACRO_TYPES: [u8; 12] = [
 /// cache entry; `None` when a token failed, and the line then shows its wire text.
 pub(super) type Macros<'a> = &'a dyn Fn(&str, u64) -> Option<String>;
 
+/// `0x720010`'s kinds: say, party, yell, monster say and yell, and party leader under the party
+/// CVar (`0xbd0968`); the others take `0xbd0964`'s. The queue applies the CVars and the range.
+fn bubble_kind(chat_type: u8) -> Option<ChatEventKind> {
+    use ChatEventKind as K;
+    Some(match chat_type {
+        1 => K::Say,
+        2 | 0x33 => K::Party,
+        6 => K::Yell,
+        0x0c => K::MonsterSay,
+        0x0e => K::MonsterYell,
+        _ => return None,
+    })
+}
+
+/// Where a line's speech bubble goes: the sender guid, its kind and the text.
+pub(super) type Bubble<'a> = &'a mut dyn FnMut(u64, ChatEventKind, &str);
+
 /// `LANG_ADDON`, the only mark of addon traffic on the wire.
 const LANG_ADDON: u32 = u32::MAX;
 
@@ -251,6 +268,7 @@ pub(super) fn deliver(
     expired: bool,
     macros: Macros,
     achievement: AchievementLink,
+    bubble: Bubble,
 ) -> bool {
     if social.is_some_and(|s| s.is_ignored(msg.sender_guid)) {
         return true;
@@ -340,6 +358,14 @@ pub(super) fn deliver(
     // ChatFrame_MessageEventHandler owns composition, filters, links, and window routing.
     windows.logs.record(false, &event.text);
     script.fire_event(&format!("CHAT_MSG_{kind}"), args);
+    // Then the sender's bubble (`0x509dd0` → `0x720010`), a monster line with `%%` read as `%`.
+    if let Some(kind) = bubble_kind(msg.chat_type) {
+        let text = match msg.chat_type {
+            0x0c | 0x0e => event.text.replace("%%", "%"),
+            _ => event.text.clone(),
+        };
+        bubble(msg.sender_guid, kind, &text);
+    }
     true
 }
 

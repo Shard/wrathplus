@@ -103,6 +103,7 @@ fn addon_lines_fire_chat_msg_addon_with_lossless_bytes() {
             false,
             &|_, _| None,
             &|_| None,
+            &mut |_, _, _| {},
         )
     };
     assert!(send(&mut script, 2, b"Pfx\tbo\tdy\0tail", 0));
@@ -163,7 +164,8 @@ fn basic_visible_types_dispatch_once_with_native_event_names() {
             &msg,
             false,
             &|_, _| None,
-            &|_| None
+            &|_| None,
+            &mut |_, _, _| {}
         ));
     }
     let received: Vec<String> = script.eval("return received").unwrap();
@@ -220,7 +222,8 @@ fn named_monster_receives_native_event_receiver_tag_guid_and_line_id() {
             &msg,
             false,
             &|_, _| None,
-            &|_| None
+            &|_| None,
+            &mut |_, _, _| {}
         ));
     }
     assert!(script
@@ -256,7 +259,8 @@ fn absent_player_name_parks_original_until_bounded_expiry() {
         &msg,
         false,
         &|_, _| None,
-        &|_| None
+        &|_| None,
+        &mut |_, _, _| {}
     ));
     assert_eq!(state.line, 0);
     assert!(deliver(
@@ -270,7 +274,61 @@ fn absent_player_name_parks_original_until_bounded_expiry() {
         &msg,
         true,
         &|_, _| None,
-        &|_| None
+        &|_| None,
+        &mut |_, _, _| {}
     ));
     assert_eq!(state.line, 1);
+}
+
+/// `0x509dd0` hands each delivered line to `0x720010`, which bubbles say, party, yell, monster
+/// say and yell and party leader; a monster line reads `%%` as `%`.
+#[test]
+fn bubbling_types_reach_the_bubble_queue_with_their_text() {
+    let mut script = UiScript::new().unwrap();
+    let (tx, _rx) = crossbeam_channel::unbounded();
+    let mut state = NativeChatFeed::default();
+    let mut bubbles = Vec::new();
+    for (kind, text) in [
+        (1u8, "hello"),
+        (2, "group"),
+        (6, "LOUD"),
+        (7, "psst"),
+        (0x0c, "100%% sure"),
+        (0x0e, "die"),
+        (0x10, "grunts"),
+        (0x33, "lead"),
+    ] {
+        let mut msg = message(kind);
+        msg.sender_guid = 0xF130_0029_3C00_47EB;
+        msg.text = text.as_bytes().to_vec();
+        assert!(deliver(
+            &mut script,
+            &mut ChatWindows::default(),
+            &mut ChannelState::default(),
+            &NameCache::default(),
+            &NetCommands(tx.clone()),
+            None,
+            &mut state,
+            &msg,
+            false,
+            &|_, _| None,
+            &|_| None,
+            &mut |guid, kind, text| bubbles.push((guid, kind, text.to_string())),
+        ));
+    }
+    use ChatEventKind as K;
+    let got: Vec<(ChatEventKind, &str)> =
+        bubbles.iter().map(|(_, k, t)| (*k, t.as_str())).collect();
+    assert_eq!(
+        got,
+        [
+            (K::Say, "hello"),
+            (K::Party, "group"),
+            (K::Yell, "LOUD"),
+            (K::MonsterSay, "100% sure"),
+            (K::MonsterYell, "die"),
+            (K::Party, "lead"),
+        ]
+    );
+    assert!(bubbles.iter().all(|(g, ..)| *g == 0xF130_0029_3C00_47EB));
 }

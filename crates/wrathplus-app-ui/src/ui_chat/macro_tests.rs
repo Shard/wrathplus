@@ -77,6 +77,7 @@ fn monster_line(chat_type: u8, text: &str, gender: u8) -> Vec<String> {
                         )
                     },
                     &|_| None,
+                    &mut |_, _, _| {},
                 )
             },
         )

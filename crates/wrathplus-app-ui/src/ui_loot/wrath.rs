@@ -7,9 +7,9 @@
 use wrathplus_protocol::wrath_loot::InventoryChangeFailure;
 
 use super::{LootAction, LootState};
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::errors::UiError;
 use crate::app_core::errors::UiErrorKeys;
+use crate::net::{ClientCommand, NetCommands};
 
 /// The slot types `LootSlot` and the auto-loot sweep take (`0x589140`, `0x588f90`): allow and owner.
 pub(super) fn is_takeable(slot_type: u8) -> bool {
@@ -71,6 +71,10 @@ pub(super) fn inventory_failure(
         errors.0.push(UiError::key(key));
     }
 }
+
+#[cfg(test)]
+#[path = "auto_loot_tests.rs"]
+mod auto_loot_tests;
 
 #[cfg(test)]
 mod tests {

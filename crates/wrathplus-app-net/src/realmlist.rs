@@ -271,12 +271,35 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("azb-realmlist-{}", std::process::id()));
         let _home =
             crate::local_state::test_env::EnvGuard::set("BENILLA_HOME", dir.to_str().unwrap());
-        write_realmlist_wtf("logon.example.org:3724").unwrap();
+        // A VPS's non-default logon port survives the file and reaches the dial.
+        write_realmlist_wtf("192.168.1.1:1337").unwrap();
         assert_eq!(
             realmlist_wtf_candidates().first(),
             Some(&dir.join(REALMLIST_WTF))
         );
-        assert_eq!(realmlist_wtf().as_deref(), Some("logon.example.org:3724"));
+        assert_eq!(realmlist_wtf().as_deref(), Some("192.168.1.1:1337"));
+        let startup = |realmlist: Realmlist| {
+            let mut app = App::new();
+            app.insert_resource(realmlist)
+                .add_systems(Update, apply_realmlist_wtf);
+            app.update();
+            app.world().resource::<Realmlist>().address().to_string()
+        };
+        let address = startup(Realmlist::unpinned(DEFAULT_REALMLIST));
+        assert_eq!(address, "192.168.1.1:1337");
+        assert_eq!(
+            wrathplus_protocol::host_port(&address, wrathplus_protocol::AUTH_PORT),
+            ("192.168.1.1", 1337)
+        );
+        // `--server vps.example.org:2337` outranks the file, port and all.
+        let pinned = startup(Realmlist {
+            address: "vps.example.org:2337".into(),
+            pinned_by_env: true,
+        });
+        assert_eq!(
+            wrathplus_protocol::host_port(&pinned, wrathplus_protocol::AUTH_PORT),
+            ("vps.example.org", 2337)
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

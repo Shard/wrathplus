@@ -39,6 +39,9 @@ pub mod quest_flags {
     pub const HIDDEN_REWARDS: u32 = 0x0000_0200;
     /// Granted and completed in one step; never appears in the client's quest log.
     pub const AUTO_REWARDED: u32 = 0x0000_0400;
+    /// AzerothCore adds the quest as its detail shows (`QuestHandler.cpp:227`), and 12340's
+    /// `QuestGetAutoAccept` (`0x58c430`) answers 1: stock's Accept then only hides the frame.
+    pub const AUTO_ACCEPT: u32 = 0x0008_0000;
 }
 
 /// `SMSG_QUEST_QUERY_RESPONSE` (vmangos `Quest.cpp:393-528`, the `>1_9_4` branch): the quest

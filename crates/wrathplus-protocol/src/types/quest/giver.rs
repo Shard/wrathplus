@@ -35,6 +35,9 @@ pub struct WrathQuestInfo {
     pub flags: u32,
     pub repeatable: bool,
     pub suggested_players: u32,
+    /// The detail's byte after its texts: AzerothCore's `activateAccept` (`GossipDef.cpp:411`), 1 on
+    /// every gossip-opened detail. Not auto-accept: `QuestGetAutoAccept` reads `flags`
+    /// ([`super::quest_flags::AUTO_ACCEPT`]).
     pub auto_accept: bool,
     pub finished: bool,
     pub reward_xp: u32,

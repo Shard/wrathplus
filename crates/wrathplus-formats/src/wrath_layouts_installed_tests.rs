@@ -3,8 +3,7 @@
 use crate::Chain;
 
 fn chain() -> Option<Chain> {
-    let data = crate::wow_data()?;
-    Chain::open_wrath(&data, "enUS").ok()
+    Chain::open_wrath(&crate::wow_data()?, "enUS").ok()
 }
 
 #[test]
@@ -45,6 +44,7 @@ fn installed_wrath_spells_read_through_the_mapped_layout() {
         mods: None,
         unmodified_points: false,
         home_area: &|| None,
+        player: None,
         global: &|key| (key == "INT_SPELL_POINTS_SPREAD_TEMPLATE").then(|| "%d to %d".into()),
         printf: &|template, args| {
             let mut text = template.to_owned();
