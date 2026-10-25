@@ -27,7 +27,7 @@ use wrathplus_protocol::wrath_ground::{self, SessionClock};
 use wrathplus_protocol::wrath_loot;
 use wrathplus_protocol::wrath_world::{
     WrathCharacter, WrathPartialFrameRead, WrathWardenRequired, WrathWorldAuthReject,
-    WrathWorldSession, WrathWorldWriter,
+    WrathWorldSession,
 };
 use wrathplus_protocol::{CharEnumItem, Character, LoginStage, SessionEnd, SessionEvent};
 use crossbeam_channel::{Receiver, Sender};
@@ -379,7 +379,7 @@ fn run(
             .send(WrathWriterControl::Install {
                 epoch,
                 session: Box::new(WrathWriterSwap {
-                    writer,
+                    writer: super::wrath_send_log::LoggedWriter::new(writer),
                     chat_language,
                     clock: Arc::clone(&session_clock),
                     active_mover: guid,
@@ -796,7 +796,7 @@ struct EpochFatal {
 }
 
 struct WrathWriterSwap {
-    writer: WrathWorldWriter,
+    writer: super::wrath_send_log::LoggedWriter,
     /// The character's own tongue for chat that names none (`faction_language` of its race).
     chat_language: u32,
     clock: Arc<SessionClock>,
@@ -2239,10 +2239,7 @@ fn writer_loop(
                     }
                     WrathRoute::NativeSpellControl => {
                         match super::spell_control_packet(command) {
-                            Ok((opcode, body)) => {
-                                super::wrath_spell_control::log_pet_send(opcode, &body);
-                                active.writer.send_raw(opcode, &body)
-                            }
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
                             Err(error) => {
                                 bevy::log::warn!("net(wrath): invalid spell-control command rejected before send: {error}");
                                 continue;
@@ -2318,10 +2315,6 @@ fn writer_loop(
                     }
                     WrathRoute::NativeSession => {
                         let (opcode, body) = session_packet(command);
-                        super::wrath_spell_control::log_pet_send(opcode, &body);
-                        if *crate::net::CAST_TRACE {
-                            bevy::log::info!("net(wrath) SEND 0x{opcode:04x} {body:02x?}");
-                        }
                         active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeTeleportAck => {

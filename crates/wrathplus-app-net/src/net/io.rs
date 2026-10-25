@@ -11,6 +11,7 @@ use wrathplus_protocol::SessionEvent;
 use super::{CharRequest, RealmRequest, SessionCommand, SessionCommandSender};
 
 pub(super) mod wrath;
+mod wrath_send_log;
 mod wrath_spell_control;
 
 pub use wrath_spell_control::spell_control_packet;
