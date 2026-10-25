@@ -33,8 +33,8 @@ pub(crate) mod logging;
 #[cfg(test)]
 mod macro_tests;
 mod native_feed;
-pub(crate) mod native_message;
 mod native_membership;
+pub(crate) mod native_message;
 pub(crate) mod native_roster;
 mod net;
 #[cfg(test)]
@@ -42,6 +42,9 @@ mod notice_tests;
 /// The `AUTO_JOIN_GUILD_CHANNEL` cascade, the one place the client joins or leaves
 /// `GuildRecruitment - City` on its own.
 mod recruitment;
+#[cfg(test)]
+#[path = "ui_chat/send_wire_tests.rs"]
+mod send_wire_tests;
 /// The chat windows' saved look: tab tint, alpha and font size, read at login, saved at logout.
 pub(crate) mod settings;
 #[cfg(test)]
@@ -193,7 +196,8 @@ impl Plugin for UiChatPlugin {
                     input::drain_addon_message_sends,
                     // Drain after streaming's exclusive collider attachment; it cannot inspect
                     // its accesses, and native channel intents need no pre-stream work.
-                    native_feed::drain_requests.after(wrathplus_world::schedule::WorldStage::Stream),
+                    native_feed::drain_requests
+                        .after(wrathplus_world::schedule::WorldStage::Stream),
                 )
                     .chain()
                     .after(UiInput)
@@ -210,8 +214,10 @@ impl Plugin for UiChatPlugin {
                 Update,
                 (
                     channels::end_session_channels_on_disconnect,
-                    channels::auto_join_zone_channels.in_set(crate::app_core::schedule::InWorldGated),
-                    recruitment::guild_recruitment_cascade.in_set(crate::app_core::schedule::InWorldGated),
+                    channels::auto_join_zone_channels
+                        .in_set(crate::app_core::schedule::InWorldGated),
+                    recruitment::guild_recruitment_cascade
+                        .in_set(crate::app_core::schedule::InWorldGated),
                 )
                     .chain()
                     .after(wrathplus_world::terrain_stream::AreaAuthoritySet),
