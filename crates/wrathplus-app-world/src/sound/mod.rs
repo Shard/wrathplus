@@ -3,9 +3,9 @@
 
 use bevy::prelude::*;
 
+use crate::app_core::player::Player;
 use crate::app_core::session::Embodied;
 use crate::player::{head_height, CameraPivot};
-use crate::app_core::player::Player;
 use wrathplus_world::schedule::WorldStage;
 use wrathplus_world::view::WorldCamera;
 
@@ -62,9 +62,9 @@ pub use zone::ExplorationSounds;
 /// `MusicVolume` 0.4 and `AmbienceVolume` 0.6, every other volume 1.0.
 #[derive(Resource)]
 pub struct SoundConfig {
-    /// `MasterSoundEffects` (default "1", `0x45737a`). The reference pauses the engine
-    /// (`0x457500` → `0x7a6570`); benilla zeroes every category in [`Self::category_amp`] and
-    /// channels run on silently, which sounds the same.
+    /// `Sound_EnableAllSound` (12340 `0x4d1710`, "1"; 1.12's `MasterSoundEffects`), which pauses
+    /// the engine (`0x457500` → `0x7a6570`); benilla zeroes every category in
+    /// [`Self::category_amp`] and channels run on silently, which sounds the same.
     pub enabled: bool,
     /// The dev chord + `M` mute: zeroes the main track only, so selection and channels run on and
     /// unmute is instant. Starts `false`; unattended runs open no device instead ([`SoundPlugin`]).
@@ -75,12 +75,14 @@ pub struct SoundConfig {
     pub sfx: f32,
     pub music: f32,
     pub ambience: f32,
-    /// `EnableMusic`/`EnableAmbience` (default "1", `0x45739b`/`0x460a9d`); 1.12 has no SFX-only
-    /// toggle. The reference's `EnableMusic` callback stops and re-picks the stream (`0x457490` →
-    /// `0x45b050`/`0x45aeb0`); benilla keeps it alive at zero and resumes mid-track.
+    /// `Sound_EnableSFX` (build 12340, default "1", `0x4d1681`), the panel's Sound Effects box.
+    pub sfx_enabled: bool,
+    /// `Sound_EnableMusic`/`Sound_EnableAmbience` ("1", `0x4d16ed`/`0x4d16a7`). 1.12's music
+    /// callback stops and re-picks the stream (`0x457490` → `0x45b050`/`0x45aeb0`); benilla keeps
+    /// it alive at zero and resumes mid-track.
     pub music_enabled: bool,
     pub ambience_enabled: bool,
-    /// `EnableErrorSpeech` (default "1", `0x457877`): gates only your own character's refusal
+    /// `Sound_EnableErrorSpeech` (12340 `0x4d16c7`, "1"): gates only your own character's refusal
     /// lines ([`vocal`]), read in `0x458250` before any escalation state moves.
     pub error_speech: bool,
     /// Sound while the window is inactive; not a 1.12 CVar (1.12 hardcodes it, and no
@@ -93,7 +95,7 @@ pub struct SoundConfig {
     /// (`0x7a52bf`); benilla starts everything and gates the output, because a refusal at kit
     /// start would make an unattended capture record silence.
     pub background_sound: bool,
-    /// `SoundReverb` (`0x4573be`, callback `0x4574d0`, flag `[0x835a4c]`): gates both the zone
+    /// `Sound_EnableReverb` (12340 `0x4d125b`, "0"; 1.12's `SoundReverb`): gates both the zone
     /// preset (`0x45a75b`) and the per-channel wet send (`0x458f13`). Read by
     /// [`reverb::zone_reverb`].
     ///
@@ -119,17 +121,17 @@ pub struct SoundConfig {
     /// kits are limited rather than clipped. The reference has no headroom mechanism and clips at
     /// full scale, as kira's hard clamp would (see [`limiter`]).
     pub limiter: bool,
-    /// `SoundListenerAtCharacter` (default "1", `0x457890`), read once per frame at `0x483125`.
+    /// `Sound_ListenerAtCharacter` (12340 `0x4d17c5`, "1"), read once per frame (1.12 `0x483125`).
     /// `1` puts the listener on the mover with the character's facing, `0` at the camera eye with
     /// its basis; position and orientation always move together, with no velocity. A cinematic
     /// overrides it (`0x483112`, checked first).
     pub listener_at_character: bool,
-    /// `EmoteSounds` (default "1", `0x4573b9`): gates only the received text-emote voice line
-    /// ([`emote::emote_sounds`]); a zero fetches no kit at all. The reference's check sits in
+    /// `Sound_EnableEmoteSounds` (12340 `0x4d17e5`, "1"): gates only the received text-emote voice
+    /// line ([`emote::emote_sounds`]); a zero fetches no kit at all. The reference's check sits in
     /// `0x623c80` or on the shared `0x623c10` leg, which `$CSD` also enters; which one is
     /// untraced, and benilla gates the received path alone.
     pub emote_sounds: bool,
-    /// `SoundZoneMusicNoDelay` (default "0", `0x4578b3`), the panel's "Loop Music": drops the
+    /// `Sound_ZoneMusicNoDelay` (12340 `0x4d1808`, "0"), the panel's "Loop Music": drops the
     /// `ZoneMusic.dbc` silence interval between plays of one zone's track
     /// ([`zone::next_track_time`], `0x4601f0`). A zone change is immediate either way.
     pub zone_music_no_delay: bool,
@@ -142,7 +144,7 @@ impl SoundConfig {
             return 0.0;
         }
         match cat {
-            kit::SoundCategory::Sfx => self.sfx,
+            kit::SoundCategory::Sfx if self.sfx_enabled => self.sfx,
             kit::SoundCategory::Music if self.music_enabled => self.music,
             kit::SoundCategory::Ambience if self.ambience_enabled => self.ambience,
             _ => 0.0,
@@ -154,6 +156,7 @@ impl Default for SoundConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            sfx_enabled: true,
             muted: false,
             master: 1.0,
             sfx: 1.0,
@@ -316,30 +319,10 @@ fn world_audio_live(
     *state.get() == crate::app_core::state::ClientState::InWorld && player.active
 }
 
-pub struct SoundPlugin;
+mod cvars;
+pub use cvars::on_cvar;
 
-/// The sound CVars' change callback: volumes clamp to `[0, 1]`, enables are `!= 0` as the
-/// reference parses them (`0x4574d0`: `setne al`).
-pub fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut sound: ResMut<SoundConfig>) {
-    let v = ev.num();
-    match ev.key().as_str() {
-        "mastervolume" => sound.master = v.clamp(0.0, 1.0),
-        "soundvolume" => sound.sfx = v.clamp(0.0, 1.0),
-        "musicvolume" => sound.music = v.clamp(0.0, 1.0),
-        "ambiencevolume" => sound.ambience = v.clamp(0.0, 1.0),
-        "mastersoundeffects" => sound.enabled = v != 0.0,
-        "enablemusic" => sound.music_enabled = v != 0.0,
-        "enableambience" => sound.ambience_enabled = v != 0.0,
-        "enableerrorspeech" => sound.error_speech = v != 0.0,
-        "sound_enablesoundwhengameisinbg" => sound.background_sound = v != 0.0,
-        "soundreverb" => sound.reverb = v != 0.0,
-        "soundoutputlimiter" => sound.limiter = v != 0.0,
-        "soundlisteneratcharacter" => sound.listener_at_character = v != 0.0,
-        "emotesounds" => sound.emote_sounds = v != 0.0,
-        "soundzonemusicnodelay" => sound.zone_music_no_delay = v != 0.0,
-        _ => {}
-    }
-}
+pub struct SoundPlugin;
 
 impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {

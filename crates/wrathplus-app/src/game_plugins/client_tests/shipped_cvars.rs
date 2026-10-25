@@ -96,7 +96,7 @@ const HOOK_ORDER: &[&str] = &[
     "player::approach::on_cvar",
     "player::camera::on_cvar",
     "player::camera_dynamics::on_cvar",
-    "sound::on_cvar",
+    "sound::cvars::on_cvar",
     "target::on_cvar",
     "ui_gamma::on_cvar",
     "world_backdrop::on_cvar",
