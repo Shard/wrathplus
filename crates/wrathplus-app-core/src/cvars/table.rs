@@ -136,37 +136,34 @@ pub const REGISTERED: &[Registered] = &[
     // forward/back, strafe and turn (`0x513d36`/`0x514e23`/`0x514f0b`/`0x514fca`). Off, the clear
     // does nothing at all: no echo, no mirror write, no packet.
     same("autoClearAFK", "1"),
-    same("MasterVolume", "1"),
-    same("SoundVolume", "1"),
-    same("MusicVolume", "0.4"),
-    same("AmbienceVolume", "0.6"),
-    // Registered "1" at `0x45737a`/`0x45739b`/`0x460a9d`. `MasterSoundEffects` is the Enable All
-    // Sound box (`SoundOptionsFrame.lua:6`), which pauses the whole sound engine, not an SFX
-    // toggle.
-    same("MasterSoundEffects", "1"),
-    same("EnableMusic", "1"),
-    same("EnableAmbience", "1"),
-    // The race/sex refusal voice lines (`0x457877`), `SoundOptionsFrame.lua:3`; the master enable
-    // greys it.
-    same("EnableErrorSpeech", "1"),
-    // Not a 1.12 CVar or checkbox; the later-era name. The reference mutes on losing focus, music
-    // included (`WM_ACTIVATE` to `0x7a4860`'s `FSOUND_SetMute(-3, active ? 0 : 1)`), so "0" is its
-    // behaviour. The knob is `SoundConfig::background_sound`.
+    // Build 12340's `Sound_*` names (`0x4d1215`-`0x4d1953`), which the stock Sound panel writes
+    // (`AudioOptionsPanels.lua`); 1.12's `MasterVolume`, `SoundVolume`, `MasterSoundEffects`, … are
+    // migrated from `config.toml` (`cvars::renamed`).
+    same("Sound_MasterVolume", "1.0"),
+    same("Sound_SFXVolume", "1.0"),
+    same("Sound_MusicVolume", "0.4"),
+    same("Sound_AmbienceVolume", "0.6"),
+    // Enable All Sound, which pauses the whole engine; Sound Effects is its own box in 3.3.5.
+    same("Sound_EnableAllSound", "1"),
+    same("Sound_EnableSFX", "1"),
+    same("Sound_EnableMusic", "1"),
+    same("Sound_EnableAmbience", "1"),
+    // The race/sex refusal voice lines; the master enable greys it.
+    same("Sound_EnableErrorSpeech", "1"),
+    // The reference mutes on losing focus, music included (`WM_ACTIVATE` to `0x7a4860`'s
+    // `FSOUND_SetMute(-3, active ? 0 : 1)`). The knob is `SoundConfig::background_sound`.
     same("Sound_EnableSoundWhenGameIsInBG", "0"),
-    // Registered "1" (`0x4573be`); `SoundConfig::reverb` carries the evidence for shipping "0".
-    deviates(
-        "SoundReverb",
-        "0",
-        "1",
-        "the reference's reverb is EAX-over-hardware, and that hardware has not existed since \
-         Vista, so \"1\" would ship audio the real client has never actually produced on any \
-         machine a player runs today",
-    ),
-    // FMOD 3's mix-ahead buffer in ms (`0x4571ca`, flags 2: read once at sound init); here it sizes
-    // the render thread's ring ahead of the IO callback (`sound::output`). `0x457520` registers
-    // "50" or "100" by a host probe (`0x835e10`/`0x835e0c`), which one on a current machine
-    // untraced; ours is the larger, since the depth has to hide a whole stalled IO cycle.
-    same("SoundBufferSize", "100").latched(),
+    same("Sound_EnableReverb", "0"),
+    // FMOD 3's mix-ahead buffer in ms, 1.12's name, which 12340 does not register (its
+    // `Sound_DSPBufferSize` is FMOD Ex's DSP buffer): read once at sound init, it sizes the render
+    // thread's ring ahead of the IO callback (`sound::output`), large enough to hide a stalled cycle.
+    ours(
+        "SoundBufferSize",
+        "100",
+        "the render thread's mix-ahead; 12340 has no counterpart, Sound_DSPBufferSize being FMOD \
+         Ex's own DSP buffer",
+    )
+    .latched(),
     // benilla's own, not a 1.12 CVar. Deviation: the reference clips at full scale and has no
     // headroom mechanism (its SFX-bus duck `0x457960` is a sidechain armed only by server-pushed
     // voice lines); benilla limits because every SFX is mastered to full scale and overlapping
@@ -282,13 +279,12 @@ pub const REGISTERED: &[Registered] = &[
     //
     // Category-7 registrations that keep no handle: the reference looks each up by name at use.
     //
-    // `SoundListenerAtCharacter` (`0x457890`): the listener at the character, else at the camera
-    // (`update_audio_listener`).
-    same("SoundListenerAtCharacter", "1"),
-    // `EmoteSounds` (`0x4573b9`): the received text-emote voice kit, and only that.
-    same("EmoteSounds", "1"),
-    // `SoundZoneMusicNoDelay` (`0x4578b3`): `next_track_time`'s immediate path.
-    same("SoundZoneMusicNoDelay", "0"),
+    // The listener at the character, else at the camera (`update_audio_listener`).
+    same("Sound_ListenerAtCharacter", "1"),
+    // The received text-emote voice kit, and only that.
+    same("Sound_EnableEmoteSounds", "1"),
+    // `next_track_time`'s immediate path, the panel's Loop Music.
+    same("Sound_ZoneMusicNoDelay", "0"),
     // `assistAttack` (`0x48fc50`, record `[0xb4d8f8]`): `/assist` also starts the swing. The "3"
     // beside it is the next registration's, `minimapZoom`: stock `/assist` selects without
     // swinging.
@@ -366,9 +362,6 @@ pub const REGISTERED: &[Registered] = &[
     same("cameraBobbingUDAmplitude", "2"),
     same("cameraBobbingFrequency", "0.8"),
     same("cameraBobbingSmoothSpeed", "0.8"),
-    // `statusBarText` (`0x48fc34`, record `[0xb4d904]`, no engine reader), read by
-    // `TextStatusBar.lua:47,97`: "0" shows the numbers on hover only.
-    same("statusBarText", "0"),
     // Enhanced Tooltips (`UIOptionsFrame.lua:15`), registered "1" at `0x48fddd` (`0x82e748`); read
     // only by the stock interface.
     same("UberTooltips", "1"),

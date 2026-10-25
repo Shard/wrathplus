@@ -2,6 +2,7 @@
 //! layer so no lower module names `game_plugins` (APP-CRATE-SPLIT-PLAN, step 0 item 6). One
 //! file per source module, named after its path; each says where its tests came from.
 
+mod cvar_deviation_tests;
 mod cvars;
 mod disenchant_wire_tests;
 mod experience_console_tests;
@@ -41,6 +42,7 @@ mod net_wrath_world_objects_capture_tests;
 mod player_camera_repair_tests;
 mod script_calls;
 mod shipped_cvars;
+mod sound_panel_tests;
 mod spell_native_failure;
 mod target_ring;
 mod ui_action_toggle;

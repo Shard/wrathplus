@@ -27,6 +27,7 @@ use bevy::prelude::*;
 use crate::app_core::vm_memo::VmMemo;
 use wrathplus_ui::script::{SeededCvar, UiScript};
 
+mod renamed;
 mod table;
 #[cfg(any(test, feature = "test-support"))]
 pub use table::Reference;
@@ -582,11 +583,7 @@ impl Cvars {
 
     /// [`Self::with_rows`] already holding one stored value.
     #[cfg(any(test, feature = "test-support"))]
-    pub fn with_rows_and_value(
-        rows: &[&'static [Registered]],
-        name: &str,
-        value: &str,
-    ) -> Self {
+    pub fn with_rows_and_value(rows: &[&'static [Registered]], name: &str, value: &str) -> Self {
         let mut cvars = Self::with_rows(rows);
         cvars.load_file(BTreeMap::from([(name.to_string(), value.to_string())]));
         cvars.events.clear();
@@ -779,7 +776,7 @@ fn stored_config() -> StoredConfig {
         Err(e) => return StoredConfig::Bad(format!("config: cannot read {}: {e}", path.display())),
     };
     match toml::from_str::<LocalConfig>(&text) {
-        Ok(cfg) => StoredConfig::Table(cfg.cvars),
+        Ok(cfg) => StoredConfig::Table(renamed::migrate(cfg.cvars)),
         Err(e) => StoredConfig::Bad(format!(
             "config: {} is malformed ({e}) — running on defaults",
             path.display()

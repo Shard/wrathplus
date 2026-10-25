@@ -78,32 +78,6 @@ fn defaults_stand_where_the_reference_column_says() {
     }
 }
 
-#[test]
-fn the_options_that_leave_the_reference_are_this_list_and_no_other() {
-    let mut names: Vec<&str> = crate::shipped_cvars::rows()
-        .filter(|r| matches!(r.reference, Reference::Deviates { .. }))
-        .map(|r| r.name)
-        .collect();
-    names.sort_unstable();
-    assert_eq!(
-        names,
-        vec![
-            "SoundReverb",
-            "ffxDeath",
-            "ffxGlow",
-            "frillDensity",
-            "gxApi",
-            "gxColorBits",
-            "gxDepthBits",
-            "gxResolution",
-            "nearclip",
-            "realmList",
-            "spellEffectLevel",
-            "weatherDensity",
-        ],
-    );
-}
-
 /// Every numeric registered default equals the code constant it mirrors; the string rows are
 /// checked in [`the_string_valued_cvars_are_the_realm_and_the_windowed_size`].
 #[test]
@@ -112,14 +86,15 @@ fn registered_defaults_mirror_the_code_truths() {
         .filter_map(|r| r.default.parse::<f32>().ok().map(|f| (r.name, f)))
         .collect();
     let sound = SoundConfig::default();
-    assert_eq!(d["MasterVolume"], sound.master);
-    assert_eq!(d["SoundVolume"], sound.sfx);
-    assert_eq!(d["MusicVolume"], sound.music);
-    assert_eq!(d["AmbienceVolume"], sound.ambience);
-    assert_eq!(d["MasterSoundEffects"] != 0.0, sound.enabled);
-    assert_eq!(d["EnableMusic"] != 0.0, sound.music_enabled);
-    assert_eq!(d["EnableAmbience"] != 0.0, sound.ambience_enabled);
-    assert_eq!(d["EnableErrorSpeech"] != 0.0, sound.error_speech);
+    assert_eq!(d["Sound_MasterVolume"], sound.master);
+    assert_eq!(d["Sound_SFXVolume"], sound.sfx);
+    assert_eq!(d["Sound_MusicVolume"], sound.music);
+    assert_eq!(d["Sound_AmbienceVolume"], sound.ambience);
+    assert_eq!(d["Sound_EnableAllSound"] != 0.0, sound.enabled);
+    assert_eq!(d["Sound_EnableSFX"] != 0.0, sound.sfx_enabled);
+    assert_eq!(d["Sound_EnableMusic"] != 0.0, sound.music_enabled);
+    assert_eq!(d["Sound_EnableAmbience"] != 0.0, sound.ambience_enabled);
+    assert_eq!(d["Sound_EnableErrorSpeech"] != 0.0, sound.error_speech);
     assert_eq!(
         d["Sound_EnableSoundWhenGameIsInBG"] != 0.0,
         sound.background_sound
@@ -128,7 +103,7 @@ fn registered_defaults_mirror_the_code_truths() {
         !sound.background_sound,
         "the reference goes quiet in the background and offers no way out"
     );
-    assert_eq!(d["SoundReverb"] != 0.0, sound.reverb);
+    assert_eq!(d["Sound_EnableReverb"] != 0.0, sound.reverb);
     assert_eq!(d["SoundOutputLimiter"] != 0.0, sound.limiter);
     assert!(sound.limiter, "the output limiter ships on");
     assert!(!sound.reverb, "zone reverb ships off");
@@ -318,7 +293,7 @@ fn gx_maximize_waits_for_the_restart_commit() {
 #[test]
 fn the_observers_apply_every_arm() {
     let mut app = cvar_app();
-    apply(&mut app, "MusicVolume", "0.7");
+    apply(&mut app, "Sound_MusicVolume", "0.7");
     assert_eq!(res::<SoundConfig>(&app).music, 0.7);
     // A string row reaches its knob; a value that is not an address leaves the knob alone.
     apply(&mut app, "realmList", "logon.example.org:3724");
@@ -342,7 +317,7 @@ fn the_observers_apply_every_arm() {
         "a known key with a bad value is consumed, and the resource keeps its truth",
     );
     // Clamps are the knob's own: volume to [0,1], farclip to FARCLIP_RANGE.
-    apply(&mut app, "mastervolume", "7");
+    apply(&mut app, "sound_mastervolume", "7");
     assert_eq!(res::<SoundConfig>(&app).master, 1.0);
     apply(&mut app, "farclip", "50");
     assert_eq!(res::<ViewDistance>(&app).farclip, *FARCLIP_RANGE.start());
@@ -406,9 +381,9 @@ fn the_observers_apply_every_arm() {
     apply(&mut app, "fpsjournal", "0");
     assert!(!res::<crate::perf::FpsJournalSetting>(&app).0);
     // Enable flags: any nonzero is on, zero is off (the client's int-parse + != 0).
-    apply(&mut app, "EnableMusic", "0");
+    apply(&mut app, "Sound_EnableMusic", "0");
     assert!(!res::<SoundConfig>(&app).music_enabled);
-    apply(&mut app, "mastersoundeffects", "1");
+    apply(&mut app, "sound_enableallsound", "1");
     assert!(res::<SoundConfig>(&app).enabled);
     apply(&mut app, "deselectonclick", "0");
     assert!(!res::<ClickConfig>(&app).deselect_on_click);
@@ -693,11 +668,17 @@ fn compose_writes_the_diff_and_preserves_what_it_does_not_own() {
         ]
         .into(),
     );
-    cvars.set("MusicVolume", "0.7"); // moved: written
+    cvars.set("Sound_MusicVolume", "0.7"); // moved: written
     cvars.set("farclip", "350"); // back to default: removed
     let out = cvars.compose();
-    assert_eq!(out.get("MusicVolume").map(String::as_str), Some("0.7"));
-    assert!(!out.contains_key("MasterVolume"), "at default: absent");
+    assert_eq!(
+        out.get("Sound_MusicVolume").map(String::as_str),
+        Some("0.7")
+    );
+    assert!(
+        !out.contains_key("Sound_MasterVolume"),
+        "at default: absent"
+    );
     assert_eq!(out.get("uiScale").map(String::as_str), Some("0.8"));
     assert!(!out.contains_key("farclip"));
     assert_eq!(out.get("FutureKnob").map(String::as_str), Some("3"));
@@ -721,7 +702,7 @@ fn a_change_saves_after_one_quiet_second_with_no_exit() {
     app.update();
     app.world_mut()
         .non_send_resource_mut::<UiScript>()
-        .run(r#"SetCVar("MusicVolume", 0.75)"#)
+        .run(r#"SetCVar("Sound_MusicVolume", 0.75)"#)
         .unwrap();
     app.update();
     assert!(
@@ -767,7 +748,7 @@ fn a_lua_setcvar_lands_in_config_toml_end_to_end() {
     assert_eq!(
         app.world_mut()
             .non_send_resource_mut::<UiScript>()
-            .cvar("MusicVolume")
+            .cvar("Sound_MusicVolume")
             .as_deref(),
         Some("0.1")
     );
@@ -775,7 +756,7 @@ fn a_lua_setcvar_lands_in_config_toml_end_to_end() {
     // The Lua write (what a settings slider will do) reaches the knob on the next frame…
     app.world_mut()
         .non_send_resource_mut::<UiScript>()
-        .run(r#"SetCVar("MusicVolume", 0.75)"#)
+        .run(r#"SetCVar("Sound_MusicVolume", 0.75)"#)
         .unwrap();
     app.update();
     assert_eq!(app.world().resource::<SoundConfig>().music, 0.75);
@@ -785,7 +766,10 @@ fn a_lua_setcvar_lands_in_config_toml_end_to_end() {
     app.update();
     let text = std::fs::read_to_string(tmp.join("config.toml")).unwrap();
     assert!(text.contains("MusicVolume = \"0.75\""), "{text}");
-    assert!(!text.contains("MasterVolume"), "defaults stay out:\n{text}");
+    assert!(
+        !text.contains("Sound_MasterVolume"),
+        "defaults stay out:\n{text}"
+    );
     let back: LocalConfig = toml::from_str(&text).unwrap();
     assert_eq!(back.cvars.len(), 1, "a diff, not a dump: {text}");
     std::fs::remove_dir_all(&tmp).ok();
@@ -818,7 +802,7 @@ fn wrath_cvar_mirror_tracks_host_sync_and_vm_replacement() {
 
 /// A client with a real CVar host: every knob resource an observer writes, every observer,
 /// [`CvarPlugin`] and a VM for the mirror.
-fn cvar_app() -> App {
+pub(super) fn cvar_app() -> App {
     let mut app = App::new();
     app.add_plugins(bevy::MinimalPlugins)
         .insert_resource(SoundConfig::default())
@@ -957,7 +941,7 @@ const ALL_OBSERVERS: &[fn(&mut App)] = &[
 ];
 
 /// A host write, its latch committed at once, and its observers run before this returns.
-fn apply(app: &mut App, name: &str, value: &str) -> SetOutcome {
+pub(super) fn apply(app: &mut App, name: &str, value: &str) -> SetOutcome {
     let world = app.world_mut();
     let (outcome, events) = {
         let mut cvars = world.resource_mut::<Cvars>();
@@ -971,7 +955,7 @@ fn apply(app: &mut App, name: &str, value: &str) -> SetOutcome {
     outcome
 }
 
-fn res<T: Resource>(app: &App) -> &T {
+pub(super) fn res<T: Resource>(app: &App) -> &T {
     app.world().resource::<T>()
 }
 
@@ -1215,8 +1199,8 @@ fn a_latched_row_stages_the_write_until_the_boundary_commits_it() {
         Some("200")
     );
     assert!(!cvars.compose().contains_key("SoundBufferSize"));
-    assert_eq!(cvars.set("MusicVolume", "0.7"), SetOutcome::Changed);
-    assert_eq!(cvars.get("MusicVolume"), Some("0.7"));
+    assert_eq!(cvars.set("Sound_MusicVolume", "0.7"), SetOutcome::Changed);
+    assert_eq!(cvars.get("Sound_MusicVolume"), Some("0.7"));
     assert_eq!(cvars.take_events().len(), 1);
 }
 
@@ -1365,10 +1349,6 @@ fn the_loaded_file_reaches_a_knob_before_anything_ordered_after_cvar_load() {
 fn every_registered_row_has_a_reader_in_the_source() {
     /// Rows whose only reader is the stock interface.
     const LUA_ONLY: &[(&str, &str)] = &[
-        (
-            "statusBarText",
-            "TextStatusBar.lua reads it on each CVAR_UPDATE",
-        ),
         (
             "UberTooltips",
             "GameTooltip's binding-line gate, stock and pfUI",
