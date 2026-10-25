@@ -1,6 +1,5 @@
 //! The spell-control route's bytes: the pet bar's orders and the other spell-control requests,
-//! as the Wrath writer sends them ([`spell_control_packet`]), and the info line each pet order
-//! logs on its way out ([`log_pet_send`]).
+//! as the Wrath writer sends them ([`spell_control_packet`]).
 
 use std::io;
 
@@ -10,18 +9,6 @@ use crate::net::ClientCommand;
 /// other pet orders, the spell cancels, resurrect replies and far sight.
 pub fn spell_control_packet(command: ClientCommand) -> io::Result<(u32, Vec<u8>)> {
     wrathplus_protocol::wrath_spell_control::encode(&spell_control_command(command))
-}
-
-/// Every pet order at info, with its bytes (`CMSG_PET_*` but the name query, which every pet in
-/// view asks): a pet that ignores its orders shows in the log whether the client sent them, which
-/// a capture (server to client only) cannot.
-pub(super) fn log_pet_send(opcode: u32, body: &[u8]) {
-    let name = u16::try_from(opcode)
-        .ok()
-        .and_then(wrathplus_protocol::wrath_opcode_names::opcode_name);
-    if let Some(name) = name.filter(|n| n.starts_with("CMSG_PET_") && *n != "CMSG_PET_NAME_QUERY") {
-        bevy::log::info!("net(wrath) SEND {name} 0x{opcode:04x} {body:02x?}");
-    }
 }
 
 /// The native request for a spell-control command.
