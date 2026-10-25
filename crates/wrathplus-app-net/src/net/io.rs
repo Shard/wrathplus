@@ -16,6 +16,12 @@ mod wrath_spell_control;
 
 pub use wrath_spell_control::spell_control_packet;
 
+/// The opcode and body the writer sends for a session-route command: the casts, item uses and
+/// the other in-world requests [`wrath`] frames from a [`super::ClientCommand`].
+pub fn session_packet(command: super::ClientCommand) -> (u32, Vec<u8>) {
+    wrath::session_packet(command)
+}
+
 /// The inbound census: every packet off the world socket, and the unix ms of the latest, which
 /// tell a silent server from a dead socket for the runaway watch ([`crate::motion`]).
 pub(crate) static INBOUND_PACKETS: AtomicU64 = AtomicU64::new(0);

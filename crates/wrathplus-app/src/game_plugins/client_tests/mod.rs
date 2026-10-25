@@ -3,6 +3,7 @@
 //! file per source module, named after its path; each says where its tests came from.
 
 mod cvars;
+mod disenchant_wire_tests;
 mod experience_console_tests;
 mod glue_world_switch_tests;
 mod names_native_pet_tests;

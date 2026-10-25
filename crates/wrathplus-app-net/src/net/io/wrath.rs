@@ -2811,7 +2811,7 @@ fn inventory_command(command: ClientCommand) -> wrathplus_protocol::wrath_invent
     }
 }
 
-fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
+pub(super) fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use wrathplus_protocol::wrath_group as g;
     use wrathplus_protocol::wrath_npc as n;
     use wrathplus_protocol::wrath_session::{self as s, CastTarget};
