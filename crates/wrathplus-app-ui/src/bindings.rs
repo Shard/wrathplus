@@ -33,9 +33,9 @@ use wrathplus_ui::script::keybind::KeybindRequest;
 use wrathplus_ui::script::UiScript;
 
 use crate::app_core::schedule::InWorldGated;
-use crate::ui_script::PointerOverUiPanel;
 use crate::app_core::ui_flags::PlayerUiHover;
 use crate::app_core::ui_flags::UiKeyboardCapture;
+use crate::ui_script::{PointerOverUiPanel, UiWheelEaten};
 
 pub(crate) mod chord;
 mod layout;
@@ -321,8 +321,8 @@ fn latch_and_dispatch(
     scroll: Res<AccumulatedMouseScroll>,
     capture: Res<UiKeyboardCapture>,
     hover: Res<PlayerUiHover>,
-    // The chrome flag; only the wheel branch reads it.
-    over_ui: Res<PointerOverUiPanel>,
+    // The chrome flag and the UI's wheel take; only the wheel branch reads them.
+    (over_ui, wheel_eaten): (Res<PointerOverUiPanel>, Option<Res<UiWheelEaten>>),
     dispatch: Res<BindingDispatch>,
     native: Res<NativeBindingRoute>,
     mut state: ResMut<BindingsState>,
@@ -480,9 +480,9 @@ fn latch_and_dispatch(
     // (`0x483d82`) per wheel message. A `runOnUp` command runs both halves; a plain one's up leg is
     // the `RunCommand` (`0x4b7bf1`) no-op. A trackpad's fractional lines carry to whole notches.
     let wheel = wheel_lines(scroll.unit, scroll.delta.y);
-    // Over chrome only (`PointerOverUiPanel`): the wheel still zooms with the cursor on a
-    // nameplate, a mouse-enabled widget but not a panel.
-    if wheel != 0.0 && !sup && !over_ui.0 {
+    // Over chrome or a frame whose `OnMouseWheel` took the notch: the wheel still zooms with the
+    // cursor on a nameplate, a mouse-enabled widget but not a panel.
+    if wheel != 0.0 && !sup && !over_ui.0 && !wheel_eaten.is_some_and(|w| w.0) {
         let steps = notches.feed(wheel);
         let key = if steps > 0 {
             BindKey::WheelUp
@@ -692,6 +692,8 @@ mod tests {
     fn frame_ate(app: &mut App, keys: &[KeyCode]) {
         app.world_mut().resource_mut::<UiKeyboardCapture>().consumed = keys.to_vec();
     }
+
+    mod wheel;
 
     /// One addon's `Bindings.xml` in the reference's shape: a `runOnUp` binding forking on
     /// `keystate`, and a one-shot. Each half counts itself in a global.
@@ -1655,26 +1657,6 @@ mod tests {
         );
     }
 
-    /// A trackpad's fractional lines carry to whole notches, each one `CameraZoomIn(1.0)`, and a
-    /// reversal drops the carried fraction.
-    #[test]
-    fn fractional_wheel_lines_dispatch_per_whole_notch() {
-        let mut app = harness();
-        for want in [0.0, 0.0, 1.0] {
-            wheel(&mut app, 0.4);
-            app.update();
-            assert_eq!(
-                state(&app).amount(Input::CameraZoomIn),
-                want,
-                "0.4 lines a frame: the third completes the notch"
-            );
-        }
-        wheel(&mut app, -1.0);
-        app.update();
-        assert_eq!(state(&app).amount(Input::CameraZoomOut), 1.0);
-        assert_eq!(state(&app).amount(Input::CameraZoomIn), 0.0);
-    }
-
     /// The window deactivate (`0x514490`) clears the direction bits a Lua Start set and keeps the
     /// mouse pair.
     #[test]
@@ -1816,8 +1798,9 @@ mod tests {
             root.join("wrathplus-ui/src/script/keybind.rs"),
             root.join("wrathplus-ui/src/bindings_xml.rs"),
         ];
+        // Production files only: `bindings/tests/` holds test children.
         for e in std::fs::read_dir(own.join("bindings")).unwrap() {
-            files.push(e.unwrap().path());
+            files.extend(Some(e.unwrap().path()).filter(|p| p.is_file()));
         }
         assert!(
             !own.join("bindings/commands.rs").exists(),

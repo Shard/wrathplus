@@ -237,3 +237,6 @@ fn installed_wrath_framexml_load_timing() {
 
 #[path = "wrath_worldmap_poi_tests.rs"]
 mod worldmap_poi;
+
+#[path = "wrath_chat_scroll_tests.rs"]
+mod chat_scroll;

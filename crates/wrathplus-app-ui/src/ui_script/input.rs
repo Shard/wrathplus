@@ -60,18 +60,21 @@ const UI_MOUSE_BUTTONS: [(MouseButton, &str); 5] = [
 /// One `OnMouseWheel` call per whole notch, `arg1 = ±1`, the fraction carried in `notches`: a
 /// trackpad gesture arrives as a `Pixel` trickle, and the stock handlers act on the sign alone
 /// (`ScrollFrameTemplate_OnMouseWheel` scrolls half a pane per call, `UIPanelTemplates.lua:150`).
+/// True when a handler took a notch.
 fn feed_wheel(
     script: &mut UiScript,
     notches: &mut WheelNotches,
     x: f32,
     y: f32,
     scroll: &AccumulatedMouseScroll,
-) {
+) -> bool {
     let whole = notches.feed(crate::bindings::wheel_lines(scroll.unit, scroll.delta.y));
     let step = whole.signum() as f32;
+    let mut took = false;
     for _ in 0..whole.unsigned_abs() {
-        script.mouse_wheel(x, y, step);
+        took |= script.mouse_wheel(x, y, step);
     }
+    took
 }
 
 /// Feeds cursor, buttons, wheel and keys into the UI engine, publishing [`PlayerUiHover`] (the
@@ -82,8 +85,13 @@ pub(super) fn feed_ui_input(
     // Carries the `wl_display` the Wayland clipboard backend needs, once winit has a surface.
     window: Query<(&Window, Option<&bevy::window::RawHandleWrapper>), With<PrimaryWindow>>,
     buttons: Res<ButtonInput<MouseButton>>,
-    // The wheel travel and its carried notch fraction, one param for clippy's argument ceiling.
-    (scroll, mut notches): (Res<AccumulatedMouseScroll>, ResMut<WheelNotches>),
+    // The wheel travel, its carried notch fraction and whether a handler took it, one param for
+    // clippy's argument ceiling.
+    (scroll, mut notches, mut eaten): (
+        Res<AccumulatedMouseScroll>,
+        ResMut<WheelNotches>,
+        ResMut<super::UiWheelEaten>,
+    ),
     mut pointer: PointerFeed,
     // One param for clippy's argument ceiling, with the pasteboard the clipboard chords use.
     mut kbd: (
@@ -109,6 +117,7 @@ pub(super) fn feed_ui_input(
         &mut pointer.payload_held,
     );
     click_consumed.0 = false;
+    eaten.0 = false;
     let Some(mut script) = script else {
         capture.typing = false;
         capture.arrows_fall_through = false;
@@ -193,7 +202,7 @@ pub(super) fn feed_ui_input(
                 script.mouse_button(x, y, name, false);
             }
         }
-        feed_wheel(&mut script, &mut notches, x, y, &scroll);
+        eaten.0 = feed_wheel(&mut script, &mut notches, x, y, &scroll);
     } else if !synthetic {
         // The OS pointer left: leave the hovered frame once, and disarm any press or drag every
         // frame, since no release ends it and a stale gesture would fire on re-entry.

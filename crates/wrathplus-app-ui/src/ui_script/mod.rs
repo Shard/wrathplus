@@ -111,6 +111,13 @@ pub(crate) struct UiPassState {
 #[derive(Resource, Default)]
 pub(crate) struct PointerOverUiPanel(pub(crate) bool);
 
+/// A wheel notch a UI `OnMouseWheel` handler took this frame: the reference's wheel walk stops at
+/// the handler, so the notch never reaches `CGWorldFrame`'s binding. A chat frame takes the wheel
+/// without the mouse (`enableMouse="false"`, `FloatingChatFrame.xml:505`), which
+/// [`PointerOverUiPanel`] cannot see. Set by the UI feed, read by the binding pass after it.
+#[derive(Resource, Default)]
+pub(crate) struct UiWheelEaten(pub(crate) bool);
+
 pub use crate::app_core::schedule::UiFeed;
 
 /// The player-UI paint pass, after the camera so world-anchored widgets use this frame's view.

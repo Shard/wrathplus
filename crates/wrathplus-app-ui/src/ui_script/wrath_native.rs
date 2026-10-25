@@ -34,6 +34,7 @@ pub(super) fn build(app: &mut App) {
         .init_resource::<UiClock>()
         .init_resource::<UiPassState>()
         .init_resource::<PointerOverUiPanel>()
+        .init_resource::<super::UiWheelEaten>()
         .init_resource::<super::ReloadUiPending>()
         .configure_sets(
             Update,

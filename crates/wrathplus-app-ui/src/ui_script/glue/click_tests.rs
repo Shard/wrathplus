@@ -31,6 +31,7 @@ fn login_world() -> World {
     world.init_resource::<Messages<KeyboardInput>>();
     world.init_resource::<AccumulatedMouseScroll>();
     world.init_resource::<crate::bindings::WheelNotches>();
+    world.init_resource::<crate::ui_script::UiWheelEaten>();
     world.init_resource::<crate::bindings::LayoutNames>();
     world.insert_resource(crate::app_core::ui_flags::UiScaleCvar(1.0));
     world.init_resource::<crate::app_core::ui_flags::PlayerUiHover>();

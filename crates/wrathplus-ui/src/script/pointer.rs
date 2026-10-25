@@ -594,8 +594,8 @@ impl UiScript {
     /// A wheel spin at `(x, y)`: fires `OnMouseWheel(self, delta)` on the hit frame, or on its
     /// nearest ancestor with the script when it has none; the reference instead lets its wheel
     /// sweep continue past a frame with no script (`0x76c180`). `delta` passes through as given;
-    /// the reference passes only its sign, `+1` or `-1` (`0x76c1a2`).
-    pub fn mouse_wheel(&mut self, x: f32, y: f32, delta: f32) {
+    /// the reference passes only its sign, `+1` or `-1` (`0x76c1a2`). True when a handler took it.
+    pub fn mouse_wheel(&mut self, x: f32, y: f32, delta: f32) -> bool {
         let target: Option<u32> = {
             // The wheel flag, not the mouse bit: the reference's wheel dispatcher `0x7664f0` walks
             // its own index and ignores hover, capture and `EnableMouse`.
@@ -616,16 +616,16 @@ impl UiScript {
                 }
             })
         };
-        if let Some(id) = target {
-            if let Err(e) = event::fire_widget_handler(
-                &self.lua,
-                id,
-                "OnMouseWheel",
-                vec![Value::Number(f64::from(delta))],
-            ) {
-                self.push_error(e);
-            }
+        let Some(id) = target else { return false };
+        if let Err(e) = event::fire_widget_handler(
+            &self.lua,
+            id,
+            "OnMouseWheel",
+            vec![Value::Number(f64::from(delta))],
+        ) {
+            self.push_error(e);
         }
+        true
     }
 }
 
