@@ -28,11 +28,14 @@ impl QuestWatches {
 /// The watch set's cap, `0x19` in `0x5e64d0`; stock FrameXML's `MAX_WATCHABLE_QUESTS` agrees.
 const MAX_WATCHES: usize = 25;
 
-/// Drops every timed watch whose expiry has passed.
-fn expire_watches(lua: &Lua) {
+/// The expiry sweep (`0x5dfef0`): drops every timed watch whose expiry has passed and answers how
+/// many, as the reference fires `QUEST_LOG_UPDATE` (`0x615020(0x125)`) once per dropped watch. The
+/// verbs never expire a watch themselves: one lapsed between sweeps still reads as watched.
+pub(crate) fn sweep(lua: &Lua) -> usize {
     let now = super::super::clock::now(lua);
     let mut model = lua.app_data_mut::<Model>().expect("model app_data");
     let QuestWatches { ids, expiry } = &mut model.quest_watches;
+    let before = ids.len();
     expiry.retain(|id, at| {
         let live = *at > now;
         if !live {
@@ -40,6 +43,24 @@ fn expire_watches(lua: &Lua) {
         }
         live
     });
+    before - ids.len()
+}
+
+/// `0x5e64d0(id, 0)`, the `trackedQuests` loader's add (`0x5e65b0`): a permanent watch on a quest
+/// in the log, under the cap; an id already watched keeps its watch.
+pub(crate) fn restore(model: &mut Model, ids: &[u32]) {
+    for &id in ids {
+        let in_log = model
+            .quest_log
+            .entries
+            .iter()
+            .any(|e| !e.is_header && e.quest_id == id)
+            || model.quest_log.hidden_quest_ids.contains(&id);
+        let watches = &mut model.quest_watches;
+        if in_log && !watches.ids.contains(&id) && watches.ids.len() < MAX_WATCHES {
+            watches.ids.push(id);
+        }
+    }
 }
 
 // A quest row's id; a header has none (`0x5e67c0` reads `[0xc237b8]`, the header flag).
@@ -49,6 +70,26 @@ fn watch_id_at(model: &Model, index: u32) -> Option<u32> {
         .and_then(|n| model.quest_log.entries.get(n))
         .filter(|e| !e.is_header)
         .map(|e| e.quest_id)
+}
+
+impl crate::script::UiScript {
+    /// The permanent watches in watch order, what the reference saves to `trackedQuests` at
+    /// logout (`0x5e0240`): a timed watch (`AddQuestWatch(i, seconds)`) is not saved.
+    pub fn quest_watches_permanent(&self) -> Vec<u32> {
+        let model = self.model_ref();
+        let w = &model.quest_watches;
+        w.ids
+            .iter()
+            .copied()
+            .filter(|id| !w.expiry.contains_key(id))
+            .collect()
+    }
+
+    /// Re-adds saved watches as permanent ones, each on a quest in the current log, as the
+    /// reference's `trackedQuests` loader (`0x5e65b0`) does on the session's first log build.
+    pub fn restore_quest_watches(&mut self, ids: &[u32]) {
+        restore(&mut self.model_mut(), ids);
+    }
 }
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -69,7 +110,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "GetQuestWatchIndex",
         lua.create_function(|lua, index: u32| {
-            expire_watches(lua);
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             Ok(watch_id_at(&model, index).and_then(|id| {
                 model
@@ -86,12 +126,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // AddQuestWatch(index[, seconds]) (`0x5e67c0` → `0x5e64d0`): at most 25 (`0x19`), a header or
     // out-of-range row adds nothing. `seconds` arms a timed watch; re-adding a permanent watch
     // changes nothing, and re-adding a timed one re-arms it, or makes it permanent with no
-    // seconds. The native stamps `time()` and its expiry sweep is untraced: here the expiry is a
-    // `GetTime` stamp and an expired watch drops the next time a watch verb reads the set.
+    // seconds. The native stamps `time()`; here the expiry is a `GetTime` stamp, dropped by
+    // [`sweep`].
     g.set(
         "GetNumQuestWatches",
         lua.create_function(|lua, ()| {
-            expire_watches(lua);
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             Ok(model.quest_watches.ids.len() as i64)
         })?,
@@ -99,7 +138,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "IsQuestWatched",
         lua.create_function(|lua, i: u32| {
-            expire_watches(lua);
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             Ok(flag(
                 watch_id_at(&model, i).is_some_and(|id| model.quest_watches.ids.contains(&id)),
@@ -109,7 +147,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "AddQuestWatch",
         lua.create_function(|lua, (i, seconds): (u32, Option<f64>)| {
-            expire_watches(lua);
             let now = super::super::clock::now(lua);
             let seconds = seconds.map_or(0, |s| s.round() as i64);
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
@@ -152,7 +189,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "GetQuestIndexForWatch",
         lua.create_function(|lua, w: usize| {
-            expire_watches(lua);
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             let index = w
                 .checked_sub(1)

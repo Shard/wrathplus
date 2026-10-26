@@ -16,7 +16,7 @@ use super::Model;
 mod quest_watch;
 use super::binding_abi::{flag, number_arg};
 use super::quest::QuestItemView;
-pub(crate) use quest_watch::QuestWatches;
+pub(crate) use quest_watch::{sweep as sweep_quest_watches, QuestWatches};
 
 /// One quest-log row; its 1-based position in [`QuestLogState::entries`] is the index every verb
 /// takes.

@@ -85,6 +85,11 @@ impl super::UiScript {
         for (event, args) in pending {
             self.fire_event(&event, args);
         }
+        // The watch list's expiry sweep (`0x5dfef0`), one `QUEST_LOG_UPDATE` per lapsed watch.
+        // Labelled: its caller's cadence is untraced; here once a tick.
+        for _ in 0..super::quest_log::sweep_quest_watches(&self.lua) {
+            self.fire_event("QUEST_LOG_UPDATE", vec![]);
+        }
         // Each entry: the frame's id, whether it has an `OnUpdate`, and the box if an EditBox.
         let walk: Vec<(u32, bool, Option<FrameHandle>)> = {
             let mut model = self.model_mut();
