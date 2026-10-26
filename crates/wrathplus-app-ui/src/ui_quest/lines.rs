@@ -55,7 +55,12 @@ enum Resolved {
     Drop,
 }
 
+/// The tracked-quest list across sessions; registered with the lines, as `ui_quest` is full.
+#[path = "watch_saved.rs"]
+pub(crate) mod watch_saved;
+
 pub(super) fn register(app: &mut App) {
+    watch_saved::register(app);
     app.init_resource::<QuestLines>()
         .net_handler(SessionEventKind::Disconnected, on_session_end)
         .add_systems(

@@ -893,6 +893,14 @@ pub(crate) fn feed_quest_log(
     // is the leaderboard line, as the `ERR_QUEST_ADD_*_SII` keys compose the same sentence.
     let progressed = quests_with_progressed_objectives(last, &fresh);
     script.set_quest_log(fresh.clone());
+    // `QUEST_WATCH_UPDATE` with the quest's 1-based log row (`0x4df880`'s search of `0xbb71c0`)
+    // goes first, from the `SMSG_QUESTUPDATE_*` handler, so the log update after it redraws the
+    // tracker stock's 300 s auto-watch grew (`QuestLogFrame.lua:265-269`); the reference fires it
+    // before the descriptor lands, here after the push.
+    for quest in &progressed {
+        let row = ScriptValue::Int(i64::from(quest.index));
+        script.fire_event("QUEST_WATCH_UPDATE", vec![row]);
+    }
     script.fire_event("QUEST_LOG_UPDATE", vec![]);
     if !progressed.is_empty() {
         for quest in progressed {
@@ -915,13 +923,6 @@ pub(crate) fn feed_quest_log(
                 };
                 crate::ui_action::show_messages(&mut script, &mut sink, "ui_quest_log", line);
             }
-            // The quest's 1-based log row: the reference's arg is `0x4df880`'s search of the row
-            // array `0xbb71c0`, not of the five-slot watch list `0xbb70a0`, and stock
-            // `AutoQuestWatch_Update(questIndex)` takes it (`QuestLogFrame.lua:67-69`).
-            script.fire_event(
-                "QUEST_WATCH_UPDATE",
-                vec![ScriptValue::Int(i64::from(quest.index))],
-            );
         }
     }
     *last = fresh;
