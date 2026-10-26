@@ -240,3 +240,6 @@ mod worldmap_poi;
 
 #[path = "wrath_chat_scroll_tests.rs"]
 mod chat_scroll;
+
+#[path = "wrath_quest_track_tests.rs"]
+mod quest_track;
