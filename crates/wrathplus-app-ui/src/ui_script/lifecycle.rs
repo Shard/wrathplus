@@ -44,6 +44,7 @@ pub(super) fn new_vm(world: &mut World) -> Option<UiScript> {
     crate::ui_achievements::seed(world, &mut script);
     seed_class_names(world, &mut script);
     seed_link_catalogs(world, &mut script);
+    seed_item_icons(world, &mut script);
     seed_session(world, &mut script);
     install_addon_asset_resolvers(world, &mut script);
     info!("ui_script: new VM, session {}", script.session());
@@ -57,6 +58,23 @@ fn seed_class_names(world: &World, script: &mut UiScript) {
     if let Some(table) = world.get_resource::<crate::chr_classes::ChrClassTable>() {
         script.set_localized_class_names(table.0.localized_names());
     }
+}
+
+/// Seed a new VM with each `Item.dbc` entry's display icon, which `GetItemIcon` reads (`0x517020`).
+fn seed_item_icons(world: &World, script: &mut UiScript) {
+    let records = world.get_resource::<crate::app_core::catalogs::ItemRecords>();
+    let displays = world.get_resource::<crate::entities::ItemDisplays>();
+    let (Some(records), Some(displays)) = (records, displays) else {
+        return;
+    };
+    let mut paths = std::collections::HashMap::<u32, Option<std::sync::Arc<str>>>::new();
+    let icons = records.0.iter().map(|(entry, row)| {
+        let icon = paths.entry(row.display_id).or_insert_with(|| {
+            crate::ui_items::item_icon(Some(displays), row.display_id).map(Into::into)
+        });
+        (entry, icon.clone())
+    });
+    script.set_item_icons(std::sync::Arc::new(icons.collect()));
 }
 
 /// Seed a new VM with Talent.dbc and GlyphProperties/GlyphSlot.dbc, which `GameTooltip:
