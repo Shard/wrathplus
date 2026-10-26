@@ -300,8 +300,7 @@ fn frame_kind_from_str(s: &str) -> Option<FrameKind> {
         "GAMETOOLTIP" => FrameKind::GameTooltip,
         "MINIMAP" => FrameKind::Minimap,
         "COOLDOWN" => FrameKind::Cooldown,
-        // Wrath's `<QuestPOIFrame>` is a plain frame here; its methods are the Wrath surface's.
-        "QUESTPOIFRAME" => FrameKind::Frame,
+        "QUESTPOIFRAME" => FrameKind::QuestPoiFrame,
         _ => return None,
     })
 }
@@ -511,6 +510,7 @@ fn kind_method_registries(kind: Option<FrameKind>) -> &'static [&'static str] {
         ],
         Some(FrameKind::Minimap) => &[super::minimap::REG_MINIMAP_METHODS],
         Some(FrameKind::Cooldown) => &[super::wrath_surface::REG_COOLDOWN_METHODS],
+        Some(FrameKind::QuestPoiFrame) => &[super::wrath_quest_poi::blob::REG_QUEST_POI_METHODS],
         Some(FrameKind::MovieFrame) => &[super::movie::REG_MOVIEFRAME_METHODS],
         Some(FrameKind::GameTooltip) => &[super::tooltip::REG_TOOLTIP_METHODS],
         _ => &[],

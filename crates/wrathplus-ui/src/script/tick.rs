@@ -317,3 +317,10 @@ impl UiScript {
         }
     }
 }
+
+/// The error a run past its instruction budget raises.
+pub(super) fn instruction_budget_error(used: u64) -> mlua::Error {
+    mlua::Error::runtime(format!(
+        "wrathplus: instruction budget exhausted after {used} VM instructions — treating this as a non-terminating loop"
+    ))
+}
