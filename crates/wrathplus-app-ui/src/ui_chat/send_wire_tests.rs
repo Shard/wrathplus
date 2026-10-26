@@ -106,20 +106,40 @@ fn wire(command: &ClientCommand) -> Vec<u8> {
 #[test]
 fn typed_lines_reach_the_wire_per_chat_type() {
     wrathplus_formats::wow_data_or_skip!();
-    let (mut world, rx) = world(chat_vm());
+    let mut vm = chat_vm();
+    // In a party: with none, `ChatFrame_OpenChat` drops a sticky PARTY back to SAY.
+    vm.set_party(wrathplus_ui::script::PartyState {
+        own_guid: 1,
+        leader_guid: 1,
+        members: vec![wrathplus_ui::script::PartyMemberInfo {
+            guid: 2,
+            name: "Alpha".into(),
+        }],
+        ..Default::default()
+    });
+    let (mut world, rx) = world(vm);
     {
         let mut channels = world.resource_mut::<super::edit::ChannelState>();
         channels.claim_slot("General - Orgrimmar");
         channels.confirm_slot("General - Orgrimmar");
     }
+    // Server commands are ordinary lines: `ChatEdit_ParseText` returns at once unless a line starts
+    // with "/", and AzerothCore parses the dot itself. The box keeps its type, sticky.
+    const DOT: &str = ".playerbots bot addclass warrior";
     for (line, chat_type, target, text) in [
         ("hello", 0x01, None, "hello"),
+        (DOT, 0x01, None, DOT),
+        ("#tag", 0x01, None, "#tag"),
+        ("!bang", 0x01, None, "!bang"),
         ("/s hi", 0x01, None, "hi"),
         ("/y loud", 0x06, None, "loud"),
         ("/e waves", 0x0a, None, "waves"),
         ("/p group", 0x02, None, "group"),
+        (DOT, 0x02, None, DOT),
+        ("/p .playerbots bot addclass warrior", 0x02, None, DOT),
         ("/g guild", 0x04, None, "guild"),
         ("/w Thrall psst", 0x07, Some("Thrall"), "psst"),
+        ("/w Thrall .help", 0x07, Some("Thrall"), ".help"),
         ("CHANNEL", 0x11, Some("General - Orgrimmar"), "lfg"),
     ] {
         if line == "CHANNEL" {
