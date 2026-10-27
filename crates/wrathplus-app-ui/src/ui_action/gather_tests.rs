@@ -92,7 +92,7 @@ fn the_tooltip_key_follows_the_creatures_trade() {
     assert_eq!(super::gather_line_key(&fields(0), Some(&names)), None);
     assert_eq!(
         super::gather_line_key(&skinnable, Some(&names)),
-        Some("UNIT_SKINNABLE_LEATHER"),
+        Some(("UNIT_SKINNABLE_LEATHER", 4)),
         "no record yet"
     );
     names.insert_creature(
@@ -112,7 +112,7 @@ fn the_tooltip_key_follows_the_creatures_trade() {
     );
     assert_eq!(
         super::gather_line_key(&skinnable, Some(&names)),
-        Some("UNIT_SKINNABLE_ROCK")
+        Some(("UNIT_SKINNABLE_ROCK", 4))
     );
 }
 
@@ -134,7 +134,7 @@ fn the_gather_line_names_the_corpses_trade() {
                 exists: true,
                 guid: 0xF130_0000_4500_0001,
                 name: Some("Corpse".into()),
-                skinnable: Some(key),
+                skinnable: Some((key, 4)),
                 ..Default::default()
             }),
         );
@@ -151,4 +151,60 @@ fn the_gather_line_names_the_corpses_trade() {
         ))
         .unwrap();
     }
+}
+
+/// `0x620ee0`'s colour leg over `0x61a1f0`: no trade spell or no skill reads red; otherwise the
+/// level's required skill (1, then `10×level − 100`, then `5×level`) against the player's skill
+/// in the spell's line.
+#[test]
+fn the_gather_line_shades_by_the_players_skill() {
+    use wrathplus_protocol::types::Field;
+    const SKINNING_LINE: u32 = 393;
+    const SKINNING: u32 = 8613;
+    let boar = |level: u32| {
+        crate::app_core::session::ObjectStore(wrathplus_protocol::ObjectFields::from_pairs(&[
+            (Field::ObjectType.index(), 0x09),
+            (Field::UnitLevel.index(), level),
+            (Field::UnitFlags.index(), 0x0400_0000),
+        ]))
+    };
+    let skill_lines =
+        wrathplus_formats::SkillLineCatalog::from_spell_lines([(SKINNING, SKINNING_LINE)]);
+    // The first `PLAYER_SKILL_INFO` slot: the line, then value | max << 16.
+    let me = |value: u32| {
+        let base = Field::PlayerSkillInfo11.index();
+        crate::app_core::session::ObjectStore(wrathplus_protocol::ObjectFields::from_pairs(&[
+            (base, SKINNING_LINE),
+            (base + 1, value | 450 << 16),
+        ]))
+    };
+    let skinner = crate::app_core::state::LearnedAbilities {
+        gather: [Some(SKINNING), None, None, None],
+        ..Default::default()
+    };
+    let shade = |level: u32, value: u32, learned: &crate::app_core::state::LearnedAbilities| {
+        super::gather_difficulty(
+            &boar(level),
+            None,
+            Some(&me(value)),
+            learned,
+            Some(&skill_lines),
+        )
+    };
+    let miner = crate::app_core::state::LearnedAbilities {
+        gather: [None, None, Some(32606), None],
+        ..Default::default()
+    };
+    assert_eq!(shade(5, 300, &miner), 4, "no Skinning: red");
+    assert_eq!(shade(5, 0, &skinner), 4, "no skill in the line: red");
+    // Level 5 needs 1: 101 grey, 51 green, 26 yellow, 1 orange.
+    assert_eq!(
+        [101, 100, 51, 26, 1].map(|v| shade(5, v, &skinner)),
+        [0, 1, 1, 2, 3]
+    );
+    // Level 15 needs 50, level 30 needs 150.
+    assert_eq!(shade(15, 49, &skinner), 4);
+    assert_eq!(shade(15, 50, &skinner), 3);
+    assert_eq!(shade(30, 149, &skinner), 4);
+    assert_eq!(shade(30, 250, &skinner), 0);
 }

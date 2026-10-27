@@ -98,20 +98,63 @@ fn track_learned_abilities(
 }
 
 /// A skinnable creature's tooltip line key by its gather trade (12340 `0x620fc3` on `0x715e50`),
-/// Skinning while its record is uncached; `None` when `UNIT_FIELD_FLAGS` bit 26 is clear.
+/// Skinning while its record is uncached, at difficulty 4 (red) until [`gather_difficulty`] shades
+/// it; `None` when `UNIT_FIELD_FLAGS` bit 26 is clear.
 pub(crate) fn gather_line_key(
     store: &crate::app_core::session::ObjectStore,
     names: Option<&crate::names::NameCache>,
-) -> Option<&'static str> {
-    use crate::app_core::gather::{gather_kind, LINE_KEYS};
-    if store.0.unit_flags() & 0x0400_0000 == 0 {
-        return None;
-    }
+) -> Option<(&'static str, u8)> {
+    (store.0.unit_flags() & 0x0400_0000 != 0).then(|| {
+        (
+            crate::app_core::gather::LINE_KEYS[corpse_trade(store, names)],
+            4,
+        )
+    })
+}
+
+/// The creature's gather trade off its template (`0x715e50`), 0 while uncached.
+fn corpse_trade(
+    store: &crate::app_core::session::ObjectStore,
+    names: Option<&crate::names::NameCache>,
+) -> usize {
     let record = (store.0.object_type() == Some(wrathplus_protocol::types::ObjectType::Unit))
         .then(|| store.0.object_entry())
         .flatten()
         .and_then(|entry| names?.creature_record(entry));
-    Some(LINE_KEYS[gather_kind(record.map_or(0, |r| r.type_flags))])
+    crate::app_core::gather::gather_kind(record.map_or(0, |r| r.type_flags))
+}
+
+/// The gather line's difficulty, `0x620ee0`'s colour leg: with the trade's spell learned
+/// (`0x53bce0`) and a positive skill in its line (`0x8016c0`), the creature level's required
+/// skill (1 to level 10, then `10×level − 100` below 20, else `5×level`) against that skill
+/// (`0x61a1f0`): 0 grey at +100, 1 green at +50, 2 yellow at +25, 3 orange at par, else 4 red.
+pub(crate) fn gather_difficulty(
+    store: &crate::app_core::session::ObjectStore,
+    names: Option<&crate::names::NameCache>,
+    me: Option<&crate::app_core::session::ObjectStore>,
+    learned: &LearnedAbilities,
+    skill_lines: Option<&wrathplus_formats::SkillLineCatalog>,
+) -> u8 {
+    let Some(spell) = learned.gather[corpse_trade(store, names)] else {
+        return 4;
+    };
+    let skill = crate::spell::spell_skill_value(me, skill_lines, spell) as i64;
+    if skill <= 0 {
+        return 4;
+    }
+    let level = i64::from(store.0.unit_level().unwrap_or(0));
+    let required = match level {
+        ..=10 => 1,
+        11..=19 => 10 * level - 100,
+        _ => 5 * level,
+    };
+    match skill - required {
+        100.. => 0,
+        50.. => 1,
+        25.. => 2,
+        0.. => 3,
+        _ => 4,
+    }
 }
 
 /// `SpellMechanic.dbc`: the name in `SPELL_FAILED_PREVENTED_BY_MECHANIC`'s `%s` (reason `0x8d`).

@@ -163,8 +163,8 @@ pub struct UnitState {
     pub racial_leader: bool,
     /// `UNIT_FIELD_FLAGS`' PvP bit: `UnitIsPVP` and the tooltip's PvP line.
     pub pvp: bool,
-    /// `UNIT_FIELD_FLAGS`' skinnable bit, as the red gather line's key (`UNIT_SKINNABLE_*`).
-    pub skinnable: Option<&'static str>,
+    /// `UNIT_FIELD_FLAGS`' skinnable bit: the gather line's key and difficulty, 0 grey to 4 red.
+    pub skinnable: Option<(&'static str, u8)>,
     /// The faction name ("Stormwind"), the tooltip line after the level line, from `Faction.dbc`
     /// through the faction template with its hiding gates applied; `None` shows no line.
     pub faction_name: Option<String>,
