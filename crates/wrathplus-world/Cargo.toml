@@ -49,5 +49,7 @@ objc2 = "0.5"
 # Match Bevy 0.18's Naga module type for CPU-only shader validation.
 naga = { version = "27", features = ["wgsl-in"] }
 futures-lite = "2"
+# The clean-exit test's stand-in render thread, on Bevy's own channel type.
+async-channel = "2"
 # Synthetic MH2O layers for the Wrath liquid spawn tests.
 wrathplus-adt = { path = "../wrathplus-adt" }

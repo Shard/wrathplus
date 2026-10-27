@@ -32,6 +32,9 @@ mod language;
 pub(crate) mod logging;
 #[cfg(test)]
 mod macro_tests;
+#[cfg(test)]
+#[path = "ui_chat/mbot_wire_tests.rs"]
+mod mbot_wire_tests;
 mod native_feed;
 mod native_membership;
 pub(crate) mod native_message;

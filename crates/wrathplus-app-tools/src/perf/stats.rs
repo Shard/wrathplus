@@ -105,6 +105,7 @@ pub(super) fn sample_frame_time(
     _pin: bevy::ecs::system::NonSendMarker,
     time: Res<Time<Real>>,
     mut stats: ResMut<FrameStats>,
+    window: Option<Res<super::WindowState>>,
 ) {
     let wall_ms = time.delta_secs() * 1000.0;
     stats.wall.push(wall_ms);
@@ -121,8 +122,15 @@ pub(super) fn sample_frame_time(
     stats.prev_main_secs = main;
 
     // The first frame's delta is the startup gap, not a hitch.
+    // A covered or unfocused window's frames are the OS's throttle, not ours: labelled, and
+    // demoted below the warnings a hitch count greps.
     if wall_ms > HITCH_LOG_MS && stats.wall.len() > 1 {
-        warn!("frame hitch: {wall_ms:.0} ms (main thread blocked this long)");
+        let tag = window.as_deref().map_or("", super::WindowState::tag);
+        if tag.is_empty() {
+            warn!("frame hitch: {wall_ms:.0} ms (main thread blocked this long)");
+        } else {
+            info!("frame hitch: {wall_ms:.0} ms{tag}");
+        }
     }
 }
 
