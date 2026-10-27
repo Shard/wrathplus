@@ -11,6 +11,7 @@ pub mod console;
 pub mod cooldowns;
 pub mod death;
 pub mod errors;
+pub mod gather;
 pub mod group;
 pub mod raid_rows;
 pub mod interaction;
