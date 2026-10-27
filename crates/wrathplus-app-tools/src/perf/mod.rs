@@ -42,6 +42,7 @@ mod stall;
 mod stats;
 #[cfg(feature = "dev")]
 mod trace;
+mod window_state;
 
 #[cfg(feature = "dev")]
 use bevy::prelude::*;
@@ -59,6 +60,7 @@ pub use journal::FpsJournalPlugin;
 pub use journal::{on_cvar, FpsJournalSetting};
 #[cfg(feature = "dev")]
 pub(crate) use main_split::MainThreadSplit;
+pub use window_state::WindowState;
 
 /// The frame budget: a 60 fps floor. No frame should exceed this.
 pub const FRAME_BUDGET_MS: f32 = 1000.0 / 60.0;

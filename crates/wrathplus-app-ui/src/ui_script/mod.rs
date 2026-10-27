@@ -401,6 +401,8 @@ mod loot_tests;
 
 #[cfg(test)]
 mod group_loot_tests;
+#[cfg(test)]
+mod group_loot_tooltip_tests;
 
 #[cfg(test)]
 mod chat_tests;
@@ -466,6 +468,10 @@ mod enchant_confirm_tests;
 
 #[cfg(test)]
 mod friends_tests;
+
+/// The contact-list storm: a reply never asks again.
+#[cfg(test)]
+mod friends_storm_tests;
 
 /// The four guild windows, over a Lua stand-in for the guild engine API.
 #[cfg(test)]

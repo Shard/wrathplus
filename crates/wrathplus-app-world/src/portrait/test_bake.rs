@@ -2,8 +2,8 @@
 //! `WOW_PORTRAIT_TEST_SKIN=<blp>`): bakes that model into every booth slot with no server and owns
 //! the booths, so the live syncs and the demand gate stand down.
 
-use wrathplus_assets::M2Model;
 use bevy::prelude::*;
+use wrathplus_assets::M2Model;
 
 use super::booth::{spawn_booth_model, BoothInstance, BoothMotion, BoothPart, BoothTwins};
 use super::framing::{body_frame, frame, head_anchor, PortraitAnchors};
@@ -216,7 +216,9 @@ fn bake_test(
 }
 
 /// `WOW_BOOTH_DUMP=<token>:<path>:<secs>`: after `secs` of app time, save the named booth's render
-/// target (e.g. `paperdoll`) to `path` as a PNG, once; inert without the env.
+/// target (e.g. `paperdoll`) to `path` as a PNG, once; inert without the env. `<secs>+` repeats
+/// every `secs` seconds, the n-th shot to `<stem>-<n>.png`. The readback is one frame's copy of
+/// the target; its sRGB encode and the PNG write run on a spawned thread, off the frame.
 ///
 /// It must wake the booth first: `Screenshot::image` returns only what renders during the capture
 /// frame (`bevy_render`'s `prepare_screenshots`), and a settled booth's camera is inactive, so a
@@ -227,25 +229,22 @@ pub(super) fn dump_booth_target(
     mut booths: ResMut<Booths>,
     time: Res<Time<bevy::time::Real>>,
     mut phase: Local<u32>,
+    mut next_at: Local<Option<f32>>,
+    mut shots: Local<u32>,
 ) {
     /// Frames awake before the shot: one would do, the margin covers the deferred camera flip and
     /// the render-app extract.
     const WAKE_LEAD: u32 = 3;
     const DONE: u32 = u32::MAX;
 
-    static SPEC: std::sync::OnceLock<Option<(String, String, f32)>> = std::sync::OnceLock::new();
-    let Some((token, path, secs)) = SPEC.get_or_init(|| {
-        let v = std::env::var("WOW_BOOTH_DUMP").ok()?;
-        let mut it = v.splitn(3, ':');
-        Some((
-            it.next()?.to_string(),
-            it.next()?.to_string(),
-            it.next()?.parse().ok()?,
-        ))
-    }) else {
+    static SPEC: std::sync::OnceLock<Option<DumpSpec>> = std::sync::OnceLock::new();
+    let Some(spec) = SPEC.get_or_init(|| DumpSpec::parse(&std::env::var("WOW_BOOTH_DUMP").ok()?))
+    else {
         return;
     };
-    if *phase == DONE || (*phase == 0 && time.elapsed_secs() < *secs) {
+    let (token, secs) = (&spec.token, spec.secs);
+    let due = *next_at.get_or_insert(secs);
+    if *phase == DONE || (*phase == 0 && time.elapsed_secs() < due) {
         return;
     }
     let Some(booth) = booths.0.get_mut(token.as_str()) else {
@@ -262,25 +261,77 @@ pub(super) fn dump_booth_target(
         *phase += 1;
         return;
     }
-    *phase = DONE;
+    let out = spec.path_for(*shots);
+    *shots += 1;
+    if spec.repeat {
+        *phase = 0;
+        *next_at = Some(time.elapsed_secs() + secs);
+    } else {
+        *phase = DONE;
+    }
     use bevy::render::view::window::screenshot::{Screenshot, ScreenshotCaptured};
-    info!("WOW_BOOTH_DUMP: shooting booth {token:?} -> {path}");
-    let out = std::path::PathBuf::from(path.clone());
+    info!(
+        "WOW_BOOTH_DUMP: shooting booth {token:?} -> {}",
+        out.display()
+    );
     commands
         .spawn(Screenshot::image(booth.target.clone()))
         .observe(move |shot: On<ScreenshotCaptured>| {
-            let Some(img) = encode_target_readback(&shot.image) else {
-                warn!("WOW_BOOTH_DUMP: unexpected target format, nothing saved");
-                return;
-            };
-            match img.try_into_dynamic() {
-                Ok(dyn_img) => match dyn_img.save(&out) {
-                    Ok(()) => info!("WOW_BOOTH_DUMP: saved {}", out.display()),
-                    Err(e) => warn!("WOW_BOOTH_DUMP: save failed: {e}"),
-                },
-                Err(e) => warn!("WOW_BOOTH_DUMP: convert failed: {e}"),
-            }
+            let (image, out) = (shot.image.clone(), out.clone());
+            std::thread::spawn(move || {
+                let Some(img) = encode_target_readback(&image) else {
+                    warn!("WOW_BOOTH_DUMP: unexpected target format, nothing saved");
+                    return;
+                };
+                match img.try_into_dynamic() {
+                    Ok(dyn_img) => match dyn_img.save(&out) {
+                        Ok(()) => info!("WOW_BOOTH_DUMP: saved {}", out.display()),
+                        Err(e) => warn!("WOW_BOOTH_DUMP: save failed: {e}"),
+                    },
+                    Err(e) => warn!("WOW_BOOTH_DUMP: convert failed: {e}"),
+                }
+            });
         });
+}
+
+/// A parsed `WOW_BOOTH_DUMP`.
+#[derive(Debug, PartialEq)]
+struct DumpSpec {
+    token: String,
+    path: String,
+    secs: f32,
+    /// `<secs>+`: shoot every `secs` seconds, not once.
+    repeat: bool,
+}
+
+impl DumpSpec {
+    fn parse(v: &str) -> Option<Self> {
+        let mut it = v.splitn(3, ':');
+        let token = it.next()?.to_string();
+        let path = it.next()?.to_string();
+        let secs = it.next()?;
+        let (secs, repeat) = match secs.strip_suffix('+') {
+            Some(s) => (s, true),
+            None => (secs, false),
+        };
+        Some(Self {
+            token,
+            path,
+            secs: secs.parse().ok()?,
+            repeat,
+        })
+    }
+
+    /// The n-th shot's file: the path itself once, `<stem>-<n>.<ext>` when repeating.
+    fn path_for(&self, n: u32) -> std::path::PathBuf {
+        let p = std::path::PathBuf::from(&self.path);
+        if !self.repeat {
+            return p;
+        }
+        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("booth");
+        let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("png");
+        p.with_file_name(format!("{stem}-{n}.{ext}"))
+    }
 }
 
 /// Encode a booth readback as the screen shows it. The targets are `Rgba16Float` holding
@@ -365,5 +416,26 @@ mod tests {
     fn an_unexpected_readback_format_refuses() {
         let img = readback(TextureFormat::Rgba8Unorm, vec![1, 2, 3, 4]);
         assert!(encode_target_readback(&img).is_none());
+    }
+
+    /// `<secs>` shoots once to the path; `<secs>+` repeats to numbered siblings.
+    #[test]
+    fn the_dump_spec_reads_once_and_repeating_shots() {
+        let once = super::DumpSpec::parse("glue:/s/booth.png:8").unwrap();
+        assert!(!once.repeat);
+        assert_eq!(once.secs, 8.0);
+        assert_eq!(once.path_for(3), std::path::PathBuf::from("/s/booth.png"));
+        let every = super::DumpSpec::parse("glue:/s/booth.png:30+").unwrap();
+        assert!(every.repeat);
+        assert_eq!(every.secs, 30.0);
+        assert_eq!(
+            every.path_for(0),
+            std::path::PathBuf::from("/s/booth-0.png")
+        );
+        assert_eq!(
+            every.path_for(12),
+            std::path::PathBuf::from("/s/booth-12.png")
+        );
+        assert!(super::DumpSpec::parse("glue:/s/booth.png").is_none());
     }
 }

@@ -5,12 +5,12 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+use bevy::prelude::*;
 use wrathplus_formats::GuildEmblem;
 use wrathplus_protocol::types::{
     friend_result, friend_status, FriendEntry, FriendStatusUpdate, GossipOption, MailListEntry,
     NpcTextBlock, TrainerSpell, VendorItem,
 };
-use bevy::prelude::*;
 
 use crate::query_cache::QueryCache;
 
@@ -513,8 +513,6 @@ pub struct SocialState {
     pub pending_lines: Vec<FriendStatusUpdate>,
     /// Set when the friend list changed, so the feed fires its list event.
     pub friends_dirty: bool,
-    /// A `ShowFriends()` is out: the next list fires `FRIENDLIST_SHOW`, not `FRIENDLIST_UPDATE`.
-    pub friends_show_pending: bool,
     pub ignores_dirty: bool,
     pub who_dirty: bool,
 }

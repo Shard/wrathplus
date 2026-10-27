@@ -35,6 +35,7 @@ impl UiScript {
 
 /// [`UiScript::fire_event`] for a caller holding `&Lua`, such as a Lua binding.
 pub(crate) fn fire_event_into(lua: &Lua, event: &str, args: Vec<ScriptValue>) {
+    super::wrath_addon_api::on_event(lua, event);
     let model_mut = || lua.app_data_mut::<Model>().expect("model app_data set");
     {
         let mut at = {
@@ -316,4 +317,11 @@ impl UiScript {
             }
         }
     }
+}
+
+/// The error a run past its instruction budget raises.
+pub(super) fn instruction_budget_error(used: u64) -> mlua::Error {
+    mlua::Error::runtime(format!(
+        "wrathplus: instruction budget exhausted after {used} VM instructions — treating this as a non-terminating loop"
+    ))
 }

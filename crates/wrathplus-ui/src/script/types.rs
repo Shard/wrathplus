@@ -103,6 +103,8 @@ pub enum QuadContent {
     /// the share still to run, clockwise from 12 o'clock, in thousandths so a steady frame repeats
     /// its value. `reverse` (`SetReverse`) darkens the elapsed share instead.
     CooldownSweep { remaining_milli: u16, reverse: bool },
+    /// A `QuestPOIFrame`'s quest blobs, which the 3.3.5 engine draws itself.
+    QuestBlob(super::QuestBlobDraw),
     /// A `Texture` region: a BLP path, a solid or vertex colour, or both (a tinted texture).
     Texture {
         path: Option<String>,
@@ -333,17 +335,6 @@ pub struct Gradient {
     /// RGBA; `SetGradient`, which takes no alpha, sets both alphas to 1.
     pub start: [f32; 4],
     pub end: [f32; 4],
-}
-
-impl Gradient {
-    /// The midpoint, the one colour a one-tint quad can show.
-    pub fn midpoint(&self) -> [f32; 4] {
-        let mut out = [0.0; 4];
-        for (i, chan) in out.iter_mut().enumerate() {
-            *chan = (self.start[i] + self.end[i]) / 2.0;
-        }
-        out
-    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

@@ -37,6 +37,7 @@ mod camera_view;
 mod channel;
 pub mod glue;
 pub mod glue_create;
+mod wrath_addon_api;
 mod wrath_channel_bindings;
 mod wrath_channel_display;
 mod wrath_channel_roster;
@@ -76,7 +77,7 @@ pub use wrath_friends_frame::{
 };
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_petition_vendor::{WrathPetitionItem, WrathPetitionVendorRequest};
-pub use wrath_quest_poi::{WrathQuestPoi, WrathQuestPoiBlob};
+pub use wrath_quest_poi::{blob::QuestBlobDraw, WrathQuestPoi, WrathQuestPoiBlob};
 pub use wrath_static_popup::{WrathInstanceLock, WrathPopupRequest, WrathPopupState};
 pub use wrath_titles::WrathCharTitle;
 pub use wrath_unit_casts::WrathUnitCast;
@@ -175,6 +176,7 @@ mod summon;
 mod talent;
 mod taxi;
 mod tick;
+use tick::instruction_budget_error;
 mod tooltip;
 mod tooltip_item;
 mod tooltip_links;
@@ -549,8 +551,7 @@ const REG_SCRIPTS: &str = "__benilla_scripts";
 /// which a top-level `SetPoint` without `relativeTo` anchors to; frame ids, from 1, are the rest.
 pub const SCREEN: crate::layout::Handle = 0;
 
-/// The frame base's script names (`0x48e680`), after `OnEvent` (`0x816830`): every frame type has
-/// these.
+/// The frame base's script names (`0x48e680`), after `OnEvent` (`0x816830`), on every frame type.
 const BASE_SCRIPT_KINDS: [&str; 20] = [
     "OnEvent",
     "OnLoad",
@@ -651,9 +652,11 @@ fn own_script_kinds(kind: FrameKind) -> (&'static [&'static str], &'static [&'st
         FrameKind::ColorSelect => (&["OnColorSelect"], NONE),
         FrameKind::SimpleHtml | FrameKind::MessageFrame => (&HYPERLINK_SCRIPT_KINDS, NONE),
         FrameKind::ScrollingMessageFrame => (&["OnMessageScrollChanged"], &HYPERLINK_SCRIPT_KINDS),
-        FrameKind::Frame | FrameKind::WorldFrame | FrameKind::Minimap | FrameKind::Cooldown => {
-            (NONE, NONE)
-        }
+        FrameKind::Frame
+        | FrameKind::WorldFrame
+        | FrameKind::Minimap
+        | FrameKind::Cooldown
+        | FrameKind::QuestPoiFrame => (NONE, NONE),
     }
 }
 
@@ -722,12 +725,6 @@ impl InstructionBudget {
         }
         Ok(mlua::VmState::Continue)
     }
-}
-
-fn instruction_budget_error(used: u64) -> mlua::Error {
-    mlua::Error::runtime(format!(
-        "wrathplus: instruction budget exhausted after {used} VM instructions — treating this as a non-terminating loop"
-    ))
 }
 
 /// Hands out [`UiScript::session`] ids: process-global and monotone, so an id is never reused.
@@ -916,6 +913,7 @@ impl UiScript {
             wrath_friends_frame::install(&lua)?;
             wrath_guild_bank::install(&lua)?;
             wrath_macro_icons::install(&lua)?;
+            wrath_addon_api::install(&lua)?;
             wrath_override_bindings::install(&lua)?;
             wrath_session::install(&lua)?;
             cursor::install_wrath(&lua)?;
@@ -1195,8 +1193,7 @@ impl UiScript {
         true
     }
 
-    /// Drain the chat lines queued since the last call (a probe's, a host `SlashCmdList` row's), for
-    /// the app to parse.
+    /// Drain the chat lines a probe or a host `SlashCmdList` row queued, for the app to parse.
     pub fn take_chat_input(&mut self) -> Vec<String> {
         std::mem::take(&mut self.model_mut().chat_input)
     }

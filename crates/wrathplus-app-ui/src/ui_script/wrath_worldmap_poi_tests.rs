@@ -167,3 +167,124 @@ fn watched_item_objective_quests_number_their_poi_icons() {
         .unwrap();
     assert_eq!(shown, "1_1=808 1_2=818 1_3=- 2_1=789");
 }
+
+/// Selecting the unfinished quest on the map draws its blob: `WorldMapFrame_SelectQuestFrame`
+/// calls `WorldMapBlobFrame:DrawQuestBlob(questId, true)` (`WorldMapFrame.lua:1691`), and the blob
+/// frame's quad carries the quest's polygon, in the stock art and alphas set at its OnLoad.
+#[test]
+fn the_selected_quests_blob_is_drawn_on_the_map() {
+    use wrathplus_ui::script::QuadContent;
+    let data = wrathplus_formats::wow_data_or_skip!();
+    let (mut s, _failures) = super::super::stock_session(&data);
+    s.clear_instruction_budget();
+    quests(&mut s);
+    s.run("ToggleFrame(WorldMapFrame)").unwrap();
+    s.tick(0.05);
+    s.resolve();
+    // A zone the map shows (terrain as floor 0, as `SetMapByID` opens a map no continent
+    // carries), and the blobs on it so they count as on it.
+    let area = 900;
+    let row = wrathplus_ui::script::WorldMapAreaView {
+        id: area,
+        map_id: 999,
+        area_id: 1,
+        display_map: -1,
+        default_floor: -1,
+        ..Default::default()
+    };
+    s.set_world_map_areas([(area, row)].into_iter().collect(), Vec::new());
+    assert!(s.eval::<bool>("return SetMapByID(900)").unwrap());
+    let poi = |quest_id: u32, objective_index: i32| WrathQuestPoi {
+        quest_id,
+        blobs: vec![WrathQuestPoiBlob {
+            objective_index,
+            area_id: area,
+            points: vec![(-9_460, 60), (-9_440, 80), (-9_450, 90)],
+            ..Default::default()
+        }],
+    };
+    s.set_wrath_quest_pois(vec![poi(1, 0), poi(2, -1)]);
+    s.run("WorldMapFrame_UpdateQuests() WorldMapFrame_SelectQuestById(1)")
+        .unwrap();
+    s.tick(0.05);
+    s.resolve();
+    assert!(s.errors().is_empty(), "{:?}", s.errors());
+    let quads = s.extract();
+    let draw = quads
+        .iter()
+        .find_map(|q| match &q.content {
+            QuadContent::QuestBlob(d)
+                if s.quad_owner_name(q.target).as_deref() == Some("WorldMapBlobFrame") =>
+            {
+                Some(d.clone())
+            }
+            _ => None,
+        })
+        .expect("WorldMapBlobFrame's quad");
+    assert_eq!(draw.polygons.len(), 1, "quest 1's one blob");
+    assert_eq!((draw.fill_alpha, draw.border_alpha), (128, 192));
+    assert!(draw.border.unwrap().ends_with("UI-QuestBlob-Outside"));
+}
+
+/// The map's open sequence over its first frames: whatever draws in an early frame still draws
+/// once the map settles, so nothing (a POI, a blob, a detail tile) flashes and vanishes, and the
+/// selected quest's blob draws from the first frame on.
+#[test]
+fn the_map_draws_nothing_on_its_first_frames_that_it_then_drops() {
+    use std::collections::BTreeSet;
+    use wrathplus_ui::script::QuadContent;
+    let data = wrathplus_formats::wow_data_or_skip!();
+    let (mut s, _failures) = super::super::stock_session(&data);
+    s.clear_instruction_budget();
+    quests(&mut s);
+    let row = wrathplus_ui::script::WorldMapAreaView {
+        id: 900,
+        map_id: 999,
+        area_id: 1,
+        display_map: -1,
+        default_floor: -1,
+        ..Default::default()
+    };
+    s.set_world_map_areas([(900, row)].into_iter().collect(), Vec::new());
+    s.run("SetMapByID(900)").unwrap();
+    let blob = |id: u32, objective_index: i32| WrathQuestPoi {
+        quest_id: id,
+        blobs: vec![WrathQuestPoiBlob {
+            objective_index,
+            area_id: 900,
+            points: vec![(-9_460, 60), (-9_440, 80), (-9_450, 90)],
+            ..Default::default()
+        }],
+    };
+    s.set_wrath_quest_pois(vec![blob(1, 0), blob(2, -1)]);
+    s.run("ToggleFrame(WorldMapFrame)").unwrap();
+    let mut frames: Vec<(BTreeSet<String>, usize)> = Vec::new();
+    for _ in 0..8 {
+        s.tick(0.03);
+        s.resolve();
+        let quads = s.extract();
+        let owners: BTreeSet<String> = quads
+            .iter()
+            .filter_map(|q| s.quad_owner_name(q.target))
+            .filter(|n| n.starts_with("WorldMap") || n.starts_with("poiWorldMap"))
+            .collect();
+        let blobs = quads
+            .iter()
+            .filter_map(|q| match &q.content {
+                QuadContent::QuestBlob(d) => Some(d.polygons.len()),
+                _ => None,
+            })
+            .sum();
+        frames.push((owners, blobs));
+    }
+    assert!(s.errors().is_empty(), "{:?}", s.errors());
+    let (settled, settled_blobs) = frames.last().cloned().unwrap();
+    for (i, (owners, blobs)) in frames.iter().enumerate() {
+        let gone: Vec<&String> = owners.difference(&settled).collect();
+        assert!(
+            gone.is_empty(),
+            "frame {i} drew {gone:?}, which the settled map drops"
+        );
+        assert_eq!(*blobs, settled_blobs, "frame {i}'s blob count");
+    }
+}
