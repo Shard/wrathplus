@@ -235,10 +235,7 @@ impl Loader<'_> {
                 let rel_to: Option<String> = anchor
                     .attr("relativeTo")
                     .map(|r| framexml::resolve_name(r, parent_name));
-                let (x, y) = children_named(anchor, "Offset")
-                    .next()
-                    .map(abs_dim)
-                    .unwrap_or((None, None));
+                let (x, y) = super::geometry::anchor_offset(anchor);
                 let args = (
                     point.to_string(),
                     rel_to,

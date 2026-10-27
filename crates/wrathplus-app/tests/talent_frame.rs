@@ -42,6 +42,10 @@ fn load_ui(script: &mut UiScript) {
     for file in FILES {
         common::load_ui(script, file);
     }
+    // The addon's XML ran above, outside `LoadAddOn`; marked loaded as `LoadAddOn` leaves it, so
+    // stock `TalentFrame_LoadUI` (`UIParent.lua:285`) does not load a second, orphan copy where the
+    // chain registers the addon, whose scroll frame would zero the shared-named scroll bar.
+    script.mark_addon_loaded("Blizzard_TalentUI");
 }
 
 /// A rank-3 prereq two tiers up the same column, the empty cell between carrying the branch.
