@@ -62,6 +62,10 @@ const VERDICTS: &[(&str, Verdict)] = &[
         Open("an OUTPUT (grab/visible), not a channel — the cover has nothing to take from it"),
     ),
     (
+        "WINIT_WINDOWS",
+        Open("an OUTPUT: `app_icon` sets the window and Dock icon once, reading no input"),
+    ),
+    (
         "RawWinitWindowEvent",
         Open(
             "read only to learn what the layout names each key (`bindings/layout.rs`), which acts \
@@ -104,6 +108,8 @@ const VERDICTS: &[(&str, Verdict)] = &[
     ("WindowMode", Plumbing),
     ("WindowPlugin", Plumbing),
     ("WindowPosition", Plumbing),
+    // `occluded`: which window a camera draws to, matched against the covered one.
+    ("WindowRef", Plumbing),
     ("WindowResolution", Plumbing),
 ];
 

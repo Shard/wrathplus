@@ -103,7 +103,9 @@ impl UiScript {
                                     QuadContent::Frame
                                 }
                             }
-                            _ => QuadContent::Frame,
+                            // A `QuestPOIFrame`'s blobs; any other frame draws nothing.
+                            _ => super::wrath_quest_poi::blob::content(&model, fh)
+                                .unwrap_or(QuadContent::Frame),
                         },
                     };
                     (

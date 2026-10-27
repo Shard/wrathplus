@@ -92,6 +92,32 @@ impl crate::script::UiScript {
     }
 }
 
+/// A greeting row's `isComplete` (`0x58bcb0`): the quest's log row, done by `0x5e0ea0` (its
+/// objectives met) or `0x5e10b0` (nothing to kill or collect). Labelled: read off the log's state
+/// (complete, or every objective line finished), not the template's counters; a quest not in the
+/// log is not complete.
+pub(crate) fn quest_done(model: &Model, quest_id: u32) -> bool {
+    model
+        .quest_log
+        .entries
+        .iter()
+        .find(|e| !e.is_header && e.quest_id == quest_id)
+        .is_some_and(|e| {
+            e.complete == 1 || (e.complete == 0 && e.objectives.iter().all(|o| o.finished))
+        })
+}
+
+/// `0x58aba0`, the grey-quest test: the player is above the quest's level by more than
+/// `[0xa12fd0][player level / 5]` (4, 4, 5, 5, 6, 6, 7, 7, then 8). No player, not trivial.
+pub(crate) fn quest_trivial(model: &Model, quest_level: u32) -> bool {
+    const MARGIN: [u32; 8] = [4, 4, 5, 5, 6, 6, 7, 7];
+    let Some(player) = model.unit("player").map(|u| u.level) else {
+        return false;
+    };
+    let margin = MARGIN.get(player as usize / 5).copied().unwrap_or(8);
+    quest_level + margin < player
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
     // WatchFrame.lua:1468 passes watch positions, not quest-log indices.

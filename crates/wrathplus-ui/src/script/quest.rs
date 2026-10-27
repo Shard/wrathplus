@@ -58,10 +58,10 @@ pub struct QuestRewardSpell {
 /// Wrath greeting metadata, parallel to the corresponding title list.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct QuestGreetingInfo {
-    /// `GetActiveTitle`'s second return (`0x58bcb0`). Labelled: App has no traced source yet and
-    /// feeds `false`.
-    pub complete: bool,
-    pub trivial: bool,
+    /// The row's quest and level off the wire; `GetActiveTitle`'s completion (`0x58bcb0`) and the
+    /// trivial test (`0x58aba0`) read them against the log and the player at call time.
+    pub quest_id: u32,
+    pub level: u32,
     pub daily: bool,
     pub repeatable: bool,
 }
@@ -273,7 +273,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 .and_then(|q| q.available_info.get(index.wrapping_sub(1)));
             Ok(match row {
                 Some(row) => MultiValue::from_vec(vec![
-                    Value::Boolean(row.trivial),
+                    Value::Boolean(super::quest_log::quest_trivial(&model, row.level)),
                     Value::Boolean(row.daily),
                     Value::Boolean(row.repeatable),
                 ]),
@@ -289,7 +289,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 .quest
                 .as_ref()
                 .and_then(|q| q.active_info.get(index.wrapping_sub(1)))
-                .map(|row| row.trivial))
+                .map(|row| super::quest_log::quest_trivial(&model, row.level)))
         })?,
     )?;
 
@@ -371,7 +371,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let title = quest.and_then(|q| at.and_then(|n| q.active_titles.get(n)));
             let complete = quest
                 .and_then(|q| at.and_then(|n| q.active_info.get(n)))
-                .is_some_and(|info| info.complete);
+                .is_some_and(|info| super::quest_log::quest_done(&model, info.quest_id));
             Ok((
                 match title {
                     Some(t) => Value::String(lua.create_string(t)?),
@@ -589,7 +589,7 @@ mod tests {
         assert!(s
             .eval::<bool>("return not QuestGetAutoAccept() and GetRewardTitle() == nil")
             .unwrap());
-        s.set_quest(Some(QuestState {
+        s.set_unit("player", Some(crate::script::UnitState { level: 60, ..Default::default() })); s.set_quest(Some(QuestState {
             auto_accept: true,
             reward_xp: 1200,
             reward_honor: 50,
@@ -598,12 +598,12 @@ mod tests {
             reward_title: Some("Champion".into()),
             suggested_group_num: 5,
             available_info: vec![super::QuestGreetingInfo {
-                trivial: true,
+                level: 1,
                 daily: true,
                 ..Default::default()
             }],
             active_info: vec![super::QuestGreetingInfo {
-                trivial: true,
+                level: 1,
                 ..Default::default()
             }],
             ..Default::default()

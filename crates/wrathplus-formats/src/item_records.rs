@@ -41,6 +41,11 @@ impl ItemRecordCatalog {
         self.rows.len()
     }
 
+    /// Every row, by entry, in no order.
+    pub fn iter(&self) -> impl Iterator<Item = (u32, &ItemRecord)> {
+        self.rows.iter().map(|(id, row)| (*id, row))
+    }
+
     pub fn is_empty(&self) -> bool {
         self.rows.is_empty()
     }

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The future WrathPlus.app bundle's Info.plist. The packaging step fills the @VERSION@ and
+     @BUILD@ placeholders and copies packaging/icon/WrathPlus.icns to Contents/Resources/. -->
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>WrathPlus</string>
+    <key>CFBundleDisplayName</key>
+    <string>WrathPlus</string>
+    <key>CFBundleIdentifier</key>
+    <string>ai.artivus.wrathplus</string>
+    <key>CFBundleExecutable</key>
+    <string>wrathplus</string>
+    <key>CFBundleIconFile</key>
+    <string>WrathPlus</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@BUILD@</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.games</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>
