@@ -32,6 +32,7 @@ use wrathplus_protocol::wrath_world::{
 };
 use wrathplus_protocol::{CharEnumItem, Character, LoginStage, SessionEnd, SessionEvent};
 
+use super::wrath_send_log::opcode_label;
 use super::{note_inbound, Parks, PingClock, PING_INTERVAL, SEND_WARN_CAP};
 use crate::net::{CharRequest, ClientCommand, RealmRequest, SessionCommand, SessionCommandSender};
 
@@ -1887,6 +1888,42 @@ fn route(command: &ClientCommand) -> WrathRoute {
     }
 }
 
+/// The one warning a failed command logs when it is dropped, or `None` when it ends the session.
+/// A socket failure always ends it ([`SendFailed`](super::wrath_send_log::SendFailed)); any other
+/// failure is the client's own (a body that would not encode or a value the codec refuses) and the
+/// command is dropped with one warning, never a session end. The exceptions keep ordered server state: losing one would desync
+/// it, so any failure on them is fatal, as before:
+/// - `SetActiveMover`, `NotActiveMover`, `NativeVehicleControl`, `GroundMovement`: the mover
+///   handoff and the movement-authority order FIFO (force root/unroot, speed and fly-flag ACKs
+///   queue behind the self pose; an overflow or a mismatched ACK means the server and we disagree
+///   about who moves and how);
+/// - `NativeTeleportAck`, `NativeWorldportAck`, `TaxiSplineDone`: acknowledgements of a
+///   server-ordered teleport, map transfer or flight, the server waits on each;
+/// - `Logout`, `LogoutCancel`: the logout handshake the session lifecycle tracks.
+///
+/// The mover ACK path (root, fly-flag and mover-order ACKs) and the protocol replies the reader
+/// queues go through the control arm, outside this rule, and stay fail-closed. A pose that fails to
+/// encode on a movement route is dropped at its encode site ([`encoded_or_dropped`]) instead.
+fn dropped_line(path: WrathRoute, error: &anyhow::Error) -> Option<String> {
+    use WrathRoute as R;
+    let fatal = error
+        .downcast_ref::<super::wrath_send_log::SendFailed>()
+        .is_some()
+        || matches!(
+            path,
+            R::SetActiveMover
+                | R::NotActiveMover
+                | R::NativeVehicleControl
+                | R::GroundMovement
+                | R::NativeTeleportAck
+                | R::NativeWorldportAck
+                | R::TaxiSplineDone
+                | R::Logout
+                | R::LogoutCancel
+        );
+    (!fatal).then(|| format!("net(wrath): {path:?} not encodable, dropped: {error:#}"))
+}
+
 /// Only implemented wire routes grant command admission. Deferred queries have no writer.
 /// Shape/value validation and epoch/capability checks remain at their existing boundaries.
 pub(in crate::net) fn has_writer_route(command: &ClientCommand) -> bool {
@@ -2044,7 +2081,8 @@ fn writer_loop(
                 if !accepts_epoch(epoch, *active_epoch) {
                     continue;
                 }
-                let result = match route(&command) {
+                let path = route(&command);
+                let result = match path {
                     WrathRoute::SetActiveMover => {
                         let ClientCommand::SetActiveMover { guid } = command else { unreachable!() };
                         // Only the mover the server handed us (`SMSG_CLIENT_CONTROL_UPDATE`); from
@@ -2383,10 +2421,15 @@ fn writer_loop(
                     }
                 };
                 if let Err(error) = result {
-                    let _ = control_tx.send(WrathWriterControl::Fatal {
-                        epoch,
-                        reason: format!("Wrath lifecycle send failed: {error:#}"),
-                    });
+                    match dropped_line(path, &error) {
+                        Some(line) => bevy::log::warn!("{line}"),
+                        None => {
+                            let _ = control_tx.send(WrathWriterControl::Fatal {
+                                epoch,
+                                reason: format!("Wrath lifecycle send failed: {error:#}"),
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -2409,14 +2452,18 @@ fn melee_packet(command: ClientCommand) -> Result<(u32, Vec<u8>)> {
         ),
         ClientCommand::StandStateChange { state } => (
             wrath_combat::CMSG_STAND_STATE_CHANGE,
-            wrath_combat::encode_stand_state_change(state)?,
+            wrath_combat::encode_stand_state_change(state)
+                .context(opcode_label(wrath_combat::CMSG_STAND_STATE_CHANGE))?,
         ),
         ClientCommand::SetSheathed { state } => {
             let state = match state {
                 0 => wrath_combat::SheathState::Unarmed,
                 1 => wrath_combat::SheathState::Melee,
                 2 => wrath_combat::SheathState::Ranged,
-                _ => bail!("invalid Wrath sheath state {state}"),
+                _ => bail!(
+                    "{}: invalid sheath state {state}",
+                    opcode_label(wrath_combat::CMSG_SET_SHEATHED)
+                ),
             };
             (
                 wrath_combat::CMSG_SET_SHEATHED,
@@ -2449,7 +2496,15 @@ fn loot_packet(command: ClientCommand) -> Result<(u32, Vec<u8>)> {
             wrath_loot::CMSG_LOOT_RELEASE,
             wrath_loot::encode_loot_release(guid),
         ),
-        _ => bail!("invalid or unsupported native Wrath solo corpse-loot command"),
+        ClientCommand::Loot { .. } => bail!("{}: no corpse", opcode_label(wrath_loot::CMSG_LOOT)),
+        ClientCommand::AutostoreLootItem { slot } => bail!(
+            "{}: slot {slot} past the loot window",
+            opcode_label(wrath_loot::CMSG_AUTOSTORE_LOOT_ITEM)
+        ),
+        ClientCommand::LootRelease { .. } => {
+            bail!("{}: no corpse", opcode_label(wrath_loot::CMSG_LOOT_RELEASE))
+        }
+        _ => bail!("not a native Wrath solo corpse-loot command"),
     })
 }
 
@@ -3314,7 +3369,8 @@ fn send_ground_movement(active: &mut WrathWriterSwap, command: ClientCommand) ->
     // Pitch rides only with SWIMMING or FLYING (AzerothCore `ReadMovementInfo`); otherwise level.
     let pitched = flags & (wrath_ground::MOVE_SWIMMING | wrath_ground::MOVE_FLYING) != 0;
     if !pitched && pitch != 0.0 {
-        bail!("Wrath on-foot movement refuses a pitch outside the water or the air");
+        bevy::log::warn!("net(wrath): on-foot movement with a pitch outside water or air, dropped");
+        return Ok(());
     }
     let pitch = pitched.then_some(pitch);
     let fall = jump.map(|jump| wrath_ground::FallTail {
@@ -3701,6 +3757,9 @@ mod tests {
     /// Movement authority: grants, denials, the self create and the vehicle hand-off.
     #[path = "authority.rs"]
     mod authority;
+    /// Client-side encode failures drop the command; socket and authority failures end the session.
+    #[path = "encode_drop.rs"]
+    mod encode_drop;
 
     pub(super) fn test_self_position() -> MovementPosition {
         MovementPosition::Stationary(wrathplus_protocol::wrath_gameplay::Position {
