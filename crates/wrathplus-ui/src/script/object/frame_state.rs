@@ -4,9 +4,11 @@ use mlua::{Lua, Table, Value};
 
 use crate::script::region_map::{set_shared, Side};
 
-use crate::order::Strata;
+#[path = "frame_strata.rs"]
+mod frame_strata;
 use crate::script::{event, Backdrop, Insets, Model};
 use crate::widget::FrameKind;
+use frame_strata::strata_name;
 
 use super::{decode_id, draw_layer_from_str, frame_handle_of, frame_wrapper, strata_from_str};
 
@@ -37,6 +39,7 @@ pub(crate) fn type_chain(kind: FrameKind) -> &'static [&'static str] {
         FrameKind::GameTooltip => &["GameTooltip", "Frame", "Region"],
         FrameKind::Minimap => &["Minimap", "Frame", "Region"],
         FrameKind::Cooldown => &["Cooldown", "Frame", "Region"],
+        FrameKind::QuestPoiFrame => &["QuestPOIFrame", "Frame", "Region"],
     }
 }
 
@@ -750,20 +753,6 @@ fn backdrop_from_table(t: &Table) -> mlua::Result<Backdrop> {
         };
     }
     Ok(bd)
-}
-
-fn strata_name(s: Strata) -> &'static str {
-    match s {
-        Strata::World => "WORLD",
-        Strata::Background => "BACKGROUND",
-        Strata::Low => "LOW",
-        Strata::Medium => "MEDIUM",
-        Strata::High => "HIGH",
-        Strata::Dialog => "DIALOG",
-        Strata::Fullscreen => "FULLSCREEN",
-        Strata::FullscreenDialog => "FULLSCREEN_DIALOG",
-        Strata::Tooltip => "TOOLTIP",
-    }
 }
 
 fn set_shown(lua: &Lua, this: &Table, shown: bool) -> mlua::Result<()> {

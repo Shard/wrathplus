@@ -1,11 +1,10 @@
-//! Build-12340 quest POI and quest-log special items (WorldMapFrame, WatchFrame, QuestLogFrame;
-//! one Wow.exe round: `/tmp/azb-ui-questpoi-native.log`, `/tmp/azb-ui-questpoi-inner.log`).
+//! Build-12340 quest POI and quest-log special items (WorldMapFrame, WatchFrame, QuestLogFrame).
 //!
 //! The POIs are `SMSG_QUEST_POI_QUERY_RESPONSE`'s blobs as the host publishes them; the query
 //! itself is engine-side (native `0x5e6940` runs on every quest-log rebuild, not from a Lua
-//! binding), so App sends it. A blob counts on the displayed map when its points' centroid
-//! projects onto it through the world-map projector (native tests the blob against the zone or
-//! dungeon floor, `0x5e0110`/`0x5e0180`). Labelled: `QuestPOIUpdateIcons` (`0x5e2eb0`) and
+//! binding), so App sends it. A blob counts on the displayed map when its points' centroid projects
+//! onto it through the world-map projector (native tests the blob against the zone or dungeon
+//! floor, `0x5e0110`/`0x5e0180`). Labelled: `QuestPOIUpdateIcons` (`0x5e2eb0`) and
 //! `SortQuestWatches`' sort (`0x5e5c10`) are unread.
 //!
 //! `GetQuestWorldMapAreaID` (`0x5e56c0` → `0x5e2b60`, `/tmp/azb-app-mig/ghidra/qwmap1.log`) picks
@@ -45,6 +44,7 @@ pub struct WrathQuestPoi {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct State {
     pois: Vec<WrathQuestPoi>,
+    pub(crate) blobs: blob::Frames,
     /// Quest id → the bag slot holding its special item.
     special_items: Vec<(u32, (i64, u32))>,
     /// `QuestMapUpdateAllQuests`' visible quests, in quest-log order (`0xc23b28`).
@@ -160,7 +160,6 @@ fn zone_area(m: &Model, quest_id: u32) -> Option<u32> {
 }
 
 fn log_index(m: &Model, quest_id: u32) -> Option<usize> {
-
     m.quest_log
         .entries
         .iter()
@@ -205,6 +204,8 @@ fn arg(args: &MultiValue, i: usize) -> Value {
 
 #[path = "wrath_quest_poi_order.rs"]
 mod order;
+#[path = "wrath_quest_poi_blob.rs"]
+pub(crate) mod blob;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // QuestMapUpdateAllQuests() (`0x5e63d0` → `0x5e5a50`) → how many log quests have a POI on the

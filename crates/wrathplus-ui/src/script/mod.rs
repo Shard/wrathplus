@@ -77,7 +77,7 @@ pub use wrath_friends_frame::{
 };
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_petition_vendor::{WrathPetitionItem, WrathPetitionVendorRequest};
-pub use wrath_quest_poi::{WrathQuestPoi, WrathQuestPoiBlob};
+pub use wrath_quest_poi::{blob::QuestBlobDraw, WrathQuestPoi, WrathQuestPoiBlob};
 pub use wrath_static_popup::{WrathInstanceLock, WrathPopupRequest, WrathPopupState};
 pub use wrath_titles::WrathCharTitle;
 pub use wrath_unit_casts::WrathUnitCast;
@@ -176,6 +176,7 @@ mod summon;
 mod talent;
 mod taxi;
 mod tick;
+use tick::instruction_budget_error;
 mod tooltip;
 mod tooltip_item;
 mod tooltip_links;
@@ -651,9 +652,11 @@ fn own_script_kinds(kind: FrameKind) -> (&'static [&'static str], &'static [&'st
         FrameKind::ColorSelect => (&["OnColorSelect"], NONE),
         FrameKind::SimpleHtml | FrameKind::MessageFrame => (&HYPERLINK_SCRIPT_KINDS, NONE),
         FrameKind::ScrollingMessageFrame => (&["OnMessageScrollChanged"], &HYPERLINK_SCRIPT_KINDS),
-        FrameKind::Frame | FrameKind::WorldFrame | FrameKind::Minimap | FrameKind::Cooldown => {
-            (NONE, NONE)
-        }
+        FrameKind::Frame
+        | FrameKind::WorldFrame
+        | FrameKind::Minimap
+        | FrameKind::Cooldown
+        | FrameKind::QuestPoiFrame => (NONE, NONE),
     }
 }
 
@@ -722,12 +725,6 @@ impl InstructionBudget {
         }
         Ok(mlua::VmState::Continue)
     }
-}
-
-fn instruction_budget_error(used: u64) -> mlua::Error {
-    mlua::Error::runtime(format!(
-        "wrathplus: instruction budget exhausted after {used} VM instructions — treating this as a non-terminating loop"
-    ))
 }
 
 /// Hands out [`UiScript::session`] ids: process-global and monotone, so an id is never reused.
