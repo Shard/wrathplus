@@ -2073,8 +2073,11 @@ fn writer_loop(
                         let timestamp = active.clock.now_ms();
                         authority
                             .with_vehicle_pose(|vehicle, pose| {
-                                let body = request.encode(vehicle, pose, timestamp)?;
-                                active.writer.send_raw(request.opcode(), &body)
+                                let body = request.encode(vehicle, pose, timestamp);
+                                match encoded_or_dropped("vehicle request", body) {
+                                    Some(body) => active.writer.send_raw(request.opcode(), &body),
+                                    None => Ok(()),
+                                }
                             })
                             .unwrap_or_else(|| {
                                 bevy::log::warn!("net(wrath): {request:?} without a driven vehicle; withheld");
@@ -3333,10 +3336,27 @@ fn send_ground_movement(active: &mut WrathWriterSwap, command: ClientCommand) ->
     authority
         .with_on_foot_send(active.active_mover, pose, |mover, pose| {
             let opcode = u32::from(kind.opcode());
-            let body = pose.encode(opcode, mover, timestamp)?;
-            active.writer.send_raw(opcode, &body)
+            match encoded_or_dropped("movement", pose.encode(opcode, mover, timestamp)) {
+                Some(body) => active.writer.send_raw(opcode, &body),
+                None => Ok(()),
+            }
         })
         .unwrap_or(Ok(()))
+}
+
+/// An outbound body, or `None` with a warning when the client's own pose would not encode: a
+/// bad pose is dropped like an invalid chat line, never a session error.
+fn encoded_or_dropped<E: std::fmt::Display>(
+    what: &str,
+    body: Result<Vec<u8>, E>,
+) -> Option<Vec<u8>> {
+    match body {
+        Ok(body) => Some(body),
+        Err(error) => {
+            bevy::log::warn!("net(wrath): {what} not encodable, dropped: {error}");
+            None
+        }
+    }
 }
 
 /// `CMSG_MOVE_NOT_ACTIVE_MOVER`: our own body's parting pose as we hand control to a vehicle or a
@@ -3367,7 +3387,10 @@ fn send_not_active_mover(active: &mut WrathWriterSwap, command: ClientCommand) -
         pitch: None,
         transport: None,
     };
-    let body = wrath_authority::encode_mover_pose(guid, pose, active.clock.now_ms())?;
+    let body = wrath_authority::encode_mover_pose(guid, pose, active.clock.now_ms());
+    let Some(body) = encoded_or_dropped("NOT_ACTIVE_MOVER", body) else {
+        return Ok(());
+    };
     active
         .writer
         .send_raw(wrath_authority::CMSG_MOVE_NOT_ACTIVE_MOVER, &body)

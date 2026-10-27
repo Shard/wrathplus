@@ -378,3 +378,28 @@ fn stale_authority_handles_cannot_send_or_change_replacement_session() {
         .unwrap();
     assert_eq!(current.with_movement_send(|| 2), Some(2));
 }
+
+/// A pose the client cannot encode (here a NaN coordinate, which the codec refuses) is dropped with
+/// a warning by every movement send, never an error that would end the session.
+#[test]
+fn an_unencodable_pose_is_dropped_not_fatal() {
+    let pose = OnFootPose {
+        flags: 0,
+        position: [f32::NAN, 0.0, 0.0],
+        orientation: 0.0,
+        fall_time: 0,
+        fall: None,
+        pitch: None,
+        transport: None,
+    };
+    let body = pose.encode(wrath_ground::MSG_MOVE_HEARTBEAT, 1, 0);
+    assert!(body.is_err(), "a NaN pose does not encode");
+    assert!(encoded_or_dropped("movement", body).is_none());
+    let parting = wrath_authority::encode_mover_pose(1, pose, 0);
+    assert!(parting.is_err());
+    assert!(encoded_or_dropped("NOT_ACTIVE_MOVER", parting).is_none());
+    assert_eq!(
+        encoded_or_dropped::<String>("movement", Ok(vec![1, 2])),
+        Some(vec![1, 2])
+    );
+}
