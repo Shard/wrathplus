@@ -19,14 +19,14 @@ use wrathplus_ui::script::{
 };
 use wrathplus_ui::strings::{fill, Arg};
 
-use crate::net::{ClientCommand, NetCommands};
+use crate::app_core::schedule::UiInput;
+use crate::app_core::schedule::UnitFeed;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::PlayerActions;
 use crate::app_core::state::Spells;
+use crate::net::{ClientCommand, NetCommands};
 use crate::ui_script::gate;
-use crate::app_core::schedule::UiInput;
-use crate::app_core::schedule::UnitFeed;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 
 /// The talent catalog (`Talent.dbc`, `TalentTab.dbc`), absent when the client data failed to load.
@@ -227,9 +227,23 @@ pub(crate) fn build_pages_by(
     points: (u32, u32),
     get: &dyn Fn(&str) -> Option<String>,
 ) -> TalentUiState {
+    let tabs = catalog.tabs_for_class(race, class);
+    build_tab_pages(catalog, tabs, rank_of, knows, spells, points, get)
+}
+
+/// [`build_pages_by`] over given tabs: a class's, or the hunter pet's one.
+pub(crate) fn build_tab_pages(
+    catalog: &TalentCatalog,
+    tab_list: Vec<&wrathplus_formats::TalentTabInfo>,
+    rank_of: &dyn Fn(&Talent) -> u32,
+    knows: &dyn Fn(u32) -> bool,
+    spells: &wrathplus_formats::SpellCatalog,
+    points: (u32, u32),
+    get: &dyn Fn(&str) -> Option<String>,
+) -> TalentUiState {
     let mut tabs = Vec::new();
     let mut pages = Vec::new();
-    for tab in catalog.tabs_for_class(race, class) {
+    for tab in tab_list {
         let list = catalog.talents_in_tab(tab.id);
         let spent: u32 = list.iter().map(rank_of).sum();
         let mut views = Vec::with_capacity(list.len());
@@ -326,6 +340,10 @@ fn drain_talent_learns(
     actions: Res<PlayerActions>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<NetCommands>,
+    pet: (
+        Option<Res<crate::ui_pet_talent_tree::PetTalentPages>>,
+        Option<Res<crate::app_core::state::PetBar>>,
+    ),
 ) {
     let Some(mut script) = script else {
         return;
@@ -338,7 +356,15 @@ fn drain_talent_learns(
             wrathplus_protocol::wrath_inspect::Command::LearnPreviewTalents { talents },
         ));
     }
-    let clicks = script.take_talent_learns();
+    let (clicks, pet_clicks): (Vec<_>, Vec<_>) = script
+        .take_talent_learns()
+        .into_iter()
+        .partition(|&(_, _, pet)| !pet);
+    if let (Some(pages), Some(bar)) = (pet.0.as_deref(), pet.1.as_deref()) {
+        for (tab, index, _) in pet_clicks {
+            crate::ui_pet_talent_tree::learn(pages, bar.guid(), tab, index, &commands);
+        }
+    }
     if clicks.is_empty() {
         return;
     }
@@ -351,7 +377,7 @@ fn drain_talent_learns(
     let race = store.0.unit_race().unwrap_or(0);
     let class = store.0.unit_class().unwrap_or(0);
     let tabs = talents.catalog.tabs_for_class(race, class);
-    for (tab, index) in clicks {
+    for (tab, index, _) in clicks {
         // 1-based Lua-facing pair; a 0 from a stray script is a miss, never an underflow.
         let Some(t) = (tab as usize)
             .checked_sub(1)
