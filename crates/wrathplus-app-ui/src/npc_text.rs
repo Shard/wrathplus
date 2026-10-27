@@ -14,10 +14,10 @@
 
 use bevy::prelude::*;
 
-use crate::names::NameCache;
-use crate::net::{Guid, GuidIndex, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::names::NameCache;
+use crate::net::{Guid, GuidIndex, NetCommands};
 
 /// The unit a `$`-macro expands against: the self player, or the speaker at the reference's four
 /// chat sites.
@@ -43,6 +43,26 @@ pub(crate) struct MacroContext<'a> {
 /// not yet known shows `$N` until the feeds re-substitute.
 pub(crate) fn substitute(text: &str, ctx: &MacroContext) -> String {
     substitute_checked(text, ctx).0
+}
+
+/// `QUEST_FLAGS_OBJ_TEXT`: the quest log shows the objectives text as its completion text.
+const OBJECTIVES_AS_COMPLETION: u32 = 0x0004_0000;
+
+/// `GetQuestLogCompletionText`'s text (`0x5e06d0`), expanded: the end text (template `+0x20a4`),
+/// or the objectives text (`+0x2b4`) when the end text is empty or the template's flags carry
+/// [`OBJECTIVES_AS_COMPLETION`]. WatchFrame shows it under a zero-objective quest, which stock
+/// counts as complete (`WatchFrame.lua:808`, `:834`).
+pub(crate) fn completion_text(
+    template: &wrathplus_protocol::types::QuestTemplate,
+    ctx: &MacroContext,
+) -> String {
+    let own = template.flags & OBJECTIVES_AS_COMPLETION == 0 && !template.end_text.is_empty();
+    let text = if own {
+        &template.end_text
+    } else {
+        &template.objectives_text
+    };
+    substitute(text, ctx)
 }
 
 /// [`substitute`] plus `0x579590`'s return flag, `false` when a token failed (no subject, or a
@@ -101,9 +121,11 @@ pub(crate) fn substitute_checked(text: &str, ctx: &MacroContext) -> (String, boo
                 Some(s) => {
                     // An id outside the table faults the reference; we emit nothing.
                     let name = if matches!(tok, 'R' | 'r') {
-                        crate::app_core::catalogs::race_names(s.race).map_or("", |(display, _)| display)
+                        crate::app_core::catalogs::race_names(s.race)
+                            .map_or("", |(display, _)| display)
                     } else {
-                        crate::app_core::catalogs::class_names(s.class).map_or("", |(display, _)| display)
+                        crate::app_core::catalogs::class_names(s.class)
+                            .map_or("", |(display, _)| display)
                     };
                     if tok.is_ascii_lowercase() {
                         out.push_str(&name.to_ascii_lowercase());

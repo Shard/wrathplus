@@ -516,6 +516,9 @@ mod screenshot_tests;
 mod questlog_tests;
 
 #[cfg(test)]
+mod questlog_description_tests;
+
+#[cfg(test)]
 mod character_tests;
 
 #[cfg(test)]
