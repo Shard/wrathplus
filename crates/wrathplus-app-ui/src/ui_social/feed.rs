@@ -2,18 +2,18 @@
 //! lines, and the sends for the Lua-side [`SocialRequest`] intents. The reference resolves names,
 //! races, classes and zones engine-side too, before Lua sees a row (`0x5ae160`).
 
+use bevy::prelude::*;
 use wrathplus_formats::AreaTableCatalog;
 use wrathplus_protocol::types::WhoEntry;
 use wrathplus_ui::script::{FriendInfo, SocialRequest, SocialState as VmSocial, UiScript, WhoInfo};
-use bevy::prelude::*;
 
+use crate::app_core::catalogs::class_names;
+use crate::app_core::catalogs::race_names;
+use crate::app_core::errors::UiError;
 use crate::area::AreaTableRes;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, NetCommands};
 use crate::ui_action::{MessageSink, Shown};
-use crate::app_core::errors::UiError;
-use crate::app_core::catalogs::class_names;
-use crate::app_core::catalogs::race_names;
 
 use super::{name_pushes, result_key, status_flag_key, SocialState};
 
@@ -104,12 +104,10 @@ pub fn feed_social(
     fed.seeded = true;
     if social.friends_dirty || first {
         social.friends_dirty = false;
-        let event = if std::mem::take(&mut social.friends_show_pending) {
-            "FRIENDLIST_SHOW"
-        } else {
-            "FRIENDLIST_UPDATE"
-        };
-        script.fire_event(event, Vec::new());
+        // `FRIENDLIST_UPDATE` alone: 12340 has no `FRIENDLIST_SHOW` (no such string in the
+        // binary), and stock `FriendsFrame_OnEvent` answers that name with `FriendsFrame_Update`,
+        // whose `ShowFriends()` would re-request on every reply, frame hidden or not.
+        script.fire_event("FRIENDLIST_UPDATE", Vec::new());
     }
     if social.ignores_dirty || first {
         social.ignores_dirty = false;
@@ -395,7 +393,6 @@ pub fn drain_social(
     for request in requests {
         match request {
             SocialRequest::RefreshFriends => {
-                social.friends_show_pending = true;
                 let _ = commands.0.send(ClientCommand::FriendListRequest);
             }
             SocialRequest::AddFriend(name) => {
@@ -690,7 +687,7 @@ mod tests {
 #[cfg(any(test, feature = "test-support"))]
 pub mod native_tests {
     use super::*;
-    
+
     #[cfg(test)]
     use crate::net::wrath_who_capture::NativeWhoPackets;
     use wrathplus_protocol::wrath_who::Entry;

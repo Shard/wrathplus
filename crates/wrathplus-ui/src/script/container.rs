@@ -438,6 +438,35 @@ fn queue_move(
     });
 }
 
+/// `UseContainerItem` with the trade window open: the bag item goes into our first free traded
+/// slot (1 to 6, never the enchant slot), queued as `ClickTradeButton` would queue it. Build
+/// 12340's arm of `0x5d8650` (inferred from its shape: a per-item check `0x59d0b0`, a free-slot
+/// search `0x59a2b0`, the lock and the set `0x59a280`). An empty, locked or soulbound item stays
+/// put (AzerothCore's `HandleSetTradeItemOpcode` cancels the whole trade on an untradeable one),
+/// as does any item when the six are full.
+fn trade_into_first_free(model: &mut Model, bag: i64, slot: u32) {
+    const SOULBOUND: u32 = 0x1;
+    const BOP_TRADEABLE: u32 = 0x100;
+    let tradeable = model
+        .containers
+        .get(&bag)
+        .and_then(|c| c.slots.get(&slot))
+        .is_some_and(|s| {
+            s.item_id != 0
+                && !s.locked
+                && (s.flags & SOULBOUND == 0 || s.flags & BOP_TRADEABLE != 0)
+        });
+    let queued: Vec<u32> = model.trade_set_items.iter().map(|&(id, _, _)| id).collect();
+    let free = model.trade.as_ref().and_then(|t| {
+        (1..super::trade::TRADE_SLOTS as u32)
+            .find(|id| t.player.slots[*id as usize - 1].is_none() && !queued.contains(id))
+    });
+    if let (true, Some(id)) = (tradeable, free) {
+        model.trade_set_items.push((id, bag, slot));
+        cursor::queue_lock_changed(model, bag, slot);
+    }
+}
+
 /// Register the container verbs as bare globals, as build 12340 has them; `C_Container` is a later
 /// client's namespace, and an addon that finds it assumes that client.
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -637,6 +666,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 if occupied {
                     model.container_repairs.push((bag, slot));
                 }
+            } else if model.trade.is_some() {
+                trade_into_first_free(&mut model, bag, slot);
             } else {
                 model
                     .script_calls

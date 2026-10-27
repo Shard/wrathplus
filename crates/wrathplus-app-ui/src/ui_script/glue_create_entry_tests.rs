@@ -177,6 +177,9 @@ fn a_post_logout_vm_is_seeded_and_the_roster_reseeds_the_death_knight() {
     assert!(dk_enabled(&mut app), "the new VM carries the gate");
 }
 
+#[path = "glue_create_layout_tests.rs"]
+mod layout;
+
 /// The name box takes typing: `CharacterCreateNameEdit` is `autoFocus`, so the keys typed after
 /// the screen shows land in it, and Accept sends what was typed.
 #[test]

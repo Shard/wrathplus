@@ -535,7 +535,7 @@ fn quest_template(r: &mut Cursor<&[u8]>) -> io::Result<QuestTemplate> {
     let title = cstring(r)?;
     let objectives_text = cstring(r)?;
     let details = cstring(r)?;
-    let _area_description = cstring(r)?;
+    native.area_description = cstring(r)?;
     let end_text = cstring(r)?;
     let mut objectives: [QuestObjective; 4] = std::array::from_fn(|_| QuestObjective {
         creature_or_go: 0,

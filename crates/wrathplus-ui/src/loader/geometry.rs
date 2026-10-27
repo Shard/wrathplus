@@ -213,10 +213,7 @@ impl Loader<'_> {
                 let rel_to: Option<String> = anchor
                     .attr("relativeTo")
                     .map(|r| framexml::resolve_name(r, parent_name));
-                let (x, y) = children_named(anchor, "Offset")
-                    .next()
-                    .map(abs_dim)
-                    .unwrap_or((None, None));
+                let (x, y) = anchor_offset(anchor);
                 let args = (
                     point.to_string(),
                     rel_to,
@@ -234,5 +231,77 @@ impl Loader<'_> {
                 self.apply_anchor(d, true);
             }
         }
+    }
+}
+
+/// An `<Anchor>`'s offset: its own `x`/`y` attributes, the shape 3.3.5's XML mostly uses
+/// (`<Anchor point="TOP" x="-90" y="-463"/>`, `CharacterCreate.xml`), with an `<Offset>` child's
+/// `<AbsDimension>` (or its own `x`/`y`) taking precedence where one is given. Labelled: the
+/// precedence when both are present is inferred, no stock file writing both.
+pub(super) fn anchor_offset(anchor: &Element) -> (Option<f32>, Option<f32>) {
+    let (ax, ay) = abs_dim(anchor);
+    let (ox, oy) = children_named(anchor, "Offset")
+        .next()
+        .map(abs_dim)
+        .unwrap_or((None, None));
+    (ox.or(ax), oy.or(ay))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::script::UiScript;
+
+    /// `x`/`y` on `<Anchor>` itself offset the point, on a frame and on a region, and an
+    /// `<Offset>` child still works; `CharacterCreate.xml`'s race, class and gender buttons hang
+    /// off their panel this way (`<Anchor point="TOP" x="-90" y="-463"/>`).
+    #[test]
+    fn anchor_attributes_offset_frames_and_regions() {
+        let mut s = UiScript::new().unwrap();
+        s.set_screen_size(800.0, 600.0);
+        let doc = crate::framexml::parse(
+            r#"<Ui>
+                <Frame name="Panel">
+                    <Size x="400" y="500"/>
+                    <Anchors><Anchor point="TOPLEFT" x="100" y="-50"/></Anchors>
+                    <Layers><Layer><FontString name="$parentLabel">
+                        <Anchors><Anchor point="TOP" x="10" y="-20"/></Anchors>
+                    </FontString></Layer></Layers>
+                    <Frames>
+                        <Button name="$parentButton">
+                            <Size x="38" y="38"/>
+                            <Anchors><Anchor point="TOP" x="-90" y="-463"/></Anchors>
+                        </Button>
+                        <Button name="$parentNext">
+                            <Size x="38" y="38"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeTo="$parentButton" relativePoint="RIGHT" x="99">
+                                    <Offset x="6" y="0"/>
+                                </Anchor>
+                            </Anchors>
+                        </Button>
+                    </Frames>
+                </Frame>
+            </Ui>"#,
+        )
+        .expect("valid FrameXML");
+        let report = crate::loader::load(&s, &doc, &|_: &str| None);
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        s.resolve();
+        let at = |s: &UiScript, frame: &str| {
+            s.eval::<(f64, f64)>(&format!("return {frame}:GetLeft(), {frame}:GetTop()"))
+                .unwrap()
+        };
+        // Panel's TOPLEFT is (100, 550) y-up and its TOP (300, 550).
+        assert_eq!(at(&s, "Panel"), (100.0, 550.0));
+        assert_eq!(at(&s, "PanelButton"), (300.0 - 90.0 - 19.0, 550.0 - 463.0));
+        assert_eq!(
+            at(&s, "PanelNext").0,
+            300.0 - 90.0 + 19.0 + 6.0,
+            "<Offset> wins over x"
+        );
+        let label: (f64, f64) = s
+            .eval("local _, _, _, x, y = PanelLabel:GetPoint() return x, y")
+            .unwrap();
+        assert_eq!(label, (10.0, -20.0), "a region's anchor attributes too");
     }
 }

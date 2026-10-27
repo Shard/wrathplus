@@ -340,3 +340,49 @@ fn slot_click_routes_player_to_clear_and_recipient_to_inert() {
     );
     assert!(s.take_errors().is_empty());
 }
+
+/// A bag item dropped with the mouse lands in the button it is dropped on: the six traded slots
+/// stack from the top, and the seventh, below a gap, is the non-traded enchant slot, wire 6
+/// (`TRADE_SLOT_NONTRADED`), which AzerothCore never transfers. A playtest's "Trade complete" with
+/// nothing moved was a drop there.
+#[test]
+fn a_dropped_bag_item_lands_in_the_slot_it_is_dropped_on() {
+    let _data = wrathplus_formats::wow_data_or_skip!();
+    let mut s = UiScript::new().unwrap();
+    s.set_screen_size(1024.0, 768.0);
+    load_ui(&mut s);
+    s.set_trade(Some(TradeState::default()));
+    s.fire_event("TRADE_SHOW", vec![]);
+    s.resolve();
+    let mut bag = wrathplus_ui::script::ContainerState {
+        num_slots: 16,
+        ..Default::default()
+    };
+    bag.slots.insert(
+        6,
+        wrathplus_ui::script::ContainerSlot {
+            item_id: 25,
+            count: 1,
+            ..Default::default()
+        },
+    );
+    s.set_container(0, Some(bag));
+    for button in [1, 2, 7] {
+        s.run("PickupContainerItem(0, 6)").unwrap();
+        let (x, y): (f64, f64) = s
+            .eval(&format!(
+                "return TradePlayerItem{button}ItemButton:GetCenter()"
+            ))
+            .unwrap();
+        s.mouse_button(x as f32, y as f32, "LeftButton", true);
+        s.mouse_button(x as f32, y as f32, "LeftButton", false);
+        s.resolve();
+        assert_eq!(
+            s.take_trade_set_items(),
+            vec![(button, 0, 6)],
+            "button {button}"
+        );
+        s.run("ClearCursor()").unwrap();
+    }
+    assert!(s.take_errors().is_empty());
+}

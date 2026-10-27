@@ -16,6 +16,8 @@ mod spline;
 #[cfg(test)]
 mod slope_tests;
 #[cfg(test)]
+mod swim_depth_tests;
+#[cfg(test)]
 mod tests;
 
 pub use facing::drive_display_facing;

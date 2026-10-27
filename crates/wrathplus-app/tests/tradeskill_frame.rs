@@ -38,6 +38,7 @@ fn load_ui(script: &mut UiScript) {
     for file in FILES {
         common::load_ui(script, file);
     }
+    script.mark_addon_loaded("Blizzard_TradeSkillUI"); // as LoadAddOn leaves it: no 2nd copy
 }
 
 fn recipe(

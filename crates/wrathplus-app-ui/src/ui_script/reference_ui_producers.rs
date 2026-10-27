@@ -303,3 +303,42 @@ fn scan_tables(text: &str, fired: &mut HashSet<String>) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    /// The one event the host invents, with why it may: our own glue `ServerField.xml` (the custom
+    /// server-address field) is its only listener, so no stock handler can hear it.
+    const HOST_EVENTS: &[&str] = &["BENILLA_REALMLIST_CHANGED"];
+
+    /// Every event name production code fires by literal is one 12340 has: the in-game table (its
+    /// init writes each name into its slot, `0xc24ee0`.. plus the low block at `0x6088xx`) or the
+    /// glue table (`0x4dbc70`..), listed in `events_12340.txt`. A host-invented event
+    /// (`FRIENDLIST_SHOW`, Wire B's contact-list storm) reaches stock handlers registered for
+    /// nothing and can loop a request against its own reply. The chat feed's built names are
+    /// guarded by `ui_chat`'s token test.
+    #[test]
+    fn every_fired_event_is_a_12340_event() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("workspace root")
+            .join("crates");
+        let known: std::collections::HashSet<&str> =
+            include_str!("events_12340.txt").lines().collect();
+        let mut alien = std::collections::BTreeSet::new();
+        for text in super::production_texts(&root) {
+            for call in super::CALLS {
+                for (i, _) in text.match_indices(call) {
+                    let rest = text[i + call.len()..].trim_start();
+                    let rest = rest.strip_prefix("lua,").map_or(rest, str::trim_start);
+                    if let Some(name) = super::leading_literal(rest) {
+                        if !known.contains(name) && !HOST_EVENTS.contains(&name) {
+                            alien.insert(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        assert!(alien.is_empty(), "fired but not 12340 events: {alien:?}");
+    }
+}

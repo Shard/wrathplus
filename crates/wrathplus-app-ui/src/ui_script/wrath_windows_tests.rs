@@ -246,3 +246,9 @@ mod quest_track;
 
 #[path = "wrath_quest_greeting_tests.rs"]
 mod quest_greeting;
+
+#[path = "wrath_exp_bar_login_tests.rs"]
+mod exp_bar_login;
+
+#[path = "wrath_request_loop_tests.rs"]
+mod request_loop;

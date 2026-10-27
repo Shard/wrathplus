@@ -36,7 +36,7 @@ const SWIM_JUMP_SPEED: f32 = 9.096_748;
 const SWIM_HYSTERESIS: f32 = 1.0 / 36.0;
 
 #[cfg(test)]
-use crate::app_core::movement::{may_swim, SWIM_UNIT_FLAGS};
+use crate::app_core::movement::{may_swim, CANNOT_SWIM, SWIM_UNIT_FLAGS};
 
 pub(crate) use crate::app_core::movement::swim_enter_depth;
 /// The depth (yd) below which swimming stops, `0.75·h - 1/36`: the band is absolute, never scaled
@@ -435,22 +435,22 @@ mod tests {
         update_swimming(player, Some(depth), 2.1);
     }
 
-    /// `PET_IN_COMBAT` is no typo: `0x6030c0` tests bit 11 on entry (`0x60310b`) and on the stop
-    /// (`0x6031ca`).
+    /// 12340 `0x4f53d0`: any one of four bits admits, and `CANNOT_SWIM` (0x4000) vetoes them all.
     #[test]
-    fn the_swim_gate_is_those_three_unit_flags_and_no_others() {
+    fn the_swim_gate_is_four_unit_flags_unless_cannot_swim() {
         const PLAYER_CONTROLLED: u32 = 0x8;
+        const RENAME: u32 = 0x10;
         const PET_IN_COMBAT: u32 = 0x800;
         const USE_SWIM_ANIMATION: u32 = 0x8000;
         assert_eq!(
             SWIM_UNIT_FLAGS,
-            PLAYER_CONTROLLED | PET_IN_COMBAT | USE_SWIM_ANIMATION
+            PLAYER_CONTROLLED | RENAME | PET_IN_COMBAT | USE_SWIM_ANIMATION
         );
-        for bit in [PLAYER_CONTROLLED, PET_IN_COMBAT, USE_SWIM_ANIMATION] {
-            assert!(may_swim(bit), "any ONE of the three admits ({bit:#x})");
+        for bit in [PLAYER_CONTROLLED, RENAME, PET_IN_COMBAT, USE_SWIM_ANIMATION] {
+            assert!(may_swim(bit), "any ONE admits ({bit:#x})");
+            assert!(!may_swim(bit | CANNOT_SWIM), "CANNOT_SWIM vetoes {bit:#x}");
         }
         assert!(!may_swim(0), "no flags at all → walks the lakebed");
-        assert!(!may_swim(!SWIM_UNIT_FLAGS));
     }
 
     #[test]
