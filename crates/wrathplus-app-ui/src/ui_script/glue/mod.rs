@@ -111,7 +111,7 @@ fn ensure_glue_vm(world: &mut World) -> bool {
     if current.is_some() && world.get_resource::<GlueVm>().and_then(|g| g.0) == current {
         return true;
     }
-    if !text_measure_ready(world) {
+    if !glue_entry_ready(world) {
         return false;
     }
     let Some(mut script) = super::lifecycle::new_vm(world) else {
@@ -140,12 +140,21 @@ fn ensure_glue_vm(world: &mut World) -> bool {
     true
 }
 
-/// Whether a VM built now can measure text. The reference measures synchronously, and GlueXML
-/// sizes from it in `OnLoad` (`CharSelectChangeRealmButton`: `SetWidth(GetTextWidth() + 50)`,
-/// `CharacterSelect.xml:475`), but the font atlas arrives an `Update` after the first screen's
-/// `OnEnter`, once the window reports its scale. A windowed client waits for it; a world with no
-/// window (a headless test) has no atlas to wait for.
-fn text_measure_ready(world: &mut World) -> bool {
+/// Whether a glue VM may be built now: no startup cover is up, and it can measure text.
+///
+/// The startup cover holds until every pipeline is compiled (`loading_screen::startup`), and a
+/// glue screen drawn under it would show through. The reference measures text synchronously, and
+/// GlueXML sizes from it in `OnLoad` (`CharSelectChangeRealmButton`:
+/// `SetWidth(GetTextWidth() + 50)`, `CharacterSelect.xml:475`), but the font atlas arrives an
+/// `Update` after the first screen's `OnEnter`, once the window reports its scale. A windowed
+/// client waits for it; a world with no window (a headless test) has no atlas to wait for.
+fn glue_entry_ready(world: &mut World) -> bool {
+    if world
+        .get_resource::<crate::loading_screen::LoadingScreen>()
+        .is_some_and(|s| s.startup_covering())
+    {
+        return false;
+    }
     let windowed = world
         .query_filtered::<(), With<bevy::window::PrimaryWindow>>()
         .iter(world)
@@ -154,7 +163,7 @@ fn text_measure_ready(world: &mut World) -> bool {
     !windowed || world.contains_resource::<crate::ui_text::UiFontAtlas>()
 }
 
-/// A glue screen entry deferred until the text measure is ready ([`text_measure_ready`]).
+/// A glue screen entry deferred until a VM may be built ([`glue_entry_ready`]).
 #[derive(Resource, Default)]
 pub(crate) struct DeferredGlueEntry(Option<crate::app_core::state::ClientState>);
 
@@ -164,7 +173,7 @@ pub(crate) fn finish_deferred_entry(world: &mut World) {
     let Some(wanted) = world.get_resource::<DeferredGlueEntry>().and_then(|d| d.0) else {
         return;
     };
-    if !text_measure_ready(world) {
+    if !glue_entry_ready(world) {
         return;
     }
     world.resource_mut::<DeferredGlueEntry>().0 = None;
@@ -178,7 +187,7 @@ pub(crate) fn finish_deferred_entry(world: &mut World) {
 
 /// Record an entry that could not build its VM yet.
 fn defer_entry(world: &mut World, state: crate::app_core::state::ClientState) {
-    if !text_measure_ready(world) {
+    if !glue_entry_ready(world) {
         world
             .get_resource_or_insert_with(DeferredGlueEntry::default)
             .0 = Some(state);
