@@ -20,20 +20,39 @@ impl LoggedWriter {
         Self(writer)
     }
 
-    /// Log the packet, then frame and send it.
+    /// Log the packet, then frame and send it. A failure here is the socket's, tagged
+    /// [`SendFailed`] so the writer loop ends the session on it and on nothing a route encodes.
     pub(super) fn send_raw(&mut self, opcode: u32, body: &[u8]) -> anyhow::Result<()> {
+        use anyhow::Context;
         bevy::log::info!("{}", send_line(opcode, body));
-        self.0.send_raw(opcode, body)
+        self.0.send_raw(opcode, body).context(SendFailed)
     }
 }
 
-/// The line [`LoggedWriter::send_raw`] logs.
-fn send_line(opcode: u32, body: &[u8]) -> String {
+/// The context every [`LoggedWriter::send_raw`] error carries: the socket write failed.
+#[derive(Debug)]
+pub(super) struct SendFailed;
+
+impl std::fmt::Display for SendFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Wrath socket send failed")
+    }
+}
+
+/// `0x<op> <name>`, for a line about a packet that never reached the socket.
+pub(super) fn opcode_label(opcode: u32) -> String {
     let name = u16::try_from(opcode)
         .ok()
         .and_then(wrathplus_protocol::wrath_opcode_names::opcode_name)
         .unwrap_or("?");
-    let mut line = format!("net(wrath) SEND 0x{opcode:04x} {} {name}", body.len());
+    format!("0x{opcode:04x} {name}")
+}
+
+/// The line [`LoggedWriter::send_raw`] logs.
+fn send_line(opcode: u32, body: &[u8]) -> String {
+    let (label, len) = (opcode_label(opcode), body.len());
+    let (hex, name) = label.split_once(' ').unwrap_or((&label, "?"));
+    let mut line = format!("net(wrath) SEND {hex} {len} {name}");
     if !LENGTH_ONLY.contains(&opcode) {
         let shown = &body[..body.len().min(BODY_SHOWN)];
         line.push_str(&format!(" {shown:02x?}"));
