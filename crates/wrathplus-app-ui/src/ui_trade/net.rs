@@ -2,14 +2,14 @@
 //! `SMSG_TRADE_STATUS_EXTENDED` replaces one side's offer, both into [`TradeSession`]. The Lua
 //! events they cause are fired by [`super::feed_trade`], which owns the VM.
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{TradeStatus, TradeStatusExtended};
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::{NamedLine, TradeSession};
-use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
 use crate::app_core::errors::UiError;
 use crate::app_core::errors::UiErrorKeys;
+use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
 
 /// Register the trade's handlers: one per kind, plus the session-end listener.
 pub(super) fn register(app: &mut App) {
@@ -453,3 +453,7 @@ mod tests {
         assert_eq!(errors.0, vec![UiError::key("ERR_TRADE_TARGET_DEAD")]);
     }
 }
+
+#[cfg(test)]
+#[path = "flow_tests.rs"]
+mod flow_tests;
