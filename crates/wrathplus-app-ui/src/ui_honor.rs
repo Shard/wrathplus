@@ -181,8 +181,8 @@ fn feed_honor(
                 let _ = commands
                     .0
                     .send(ClientCommand::InspectHonorStats { target: guid });
-                // Unresolved, labelled: the reference's request (`0x5e9140`) is untraced; the
-                // PvP tab's arena rows need `MSG_INSPECT_ARENA_TEAMS` too, sent with it.
+                // 12340's request `0x5e9140` sends `MSG_INSPECT_ARENA_TEAMS` right after, for the
+                // PvP tab's arena rows; its held/pending gate is the binding's.
                 let _ = commands.0.send(ClientCommand::NativeBattleground(
                     wrathplus_protocol::wrath_battleground::Command::InspectArenaTeams {
                         player: guid,

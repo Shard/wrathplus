@@ -382,7 +382,15 @@ fn the_stock_tracking_menu_lists_the_books_tracking_spells_then_the_town_types()
         }),
     );
     s.set_spellbook(book.clone());
-    s.set_tracking_spells(crate::ui_aura::tracking_spells(&book, &catalog));
+    let mut order = Vec::new();
+    let known = book
+        .slots
+        .iter()
+        .map(|slot| slot.spell_id)
+        .filter(|&id| catalog.get(id).is_some_and(|d| d.tracking_aura()))
+        .collect();
+    crate::ui_aura::tracking_order::merge_learn_order(&mut order, &known);
+    s.set_tracking_spells(order);
 
     let open = |s: &mut UiScript| {
         s.run("HideDropDownMenu(1) MiniMapTrackingButton:Click()")
