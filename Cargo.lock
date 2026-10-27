@@ -7951,6 +7951,7 @@ dependencies = [
  "serde",
  "symphonia",
  "toml",
+ "winit",
  "wrathplus-app-core",
  "wrathplus-app-net",
  "wrathplus-assets",

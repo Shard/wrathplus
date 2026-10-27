@@ -251,7 +251,7 @@ fn main() {
     println!("\n{} addon(s) under {}", reports.len(), root.display());
     // Without an install there is no GlobalStrings.lua and about 5,000 globals are missing.
     println!(
-        "  VM: the stock 1.12 FrameXML off the player's chain + a seated session{}\n",
+        "  VM: the stock 3.3.5 FrameXML off the player's chain + a seated session{}\n",
         if addon_harness::seated_with_global_strings() {
             " + the real GlobalStrings.lua"
         } else {

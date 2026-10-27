@@ -32,6 +32,8 @@ half = "2"
 libc = "0.2"
 # PNG encoding only: the macOS cursor's NSImage data and screenshots.
 image = { version = "0.25", default-features = false, features = ["png"] }
+# The window icon (`app_icon`); the version bevy_winit already resolves.
+winit = { version = "0.30", default-features = false }
 # Thread-to-ECS channels: crossbeam's `Receiver` is `Sync`, so it is a resource without a mutex.
 crossbeam-channel = "0.5"
 wrathplus-assets = { path = "../wrathplus-assets", default-features = false }

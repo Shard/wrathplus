@@ -8,16 +8,16 @@
 
 use std::collections::HashMap;
 
+use bevy::prelude::*;
 use wrathplus_formats::{CharCreateCatalog, ChrClasses};
 use wrathplus_protocol::{CharAction, CharCreateReq};
 use wrathplus_ui::script::glue_create::{
     GlueCreateCatalog, GlueCreateClass, GlueCreateRace, GlueCreateRequest,
 };
 use wrathplus_ui::script::{ScriptValue, UiScript};
-use bevy::prelude::*;
 
-use crate::char_create::{ALLIANCE, CLASS_SLOTS, HORDE};
 use crate::app_core::state::ClientState;
+use crate::char_create::{ALLIANCE, CLASS_SLOTS, HORDE};
 use crate::glue_strings::GlueStrings;
 use crate::portrait::{CreateLook, GlueLook, GluePreview};
 
@@ -30,6 +30,14 @@ impl Plugin for StockCreatePlugin {
             .add_systems(
                 OnEnter(ClientState::CharCreate),
                 enter_stock_create.run_if(super::glue::stock_glue_active),
+            )
+            // Before input: the select screen's Create click shows `CharacterCreate` inside its own
+            // Lua call (`SetGlueScreen`), so `CharacterCreate_OnShow` must find the catalog seeded.
+            .add_systems(
+                Update,
+                seed_stock_create
+                    .run_if(super::glue::stock_glue_up)
+                    .before(super::UiInput),
             )
             .add_systems(
                 Update,
@@ -178,19 +186,28 @@ pub(crate) fn catalog(
     }
 }
 
-/// Entering the create screen on the stock glue: seed the catalog. The Lua side resets the
-/// selection itself (`CharacterCreate_OnShow` calls `ResetCharCustomize`).
-fn enter_stock_create(
+/// Seed the create API's catalog into each glue VM once its data is loaded, and again when the
+/// roster changes (the Death Knight gate reads it). The Lua side resets the selection itself
+/// (`CharacterCreate_OnShow` calls `ResetCharCustomize`).
+fn seed_stock_create(
     script: Option<NonSendMut<UiScript>>,
     catalog: Option<Res<crate::entities::CharCreate>>,
     classes: Option<Res<crate::chr_classes::ChrClassTable>>,
     roster: Res<crate::app_core::state::Roster>,
-    time: Res<Time>,
+    mut seeded: Local<crate::app_core::vm_memo::VmMemo<bool>>,
     mut pending: ResMut<StockCreate>,
+    time: Res<Time>,
 ) {
     let (Some(mut script), Some(catalog)) = (script, catalog) else {
         return;
     };
+    let fresh = seeded.claim(&script);
+    if fresh {
+        script.seed_glue_create_rng(time.elapsed().as_nanos() as u64 ^ 0x5DEE_CE66);
+    }
+    if !fresh && !roster.is_changed() && !catalog.is_changed() {
+        return;
+    }
     let death_knight = roster.chars.iter().any(|c| c.level >= 55);
     let name_gen = pending
         .name_gen
@@ -207,7 +224,17 @@ fn enter_stock_create(
         death_knight,
         name_gen,
     ));
-    script.seed_glue_create_rng(time.elapsed().as_nanos() as u64 ^ 0x5DEE_CE66);
+}
+
+/// Entering the create screen on the stock glue: a fresh randomizer seed and no create in flight.
+fn enter_stock_create(
+    script: Option<NonSendMut<UiScript>>,
+    time: Res<Time>,
+    mut pending: ResMut<StockCreate>,
+) {
+    if let Some(mut script) = script {
+        script.seed_glue_create_rng(time.elapsed().as_nanos() as u64 ^ 0x5DEE_CE66);
+    }
     pending.pending = None;
 }
 
@@ -313,6 +340,10 @@ pub(crate) fn drive_stock_create(
 #[cfg(test)]
 #[path = "glue_create_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "glue_create_entry_tests.rs"]
+mod entry_tests;
 
 #[cfg(test)]
 #[path = "glue_options_tests.rs"]
