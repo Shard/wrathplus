@@ -48,3 +48,14 @@ pub(crate) fn drawn_glyphs(text: &str) -> usize {
         })
         .count()
 }
+
+impl crate::script::Gradient {
+    /// The midpoint, the one colour a one-tint quad can show.
+    pub fn midpoint(&self) -> [f32; 4] {
+        let mut out = [0.0; 4];
+        for (i, chan) in out.iter_mut().enumerate() {
+            *chan = (self.start[i] + self.end[i]) / 2.0;
+        }
+        out
+    }
+}

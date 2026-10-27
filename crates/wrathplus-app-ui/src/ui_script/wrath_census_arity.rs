@@ -183,7 +183,7 @@ pub(super) fn audit(
             local kinds = { "Frame", "Button", "CheckButton", "EditBox", "StatusBar", "Slider",
                 "ScrollFrame", "MessageFrame", "ScrollingMessageFrame", "GameTooltip", "Model",
                 "PlayerModel", "DressUpModel", "TabardModel", "Minimap", "ColorSelect", "SimpleHTML",
-                "Cooldown", "LootButton", "MovieFrame" }
+                "Cooldown", "LootButton", "MovieFrame", "QuestPOIFrame" }
             local target, fn, kind = nil, nil, "METHOD"
             if method then
                 for _, kind in ipairs(kinds) do

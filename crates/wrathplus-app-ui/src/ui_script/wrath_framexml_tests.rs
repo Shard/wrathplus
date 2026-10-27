@@ -569,7 +569,7 @@ fn missing_surface(
             local kinds = { "Frame", "Button", "CheckButton", "EditBox", "StatusBar", "Slider",
                 "ScrollFrame", "MessageFrame", "ScrollingMessageFrame", "GameTooltip", "Model",
                 "PlayerModel", "DressUpModel", "TabardModel", "Minimap", "ColorSelect", "SimpleHTML",
-                "Cooldown", "LootButton", "MovieFrame" }
+                "Cooldown", "LootButton", "MovieFrame", "QuestPOIFrame" }
             local has, out = {}, {}
             for _, kind in ipairs(kinds) do
                 local ok, frame = pcall(CreateFrame, kind)
