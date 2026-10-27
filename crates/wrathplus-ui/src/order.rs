@@ -362,16 +362,16 @@ pub fn traversal(arena: &WidgetArena) -> DrawList {
 
 // ── Hit-testing: the mouse-focus capture walk ────────────────────────────────────────────────
 
-/// The frame the cursor captures, by the client's sweep `0x7660d0`: strata high to low, and in one
-/// `(strata, level)` plane the earlier-linked frame first. The first frame that takes the mouse
-/// ends the sweep whatever its handler does (`0x7663f7` overwrites the result of the call at
-/// `0x7663f4`), so a disabled button still eats the click.
+/// The frame the cursor captures, by 12340's sweep `0x4945a0` over the `CSimpleTop` at
+/// `[0xb499a8]`: the nine strata high to low, each stratum's list probed from index 0, and the
+/// first frame whose mouse test (vtable `+0x7c`) accepts ends the sweep, so a disabled button still
+/// eats the click.
 ///
-/// Equal levels go to the earlier link (`0x764aa0` appends after equals). A parent is linked before
-/// its children (show at `0x76ae85`, then `0x76aeb6`; `SetFrameLevel` likewise), so it wins a tie
+/// Equal levels go to the earlier link. A parent is linked before its children, so it wins a tie
 /// with its child, which `TargetFrame.lua:33` relies on; and the first-declared sibling wins, so a
 /// full-area `<Button>` declared first, mouse-enabled by its constructor, swallows its window.
-/// Drawing still puts the later link on top.
+/// Drawing still puts the later link on top. Labelled: the link order is 1.12's (insert
+/// `0x764aa0`, show `0x76ae85`), not re-traced in 12340; Gatherer's toplevel test pins the tie.
 ///
 /// `sorted` is [`traversal`]'s ascending list and `hits` says whether a frame is a candidate at the
 /// cursor; regions never capture.
