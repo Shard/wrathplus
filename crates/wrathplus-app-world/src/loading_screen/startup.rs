@@ -29,7 +29,7 @@ fn raise_startup_cover(
     window: Query<(), With<PrimaryWindow>>,
     time: Res<Time<Real>>,
 ) {
-    if window.is_empty() || wrathplus_world::dev_state::deterministic_run() {
+    if window.is_empty() || !crate::pipe_warm::runs_a_menagerie() {
         return;
     }
     screen.raise("startup, pipeline warm", false, None, time.elapsed_secs());
@@ -126,7 +126,11 @@ mod tests {
         app.init_resource::<Ran>()
             .add_systems(Update, count.run_if(super::super::no_startup_cover));
         app.update();
-        assert_eq!(app.world().resource::<Ran>().0, 1, "no loading screen at all");
+        assert_eq!(
+            app.world().resource::<Ran>().0,
+            1,
+            "no loading screen at all"
+        );
 
         let mut screen = LoadingScreen::default();
         screen.raise("startup, pipeline warm", false, None, 0.0);

@@ -297,6 +297,11 @@ impl WarmPass {
     }
 }
 
+/// Whether this process warms at all: never in a capture, which must stay deterministic.
+pub(crate) fn runs_a_menagerie() -> bool {
+    !wrathplus_world::dev_state::deterministic_run()
+}
+
 /// How long after the last reveal `pending == 0` means drained: the counters cross worlds a frame
 /// apart.
 const WARM_SETTLE_SECS: f32 = 0.25;
@@ -363,7 +368,7 @@ fn run_warm_pass(
         return;
     }
     // No menagerie in a capture.
-    if wrathplus_world::dev_state::deterministic_run() {
+    if !runs_a_menagerie() {
         warm.done = true;
         return;
     }
