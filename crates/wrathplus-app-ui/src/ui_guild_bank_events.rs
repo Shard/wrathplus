@@ -1,27 +1,7 @@
-//! The guild bank's FrameScript events: the frame's, off a change of view, and
-//! `GUILDBANK_TEXT_CHANGED`, off `SMSG_GUILD_EVENT`.
+//! The guild bank's FrameScript events: the frame's, off a change of view, and the queued
+//! `GUILDBANK_TEXT_CHANGED`s.
 use super::GuildBank;
-use bevy::prelude::*;
-use wrathplus_protocol::SessionEvent;
 use wrathplus_ui::script::{ScriptValue, UiScript, WrathGuildBankView};
-
-/// `SMSG_GUILD_EVENT` case `0x13` (`0x6d92d0`): another member edited a tab's text; the frame
-/// re-queries it when that tab is showing (`Blizzard_GuildBankUI.lua:151-155`). Fired whether or
-/// not the vault is open, as the reference does. Labelled: the cached text stays until the new
-/// one lands; the reference's `0x5a4310(tab, 1)` beside the fire is untraced.
-pub(super) fn text_changed(In(event): In<SessionEvent>, mut bank: ResMut<GuildBank>) {
-    use wrathplus_protocol::types::guild_event::BANK_TEXT_CHANGED;
-    if let SessionEvent::GuildEvent(notice) = event {
-        // `atol` of the first string, as the reference reads it.
-        let tab = notice
-            .params
-            .first()
-            .and_then(|p| p.trim().parse::<u8>().ok());
-        if let (BANK_TEXT_CHANGED, Some(tab)) = (notice.event, tab) {
-            bank.text_changed.push(tab);
-        }
-    }
-}
 
 /// Fire the queued `GUILDBANK_TEXT_CHANGED(tab)`, 1-based (`"%d"`, `0x9e289c`).
 pub(super) fn fire_text_changed(bank: &mut GuildBank, script: &mut UiScript) {
