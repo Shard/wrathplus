@@ -20,7 +20,6 @@ mod generic_for;
 mod gm_ticket;
 mod grammar;
 mod handler_prof;
-mod hit_order;
 mod host_state;
 mod input;
 mod keyboard;

@@ -362,13 +362,16 @@ pub fn traversal(arena: &WidgetArena) -> DrawList {
 
 // ── Hit-testing: the mouse-focus capture walk ────────────────────────────────────────────────
 
-/// The frame the cursor captures, by 12340's mouse sweep (`0x4945a0`, `CSimpleTop` input event
-/// `0xd`): strata high to low, and in each stratum its frame list in order, the first frame whose
-/// hit test (vfunc `+0x7c`) takes the cursor becoming the focus (`top+0x78`). The first frame that
-/// takes the mouse ends the sweep whatever its handler does, so a disabled button still eats the
-/// click. Within one `(strata, level)` plane the frame drawn on top is probed first, so the frame
-/// you see is the frame you hit. Labelled: the stratum list's insertion order is untraced; this
-/// takes it as the reverse of the draw order the same list paints in.
+/// The frame the cursor captures, by the client's sweep `0x7660d0`: strata high to low, and in one
+/// `(strata, level)` plane the earlier-linked frame first. The first frame that takes the mouse
+/// ends the sweep whatever its handler does (`0x7663f7` overwrites the result of the call at
+/// `0x7663f4`), so a disabled button still eats the click.
+///
+/// Equal levels go to the earlier link (`0x764aa0` appends after equals). A parent is linked before
+/// its children (show at `0x76ae85`, then `0x76aeb6`; `SetFrameLevel` likewise), so it wins a tie
+/// with its child, which `TargetFrame.lua:33` relies on; and the first-declared sibling wins, so a
+/// full-area `<Button>` declared first, mouse-enabled by its constructor, swallows its window.
+/// Drawing still puts the later link on top.
 ///
 /// `sorted` is [`traversal`]'s ascending list and `hits` says whether a frame is a candidate at the
 /// cursor; regions never capture.
@@ -385,8 +388,8 @@ pub fn hit_test<F: Fn(FrameHandle) -> bool>(
         while start > 0 && plane(sorted[start - 1].1) == p {
             start -= 1;
         }
-        // Planes descend; within one, the frame drawn last (on top) is probed first.
-        for (target, _) in sorted[start..end].iter().rev() {
+        // Planes descend; within one, the earlier-linked frame is probed first.
+        for (target, _) in &sorted[start..end] {
             if let ZTarget::Frame(fh) = *target {
                 if hits(fh) {
                     return Some(fh);

@@ -38,10 +38,10 @@ fn enable_mouse_gates_hit_testing() {
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
 
-/// At a strata and level tie the frame drawn on top takes the hit, the one you see: 12340's sweep
-/// (`0x4945a0`) walks strata high to low and each stratum's list in order.
+/// At a strata and level tie the earlier-linked frame takes the hit, though the later one draws on
+/// top: `0x764aa0` appends equal keys after (strict `ja`) and `0x7660d0` sweeps from index 0.
 #[test]
-fn hit_order_is_strata_then_level_then_the_frame_drawn_on_top() {
+fn hit_order_is_strata_then_level_then_the_earlier_linked_frame() {
     let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
@@ -58,9 +58,9 @@ fn hit_order_is_strata_then_level_then_the_frame_drawn_on_top() {
     .unwrap();
     s.resolve();
 
-    // Same strata and level: B, drawn on top, captures.
+    // Same strata and level: A, linked first, captures though B draws on top.
     s.mouse_move(400.0, 300.0);
-    assert_eq!(s.eval::<String>("return who").unwrap(), "B");
+    assert_eq!(s.eval::<String>("return who").unwrap(), "A");
 
     // Move off everything to clear the mouseover (fires OnLeave, resets focus) before re-testing.
     s.mouse_move(-10.0, -10.0);
