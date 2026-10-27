@@ -187,6 +187,10 @@ Build the seams now; features land on them later.
 - **Never launch the game client** (`target/azb-live/*.sh`): Shannon plays on the same account. The
   manager runs live checks.
 - **Trusted UI**: no taint, no protected frames, no secure-execution emulation.
+- **Writer failures**: a command the client cannot encode is logged with its opcode and dropped,
+  never a session end; socket errors still end it. Server-ordered routes stay fail-closed: the
+  mover hand-off, movement-authority ACKs, teleport/worldport/taxi ACKs and logout (the list and
+  reasons: `dropped_line` in `wrathplus-app-net` `net/io/wrath.rs`). New routes need no opt-in.
 - **No server changes**: AzerothCore source is a protocol reference only.
 - **Never commit** Blizzard assets, dumps, or `.azerothbench-test.env`.
 - **Every unit passes `cargo test -p wrathplus-app --lib` before it is reported** (heavy; take your
