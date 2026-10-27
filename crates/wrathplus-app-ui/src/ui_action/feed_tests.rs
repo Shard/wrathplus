@@ -3,10 +3,10 @@
 
 use std::collections::HashMap;
 
+use bevy::prelude::*;
 use wrathplus_formats::{ItemDisplay, ItemDisplayCatalog};
 use wrathplus_protocol::types::{ActionButton, ItemSpellEntry, ACTION_KIND_ITEM};
 use wrathplus_ui::script::UiScript;
-use bevy::prelude::*;
 
 use super::feed::{feed_actions, MISSING_ITEM_ICON};
 use super::{CastErrors, MountErrors, PetTameFailures, PlayerActions, UiErrorKeys, UiErrorTexts};
@@ -435,13 +435,11 @@ fn pre_resolved_lines_land_on_the_errors_frame_in_the_arms_colour() {
     );
 }
 
-/// Neither caster's refusal writes a chat line: build 12340 logs the player's as
-/// `SPELL_CAST_FAILED` through `COMBAT_LOG_EVENT` (`crate::spell::native_failure`), and the pet's
-/// handler `0x6e8eb0` logs nothing. Both entries name the same spell, so only the caster differs.
+/// A refusal writes no chat line: build 12340 logs it as `SPELL_CAST_FAILED` through
+/// `COMBAT_LOG_EVENT` (`crate::spell::native_failure`).
 #[test]
 fn a_refused_cast_writes_no_chat_line() {
     use crate::app_core::errors::CastFail;
-    use crate::app_core::errors::Caster;
     use crate::app_core::state::Spells;
     use wrathplus_formats::{SpellCatalog, SpellDisplay};
 
@@ -450,15 +448,11 @@ fn a_refused_cast_writes_no_chat_line() {
     let (tx, _rx) = crossbeam_channel::unbounded();
     let mut app = App::new();
     let mut errors = CastErrors::default();
-    // 0x5f ROOTED has a string on both tables, so neither entry drops for want of one.
-    errors.0.push(CastFail {
-        spell_id: GROWL,
-        reason: 0x5F,
-        arg: None,
-        caster: Caster::Player,
-        redisplay: false,
-    });
-    errors.push_pet(GROWL, 0x5F);
+    // ROOTED has a string, so the entry does not drop for want of one.
+    errors.0.push(CastFail::local(
+        GROWL,
+        crate::spell::cast_fail_keys::reason::ROOTED,
+    ));
 
     app.insert_resource(PlayerActions::default())
         .insert_resource(errors)
@@ -495,7 +489,7 @@ fn a_refused_cast_writes_no_chat_line() {
             .resource::<crate::app_core::chat::ChatLog>()
             .pending_len(),
         0,
-        "no 1.12 failure sentence for either caster"
+        "no failure sentence in chat"
     );
 }
 

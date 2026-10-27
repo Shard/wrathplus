@@ -20,24 +20,27 @@ use wrathplus_ui::script::{
     TradeSkillDifficulty, TradeSkillReagent, TradeSkillRecipe, TradeSkillState, UiScript,
 };
 
-use crate::creature_anim::{CastEvent, CastEventKind};
-use crate::entities::ItemDisplays;
-use crate::items::Items;
-use crate::net::{NetCommands, NetHandlerApp, Objects};
+use crate::app_core::schedule::UiInput;
+use crate::app_core::schedule::UnitFeed;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::spell::{cast_target, CastCommit, CastLadder};
 use crate::app_core::state::PlayerActions;
+use crate::app_core::state::SkillLines;
 use crate::app_core::state::Spells;
-use crate::ui_items::item_icon;
+use crate::creature_anim::{CastEvent, CastEventKind};
+use crate::entities::ItemDisplays;
 use crate::inventory::count_of;
 use crate::inventory::InventoryScope;
-use crate::app_core::schedule::UiInput;
-use crate::app_core::state::SkillLines;
-use crate::app_core::schedule::UnitFeed;
+use crate::items::Items;
+use crate::net::{NetCommands, NetHandlerApp, Objects};
+use crate::spell::{cast_target, CastCommit, CastLadder};
+use crate::ui_items::item_icon;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 
 pub(crate) use crate::app_core::interaction::TradeSkillOpens;
+/// A recipe's "Requires:" tools: focus, totems and totem categories.
+mod tools;
+pub(crate) use tools::TotemCategories;
 /// The open book's skill line. The Lua close and the session end clear it: a logout replaces the
 /// VM without running the old `OnHide`, so the close alone never comes.
 #[derive(Resource, Default)]
@@ -168,7 +171,10 @@ impl Plugin for UiTradeSkillPlugin {
         app.init_resource::<TradeSkillOpens>()
             .init_resource::<TradeSkillOpen>()
             .init_resource::<TradeSkillRepeat>()
-            .add_systems(Startup, load_spell_focus.after(AssetSet::Open))
+            .add_systems(
+                Startup,
+                (load_spell_focus, tools::load_totem_categories).after(AssetSet::Open),
+            )
             .add_systems(
                 Update,
                 (
@@ -304,7 +310,7 @@ fn resolve_recipe(
     rank: u32,
     spells: &Spells,
     skill_lines: &SkillLines,
-    focus: Option<&SpellFocus>,
+    tool_names: &tools::ToolNames,
     icons: Option<&ItemDisplays>,
     subclasses: Option<&crate::items::ItemSubClasses>,
     store: &ObjectStore,
@@ -370,21 +376,9 @@ fn resolve_recipe(
         .flatten()
         .map_or((None, 0, 0), |(g, it, il)| (Some(g), it, il));
 
-    // Tools in `0x4ff980`'s order: the spell focus, `Totem[0]`, `Totem[1]`. The focus is always
-    // met (its `hasTool` is the literal 1.0); an unmet totem reads red. A tool whose template has
-    // not landed is left out, as the reference does while it asks.
-    let mut tools = Vec::new();
-    if d.requires_spell_focus != 0 {
-        if let Some(name) = focus.and_then(|f| f.catalog.name(d.requires_spell_focus)) {
-            tools.push((name.to_string(), true));
-        }
-    }
-    for &t in d.totems.iter().filter(|&&t| t != 0) {
-        let have = count_of(&store.0, objects, t, InventoryScope::CARRIED) > 0;
-        if let Some(info) = items.template(t, 0, commands) {
-            tools.push((info.name.clone(), have));
-        }
-    }
+    let focus = tool_names.focus.as_deref().map(|f| &f.catalog);
+    let categories = tool_names.categories.as_deref().map(|c| &c.0);
+    let tools = tools::recipe_tools(d, focus, categories, store, objects, items, commands);
 
     // `GetTradeSkillInfo`'s altVerb (`0x5db2a0`): the open line's `alternateVerb` unless the first
     // effect makes an item (24 `CREATE_ITEM`, 157 `CREATE_ITEM_2`, 59 `CREATE_RANDOM_ITEM`).
@@ -423,7 +417,7 @@ fn feed_trade_skill(
     actions: Res<PlayerActions>,
     spells: Option<Res<Spells>>,
     skill_lines: Option<Res<SkillLines>>,
-    focus: Option<Res<SpellFocus>>,
+    tool_names: tools::ToolNames,
     icons: Option<Res<ItemDisplays>>,
     subclasses: Option<Res<crate::items::ItemSubClasses>>,
     repeat: Res<TradeSkillRepeat>,
@@ -507,7 +501,7 @@ fn feed_trade_skill(
                     rank,
                     spells,
                     skill_lines,
-                    focus.as_deref(),
+                    &tool_names,
                     icons.as_deref(),
                     subclasses.as_deref(),
                     store,
@@ -672,10 +666,10 @@ fn drain_trade_skill(
 mod tests {
     use super::*;
     use crate::items::{test_template, TestDeps};
+    use std::collections::HashMap;
     use wrathplus_formats::{
         ItemDisplay, ItemDisplayCatalog, SpellDisplay, SPELL_EFFECT_ENCHANT_ITEM,
     };
-    use std::collections::HashMap;
 
     /// A recipe with its own spell icon, so a wrong arm names itself in the assertion.
     fn recipe(effect: u32, item: u32) -> SpellDisplay {

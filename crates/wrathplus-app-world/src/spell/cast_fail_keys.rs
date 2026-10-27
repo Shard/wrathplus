@@ -1,11 +1,9 @@
-//! The wire reason tables behind cast-failure text: build 12340's `SpellCastResult` names and
-//! the reference's `SPELL_FAILED_*` key table, which the spell and combat-log layers read
-//! without the UI's text resolution.
+//! Build 12340's cast-failure reasons: its `SpellCastResult` names by wire value, the table
+//! `0x7fcca0` returns (`SPELL_FAILED_*` GlobalStrings keys; AzerothCore `SharedDefines.h`), and a
+//! named constant for each reason the client raises or tests ([`reason`]). Every layer, the
+//! server's packets and the local cast checks alike, speaks this one numbering.
 
-/// Wire reason to its `SPELL_FAILED_*` GlobalStrings key: the reference's table `0x6e23e0`, in
-/// vmangos `SpellCastResult` order (`SpellDefines.h:350`).
-/// Build 12340's `SpellCastResult` names, by wire value (AzerothCore `SharedDefines.h`); its
-/// values are renumbered from 1.12's, so a Wrath reason is mapped by name ([`from_wrath`]).
+/// Build 12340's `SpellCastResult` names, by wire value (`0x7fcca0`, identical row for row).
 #[rustfmt::skip]
 pub const WRATH_CAST_FAIL_KEYS: [&str; 187] = [
     "SPELL_FAILED_SUCCESS", // 0x00
@@ -205,165 +203,114 @@ pub fn wrath_key(reason: u8) -> Option<&'static str> {
         .filter(|_| reason != 0)
 }
 
-/// A build-12340 cast-failure reason as the 1.12 code with the same `SPELL_FAILED_*` name, or
-/// `SPELL_FAILED_UNKNOWN`'s when 1.12 has no such failure.
-pub fn from_wrath(reason: u8) -> u8 {
-    let key = WRATH_CAST_FAIL_KEYS
-        .get(usize::from(reason))
-        .copied()
-        .unwrap_or("SPELL_FAILED_UNKNOWN");
-    let find = |key: &str| CAST_FAIL_KEYS.iter().position(|k| *k == key);
-    find(key)
-        .or_else(|| find("SPELL_FAILED_UNKNOWN"))
-        .map_or(0, |i| i as u8)
+/// Whether two strings are equal, at compile time.
+const fn same(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
 }
 
-#[rustfmt::skip]
-pub const CAST_FAIL_KEYS: [&str; 146] = [
-    "SPELL_FAILED_AFFECTING_COMBAT",             // 0x00
-    "SPELL_FAILED_ALREADY_AT_FULL_HEALTH",       // 0x01
-    "SPELL_FAILED_ALREADY_AT_FULL_POWER",        // 0x02
-    "SPELL_FAILED_ALREADY_BEING_TAMED",          // 0x03
-    "SPELL_FAILED_ALREADY_HAVE_CHARM",           // 0x04
-    "SPELL_FAILED_ALREADY_HAVE_SUMMON",          // 0x05
-    "SPELL_FAILED_ALREADY_OPEN",                 // 0x06
-    "SPELL_FAILED_AURA_BOUNCED",                 // 0x07
-    "SPELL_FAILED_AUTOTRACK_INTERRUPTED",        // 0x08
-    "SPELL_FAILED_BAD_IMPLICIT_TARGETS",         // 0x09
-    "SPELL_FAILED_BAD_TARGETS",                  // 0x0a
-    "SPELL_FAILED_CANT_BE_CHARMED",              // 0x0b
-    "SPELL_FAILED_CANT_BE_DISENCHANTED",         // 0x0c
-    "SPELL_FAILED_CANT_BE_PROSPECTED",           // 0x0d
-    "SPELL_FAILED_CANT_CAST_ON_TAPPED",          // 0x0e
-    "SPELL_FAILED_CANT_DUEL_WHILE_INVISIBLE",    // 0x0f
-    "SPELL_FAILED_CANT_DUEL_WHILE_STEALTHED",    // 0x10
-    "SPELL_FAILED_CANT_STEALTH",                 // 0x11
-    "SPELL_FAILED_CASTER_AURASTATE",             // 0x12
-    "SPELL_FAILED_CASTER_DEAD",                  // 0x13
-    "SPELL_FAILED_CHARMED",                      // 0x14
-    "SPELL_FAILED_CHEST_IN_USE",                 // 0x15
-    "SPELL_FAILED_CONFUSED",                     // 0x16
-    "SPELL_FAILED_DONT_REPORT",                  // 0x17
-    "SPELL_FAILED_EQUIPPED_ITEM",                // 0x18
-    "SPELL_FAILED_EQUIPPED_ITEM_CLASS",          // 0x19
-    "SPELL_FAILED_EQUIPPED_ITEM_CLASS_MAINHAND", // 0x1a
-    "SPELL_FAILED_EQUIPPED_ITEM_CLASS_OFFHAND",  // 0x1b
-    "SPELL_FAILED_ERROR",                        // 0x1c
-    "SPELL_FAILED_FIZZLE",                       // 0x1d
-    "SPELL_FAILED_FLEEING",                      // 0x1e
-    "SPELL_FAILED_FOOD_LOWLEVEL",                // 0x1f
-    "SPELL_FAILED_HIGHLEVEL",                    // 0x20
-    "SPELL_FAILED_HUNGER_SATIATED",              // 0x21
-    "SPELL_FAILED_IMMUNE",                       // 0x22
-    "SPELL_FAILED_INTERRUPTED",                  // 0x23
-    "SPELL_FAILED_INTERRUPTED_COMBAT",           // 0x24
-    "SPELL_FAILED_ITEM_ALREADY_ENCHANTED",       // 0x25
-    "SPELL_FAILED_ITEM_GONE",                    // 0x26
-    "SPELL_FAILED_ITEM_NOT_FOUND",               // 0x27
-    "SPELL_FAILED_ITEM_NOT_READY",               // 0x28
-    "SPELL_FAILED_LEVEL_REQUIREMENT",            // 0x29
-    "SPELL_FAILED_LINE_OF_SIGHT",                // 0x2a
-    "SPELL_FAILED_LOWLEVEL",                     // 0x2b
-    "SPELL_FAILED_LOW_CASTLEVEL",                // 0x2c
-    "SPELL_FAILED_MAINHAND_EMPTY",               // 0x2d
-    "SPELL_FAILED_MOVING",                       // 0x2e
-    "SPELL_FAILED_NEED_AMMO",                    // 0x2f
-    "SPELL_FAILED_NEED_AMMO_POUCH",              // 0x30
-    "SPELL_FAILED_NEED_EXOTIC_AMMO",             // 0x31
-    "SPELL_FAILED_NOPATH",                       // 0x32
-    "SPELL_FAILED_NOT_BEHIND",                   // 0x33
-    "SPELL_FAILED_NOT_FISHABLE",                 // 0x34
-    "SPELL_FAILED_NOT_HERE",                     // 0x35
-    "SPELL_FAILED_NOT_INFRONT",                  // 0x36
-    "SPELL_FAILED_NOT_IN_CONTROL",               // 0x37
-    "SPELL_FAILED_NOT_KNOWN",                    // 0x38
-    "SPELL_FAILED_NOT_MOUNTED",                  // 0x39
-    "SPELL_FAILED_NOT_ON_TAXI",                  // 0x3a
-    "SPELL_FAILED_NOT_ON_TRANSPORT",             // 0x3b
-    "SPELL_FAILED_NOT_READY",                    // 0x3c
-    "SPELL_FAILED_NOT_SHAPESHIFT",               // 0x3d
-    "SPELL_FAILED_NOT_STANDING",                 // 0x3e
-    "SPELL_FAILED_NOT_TRADEABLE",                // 0x3f
-    "SPELL_FAILED_NOT_TRADING",                  // 0x40
-    "SPELL_FAILED_NOT_UNSHEATHED",               // 0x41
-    "SPELL_FAILED_NOT_WHILE_GHOST",              // 0x42
-    "SPELL_FAILED_NO_AMMO",                      // 0x43
-    "SPELL_FAILED_NO_CHARGES_REMAIN",            // 0x44
-    "SPELL_FAILED_NO_CHAMPION",                  // 0x45
-    "SPELL_FAILED_NO_COMBO_POINTS",              // 0x46
-    "SPELL_FAILED_NO_DUELING",                   // 0x47
-    "SPELL_FAILED_NO_ENDURANCE",                 // 0x48
-    "SPELL_FAILED_NO_FISH",                      // 0x49
-    "SPELL_FAILED_NO_ITEMS_WHILE_SHAPESHIFTED",  // 0x4a
-    "SPELL_FAILED_NO_MOUNTS_ALLOWED",            // 0x4b
-    "SPELL_FAILED_NO_PET",                       // 0x4c
-    "SPELL_FAILED_NO_POWER",                     // 0x4d
-    "SPELL_FAILED_NOTHING_TO_DISPEL",            // 0x4e
-    "SPELL_FAILED_NOTHING_TO_STEAL",             // 0x4f
-    "SPELL_FAILED_ONLY_ABOVEWATER",              // 0x50
-    "SPELL_FAILED_ONLY_DAYTIME",                 // 0x51
-    "SPELL_FAILED_ONLY_INDOORS",                 // 0x52
-    "SPELL_FAILED_ONLY_MOUNTED",                 // 0x53
-    "SPELL_FAILED_ONLY_NIGHTTIME",               // 0x54
-    "SPELL_FAILED_ONLY_OUTDOORS",                // 0x55
-    "SPELL_FAILED_ONLY_SHAPESHIFT",              // 0x56
-    "SPELL_FAILED_ONLY_STEALTHED",               // 0x57
-    "SPELL_FAILED_ONLY_UNDERWATER",              // 0x58
-    "SPELL_FAILED_OUT_OF_RANGE",                 // 0x59
-    "SPELL_FAILED_PACIFIED",                     // 0x5a
-    "SPELL_FAILED_POSSESSED",                    // 0x5b
-    "SPELL_FAILED_REAGENTS",                     // 0x5c
-    "SPELL_FAILED_REQUIRES_AREA",                // 0x5d
-    "SPELL_FAILED_REQUIRES_SPELL_FOCUS",         // 0x5e
-    "SPELL_FAILED_ROOTED",                       // 0x5f
-    "SPELL_FAILED_SILENCED",                     // 0x60
-    "SPELL_FAILED_SPELL_IN_PROGRESS",            // 0x61
-    "SPELL_FAILED_SPELL_LEARNED",                // 0x62
-    "SPELL_FAILED_SPELL_UNAVAILABLE",            // 0x63
-    "SPELL_FAILED_STUNNED",                      // 0x64
-    "SPELL_FAILED_TARGETS_DEAD",                 // 0x65
-    "SPELL_FAILED_TARGET_AFFECTING_COMBAT",      // 0x66
-    "SPELL_FAILED_TARGET_AURASTATE",             // 0x67
-    "SPELL_FAILED_TARGET_DUELING",               // 0x68
-    "SPELL_FAILED_TARGET_ENEMY",                 // 0x69
-    "SPELL_FAILED_TARGET_ENRAGED",               // 0x6a
-    "SPELL_FAILED_TARGET_FRIENDLY",              // 0x6b
-    "SPELL_FAILED_TARGET_IN_COMBAT",             // 0x6c
-    "SPELL_FAILED_TARGET_IS_PLAYER",             // 0x6d
-    "SPELL_FAILED_TARGET_NOT_DEAD",              // 0x6e
-    "SPELL_FAILED_TARGET_NOT_IN_PARTY",          // 0x6f
-    "SPELL_FAILED_TARGET_NOT_LOOTED",            // 0x70
-    "SPELL_FAILED_TARGET_NOT_PLAYER",            // 0x71
-    "SPELL_FAILED_TARGET_NO_POCKETS",            // 0x72
-    "SPELL_FAILED_TARGET_NO_WEAPONS",            // 0x73
-    "SPELL_FAILED_TARGET_UNSKINNABLE",           // 0x74
-    "SPELL_FAILED_THIRST_SATIATED",              // 0x75
-    "SPELL_FAILED_TOO_CLOSE",                    // 0x76
-    "SPELL_FAILED_TOO_MANY_OF_ITEM",             // 0x77
-    "SPELL_FAILED_TOTEMS",                       // 0x78
-    "SPELL_FAILED_TRAINING_POINTS",              // 0x79
-    "SPELL_FAILED_TRY_AGAIN",                    // 0x7a
-    "SPELL_FAILED_UNIT_NOT_BEHIND",              // 0x7b
-    "SPELL_FAILED_UNIT_NOT_INFRONT",             // 0x7c
-    "SPELL_FAILED_WRONG_PET_FOOD",               // 0x7d
-    "SPELL_FAILED_NOT_WHILE_FATIGUED",           // 0x7e
-    "SPELL_FAILED_TARGET_NOT_IN_INSTANCE",       // 0x7f
-    "SPELL_FAILED_NOT_WHILE_TRADING",            // 0x80
-    "SPELL_FAILED_TARGET_NOT_IN_RAID",           // 0x81
-    "SPELL_FAILED_DISENCHANT_WHILE_LOOTING",     // 0x82
-    "SPELL_FAILED_PROSPECT_WHILE_LOOTING",       // 0x83
-    "SPELL_FAILED_PROSPECT_NEED_MORE",           // 0x84
-    "SPELL_FAILED_TARGET_FREEFORALL",            // 0x85
-    "SPELL_FAILED_NO_EDIBLE_CORPSES",            // 0x86
-    "SPELL_FAILED_ONLY_BATTLEGROUNDS",           // 0x87
-    "SPELL_FAILED_TARGET_NOT_GHOST",             // 0x88
-    "SPELL_FAILED_TOO_MANY_SKILLS",              // 0x89
-    "SPELL_FAILED_TRANSFORM_UNUSABLE",           // 0x8a
-    "SPELL_FAILED_WRONG_WEATHER",                // 0x8b
-    "SPELL_FAILED_DAMAGE_IMMUNE",                // 0x8c
-    "SPELL_FAILED_PREVENTED_BY_MECHANIC",        // 0x8d
-    "SPELL_FAILED_PLAY_TIME",                    // 0x8e
-    "SPELL_FAILED_REPUTATION",                   // 0x8f
-    "SPELL_FAILED_MIN_SKILL",                    // 0x90
-    "SPELL_FAILED_UNKNOWN",                      // 0x91
-];
+/// A reason's wire value from its `SPELL_FAILED_*` name; an unknown name fails the build.
+const fn code(name: &str) -> u8 {
+    let mut i = 0;
+    while i < WRATH_CAST_FAIL_KEYS.len() {
+        if same(WRATH_CAST_FAIL_KEYS[i], name) {
+            return i as u8;
+        }
+        i += 1;
+    }
+    panic!("not a build-12340 SpellCastResult name")
+}
+
+/// The reasons the client raises locally or tests, by their 12340 wire values.
+pub mod reason {
+    use super::code;
+
+    pub const AFFECTING_COMBAT: u8 = code("SPELL_FAILED_AFFECTING_COMBAT");
+    pub const ALREADY_AT_FULL_HEALTH: u8 = code("SPELL_FAILED_ALREADY_AT_FULL_HEALTH");
+    pub const ALREADY_AT_FULL_MANA: u8 = code("SPELL_FAILED_ALREADY_AT_FULL_MANA");
+    pub const ALREADY_AT_FULL_POWER: u8 = code("SPELL_FAILED_ALREADY_AT_FULL_POWER");
+    pub const BAD_IMPLICIT_TARGETS: u8 = code("SPELL_FAILED_BAD_IMPLICIT_TARGETS");
+    pub const BAD_TARGETS: u8 = code("SPELL_FAILED_BAD_TARGETS");
+    pub const CASTER_AURASTATE: u8 = code("SPELL_FAILED_CASTER_AURASTATE");
+    pub const CASTER_DEAD: u8 = code("SPELL_FAILED_CASTER_DEAD");
+    pub const CHARMED: u8 = code("SPELL_FAILED_CHARMED");
+    pub const CONFUSED: u8 = code("SPELL_FAILED_CONFUSED");
+    pub const CUSTOM_ERROR: u8 = code("SPELL_FAILED_CUSTOM_ERROR");
+    pub const DONT_REPORT: u8 = code("SPELL_FAILED_DONT_REPORT");
+    pub const EQUIPPED_ITEM: u8 = code("SPELL_FAILED_EQUIPPED_ITEM");
+    pub const EQUIPPED_ITEM_CLASS: u8 = code("SPELL_FAILED_EQUIPPED_ITEM_CLASS");
+    pub const EQUIPPED_ITEM_CLASS_MAINHAND: u8 = code("SPELL_FAILED_EQUIPPED_ITEM_CLASS_MAINHAND");
+    pub const EQUIPPED_ITEM_CLASS_OFFHAND: u8 = code("SPELL_FAILED_EQUIPPED_ITEM_CLASS_OFFHAND");
+    pub const FISHING_TOO_LOW: u8 = code("SPELL_FAILED_FISHING_TOO_LOW");
+    pub const FLEEING: u8 = code("SPELL_FAILED_FLEEING");
+    pub const GLYPH_SOCKET_LOCKED: u8 = code("SPELL_FAILED_GLYPH_SOCKET_LOCKED");
+    pub const HIGHLEVEL: u8 = code("SPELL_FAILED_HIGHLEVEL");
+    pub const INVALID_GLYPH: u8 = code("SPELL_FAILED_INVALID_GLYPH");
+    pub const ITEM_NOT_READY: u8 = code("SPELL_FAILED_ITEM_NOT_READY");
+    pub const MAINHAND_EMPTY: u8 = code("SPELL_FAILED_MAINHAND_EMPTY");
+    pub const MAX_SOCKETS: u8 = code("SPELL_FAILED_MAX_SOCKETS");
+    pub const MIN_SKILL: u8 = code("SPELL_FAILED_MIN_SKILL");
+    pub const MOVING: u8 = code("SPELL_FAILED_MOVING");
+    pub const NEED_AMMO: u8 = code("SPELL_FAILED_NEED_AMMO");
+    pub const NEED_EXOTIC_AMMO: u8 = code("SPELL_FAILED_NEED_EXOTIC_AMMO");
+    pub const NEED_MORE_ITEMS: u8 = code("SPELL_FAILED_NEED_MORE_ITEMS");
+    pub const NOPATH: u8 = code("SPELL_FAILED_NOPATH");
+    pub const NOT_BEHIND: u8 = code("SPELL_FAILED_NOT_BEHIND");
+    pub const NOT_FISHABLE: u8 = code("SPELL_FAILED_NOT_FISHABLE");
+    pub const NOT_MOUNTED: u8 = code("SPELL_FAILED_NOT_MOUNTED");
+    pub const NOT_READY: u8 = code("SPELL_FAILED_NOT_READY");
+    pub const NOT_UNSHEATHED: u8 = code("SPELL_FAILED_NOT_UNSHEATHED");
+    pub const NO_COMBO_POINTS: u8 = code("SPELL_FAILED_NO_COMBO_POINTS");
+    pub const NO_POWER: u8 = code("SPELL_FAILED_NO_POWER");
+    pub const NO_VALID_TARGETS: u8 = code("SPELL_FAILED_NO_VALID_TARGETS");
+    pub const ONLY_ABOVEWATER: u8 = code("SPELL_FAILED_ONLY_ABOVEWATER");
+    pub const ONLY_SHAPESHIFT: u8 = code("SPELL_FAILED_ONLY_SHAPESHIFT");
+    pub const ONLY_UNDERWATER: u8 = code("SPELL_FAILED_ONLY_UNDERWATER");
+    pub const ON_USE_ENCHANT: u8 = code("SPELL_FAILED_ON_USE_ENCHANT");
+    pub const OUT_OF_RANGE: u8 = code("SPELL_FAILED_OUT_OF_RANGE");
+    pub const PACIFIED: u8 = code("SPELL_FAILED_PACIFIED");
+    pub const PLAY_TIME: u8 = code("SPELL_FAILED_PLAY_TIME");
+    pub const PREVENTED_BY_MECHANIC: u8 = code("SPELL_FAILED_PREVENTED_BY_MECHANIC");
+    pub const REAGENTS: u8 = code("SPELL_FAILED_REAGENTS");
+    pub const REQUIRES_AREA: u8 = code("SPELL_FAILED_REQUIRES_AREA");
+    pub const REQUIRES_SPELL_FOCUS: u8 = code("SPELL_FAILED_REQUIRES_SPELL_FOCUS");
+    pub const ROOTED: u8 = code("SPELL_FAILED_ROOTED");
+    pub const SILENCED: u8 = code("SPELL_FAILED_SILENCED");
+    pub const SPELL_IN_PROGRESS: u8 = code("SPELL_FAILED_SPELL_IN_PROGRESS");
+    pub const STUNNED: u8 = code("SPELL_FAILED_STUNNED");
+    pub const TARGETS_DEAD: u8 = code("SPELL_FAILED_TARGETS_DEAD");
+    pub const TOO_CLOSE: u8 = code("SPELL_FAILED_TOO_CLOSE");
+    pub const TOO_MANY_OF_ITEM: u8 = code("SPELL_FAILED_TOO_MANY_OF_ITEM");
+    pub const TOO_MANY_SOCKETS: u8 = code("SPELL_FAILED_TOO_MANY_SOCKETS");
+    pub const TOTEMS: u8 = code("SPELL_FAILED_TOTEMS");
+    pub const TOTEM_CATEGORY: u8 = code("SPELL_FAILED_TOTEM_CATEGORY");
+    pub const UNIQUE_GLYPH: u8 = code("SPELL_FAILED_UNIQUE_GLYPH");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The constants are the table's rows: the live failure's 130 is `TOTEM_CATEGORY`, and the
+    /// values the 1.12 port used are not 12340's.
+    #[test]
+    fn the_named_reasons_are_build_12340_wire_values() {
+        assert_eq!(reason::TOTEM_CATEGORY, 130);
+        assert_eq!(wrath_key(130), Some("SPELL_FAILED_TOTEM_CATEGORY"));
+        assert_eq!(
+            (reason::DONT_REPORT, reason::NOT_READY, reason::OUT_OF_RANGE),
+            (0x1b, 0x43, 0x61)
+        );
+        assert_eq!(wrath_key(0), None, "success is no failure");
+    }
+}

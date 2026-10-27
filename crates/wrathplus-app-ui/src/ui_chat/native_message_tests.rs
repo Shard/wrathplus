@@ -183,8 +183,9 @@ fn native_types_do_not_use_vanilla_numbers() {
     assert_eq!(token(0x0c), Some("MONSTER_SAY"));
     assert_eq!(token(0x11), Some("CHANNEL"));
     assert_eq!(token(0x30), Some("ACHIEVEMENT"));
-    for t in 0..0x34 {
-        assert!(token(t).is_some());
+    // Every 12340 type names an event but the two whose event slot is nameless (`[0x9fbe80]`).
+    for t in (0..0x34).filter(|t| !matches!(t, 0x2f | 0x32)) {
+        assert!(token(t).is_some(), "{t:#x}");
     }
     assert_eq!(token(0xff), None);
 }
@@ -331,4 +332,21 @@ fn bubbling_types_reach_the_bubble_queue_with_their_text() {
         ]
     );
     assert!(bubbles.iter().all(|(g, ..)| *g == 0xF130_0029_3C00_47EB));
+}
+
+/// Every chat type the feed fires names a 12340 event: `[0x9fbe80]` routes `WHISPER_FOREIGN` to the
+/// plain whisper (id `0xc6`), and `BATTLENET`/`ARENA_POINTS` to nameless slots, which fire nothing.
+#[test]
+fn every_chat_type_fires_a_12340_event_or_nothing() {
+    let known: std::collections::HashSet<&str> = include_str!("../ui_script/events_12340.txt")
+        .lines()
+        .collect();
+    assert_eq!(token(0x08), Some("WHISPER"));
+    for kind in 0..=u8::MAX {
+        if let Some(suffix) = token(kind) {
+            let event = format!("CHAT_MSG_{suffix}");
+            assert!(known.contains(event.as_str()), "{kind:#x} fires {event}");
+        }
+    }
+    assert_eq!((token(0x2f), token(0x32)), (None, None));
 }

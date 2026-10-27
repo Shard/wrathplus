@@ -60,9 +60,8 @@ pub struct RollMetadata {
     pub item_limit_category: u32,
 }
 
-/// The template's sockets, for the socketing window: per socket block its colour mask (0 none;
-/// AzerothCore `SocketColor`) and raw content word, the bonus enchant, and the gem's own
-/// `GemProperties` id (0 for an item that is no gem).
+/// The template's sockets, for the socketing window: per block its colour mask (AzerothCore
+/// `SocketColor`, 0 none) and raw content word, the bonus enchant, the gem's `GemProperties` id.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SocketMetadata {
     pub colors: [u32; ITEM_SOCKET_BLOCKS],
@@ -219,7 +218,7 @@ pub fn decode_native_item_query_response(body: &[u8]) -> Result<(u32, Option<Nat
     let area = input.u32()?;
     let map = input.u32()?;
     let bag_family = input.u32()?;
-    let _totem_category = input.u32()?;
+    let totem_category = input.u32()?;
     let mut sockets = SocketMetadata::default();
     for i in 0..ITEM_SOCKET_BLOCKS {
         sockets.colors[i] = input.u32()?;
@@ -297,6 +296,7 @@ pub fn decode_native_item_query_response(body: &[u8]) -> Result<(u32, Option<Nat
                 area,
                 map,
                 bag_family,
+                totem_category,
             },
         }),
     ))
@@ -626,8 +626,8 @@ mod tests {
             (901, 1001, 1101)
         );
         assert_eq!(
-            (item.area, item.map, item.bag_family),
-            (1201, 1301, 0x0000_4121)
+            (item.area, item.map, item.bag_family, item.totem_category),
+            (1201, 1301, 0x0000_4121, 1401)
         );
     }
 

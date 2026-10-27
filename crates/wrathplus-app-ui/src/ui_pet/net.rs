@@ -13,12 +13,11 @@ use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use wrathplus_assets::coords::wow_to_bevy;
 
 use super::PetBar;
-use crate::net::{GuidIndex, NetHandlerApp, PetDismissSoundMessage, PetTalkMessage};
-use crate::app_core::errors::CastErrors;
 use crate::app_core::errors::PetTameFailures;
-use crate::app_core::state::Spells;
 use crate::app_core::errors::UiError;
 use crate::app_core::errors::UiErrorKeys;
+use crate::app_core::state::Spells;
+use crate::net::{GuidIndex, NetHandlerApp, PetDismissSoundMessage, PetTalkMessage};
 
 pub(super) fn register(app: &mut App) {
     use SessionEventKind as K;
@@ -95,9 +94,9 @@ fn on_action_feedback(In(ev): In<SessionEvent>, mut errors: ResMut<UiErrorKeys>)
     }
 }
 
-fn on_cast_failed(In(ev): In<SessionEvent>, mut errors: ResMut<CastErrors>) {
+fn on_cast_failed(In(ev): In<SessionEvent>) {
     if let SessionEvent::PetCastFailed { spell_id, reason } = ev {
-        pet_cast_failed(spell_id, reason, &mut errors);
+        pet_cast_failed(spell_id, reason);
     }
 }
 
@@ -317,14 +316,10 @@ fn pet_dismiss_sound(
     });
 }
 
-/// `SMSG_PET_CAST_FAILED`: queued as the pet's, so the display uses the reference's pet table
-/// (`0x6e8eb0`, not the player's `0x6e1a00`). Our cast state is untouched, and unlike the
-/// player's it writes no combat-log line and plays no error sound (`0x62c360`, `0x458a50`).
-fn pet_cast_failed(spell_id: u32, reason: Option<u8>, errors: &mut CastErrors) {
+/// The shared event's pet refusal, which a build 12340 session never raises: its
+/// `SMSG_PET_CAST_FAILED` is `spell::native_failure`'s. Logged only.
+fn pet_cast_failed(spell_id: u32, reason: Option<u8>) {
     debug!("net: pet cast failed — spell {spell_id} reason {reason:?}");
-    if let Some(reason) = reason {
-        errors.push_pet(spell_id, reason);
-    }
 }
 
 #[cfg(test)]

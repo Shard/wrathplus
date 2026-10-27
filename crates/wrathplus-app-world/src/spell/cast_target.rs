@@ -58,12 +58,12 @@ const UNIT_BITS: u16 = TF_UNIT
     | TF_CORPSE_ALLY;
 
 /// Client cast-failed reasons used when an enemy word cannot bind.
-pub(crate) const ERR_NO_TARGET: u8 = 0x09;
-pub(crate) const ERR_INVALID_TARGET: u8 = 0x0A;
+pub(crate) const ERR_NO_TARGET: u8 = crate::spell::cast_fail_keys::reason::BAD_IMPLICIT_TARGETS;
+pub(crate) const ERR_INVALID_TARGET: u8 = crate::spell::cast_fail_keys::reason::BAD_TARGETS;
 
 /// `SPELL_FAILED_MAINHAND_EMPTY`, "Your weapon hand is empty": the reference's own refusal for an
 /// imbue with an empty main hand (`0x6e5050`).
-pub(crate) const ERR_MAINHAND_EMPTY: u8 = 0x2d;
+pub(crate) const ERR_MAINHAND_EMPTY: u8 = crate::spell::cast_fail_keys::reason::MAINHAND_EMPTY;
 
 /// The dest-location bit, the ground-cast wire mask (`BindLocation 0x6e60f0`).
 const TF_DEST_LOCATION: u16 = 0x0040;
@@ -482,7 +482,8 @@ pub fn resolve_cast_target(
                 return CastWireTarget::Item(item)
             }
             // Empty hand: not a cursor. The cast tail re-tests the attribute (`0x6e504b`), clears
-            // the word (`0x6e5057`) and raises 0x2d, jumping over the cursor arm (`0x6e50ab`).
+            // the word (`0x6e5057`) and raises MAINHAND_EMPTY, jumping over the cursor arm
+            // (`0x6e50ab`).
             None => return CastWireTarget::RefusedAtArm(ERR_MAINHAND_EMPTY),
             // A residual the item arm cannot clear waits at the cursor in the reference; no
             // shipped row has one (all 22 carry `Targets == 0x10`).

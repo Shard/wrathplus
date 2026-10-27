@@ -50,7 +50,7 @@ const SPELL: &str = "DBFilesClient\\Spell.dbc";
 
 /// The 1.12 record's 173 fields plus slots for the 3.3.5-only columns the build-12340 layout
 /// maps in (`wrath_layouts::spell`); a 1.12 file no longer parses.
-const SPELL_FIELDS: usize = 195;
+const SPELL_FIELDS: usize = 197;
 /// `SpellFamilyFlags[2]`, family bits 64-95 (3.3.5 column 211; AzerothCore `flag96
 /// SpellFamilyFlags`, 209-211).
 const COL_SPELL_FAMILY_FLAGS_2: usize = 173;
@@ -74,6 +74,8 @@ const COL_ATTRIBUTES_EX6: usize = 190;
 /// `SpellDescriptionVariableID` (232): `$bc1`, and the row of `$<name>` definitions.
 const COL_EFFECT_BONUS_MULTIPLIER_1: usize = 191;
 const COL_DESCRIPTION_VARIABLES: usize = 194;
+/// `RequiredTotemCategoryID[2]` (3.3.5 columns 222-223): tool kinds, a Blacksmith Hammer.
+const COL_TOTEM_CATEGORY_1: usize = 195;
 /// `Category` (`+0x8`): the shared-cooldown `SpellCategory.dbc` id, such as potions 4.
 const COL_CATEGORY: usize = 2;
 const COL_CAST_UI: usize = 3;
@@ -627,6 +629,9 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 caster_aura_state: u32_at(r, COL_CASTER_AURA_STATE).unwrap_or(0),
                 target_aura_state: u32_at(r, COL_TARGET_AURA_STATE).unwrap_or(0),
                 totems: std::array::from_fn(|i| u32_at(r, COL_TOTEM_1 + i).unwrap_or(0)),
+                totem_categories: std::array::from_fn(|i| {
+                    u32_at(r, COL_TOTEM_CATEGORY_1 + i).unwrap_or(0)
+                }),
                 reagents: std::array::from_fn(|i| {
                     (
                         u32_at(r, COL_REAGENT_1 + i).unwrap_or(0),

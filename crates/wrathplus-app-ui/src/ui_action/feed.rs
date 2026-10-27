@@ -12,11 +12,11 @@ use bevy::prelude::*;
 use wrathplus_protocol::types::{ACTION_KIND_ITEM, ACTION_KIND_SPELL};
 use wrathplus_ui::script::{ActionSlot, ScriptValue, UiScript};
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::net::NetCommands;
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 
 use super::errors::{
     first_missing_totem, first_short_reagent, global_string, mount_result_key,
@@ -51,21 +51,25 @@ pub(super) struct FeedMemory {
 /// parameter limit; each is absent without game data. The shapeshift forms ride [`Spells`].
 #[derive(bevy::ecs::system::SystemParam)]
 pub(super) struct FailNameTables<'w> {
-    /// `SpellFocusObject.dbc`, for `0x5e`.
+    /// `SpellFocusObject.dbc`, for `REQUIRES_SPELL_FOCUS`.
     focus: Option<Res<'w, crate::ui_tradeskill::SpellFocus>>,
-    /// `AreaTable.dbc`, for `0x5d`.
+    /// `AreaTable.dbc`, for `REQUIRES_AREA`.
     areas: Option<Res<'w, crate::area::AreaTableRes>>,
-    /// `SpellMechanic.dbc`, for `0x8d`.
+    /// `SpellMechanic.dbc`, for `PREVENTED_BY_MECHANIC`.
     mechanics: Option<Res<'w, super::SpellMechanics>>,
+    /// `TotemCategory.dbc`, for `TOTEM_CATEGORY`.
+    categories: Option<Res<'w, crate::ui_tradeskill::TotemCategories>>,
 }
 
 impl FailNameTables<'_> {
     fn args<'a>(&'a self, spells: Option<&'a Spells>) -> cast_fail::FailArgs<'a> {
         cast_fail::FailArgs {
             arg: None,
+            power_type: None,
             focus: self.focus.as_deref().map(|f| &f.catalog),
             areas: self.areas.as_deref().map(|a| &a.0),
             mechanics: self.mechanics.as_deref().map(|m| &m.catalog),
+            categories: self.categories.as_deref().map(|c| &c.0),
             forms: spells.map(|s| &s.forms),
         }
     }
@@ -97,120 +101,67 @@ pub(super) fn feed_actions(
     let memory = memory.get(&script);
 
     // Cast failures become error lines through [`cast_fail`], all resolved before any event
-    // fires. The drain owns the arms that need our bags or the item cache: `0x78` and `0x5c`
-    // (`0x6e1e7f`) name the failing slot's item, found as the pre-send check finds it. On a cache
-    // miss the entry stays queued, as the reference's callback `0x6e29b0` redisplays on the answer.
+    // fires. A local `TOTEMS`/`REAGENTS` refusal carries no item, so the drain names the failing
+    // one as the pre-send check finds it; an item still in flight requeues the entry, as 12340's
+    // cache callback redisplays the line on the answer.
     let self_store = self_q.iter().next();
     let mut await_template: Vec<crate::app_core::errors::CastFail> = Vec::new();
-    let fail_args = name_tables.args(spells.as_deref());
+    let mut fail_args = name_tables.args(spells.as_deref());
+    fail_args.power_type = self_store.map(|s| s.0.unit_power_type());
+    let get = |key: &str| global_string(&script, key);
+    let item_name = |entry: u32| match items.template(entry, 0, &commands) {
+        Some(t) => cast_fail::ItemName::Named(t.name.clone()),
+        None if items.template_answered_unknown(entry) => cast_fail::ItemName::Unknown,
+        None => cast_fail::ItemName::Pending,
+    };
+    let subclass = |class: u32, mask: u32| {
+        sub_classes
+            .as_deref()
+            .and_then(|s| s.0.requirement_display_name(class, mask))
+    };
+    let lookups = cast_fail::Lookups {
+        get: &get,
+        item_name: &item_name,
+        subclass: &subclass,
+    };
     let texts: Vec<cast_fail::CastFailLine> = cast_errors
         .0
         .drain(..)
         .filter_map(|fail| {
-            let crate::app_core::errors::CastFail {
-                spell_id,
-                reason,
-                caster,
-                ..
-            } = fail;
-            let pet = caster == crate::app_core::errors::Caster::Pet;
-            let d = spells.as_ref().and_then(|s| s.catalog.get(spell_id));
-            let get = |key: &str| global_string(&script, key);
-            // The displayed line first and the log line from it, the reference's order.
-            let line = (|| -> Option<cast_fail::CastFailLine> {
-                // `0x19`-`0x1b` (`0x6e1db7`, through `0x6e2380`): the singular subclass name,
-                // "Must have a Wand equipped"; a multi-bit mask names its `ItemSubClassMask.dbc`
-                // group, else the first subclass, where the tooltip (`0x52eea7`) uses the plural
-                // and joins. The pet's table fills it too (`0x6e904d`).
-                if let (0x19..=0x1b, Some(d), Some(subs)) = (reason, d, sub_classes.as_deref()) {
-                    if let Some(name) = (d.equipped_item_class >= 0)
-                        .then(|| {
-                            subs.0.requirement_display_name(
-                                d.equipped_item_class as u32,
-                                d.equipped_item_subclass_mask,
-                            )
-                        })
-                        .flatten()
-                    {
-                        let key = cast_fail::CAST_FAIL_KEYS[reason as usize];
-                        return get(key)
-                            .filter(|s| !s.is_empty())
-                            .map(|t| cast_fail::CastFailLine::passthrough(t.replace("%s", &name)));
-                    }
+            let d = spells.as_ref().and_then(|s| s.catalog.get(fail.spell_id));
+            // With no store yet, the first one the spell names.
+            let local_item = || {
+                let d = d?;
+                if fail.reason == cast_fail::reason::TOTEMS {
+                    self_store
+                        .and_then(|s| first_missing_totem(d, s, &objects))
+                        .or_else(|| d.totems.iter().copied().find(|&t| t != 0))
+                } else {
+                    self_store
+                        .and_then(|s| first_short_reagent(d, s, &objects))
+                        .or_else(|| d.reagents.iter().map(|&(id, _)| id).find(|&id| id != 0))
                 }
-                // `0x31` (`0x6e1e54`): the same helper for class 6 (Projectile), mask `1 << arg`,
-                // the shift masked to five bits as x86 `shl` masks it (`0x6e1e5c`). The player's
-                // arm only: the pet's table (`0x6e93d0`) has no `0x31` entry. vmangos never sends
-                // the word (`Spell.cpp:4419-4443`), so against it this declines to the stem.
-                if let (false, 0x31, Some(arg), Some(subs)) =
-                    (pet, reason, fail.arg, sub_classes.as_deref())
-                {
-                    const ITEM_CLASS_PROJECTILE: u32 = 6;
-                    if let Some(name) = subs
-                        .0
-                        .requirement_display_name(ITEM_CLASS_PROJECTILE, 1u32 << (arg & 31))
-                    {
-                        let key = cast_fail::CAST_FAIL_KEYS[reason as usize];
-                        return get(key)
-                            .filter(|s| !s.is_empty())
-                            .map(|t| cast_fail::CastFailLine::passthrough(t.replace("%s", &name)));
-                    }
+            };
+            let arg = match fail.reason {
+                cast_fail::reason::TOTEMS | cast_fail::reason::REAGENTS => {
+                    fail.arg.or_else(local_item)
                 }
-                // `0x78` and `0x5c`, the player's arms only: the pet's table sends both to its
-                // generic arm.
-                if !pet && (reason == 0x78 || reason == 0x5c) {
-                    let d = d?;
-                    let failing = if reason == 0x78 {
-                        self_store
-                            .and_then(|s| first_missing_totem(d, s, &objects))
-                            // No self store yet: name the first tool.
-                            .or_else(|| d.totems.iter().copied().find(|&t| t != 0))
-                    } else {
-                        self_store
-                            .and_then(|s| first_short_reagent(d, s, &objects))
-                            .or_else(|| d.reagents.iter().map(|&(id, _)| id).find(|&id| id != 0))
-                    }?;
-                    let cached = items
-                        .template(failing, 0, &commands)
-                        .map(|i| i.name.clone());
-                    let name = match cached {
-                        Some(name) => name,
-                        // Answered unknown: the reference's callback literal (`0x838044`).
-                        None if items.template_answered_unknown(failing) => "UNKNOWN".to_string(),
-                        None => {
-                            // Pending: requeued as a redisplay, which is not logged.
-                            await_template.push(fail.requeued());
-                            return None;
-                        }
-                    };
-                    let key = if reason == 0x78 {
-                        "SPELL_FAILED_TOTEMS"
-                    } else {
-                        "SPELL_FAILED_REAGENTS"
-                    };
-                    return get(key)
-                        .filter(|s| !s.is_empty())
-                        .map(|t| cast_fail::CastFailLine::passthrough(t.replace("%s", &name)));
-                }
-                cast_fail::cast_fail_text(
-                    caster,
-                    reason,
-                    d,
-                    cast_fail::FailArgs {
-                        arg: fail.arg,
-                        ..fail_args
-                    },
-                    &get,
-                )
-            })();
-            // The reason, its wire word and both resolved buffers, so a declined arm is readable
-            // from a probe run.
+                _ => fail.arg,
+            };
+            let args = cast_fail::FailArgs { arg, ..fail_args };
+            let resolved = cast_fail::cast_fail_text(fail.reason, d, args, &lookups);
             debug!(
-                "ui_action: cast fail — {caster:?} spell {spell_id} reason {reason:#04x} \
-                 arg {:?} → {:?}",
-                fail.arg, line
+                "ui_action: cast fail — spell {} reason {:#04x} arg {:?} → {:?}",
+                fail.spell_id, fail.reason, fail.arg, resolved
             );
-            line
+            match resolved {
+                cast_fail::Resolved::Line(line) => Some(line),
+                cast_fail::Resolved::Silent => None,
+                cast_fail::Resolved::Await => {
+                    await_template.push(fail.requeued());
+                    None
+                }
+            }
         })
         .collect();
     cast_errors.0.extend(await_template);
@@ -471,7 +422,13 @@ fn spell_action_icon(
     auto_attack_icon(d, store, &spells.forms, objects, items, icons, commands)
         .or_else(|| {
             store
-                .filter(|s| super::toggle::active_action_toggle(spell_id, d, super::toggle::unit_auras(objects, s)))
+                .filter(|s| {
+                    super::toggle::active_action_toggle(
+                        spell_id,
+                        d,
+                        super::toggle::unit_auras(objects, s),
+                    )
+                })
                 .and_then(|_| d.active_icon.clone())
         })
         .or_else(|| d.icon.clone())

@@ -5,11 +5,12 @@
 //! the greying walk `0x6e3d60`.
 
 use super::SpellModifiers;
+use crate::spell::cast_fail_keys::reason;
 use wrathplus_formats::{RangeUnit, SpellDisplay, SpellRange};
 
 /// The range refusals `CanTargetUnit 0x6e4440` emits: "Out of range." and "Target too close".
-pub(super) const ERR_OUT_OF_RANGE: u8 = 0x59;
-pub(super) const ERR_TOO_CLOSE: u8 = 0x76;
+pub(super) const ERR_OUT_OF_RANGE: u8 = reason::OUT_OF_RANGE;
+pub(super) const ERR_TOO_CLOSE: u8 = reason::TOO_CLOSE;
 
 /// The range refusal, before `ArmCast`/`SendCast`, so an out-of-range press never runs the commit
 /// tail (the ranged sheath snap `0x6e5930` included): squared 3D distance against
@@ -50,12 +51,12 @@ const PREVENTION_PACIFY: u32 = 2;
 ///
 /// | # | arm | gate | reason |
 /// |---|---|---|---|
-/// | 1 | CHARMED | `UNIT_FIELD_CHARMEDBY != 0` and the charmer is not us | `0x14` |
-/// | 2 | STUNNED | bit 18, every spell | `0x64` |
-/// | 3 | SILENCED | bit 13 and `PreventionType == 1` | `0x60` |
-/// | 4 | PACIFIED | bit 17 and `PreventionType == 2` | `0x5a` |
-/// | 5 | FLEEING | bit 23 | `0x1e` |
-/// | 6 | CONFUSED | bit 22 | `0x16` |
+/// | 1 | CHARMED | `UNIT_FIELD_CHARMEDBY != 0` and the charmer is not us | `0x18` |
+/// | 2 | STUNNED | bit 18, every spell | `0x6c` |
+/// | 3 | SILENCED | bit 13 and `PreventionType == 1` | `0x68` |
+/// | 4 | PACIFIED | bit 17 and `PreventionType == 2` | `0x62` |
+/// | 5 | FLEEING | bit 23 | `0x22` |
+/// | 6 | CONFUSED | bit 22 | `0x1a` |
 ///
 /// A dead caster skips all six (`0x60980d`). Only `TryCast` calls this, so stun, silence and
 /// pacify refuse on the press without greying a button; the greying walk's own copy of these
@@ -65,7 +66,7 @@ const PREVENTION_PACIFY: u32 = 2;
 /// Each arm first scans the caster's `UNIT_FIELD_AURA[0..47]` for auras of its own types (charm
 /// `{6, 177, 2}`, stun `{12}`, silence `{27, 12, 60}`, pacify `{25, 12, 60}`, fear `{7}`, confuse
 /// `{5}`) and asks [`wrathplus_formats::grants_immunity`] of each: a hit lifts the refusal; a named
-/// blocking mechanic turns the reason into `0x8d`.
+/// blocking mechanic turns the reason into `0x93`.
 pub(crate) fn cast_cc_refusal(
     unit_flags: u32,
     health: Option<u32>,
@@ -85,7 +86,7 @@ pub(crate) fn cast_cc_refusal(
         return None;
     }
     let prevention = spell.map_or(0, |d| d.prevention_type);
-    // An exempt scan skips the arm; otherwise `0x8d` when it named a mechanic, else the arm's own
+    // An exempt scan skips the arm; otherwise `0x93` when it named a mechanic, else the arm's own
     // reason.
     let mut arm = |aura_types: &[u32], own_reason: u8| -> Option<(u8, Option<u32>)> {
         let scan = exempt(aura_types);
@@ -101,32 +102,32 @@ pub(crate) fn cast_cc_refusal(
     };
 
     if charmed_by_other {
-        if let Some(r) = arm(&[6, 177, 2], 0x14) {
+        if let Some(r) = arm(&[6, 177, 2], reason::CHARMED) {
             return Some(r);
         }
     }
     if unit_flags & UNIT_FLAG_STUNNED != 0 {
-        if let Some(r) = arm(&[12], 0x64) {
+        if let Some(r) = arm(&[12], reason::STUNNED) {
             return Some(r);
         }
     }
     if unit_flags & UNIT_FLAG_SILENCED != 0 && prevention == PREVENTION_SILENCE {
-        if let Some(r) = arm(&[27, 12, 60], 0x60) {
+        if let Some(r) = arm(&[27, 12, 60], reason::SILENCED) {
             return Some(r);
         }
     }
     if unit_flags & UNIT_FLAG_PACIFIED != 0 && prevention == PREVENTION_PACIFY {
-        if let Some(r) = arm(&[25, 12, 60], 0x5a) {
+        if let Some(r) = arm(&[25, 12, 60], reason::PACIFIED) {
             return Some(r);
         }
     }
     if unit_flags & UNIT_FLAG_FLEEING != 0 {
-        if let Some(r) = arm(&[7], 0x1e) {
+        if let Some(r) = arm(&[7], reason::FLEEING) {
             return Some(r);
         }
     }
     if unit_flags & UNIT_FLAG_CONFUSED != 0 {
-        if let Some(r) = arm(&[5], 0x16) {
+        if let Some(r) = arm(&[5], reason::CONFUSED) {
             return Some(r);
         }
     }
@@ -135,10 +136,10 @@ pub(crate) fn cast_cc_refusal(
 
 /// `SPELL_FAILED_PREVENTED_BY_MECHANIC`, "Can't do that while %s" with the blocking aura's
 /// `SpellMechanic.dbc` name.
-const REASON_PREVENTED_BY_MECHANIC: u8 = 0x8d;
+const REASON_PREVENTED_BY_MECHANIC: u8 = reason::PREVENTED_BY_MECHANIC;
 
 /// The mounted refusal, `0x6094f0`'s mounted block (`0x609c6c`): a live
-/// `UNIT_FIELD_MOUNTDISPLAYID` refuses with `0x39` "You are mounted" unless Attributes bit 24
+/// `UNIT_FIELD_MOUNTDISPLAYID` refuses with NOT_MOUNTED "You are mounted" unless Attributes bit 24
 /// (`0x01000000`, vmangos `SPELL_ATTR_ALLOW_WHILE_MOUNTED`, tested at `0x609c6f`) is set. A spell
 /// with no record has no exemption. The mount-required gate (`0x53`, `0x609c05`) is not built, as
 /// no 1.12 player spell needs it; it reads `0x40` in `AuraInterruptFlags` and, at `0x609c3a`, in
@@ -159,9 +160,9 @@ const INTERRUPT_ABOVE_WATER: u32 = 0x100;
 const ATTR_EX_CHANNELED: u32 = 0x44;
 
 /// `SPELL_FAILED_ONLY_ABOVEWATER`, "Cannot use while swimming".
-pub(super) const ERR_ONLY_ABOVEWATER: u8 = 0x50;
+pub(super) const ERR_ONLY_ABOVEWATER: u8 = reason::ONLY_ABOVEWATER;
 /// `SPELL_FAILED_ONLY_UNDERWATER`, "Can only use while swimming".
-pub(super) const ERR_ONLY_UNDERWATER: u8 = 0x58;
+pub(super) const ERR_ONLY_UNDERWATER: u8 = reason::ONLY_UNDERWATER;
 
 /// The water refusal, `0x6094f0`'s environment block `0x609d33`..`0x609de2`: after the
 /// mounted, posture and day/night legs, before the moving gate, so a druid on land is refused
@@ -169,8 +170,8 @@ pub(super) const ERR_ONLY_UNDERWATER: u8 = 0x58;
 ///
 /// | reason | bit | arm A, `AuraInterruptFlags` | arm B, `ChannelInterruptFlags` |
 /// |---|---|---|---|
-/// | [`ERR_ONLY_UNDERWATER`] `0x58` | `0x100` | `0x609d36`, `0x609d46` | `0x609d6f`, `0x609d7b` |
-/// | [`ERR_ONLY_ABOVEWATER`] `0x50` | `0x80` | `0x609da4`, `0x609dac` | `0x609db5`, `0x609dc2` |
+/// | [`ERR_ONLY_UNDERWATER`] `0x60` | `0x100` | `0x609d36`, `0x609d46` | `0x609d6f`, `0x609d7b` |
+/// | [`ERR_ONLY_ABOVEWATER`] `0x58` | `0x80` | `0x609da4`, `0x609dac` | `0x609db5`, `0x609dc2` |
 ///
 /// Swimming is `[[caster+0x118]+0x40] & 0x200000`, the movement word the moving gate reads. Arm B
 /// matters: Fishing ranks 2-4 (7731/7732/18248) carry the bit only in `ChannelInterruptFlags
@@ -199,7 +200,7 @@ pub(super) fn cast_water_refusal(move_flags_word: u32, spell: Option<&SpellDispl
 const AURA_INTERRUPT_MOVING_TURNING: u32 = 0x18;
 
 /// The moving refusal, `0x6094f0`'s moving block (`0x609de3`..`0x609e48`), the only local emitter
-/// of `0x2e` "Can't do that while moving": no packet, no cast bar, no GCD. vmangos accepts the
+/// of MOVING "Can't do that while moving": no packet, no cast bar, no GCD. vmangos accepts the
 /// cast (its moving reject covers only autorepeat and sit-still spells, `Spell.cpp:5437`) and
 /// then interrupts it. It refuses when all hold:
 ///
@@ -496,7 +497,10 @@ mod tests {
             "on land, Aquatic Form refuses: it is underwater-only"
         );
         assert_eq!(
-            cast_water_refusal(crate::app_core::movement::move_flags::SWIMMING, Some(aquatic)),
+            cast_water_refusal(
+                crate::app_core::movement::move_flags::SWIMMING,
+                Some(aquatic)
+            ),
             None,
             "swimming, it goes through"
         );
@@ -554,248 +558,5 @@ mod tests {
 }
 
 #[cfg(test)]
-mod cc_refusal_tests {
-    use super::*;
-
-    const STUNNED: u32 = 0x0004_0000;
-    const SILENCED: u32 = 0x0000_2000;
-    const PACIFIED: u32 = 0x0002_0000;
-    const CONFUSED: u32 = 0x0040_0000;
-    const FLEEING: u32 = 0x0080_0000;
-
-    fn spell(prevention_type: u32) -> SpellDisplay {
-        SpellDisplay {
-            prevention_type,
-            ..Default::default()
-        }
-    }
-
-    /// A scan that finds no aura: every arm answers its own reason.
-    fn no_auras() -> impl FnMut(&[u32]) -> wrathplus_formats::CcExemption {
-        |_: &[u32]| wrathplus_formats::CcExemption::default()
-    }
-
-    /// The reason alone, dropping the mechanic.
-    fn reason_of(v: Option<(u8, Option<u32>)>) -> Option<u8> {
-        v.map(|(r, _)| r)
-    }
-
-    /// A live caster, nobody else at the reins, no auras.
-    fn cc(flags: u32, d: &SpellDisplay) -> Option<u8> {
-        cast_cc_refusal(flags, Some(100), false, Some(d), &mut no_auras()).map(|(r, _)| r)
-    }
-
-    /// Stun, fear, charm and confuse refuse every spell; silence and pacify only the rows whose
-    /// `PreventionType` names them.
-    #[test]
-    fn crowd_control_refuses_by_prevention_type_except_the_unconditional_arms() {
-        // Fireball's shape (silence), Heroic Strike's (pacify), auto-attack's (neither).
-        let cast = spell(1);
-        let melee = spell(2);
-        let neither = spell(0);
-
-        // The arms with no per-spell gate refuse every row.
-        for (flags, reason) in [(STUNNED, 0x64), (FLEEING, 0x1e), (CONFUSED, 0x16)] {
-            for d in [&cast, &melee, &neither] {
-                assert_eq!(cc(flags, d), Some(reason), "flags {flags:#x}");
-            }
-        }
-        // Charm: somebody else holds the reins.
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                0,
-                Some(100),
-                true,
-                Some(&neither),
-                &mut no_auras()
-            )),
-            Some(0x14)
-        );
-
-        assert_eq!(cc(SILENCED, &cast), Some(0x60));
-        assert_eq!(cc(SILENCED, &melee), None);
-        assert_eq!(cc(SILENCED, &neither), None);
-
-        assert_eq!(cc(PACIFIED, &melee), Some(0x5a));
-        assert_eq!(cc(PACIFIED, &cast), None);
-
-        // No record claims no prevention.
-        assert_eq!(cc(0, &cast), None);
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                SILENCED,
-                Some(100),
-                false,
-                None,
-                &mut no_auras()
-            )),
-            None
-        );
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                STUNNED,
-                Some(100),
-                false,
-                None,
-                &mut no_auras()
-            )),
-            Some(0x64),
-            "the stun needs no record"
-        );
-    }
-
-    /// The reference's order, first match wins.
-    #[test]
-    fn the_arms_are_tried_in_the_references_order() {
-        let cast = spell(1);
-        // Charm (1) beats a stun.
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                STUNNED | SILENCED,
-                Some(100),
-                true,
-                Some(&cast),
-                &mut no_auras()
-            )),
-            Some(0x14)
-        );
-        // Stun (2) beats everything below it.
-        assert_eq!(
-            cc(STUNNED | SILENCED | PACIFIED | FLEEING | CONFUSED, &cast),
-            Some(0x64)
-        );
-        // Silence (3) beats fear (5) and confuse (6).
-        assert_eq!(cc(SILENCED | FLEEING | CONFUSED, &cast), Some(0x60));
-        // Out of silence's reach, fear takes it before confuse.
-        assert_eq!(cc(SILENCED | FLEEING | CONFUSED, &spell(0)), Some(0x1e));
-    }
-
-    /// The exemption's three outcomes at an arm.
-    #[test]
-    fn the_exemption_skips_an_arm_or_renames_its_refusal() {
-        let cast = spell(1);
-        let scan = |exempt: bool, mechanic: u32| {
-            move |_: &[u32]| wrathplus_formats::CcExemption { exempt, mechanic }
-        };
-
-        // No aura of the arm's type: its own reason.
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                STUNNED,
-                Some(100),
-                false,
-                Some(&cast),
-                &mut scan(false, 0)
-            )),
-            Some(0x64)
-        );
-        // A blocking aura the cast does not counter: renamed to `0x8d`.
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                STUNNED,
-                Some(100),
-                false,
-                Some(&cast),
-                &mut scan(false, 12)
-            )),
-            Some(0x8d)
-        );
-        // The cast grants immunity (Ice Block while stunned): the arm is skipped.
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                STUNNED,
-                Some(100),
-                false,
-                Some(&cast),
-                &mut scan(true, 0)
-            )),
-            None
-        );
-        // Skipping the stun arm still leaves silence below it.
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                STUNNED | SILENCED,
-                Some(100),
-                false,
-                Some(&cast),
-                &mut |types: &[u32]| {
-                    // Exempt from the stun arm `{12}` only.
-                    wrathplus_formats::CcExemption {
-                        exempt: types == [12],
-                        mechanic: 0,
-                    }
-                }
-            )),
-            Some(0x60)
-        );
-    }
-
-    /// Only the renamed refusal carries the mechanic.
-    #[test]
-    fn the_renamed_refusal_carries_the_mechanic_and_the_others_carry_nothing() {
-        let cast = spell(1);
-        let scan = |exempt: bool, mechanic: u32| {
-            move |_: &[u32]| wrathplus_formats::CcExemption { exempt, mechanic }
-        };
-
-        assert_eq!(
-            cast_cc_refusal(STUNNED, Some(100), false, Some(&cast), &mut scan(false, 12)),
-            Some((0x8d, Some(12)))
-        );
-        assert_eq!(
-            cast_cc_refusal(STUNNED, Some(100), false, Some(&cast), &mut scan(false, 0)),
-            Some((0x64, None))
-        );
-        assert_eq!(
-            cast_cc_refusal(STUNNED, Some(100), false, Some(&cast), &mut scan(true, 0)),
-            None
-        );
-    }
-
-    /// A dead caster skips all six arms (`0x60980d`'s `jle` on `UNIT_FIELD_HEALTH`).
-    #[test]
-    fn a_dead_caster_takes_no_crowd_control_refusal() {
-        let cast = spell(1);
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                STUNNED,
-                Some(0),
-                false,
-                Some(&cast),
-                &mut no_auras()
-            )),
-            None
-        );
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                0,
-                Some(0),
-                true,
-                Some(&cast),
-                &mut no_auras()
-            )),
-            None
-        );
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                STUNNED,
-                Some(1),
-                false,
-                Some(&cast),
-                &mut no_auras()
-            )),
-            Some(0x64)
-        );
-        // No health field yet is not death.
-        assert_eq!(
-            reason_of(cast_cc_refusal(
-                STUNNED,
-                None,
-                false,
-                Some(&cast),
-                &mut no_auras()
-            )),
-            Some(0x64)
-        );
-    }
-}
+#[path = "validator_cc_tests.rs"]
+mod cc_refusal_tests;

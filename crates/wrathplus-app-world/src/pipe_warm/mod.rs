@@ -18,7 +18,6 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{CachedPipelineState, PipelineCache, PipelineDescriptor};
 use bevy::render::{Render, RenderApp, RenderSystems};
 
-use crate::app_core::state::ClientState;
 use crate::loading_screen::LoadingScreen;
 use wrathplus_assets::materials::WowModelMaterial;
 use wrathplus_world::model_render::MaterialCache;
@@ -27,7 +26,9 @@ use wrathplus_world::particles::buffer::{
 };
 
 mod menagerie;
+mod release;
 use menagerie::{spawn_menagerie, BoothCamQuery, WarmLanes};
+use release::{verdict, Verdict, WARM_HARD_CAP_SECS, WARM_STALL_SECS};
 
 /// The channel between the main and render worlds, aligned to within one frame.
 #[derive(Resource, Clone)]
@@ -95,14 +96,10 @@ fn publish_compile_burst(warm: Res<WarmPass>) {
     wrathplus_world::thread_qos::COMPILE_BURST.store(bursting, Ordering::Relaxed);
 }
 
-/// Publish whether the frame is covered to the render world.
-fn publish_cover(
-    watch: Res<PipeWatch>,
-    loading: Res<LoadingScreen>,
-    state: Res<State<ClientState>>,
-) {
-    let covered = loading.covering() || *state.get() != ClientState::InWorld;
-    watch.0.covered.store(covered, Ordering::Relaxed);
+/// Publish whether the frame is covered to the render world: only a loading cover hides a
+/// compile. The glue screens are on screen, so a compile there is as live as one in world.
+fn publish_cover(watch: Res<PipeWatch>, loading: Res<LoadingScreen>) {
+    watch.0.covered.store(loading.covering(), Ordering::Relaxed);
 }
 
 /// Count the cache's pipelines after it queues this frame's builds, and warn on any new one
@@ -273,6 +270,9 @@ pub(crate) struct WarmPass {
     /// count it saw, for [`verdict`]'s stall test.
     last_progress: f32,
     settled_seen: usize,
+    /// A pass has run to its end (drained or released) in this process; the startup cover
+    /// lifts on it.
+    finished: bool,
 }
 
 impl WarmPass {
@@ -280,6 +280,26 @@ impl WarmPass {
     pub(crate) fn satisfied(&self) -> bool {
         self.done
     }
+
+    /// A pass has spawned under this cover, or ran to its end under an earlier one.
+    pub(crate) fn started(&self) -> bool {
+        self.spawned_at.is_some() || self.finished
+    }
+
+    /// A pass has run to its end in this process, drained or released by a net.
+    pub(crate) fn finished(&self) -> bool {
+        self.finished
+    }
+
+    #[cfg(test)]
+    pub(crate) fn mark_finished_for_test(&mut self) {
+        self.finished = true;
+    }
+}
+
+/// Whether this process warms at all: never in a capture, which must stay deterministic.
+pub(crate) fn runs_a_menagerie() -> bool {
+    !wrathplus_world::dev_state::deterministic_run()
 }
 
 /// How long after the last reveal `pending == 0` means drained: the counters cross worlds a frame
@@ -321,36 +341,6 @@ type WarmRigVis<'w, 's> = Query<
     (With<WarmRig>, Without<WarmBoothCam>),
 >;
 
-/// The pass holds the cover while it progresses, however slow the machine: a flat timeout released
-/// it with rigs unrevealed on a loaded machine (8 of 10 probe runs, 2026-10-27), and what was left
-/// compiled live in play. It releases on [`WARM_STALL_SECS`] with neither a rig revealed nor a
-/// pipeline settled (a hung or erroring build), and at [`WARM_HARD_CAP_SECS`] whatever the progress.
-const WARM_STALL_SECS: f32 = 5.0;
-/// The safety net: six times an unloaded drain (7–10 s), past any loaded one seen.
-const WARM_HARD_CAP_SECS: f32 = 60.0;
-
-/// What the pass does this frame.
-#[derive(Debug, PartialEq)]
-enum Verdict {
-    Drained,
-    Stalled,
-    Capped,
-    Wait,
-}
-
-/// The release rule, in seconds of `Time<Real>`: drained once every rig is revealed, nothing is
-/// pending and the settle window has passed; else a stall or the cap; else wait.
-fn verdict(now: f32, spawned: f32, last_progress: f32, drained: bool) -> Verdict {
-    if drained {
-        Verdict::Drained
-    } else if now - spawned >= WARM_HARD_CAP_SECS {
-        Verdict::Capped
-    } else if now - last_progress >= WARM_STALL_SECS {
-        Verdict::Stalled
-    } else {
-        Verdict::Wait
-    }
-}
 fn run_warm_pass(
     mut commands: Commands,
     mut warm: ResMut<WarmPass>,
@@ -378,7 +368,7 @@ fn run_warm_pass(
         return;
     }
     // No menagerie in a capture.
-    if wrathplus_world::dev_state::deterministic_run() {
+    if !runs_a_menagerie() {
         warm.done = true;
         return;
     }
@@ -516,6 +506,7 @@ fn finish(
     rigs: &Query<(Entity, Option<&ChildOf>), With<WarmRig>>,
 ) {
     warm.done = true;
+    warm.finished = true;
     warm.effect_tex = None;
     despawn_rigs(commands, rigs);
 }

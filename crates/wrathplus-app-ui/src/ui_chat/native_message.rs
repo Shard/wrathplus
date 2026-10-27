@@ -58,7 +58,8 @@ impl NativeChatFeed {
     }
 }
 
-/// AzerothCore SharedDefines.h ChatMsg (12340), not types::CHAT_MSG_* (5875).
+/// The `CHAT_MSG_*` suffix 12340 fires for a chat type: the event id table `[0x9fbe80]`, read by
+/// `0x4fdbc0` for types below `0x3e`. AzerothCore SharedDefines.h ChatMsg names the types.
 fn token(kind: u8) -> Option<&'static str> {
     Some(match kind {
         0x00 => "SYSTEM",
@@ -69,7 +70,8 @@ fn token(kind: u8) -> Option<&'static str> {
         0x05 => "OFFICER",
         0x06 => "YELL",
         0x07 => "WHISPER",
-        0x08 => "WHISPER_FOREIGN",
+        // Id `0xc6`, the plain whisper's: 12340 has no `CHAT_MSG_WHISPER_FOREIGN`.
+        0x08 => "WHISPER",
         0x09 => "WHISPER_INFORM",
         0x0a => "EMOTE",
         0x0b => "TEXT_EMOTE",
@@ -108,10 +110,8 @@ fn token(kind: u8) -> Option<&'static str> {
         0x2c => "BATTLEGROUND",
         0x2d => "BATTLEGROUND_LEADER",
         0x2e => "RESTRICTED",
-        0x2f => "BATTLENET",
         0x30 => "ACHIEVEMENT",
         0x31 => "GUILD_ACHIEVEMENT",
-        0x32 => "ARENA_POINTS",
         0x33 => "PARTY_LEADER",
         _ => return None,
     })
@@ -280,6 +280,11 @@ pub(super) fn deliver(
             return false;
         };
         script.fire_event("CHAT_MSG_ADDON", addon_args(msg, sender));
+        return true;
+    }
+    // `BATTLENET` (`0x2f`, id `0xed`) and `ARENA_POINTS` (`0x32`, id `0x292`) index event slots
+    // 12340 leaves nameless, so their lines reach no handler and fire nothing here.
+    if matches!(msg.chat_type, 0x2f | 0x32) {
         return true;
     }
     let Some(kind) = token(msg.chat_type) else {
