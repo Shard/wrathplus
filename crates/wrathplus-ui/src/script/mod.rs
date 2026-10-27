@@ -178,6 +178,7 @@ mod taxi;
 mod tick;
 use tick::instruction_budget_error;
 mod tooltip;
+mod tooltip_gather;
 mod tooltip_item;
 mod tooltip_links;
 mod tooltip_spell;

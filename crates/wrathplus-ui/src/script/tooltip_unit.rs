@@ -9,7 +9,7 @@ use super::tooltip::{append_line, clear_content, fire_cleared, show_or_hide_empt
 use super::unit::{is_civilian_kill, level_reads_unknown, unknownobject};
 use super::{KindState, Model, UnitState};
 use crate::layout::{Anchor, Point};
-use crate::strings::{fill, global, Arg};
+use crate::strings::{fill, Arg};
 use crate::widget::FrameHandle;
 
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
@@ -155,9 +155,9 @@ fn render_unit_view(lua: &Lua, this: &Table, unit: Option<UnitState>) -> mlua::R
     if u.pvp {
         append_line(lua, this, ("PvP".into(), WHITE), None, false)?;
     }
-    if let Some(key) = u.skinnable {
-        let line = global(lua, key).unwrap_or_else(|| "Skinnable".into());
-        append_line(lua, this, (line, RED), None, false)?;
+    if let Some((key, difficulty)) = u.skinnable {
+        let line = super::tooltip_gather::line(lua, key, difficulty);
+        append_line(lua, this, line, None, false)?;
     }
     // "Civilian" (`0x612550`): PvP-flagged, a civilian, hostile, and grey to kill (`0x5f0700`).
     if is_civilian_kill(&u, player_level) {
