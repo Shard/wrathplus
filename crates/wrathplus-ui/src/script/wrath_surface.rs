@@ -48,6 +48,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     install_trusted_secure_environment(lua)?;
     install_frame_methods(lua)?;
     wrath_cooldown::install(lua)?;
+    super::wrath_quest_poi::blob::install(lua)?;
     super::wrath_input_verbs::install(lua)?;
     install_compat(lua)
 }
@@ -85,14 +86,6 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
                 return setOwner(self, owner, ...)
             end
             function tooltips.GetOwner(self) return owners[self] end
-            -- QuestPOIFrame (the world map's quest blobs): accepted, not drawn.
-            for _, name in ipairs({ "DrawQuestBlob", "DrawBlob", "DrawNone", "SetFillTexture",
-                "SetBorderTexture", "SetFillAlpha", "SetBorderAlpha", "SetBorderScalar",
-                "EnableSmoothing", "EnableMerging", "UpdateMouseOverTooltip" }) do
-                methods[name] = function() end
-            end
-            function methods.GetNumTooltips() return 0 end
-            function methods.GetTooltipIndex() return nil end
             -- Sliders enable and disable like buttons.
             local disabled = setmetatable({}, { __mode = "k" })
             function sliders.Enable(self)

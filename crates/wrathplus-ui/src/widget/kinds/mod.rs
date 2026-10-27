@@ -49,10 +49,10 @@ pub enum FrameKind {
     GameTooltip,
     /// The `<Minimap>` widget, a game-layer factory (`0x495940`) the app draws the map into.
     Minimap,
-    /// Wrath's `<Cooldown>` (`ActionButtonTemplate.xml:63`): a `Frame` plus the sweep verbs, which
-    /// the engine paints from [`crate::script::QuadContent::CooldownSweep`]. Its factory address
-    /// in 12340 is untraced.
+    /// Wrath's `<Cooldown>` (`ActionButtonTemplate.xml:63`), a `Frame` plus the sweep verbs the
+    /// engine paints ([`crate::script::QuadContent::CooldownSweep`]); its factory is untraced.
     Cooldown,
+    QuestPoiFrame,
 }
 
 /// The kind of a [`Region`] leaf, the client's `CScriptRegion`-derived non-frame objects.
