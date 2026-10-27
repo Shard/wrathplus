@@ -203,7 +203,7 @@ fn arg(args: &MultiValue, i: usize) -> Value {
 }
 
 #[path = "wrath_quest_poi_order.rs"]
-mod order;
+pub(crate) mod order;
 #[path = "wrath_quest_poi_blob.rs"]
 pub(crate) mod blob;
 

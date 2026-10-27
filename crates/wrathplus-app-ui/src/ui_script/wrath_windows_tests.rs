@@ -243,3 +243,6 @@ mod chat_scroll;
 
 #[path = "wrath_quest_track_tests.rs"]
 mod quest_track;
+
+#[path = "wrath_quest_greeting_tests.rs"]
+mod quest_greeting;
