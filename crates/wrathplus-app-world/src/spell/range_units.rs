@@ -2,24 +2,24 @@
 //! and the caster's auto-attack target, each as its combat reach, player bit and motion
 //! ([`wrathplus_formats::RangeUnit`]).
 
+use bevy::ecs::system::SystemParam;
+use bevy::prelude::*;
 use wrathplus_formats::{RangeUnit, UnitMotion};
 use wrathplus_protocol::types::ObjectType;
 use wrathplus_protocol::MoveSpeeds;
-use bevy::ecs::system::SystemParam;
-use bevy::prelude::*;
 
+use crate::app_core::movement::move_flags;
+use crate::app_core::player::Player;
+use crate::app_core::session::Embodied;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::creature_anim::select::unify;
 use crate::creature_anim::Engaged;
-use crate::app_core::movement::move_flags;
 use crate::motion::CreatureSwimming;
 use crate::motion::RemoteMotion;
 use crate::motion::Spline;
 use crate::motion::UnitMoveModes;
 use crate::net::{current_speed, GuidIndex, UnitSpeeds};
-use crate::app_core::session::Embodied;
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
 
 /// The descriptor's default combat reach, before a unit's store streams.
 pub const DEFAULT_REACH: f32 = 1.5;
@@ -315,8 +315,8 @@ mod tests {
     #[test]
     fn the_press_reaches_the_moving_bonus_with_both_units_running() {
         use super::super::cast_target::CastTargeting;
-        use wrathplus_formats::{SpellDisplay, SpellRange};
         use bevy::ecs::system::RunSystemOnce;
+        use wrathplus_formats::{SpellDisplay, SpellRange};
 
         const ME: u64 = 0xF130_0000_0000_0001;
         let refusal = |caster_runs: bool, mob_runs: bool, yards: f32| {
@@ -368,9 +368,21 @@ mod tests {
                 .expect("the context builds")
         };
         assert_eq!(refusal(true, true, 7.0), None, "both running");
-        assert_eq!(refusal(true, true, 8.0), Some(0x59), "past 7.667");
-        assert_eq!(refusal(true, false, 7.0), Some(0x59), "the mob stands");
-        assert_eq!(refusal(false, true, 7.0), Some(0x59), "the caster stands");
+        assert_eq!(
+            refusal(true, true, 8.0),
+            Some(crate::spell::cast_fail_keys::reason::OUT_OF_RANGE),
+            "past 7.667"
+        );
+        assert_eq!(
+            refusal(true, false, 7.0),
+            Some(crate::spell::cast_fail_keys::reason::OUT_OF_RANGE),
+            "the mob stands"
+        );
+        assert_eq!(
+            refusal(false, true, 7.0),
+            Some(crate::spell::cast_fail_keys::reason::OUT_OF_RANGE),
+            "the caster stands"
+        );
         assert_eq!(refusal(false, false, 4.9), None, "the floor stands");
     }
 }

@@ -3,35 +3,29 @@
 //! ([`super::inflight`], [`super::cooldowns`], [`super::mods`]) and the windows' stores through
 //! [`Lifecycle`] and [`Scene`].
 
+use crate::spell::cast_fail_keys::reason;
 use crate::spell::cooldowns::CooldownsSpell;
 use std::time::{Duration, Instant};
 
+use bevy::prelude::*;
 use wrathplus_formats::LearnAnnouncement;
 use wrathplus_protocol::types::{ActionButton, SpellCooldown};
-use bevy::prelude::*;
 
 use super::cast_target::CastTargeting;
 use super::{
     ActiveChannel, AutoRepeatActive, CastCommit, CastLadder, Cooldowns, PendingCast,
     QueuedMeleeSpell,
 };
+use crate::app_core::errors::{CastErrors, UiError, UiErrorKeys};
+use crate::app_core::state::{AuraDurations, LearnedInTab, PlayerActions, Spells};
 use crate::creature_anim::{CastEvent, CastEventKind, Casting, SpellGoTargets};
 use crate::spell::cast_bar::{CastBarEdge, CastBarFeed};
-use crate::app_core::errors::CastErrors;
-use crate::app_core::state::PlayerActions;
-use crate::app_core::state::Spells;
-use crate::app_core::errors::UiError;
-use crate::app_core::errors::UiErrorKeys;
-use crate::app_core::state::AuraDurations;
-use crate::app_core::state::LearnedInTab;
 
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::ecs::system::SystemParam;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
+use crate::app_core::session::{ObjectStore, SelfGuid, SelfPlayer};
 use crate::net::{GuidIndex, NetCommands, NetHandlerApp};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfGuid;
-use crate::app_core::session::SelfPlayer;
 
 /// Register the spell's handlers; called from [`super::SpellPlugin`].
 pub(super) fn register(app: &mut App) {
@@ -191,8 +185,6 @@ fn on_cast_result(
         arg,
     } = ev
     {
-        // Build 12340 renumbered `SpellCastResult`; the tables below are 1.12's.
-        let reason = reason.map(crate::spell::cast_fail_keys::from_wrath);
         // A 3.3.5 server sends `SMSG_SPELL_COOLDOWN` for a player's own cast only when a modifier
         // changed it (AzerothCore `Player::AddSpellAndCategoryCooldowns`); the client starts the
         // `Spell.dbc` recovery itself when its cast goes off.
@@ -690,21 +682,20 @@ fn cast_result(
     if !success {
         // `HandleCastFailed 0x6e1a00` clears the GCD armed at send (`0x6e1d83 → 0x6e1630`), and the
         // bit-25 revert below drops a parked record; the spell's own recovery starts at SPELL_GO,
-        // which a failed cast never reaches. A failing cached auto-repeat spell with reason ≠ 0x17
+        // which a failed cast never reaches. A failing cached auto-repeat spell not DONT_REPORT
         // runs the full local cancel (`0x6e1cd9`–`0x6e1cea` → `0x6ea080`, the
         // `SMSG_CANCEL_AUTO_REPEAT` routine). A deselect arrives as this failure (vmangos
         // `HandleSetSelectionOpcode` → `Spell::cancel` → `SendCastResult(INTERRUPTED)`); target
         // death arrives as [`cancel_auto_repeat`].
         let now = Instant::now();
-        // Reason 0x17 DONT_REPORT exits before the GCD clear and the display (`6e1ce1`/`6e1cf7` →
-        // `0x6e224f`). The in-flight clear below still runs, as the reference's `0x6e741a` does
-        // once `HandleCastFailed` returns: vmangos sends 0x17 for real aborts.
-        let dont_report = reason == Some(0x17);
+        // DONT_REPORT skips the GCD clear and the display (12340 `0x808200`'s `!= 0x1b` gates);
+        // the in-flight clear below still runs, as AzerothCore sends it for real aborts.
+        let dont_report = reason == Some(reason::DONT_REPORT);
         if !dont_report {
             cooldowns.clear_gcd(spell_id, now);
-            // The bit-25 revert (`6e73cc–6e73e6`): a non-0x3c failure of a cooldown-on-event spell
-            // removes its parked record (a failed Feign Death or Stealth).
-            if reason != Some(0x3c)
+            // The bit-25 revert (`0x809af0`): a failure other than NOT_READY of a cooldown-on-event
+            // spell removes its parked record (a failed Feign Death or Stealth).
+            if reason != Some(reason::NOT_READY)
                 && spells
                     .and_then(|s| s.catalog.get(spell_id))
                     .is_some_and(|d| d.cooldown_on_event())
@@ -713,7 +704,7 @@ fn cast_result(
             }
         }
         let self_e = self_guid.0.and_then(|g| index.0.get(&g)).copied();
-        if auto_repeat.0 == Some(spell_id) && reason != Some(0x17) {
+        if auto_repeat.0 == Some(spell_id) && !dont_report {
             crate::creature_anim::cancel_auto_repeat_local(self_e, auto_repeat, commands, net);
         }
         // Only the failure of the cast the bar shows (keyed to our `Casting`) red-fades it: a
@@ -735,8 +726,6 @@ fn cast_result(
                     spell_id,
                     reason,
                     arg,
-                    // `SMSG_CAST_FAILED` is addressed to the caster, and this handler is ours.
-                    caster: crate::app_core::errors::Caster::Player,
                     redisplay: false,
                 });
             }
@@ -1291,7 +1280,9 @@ fn pet_go_cooldown(
         .0
         .get(&caster)
         .and_then(|&e| stores.get(e).ok())
-        .and_then(|s| s.0.unit_owner(wrathplus_protocol::OwnerFallback::SummonedBy))
+        .and_then(|s| {
+            s.0.unit_owner(wrathplus_protocol::OwnerFallback::SummonedBy)
+        })
         == Some(me)
 }
 
@@ -1676,11 +1667,11 @@ mod tests {
     /// running Fireball bar: the edge is keyed to our `Casting`.
     #[test]
     fn a_proc_go_mid_cast_does_not_finish_the_running_bar() {
+        use crate::app_core::session::SelfPlayer;
         use crate::combat_text::CombatTextSpawn;
         use crate::creature_anim::Casting;
         use crate::go_anim::GoLidOpen;
         use crate::net::Guid;
-        use crate::app_core::session::SelfPlayer;
         use bevy::ecs::system::RunSystemOnce;
 
         let mut app = App::new();
@@ -1812,9 +1803,9 @@ mod tests {
     /// `MSG_CHANNEL_START` removes it.
     #[test]
     fn a_cancelled_channel_never_turns_the_bar_red() {
+        use crate::app_core::session::SelfPlayer;
         use crate::creature_anim::Casting;
         use crate::net::Guid;
-        use crate::app_core::session::SelfPlayer;
         use bevy::ecs::system::RunSystemOnce;
 
         const BLIZZARD: u32 = 10;
@@ -1903,11 +1894,11 @@ mod tests {
     /// Speed-0 spell (`0x6e7d4e`), and silenced by `CombatDamage` (`0x607140`).
     #[test]
     fn the_gos_inline_miss_word_is_gold_instant_only_and_cvar_gated() {
+        use crate::app_core::session::SelfPlayer;
         use crate::combat_text::{CombatTextSpawn, COLOR_SPELL_GOLD};
         use crate::creature_anim::Casting;
         use crate::go_anim::GoLidOpen;
         use crate::net::Guid;
-        use crate::app_core::session::SelfPlayer;
         use bevy::ecs::system::RunSystemOnce;
 
         const SINISTER_STRIKE: u32 = 1752; // Speed 0: an instant melee ability
@@ -2087,11 +2078,11 @@ mod tests {
         display: fn() -> wrathplus_formats::SpellDisplay,
         mods: crate::spell::SpellModifiers,
     ) -> (u32, u32, u32, u64) {
+        use crate::app_core::session::SelfPlayer;
         use crate::combat_text::CombatTextSpawn;
         use crate::creature_anim::Casting;
         use crate::go_anim::GoLidOpen;
         use crate::net::Guid;
-        use crate::app_core::session::SelfPlayer;
         use bevy::ecs::system::RunSystemOnce;
 
         const SPELL: u32 = 2649;
@@ -2215,7 +2206,9 @@ mod tests {
         (
             armed(world.resource::<Cooldowns>()),
             armed(&world.resource::<crate::app_core::state::PetBar>().cooldowns),
-            world.resource::<crate::app_core::state::PetBar>().bar_signals,
+            world
+                .resource::<crate::app_core::state::PetBar>()
+                .bar_signals,
             world
                 .resource::<crate::app_core::state::PetBar>()
                 .cooldowns
@@ -2444,9 +2437,9 @@ mod tests {
     /// makes it the full cancel: the key and the shooting idle both drop.
     #[test]
     fn a_cast_result_fail_of_the_cached_auto_repeat_spell_disarms_the_shooting_idle() {
+        use crate::app_core::session::SelfPlayer;
         use crate::creature_anim::AutoRepeatArmed;
         use crate::net::Guid;
-        use crate::app_core::session::SelfPlayer;
         use bevy::ecs::system::RunSystemOnce;
 
         let mut app = App::new();
@@ -2520,8 +2513,8 @@ mod tests {
                 .unwrap();
         };
 
-        // Reason 0x17 is the one skip (`6e1ce1 cmp cl,0x17; je`): armed stays armed.
-        fire_fail(&mut app, 0x17);
+        // DONT_REPORT is the one skip: armed stays armed.
+        fire_fail(&mut app, reason::DONT_REPORT);
         assert_eq!(app.world().resource::<AutoRepeatActive>().0, Some(75));
         assert!(app
             .world()
@@ -2530,7 +2523,7 @@ mod tests {
             .is_some());
 
         // SPELL_FAILED_INTERRUPTED, the deselect's wire form, runs the full cancel.
-        fire_fail(&mut app, 0x1e);
+        fire_fail(&mut app, reason::FLEEING);
         assert_eq!(
             app.world().resource::<AutoRepeatActive>().0,
             None,
@@ -2676,11 +2669,11 @@ mod tests {
     /// - another caster's Backstab, nothing.
     #[test]
     fn a_go_deferred_spell_swings_at_its_first_hit_and_the_hunter_shots_do_not() {
+        use crate::app_core::session::SelfPlayer;
         use crate::combat_text::CombatTextSpawn;
         use crate::creature_anim::{Casting, Engaged};
         use crate::go_anim::GoLidOpen;
         use crate::net::{ClientCommand, Guid};
-        use crate::app_core::session::SelfPlayer;
         use bevy::ecs::system::RunSystemOnce;
 
         const BACKSTAB: u32 = 53;
@@ -2847,8 +2840,8 @@ mod tests {
     /// - a reply for a spell not in flight chains nothing (`0x6e7408`).
     #[test]
     fn a_hunter_shots_cast_result_chains_auto_shot_exactly_once() {
-        use crate::net::Guid;
         use crate::app_core::session::SelfPlayer;
+        use crate::net::Guid;
         use bevy::ecs::system::RunSystemOnce;
 
         const SERPENT_STING: u32 = 1978;
@@ -2939,7 +2932,11 @@ mod tests {
                         cast_result(
                             spell_id,
                             success,
-                            if success { None } else { Some(0x1b) },
+                            if success {
+                                None
+                            } else {
+                                Some(reason::OUT_OF_RANGE)
+                            },
                             None,
                             &mut commands,
                             &self_guid,

@@ -3,25 +3,25 @@
 //! [`feed_repair_costs`] the repair costs, and [`drain_merchant`] sends the Lua intents. A
 //! bag click sells through [`crate::ui_items`].
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{buy_result, sell_result, VendorItem};
 use wrathplus_world::interact::WorldRightPress;
-use bevy::prelude::*;
 
 use wrathplus_ui::script::{
     ItemStatsHead, MerchantItem, MerchantState, RepairCosts, ScriptValue, UiScript,
 };
 
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::entities::ItemDisplays;
+use crate::inventory::slot_guid;
 use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, Guid, NetCommands, Objects};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::ui_items::{item_link, wire_pos_for};
-use crate::inventory::slot_guid;
 use crate::ui_script::gate;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 use wrathplus_protocol::types::BAG_PLAYER_INVENTORY;
 
@@ -71,7 +71,9 @@ impl Plugin for UiMerchantPlugin {
                     // feed follows `UnitFeed`: `MERCHANT_SHOW`'s paint reads the item and
                     // player-requirement stores for `GetMerchantItemInfo`'s `isUsable`.
                     close_npc_session_out_of_range::<MerchantOpen>.before(feed_merchant),
-                    feed_merchant.after(crate::app_core::schedule::UnitFeed).in_set(UiFeed),
+                    feed_merchant
+                        .after(crate::app_core::schedule::UnitFeed)
+                        .in_set(UiFeed),
                     // Before `feed_char`: the `UNIT_INVENTORY_CHANGED` a repair fires refreshes the
                     // Repair All button from this total (`PaperDollFrame.lua:717-724`).
                     feed_repair_costs
@@ -946,19 +948,21 @@ pub mod purse_fixture {
 
     /// Template 1 alone, friend to its own group (masks 3/2/12), so the vendor is Friendly.
     fn factions() -> crate::app_core::state::Factions {
-        crate::app_core::state::Factions::from_catalog(wrathplus_formats::FactionCatalog::from_rows(
-            std::collections::HashMap::from([(
-                1,
-                wrathplus_formats::FactionTemplate {
-                    faction: 1,
-                    group_mask: 3,
-                    friend_group_mask: 2,
-                    enemy_group_mask: 12,
-                    ..Default::default()
-                },
-            )]),
-            std::collections::HashMap::new(),
-        ))
+        crate::app_core::state::Factions::from_catalog(
+            wrathplus_formats::FactionCatalog::from_rows(
+                std::collections::HashMap::from([(
+                    1,
+                    wrathplus_formats::FactionTemplate {
+                        faction: 1,
+                        group_mask: 3,
+                        friend_group_mask: 2,
+                        enemy_group_mask: 12,
+                        ..Default::default()
+                    },
+                )]),
+                std::collections::HashMap::new(),
+            ),
+        )
     }
 
     /// [`seat`] and the player with the sword at `slot_field`; returns the player's entity too.
@@ -1057,8 +1061,8 @@ mod tests {
         const FIELD_UNIT_FACTIONTEMPLATE: u16 =
             wrathplus_protocol::types::Field::UnitFactionTemplate.index();
         const FIELD_UNIT_NPC_FLAGS: u16 = wrathplus_protocol::types::Field::UnitNpcFlags.index();
-        use wrathplus_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
+        use wrathplus_protocol::ObjectFields;
 
         /// Absolute descriptor indices.
         const OBJECT_ENTRY: u16 = Field::ObjectEntry.index();
@@ -1146,9 +1150,9 @@ mod tests {
         money: u32,
     ) -> (Vec<ClientCommand>, Vec<String>, Vec<&'static str>) {
         const FIELD_UNIT_NPC_FLAGS: u16 = wrathplus_protocol::types::Field::UnitNpcFlags.index();
-        use wrathplus_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
         use purse_fixture::*;
+        use wrathplus_protocol::ObjectFields;
 
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut app = App::new();
@@ -1304,8 +1308,8 @@ mod tests {
             wrathplus_protocol::types::Field::PlayerInvSlotHead.index();
         const FIELD_UNIT_FACTIONTEMPLATE: u16 =
             wrathplus_protocol::types::Field::UnitFactionTemplate.index();
-        use wrathplus_protocol::ObjectFields;
         use purse_fixture::*;
+        use wrathplus_protocol::ObjectFields;
 
         /// `ITEM_FIELD_DURABILITY`, absolute.
         const ITEM_DURABILITY: u16 = Field::ItemDurability.index();
@@ -1592,6 +1596,7 @@ mod tests {
                 area: 0,
                 map: 0,
                 bag_family: 0,
+                totem_category: 0,
             }),
         );
         let resolved = resolve_item(&row(2129, 1, 3), &items, None, &commands, (None, None));

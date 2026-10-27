@@ -148,6 +148,9 @@ pub struct SpellDisplay {
     pub target_aura_state: u32,
     /// `Totem[2]` (columns 40-41): tools that must be carried, not consumed, such as a hammer.
     pub totems: [u32; 2],
+    /// `RequiredTotemCategoryID[2]`: `TotemCategory.dbc` tool kinds, served by any carried item
+    /// of a compatible category (`TotemCategoryCatalog::serves`).
+    pub totem_categories: [u32; 2],
     /// `Reagent[8]` and `ReagentCount[8]` (columns 42-49, 50-57): consumed items and counts.
     pub reagents: [(u32, u32); 8],
     /// `EquippedItemClass` (column 58, signed): the item class a worn item must be; -1 is none.
@@ -606,18 +609,18 @@ pub enum LearnAnnouncement {
 /// A [`SpellDisplay::form_refusal`] verdict: the cast-fail reason `0x612480` writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormRefusal {
-    /// `SPELL_FAILED_NOT_SHAPESHIFT` (0x3d): a `StancesNot` hit, or a no-shapeshift spell in one.
+    /// `SPELL_FAILED_NOT_SHAPESHIFT` (0x44): a `StancesNot` hit, or a no-shapeshift spell in one.
     NotShapeshift,
-    /// `SPELL_FAILED_ONLY_SHAPESHIFT` (0x56, "Must be in %s"): not in a required form.
+    /// `SPELL_FAILED_ONLY_SHAPESHIFT` (0x5e, "Must be in %s"): not in a required form.
     OnlyShapeshift,
 }
 
 impl FormRefusal {
-    /// The `SPELL_FAILED_*` reason byte.
+    /// The `SPELL_FAILED_*` reason byte, build 12340's numbering.
     pub fn reason(self) -> u8 {
         match self {
-            FormRefusal::NotShapeshift => 0x3d,
-            FormRefusal::OnlyShapeshift => 0x56,
+            FormRefusal::NotShapeshift => 0x44,
+            FormRefusal::OnlyShapeshift => 0x5e,
         }
     }
 }

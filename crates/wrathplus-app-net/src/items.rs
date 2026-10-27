@@ -11,8 +11,8 @@ use wrathplus_protocol::{ItemInfo, ObjectFields};
 
 use bevy::ecs::system::SystemParam;
 
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, Objects};
 use crate::app_core::session::ObjectStore;
+use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, Objects};
 use crate::query_cache::QueryCache;
 
 /// An item or container entity's kind (`TYPEMASK_ITEM` / `TYPEMASK_CONTAINER`), with no model or
@@ -176,8 +176,15 @@ impl ItemChanges<'_, '_> {
 #[derive(SystemParam)]
 pub struct Inventory<'w, 's> {
     pub self_store: Query<'w, 's, &'static ObjectStore, With<crate::app_core::session::SelfPlayer>>,
-    pub self_changed:
-        Query<'w, 's, (), (With<crate::app_core::session::SelfPlayer>, Changed<ObjectStore>)>,
+    pub self_changed: Query<
+        'w,
+        's,
+        (),
+        (
+            With<crate::app_core::session::SelfPlayer>,
+            Changed<ObjectStore>,
+        ),
+    >,
     pub objects: Objects<'w, 's>,
     pub changes: ItemChanges<'w, 's>,
 }
@@ -439,12 +446,7 @@ impl Items {
 
     /// The template for `entry` if known; a miss asks once per entry per connection (`guid` rides
     /// along, `0` for template-only). A cached negative is also `None`, without a re-ask.
-    pub fn template(
-        &self,
-        entry: u32,
-        guid: u64,
-        commands: &NetCommands,
-    ) -> Option<&ItemInfo> {
+    pub fn template(&self, entry: u32, guid: u64, commands: &NetCommands) -> Option<&ItemInfo> {
         if self.templates.answered(entry) {
             return self.templates.get(entry);
         }
@@ -578,10 +580,7 @@ impl TestDeps {
     }
 
     /// Run `f` with the object lookup, the template cache and the command channel borrowed apart.
-    pub fn with_objects<R>(
-        &mut self,
-        f: impl FnOnce(&Objects, &Items, &NetCommands) -> R,
-    ) -> R {
+    pub fn with_objects<R>(&mut self, f: impl FnOnce(&Objects, &Items, &NetCommands) -> R) -> R {
         let (world, items, commands) = (&mut self.world, &self.items, &self.commands);
         let mut state = bevy::ecs::system::SystemState::<Objects>::new(world);
         let objects = state.get(world);
@@ -780,6 +779,7 @@ pub fn test_template(name: &str) -> ItemInfo {
         area: 0,
         map: 0,
         bag_family: 0,
+        totem_category: 0,
     }
 }
 

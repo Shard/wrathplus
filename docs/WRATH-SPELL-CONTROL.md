@@ -48,9 +48,10 @@ bodies as AC's handlers read them; no server acceptance is claimed:
   0 decline), 0174 pet set action (one or two pairs; AC counts them by body size), 0175 pet action,
   0176 abandon, 0177 rename (no declined names), 026B pet cancel aura, 026D cancel auto-repeat,
   02EA pet stop attack, 02F3 pet spell autocast.
+- Also with producers: 0375 cancel mount aura (`Dismount()`), 0414 totem destroyed
+  (`DestroyTotem(slot)`), and 03F8 spell click (below).
 - Transport-only (`ClientCommand::NativeSpellControl`, no producer yet): 0279 request pet info,
-  029B cancel growth aura, 0375 cancel mount aura, 03F8 spell click, 0414 totem destroyed,
-  047A pet learn talent.
+  029B cancel growth aura, 047A pet learn talent.
 
 **Not in this unit**: 01F0 pet cast spell (needs a native `SpellCastTargets` writer and a
 producer), the vehicle seat/exit requests 046D/0476..0479 (they carry movement info; movement
@@ -147,3 +148,68 @@ One read-only Ghidra round on build 12340 `Wow.exe` (`WireASpellCtl.java`, log
     drops the selection and sends `CMSG_SET_SELECTION` 0. Any other selection stays.
   - Here `spell/native_control.rs` raises `target::DeselectGuid(caster)`, the existing
     guid-scoped deselect.
+
+## The spell click
+
+One read-only Ghidra round on build 12340 `Wow.exe` (`WireASpellClick.java`, log
+`azb-live/wire-a/azb-wire-ghidra-ql/spellclick-decomp.log`) read the right-click service ladder
+`0x6ddbb0` and the only sender of `CMSG_SPELLCLICK`, `0x6d2740` (the `u64` guid AzerothCore's
+`HandleSpellClick` reads).
+
+- The spell click is the ladder's rung after every service bit. It sends and returns before the
+  Talk gesture (`0x73ad70`) the other arms play.
+- Its gate `0x71c570` reads the unit's descriptor:
+  - `UNIT_NPC_FLAGS` bit 24 (SPELLCLICK);
+  - not `UNIT_FIELD_FLAGS_2` `0x2000` (`UNIT_FLAG2_PREVENT_SPELL_CLICK`);
+  - under `0x1000` (`UNIT_FLAG2_RESTRICT_PARTY_INTERACTION`), the unit is a party member or that
+    member's pet (`0x52c8c0`), or a raid member or that member's pet (`0x573200`). A streamed
+    member's pet is its `CHARM`, else its `SUMMON`; an unstreamed one is its record's pet guid.
+- Here, `target/click.rs` adds the rung when no service arm matches (`spell_clickable`,
+  `group_owns`). Pinned in `click_ladder_tests.rs`.
+- Not built, reported: the ladder's other rungs past ours.
+  - Bit 23 sends `CMSG_GUILD_BANKER_ACTIVATE` for a guild-banker NPC (`0x6d23c0`).
+  - After the spell click, `0x723050` gates `0x6d27c0`, which opens `0x4A8`, a vehicle request
+    (vehicle family).
+  - Bit 26 opens the mailbox for a mailbox NPC (`0x56da60`; mail is Wire B's).
+
+## Cast results
+
+A live failure (session 115138) showed "Unknown reason" for `SPELL_FAILED_TOTEM_CATEGORY` (130,
+category 162, the Blacksmith Hammer): `spell::net` mapped every 12340 reason by name to 1.12's
+numbering, which has no such failure, and 1.12's `SPELL_FAILED_UNKNOWN` (145) came out. One
+read-only Ghidra round (`WireACastFail.java`, log `azb-live/wire-a/azb-wire-ghidra-ql/
+castfail-decomp.log`) read the handler `0x809af0` (registered for `0x130`), its formatter
+`0x808200`, the message-row pick `0x807f10` and the key table `0x7fcca0`, which equals
+`WRATH_CAST_FAIL_KEYS` row for row (187).
+
+- Every layer now speaks 12340's numbering: the server's results, the local cast checks
+  (validator, cast ladder, targeting, item binds, the skinning click) and the display.
+  `spell::cast_fail_keys::reason` names each value by its `SPELL_FAILED_*` key at compile time.
+  The 1.12 table and `from_wrath` are gone.
+- `ui_action::cast_fail` is the 12340 ladder:
+  1. the reason's key, its `_PET` variant first for a pet-teaching spell, or
+     `SPELL_FAILED_CUSTOM_ERROR_n`;
+  2. the argument arm fills the template: totem category, spell focus, area and mechanic names
+     from their DBCs; the reagent or totem item from the cache, waiting while it is in flight;
+     the equipped-item and exotic-ammo subclass names; the shapeshift forms; our power noun;
+     the fishing skill;
+  3. the message row (the cooldown rows by category and ability bit, the bad-target rows by the
+     target mask), shown with the filled text as its `%s`.
+- `DONT_REPORT` shows nothing; the bit-25 revert skips `NOT_READY` (the handler's `!= 0x43`).
+- Not carried, labelled: the wire's second argument word (the shared event holds one), so
+  `NEED_MORE_ITEMS` and `MIN_SKILL` keep their templates and the equipped-item arm names the
+  spell record's class and mask, which is what AzerothCore sends. Not built:
+  `TOO_MANY_OF_ITEM`'s limit-category row, `UNIQUE_GLYPH`'s glyph name, `NO_POWER`'s
+  `PowerDisplay.dbc` name.
+- The shared `PetCastFailed` event is never raised by a 12340 session; its owner only logs. The
+  pet's `SMSG_PET_CAST_FAILED` stays `spell::native_failure`'s.
+
+## Recipe tools
+
+`GetTradeSkillTools` (`0x5de620`) lists the spell focus, then `Totem[0..2]` by item, then
+`RequiredTotemCategoryID[0..2]` by `TotemCategory.dbc` name (`Spell.dbc` columns 222-223, now
+read). A category is met by carrying any item whose own template category has the same type and
+covers the mask (`0x7548f0`; AzerothCore `IsTotemCategoryCompatibleWith`); the item template's
+`TotemCategory` word is now kept. Not built: the `RequiredAreasID` entry between the focus and the
+totems.
+

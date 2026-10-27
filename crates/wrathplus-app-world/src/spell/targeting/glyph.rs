@@ -19,16 +19,16 @@
 //! Labelled: a refusal shows its line through the cast-error path (`0x808200`) and keeps the wait.
 //! The `USE_GLYPH` site is not traced; it fires when the wait begins.
 
+use bevy::prelude::*;
 use wrathplus_formats::glyphs::GlyphCatalog;
 use wrathplus_formats::SpellDisplay;
 use wrathplus_protocol::ObjectFields;
-use bevy::prelude::*;
 
 /// `SPELL_EFFECT_APPLY_GLYPH`.
 const APPLY_GLYPH: u32 = 74;
-const INVALID_GLYPH: u8 = 0xaf;
-const UNIQUE_GLYPH: u8 = 0xb0;
-const SOCKET_LOCKED: u8 = 0xb1;
+use crate::spell::cast_fail_keys::reason::{
+    GLYPH_SOCKET_LOCKED as SOCKET_LOCKED, INVALID_GLYPH, UNIQUE_GLYPH,
+};
 
 /// The `PlaceGlyphInSocket` calls the StaticPopup host forwarded, 0-based sockets.
 #[derive(Resource, Default)]
@@ -42,7 +42,10 @@ pub(crate) fn load(mut commands: Commands, assets: Option<Res<wrathplus_assets::
     use wrathplus_assets::LockRecover;
     let Some(assets) = assets else { return };
     let mut chain = assets.chain.lock_recover();
-    if !matches!(chain.profile(), wrathplus_formats::DataProfile::Wrath { .. }) {
+    if !matches!(
+        chain.profile(),
+        wrathplus_formats::DataProfile::Wrath { .. }
+    ) {
         return;
     }
     match wrathplus_formats::glyphs::load_glyph_catalog(&mut chain) {

@@ -63,6 +63,7 @@ impl Default for SpellDisplay {
             caster_aura_state: 0,
             target_aura_state: 0,
             totems: [0; 2],
+            totem_categories: [0; 2],
             reagents: [(0, 0); 8],
             equipped_item_class: -1,
             equipped_item_subclass_mask: 0,

@@ -1,8 +1,8 @@
 //! The UI error line's queues: refusals that world, net and UI code raise and `ui_action`'s
 //! drain shows. `ui_action::errors` keeps the resolvers and re-exports these from its old path.
 
-use wrathplus_ui::messages::MsgKind;
 use bevy::prelude::*;
+use wrathplus_ui::messages::MsgKind;
 
 /// Cast failures for the UI error line; the spell id lets the display key on the spell's record.
 #[derive(Resource, Default)]
@@ -14,56 +14,40 @@ impl CastErrors {
         self.0.push(CastFail::local(spell_id, reason));
     }
 
-    /// Queue a client-local refusal with an argument word, the crowd-control `0x8d`.
+    /// Queue a client-local refusal with an argument word, the crowd-control
+    /// `PREVENTED_BY_MECHANIC`.
     pub fn push_local_arg(&mut self, spell_id: u32, reason: u8, arg: u32) {
         self.0.push(CastFail {
             spell_id,
             reason,
             arg: Some(arg),
-            caster: Caster::Player,
-            redisplay: false,
-        });
-    }
-
-    /// Queue the pet's `SMSG_PET_CAST_FAILED` refusal, which carries no argument word
-    /// (vmangos `Packets/Pet.cpp:127-132`).
-    pub fn push_pet(&mut self, spell_id: u32, reason: u8) {
-        self.0.push(CastFail {
-            spell_id,
-            reason,
-            arg: None,
-            caster: Caster::Pet,
             redisplay: false,
         });
     }
 }
 
-/// One queued cast failure. `arg` fills the message's `%s` (the arm table `0x6e1d8e`); the
-/// reference raises its local refusals with none, except the crowd-control `0x8d` (`0x6094f0`),
-/// which names the blocking aura's `SpellMechanic.dbc` id.
+/// One queued cast failure of ours, in build 12340's reason numbering
+/// (`spell::cast_fail_keys::reason`). `arg` is the wire's first argument word, which fills the
+/// message's `%s`; a local refusal has none, except the crowd-control `PREVENTED_BY_MECHANIC`,
+/// which names the blocking aura's `SpellMechanic.dbc` id. The pet's refusals are
+/// `spell::native_failure`'s.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CastFail {
     pub spell_id: u32,
     pub reason: u8,
     pub arg: Option<u32>,
-    /// Whose refusal this is, which picks the reference's message table ([`Caster`]).
-    pub caster: Caster,
-    /// A retry after the item template landed (the `0x78`/`0x5c` cache miss). The reference's
-    /// first pass exits past both the line and the log (`0x6e1eab`, `0x6e1efc`); its retry, the
-    /// cache callback `0x6e29b0`, calls `DisplayError` directly and never `0x62c360`, so a
-    /// redisplay is not logged.
+    /// A retry after the item template landed (the `TOTEMS`/`REAGENTS` cache miss): the cache
+    /// callback redisplays the line, which is not logged again.
     pub redisplay: bool,
 }
 
 impl CastFail {
-    /// A client-local refusal, with no argument word; always the player's, since the server
-    /// decides every pet refusal.
+    /// A client-local refusal, with no argument word.
     pub const fn local(spell_id: u32, reason: u8) -> Self {
         Self {
             spell_id,
             reason,
             arg: None,
-            caster: Caster::Player,
             redisplay: false,
         }
     }
@@ -75,18 +59,6 @@ impl CastFail {
             ..self
         }
     }
-}
-
-/// Who failed to cast, which picks the reference's handler: `SMSG_CAST_RESULT` lands in
-/// `0x6e1a00` and `SMSG_PET_CAST_FAILED` in `0x6e8eb0`, each with its own reason-to-errorId map;
-/// the rest of `ui_action::cast_fail::cast_fail_text` is shared.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Caster {
-    /// Ours: `SMSG_CAST_RESULT` and every local refusal.
-    #[default]
-    Player,
-    /// The pet's or the charm's: `SMSG_PET_CAST_FAILED` only.
-    Pet,
 }
 
 /// (Dis)mount refusals from `SMSG_MOUNTRESULT`/`SMSG_DISMOUNTRESULT` as `(mount, code)`, resolved

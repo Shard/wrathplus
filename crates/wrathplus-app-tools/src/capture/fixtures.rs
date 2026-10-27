@@ -90,57 +90,13 @@ pub(super) fn seed_ui_fixture(
 
     let template = |name: &str, quality: u32| wrathplus_protocol::types::ItemInfo {
         class: 4,
-        subclass: 0,
         name: name.into(),
-        display_info_id: 0, // per-row display comes from the vendor/loot row itself
+        // The per-row display comes from the vendor/loot row itself.
         quality,
-        flags: 0,
-        buy_price: 0,
-        sell_price: 0,
-        inventory_type: 0,
         allowable_class: -1,
         allowable_race: -1,
-        item_level: 0,
-        required_level: 0,
-        required_skill: 0,
-        required_skill_rank: 0,
-        required_spell: 0,
-        required_honor_rank: 0,
-        required_city_rank: 0,
-        required_rep_faction: 0,
-        required_rep_rank: 0,
-        max_count: 0,
         stackable: 1,
-        container_slots: 0,
-        stats: Vec::new(),
-        damages: Vec::new(),
-        dmg_min: 0.0,
-        dmg_max: 0.0,
-        dmg_type: 0,
-        armor: 0,
-        resistances: [0; 6],
-        delay_ms: 0,
-        ammo_type: 0,
-        ranged_mod_range: 0.0,
-        spells: Vec::new(),
-        spell_charges_0: 0,
-        use_spell: None,
-        bonding: 0,
-        description: String::new(),
-        page_text: 0,
-        language_id: 0,
-        page_material: 0,
-        start_quest: 0,
-        lock_id: 0,
-        material: 0,
-        sheath: 0,
-        random_property: 0,
-        block: 0,
-        item_set: 0,
-        max_durability: 0,
-        area: 0,
-        map: 0,
-        bag_family: 0,
+        ..Default::default()
     };
 
     match fixture {
@@ -390,22 +346,24 @@ pub(super) fn seed_ui_fixture(
             };
             quest.open(
                 NPC_GUID,
-                crate::app_core::state::QuestView::Detail(wrathplus_protocol::types::QuestDetails {
-                    wrath: None,
-                    npc: NPC_GUID,
-                    quest_id: 783,
-                    title: "A Threat Within".into(),
-                    details:
-                        "Kobolds have infested the Echo Ridge Mine to the northeast. Slay them \
+                crate::app_core::state::QuestView::Detail(
+                    wrathplus_protocol::types::QuestDetails {
+                        wrath: None,
+                        npc: NPC_GUID,
+                        quest_id: 783,
+                        title: "A Threat Within".into(),
+                        details:
+                            "Kobolds have infested the Echo Ridge Mine to the northeast. Slay them \
                               and return to me."
-                            .into(),
-                    objectives: "Kill 8 Kobold Vermin.".into(),
-                    auto_finish: 1,
-                    choices: vec![choice(92_001, DISP_SWORD), choice(92_002, DISP_STONE)],
-                    rewards: vec![choice(92_003, DISP_SHIELD)],
-                    money: 1234, // 12s 34c
-                    reward_spell: 0,
-                }),
+                                .into(),
+                        objectives: "Kill 8 Kobold Vermin.".into(),
+                        auto_finish: 1,
+                        choices: vec![choice(92_001, DISP_SWORD), choice(92_002, DISP_STONE)],
+                        rewards: vec![choice(92_003, DISP_SHIELD)],
+                        money: 1234, // 12s 34c
+                        reward_spell: 0,
+                    },
+                ),
             );
         }
         UiFixture::QuestGreeting => {
@@ -427,28 +385,30 @@ pub(super) fn seed_ui_fixture(
             // The multi-quest greeting: two available quests, bullet rows under "Available Quests".
             quest.open(
                 NPC_GUID,
-                crate::app_core::state::QuestView::Greeting(wrathplus_protocol::types::QuestGiverList {
-                    npc: NPC_GUID,
-                    greeting: "Greetings, $N. The town of Goldshire needs able hands.".into(),
-                    emote_delay: 0,
-                    emote: 0,
-                    quests: vec![
-                        wrathplus_protocol::types::QuestListEntry {
-                            wrath: None,
-                            quest_id: 84,
-                            icon: 0,
-                            level: 4,
-                            title: "Brotherhood of Thieves".into(),
-                        },
-                        wrathplus_protocol::types::QuestListEntry {
-                            wrath: None,
-                            quest_id: 40,
-                            icon: 0,
-                            level: 3,
-                            title: "Eagan Peltskinner".into(),
-                        },
-                    ],
-                }),
+                crate::app_core::state::QuestView::Greeting(
+                    wrathplus_protocol::types::QuestGiverList {
+                        npc: NPC_GUID,
+                        greeting: "Greetings, $N. The town of Goldshire needs able hands.".into(),
+                        emote_delay: 0,
+                        emote: 0,
+                        quests: vec![
+                            wrathplus_protocol::types::QuestListEntry {
+                                wrath: None,
+                                quest_id: 84,
+                                icon: 0,
+                                level: 4,
+                                title: "Brotherhood of Thieves".into(),
+                            },
+                            wrathplus_protocol::types::QuestListEntry {
+                                wrath: None,
+                                quest_id: 40,
+                                icon: 0,
+                                level: 3,
+                                title: "Eagan Peltskinner".into(),
+                            },
+                        ],
+                    },
+                ),
             );
         }
         UiFixture::QuestLog => {
