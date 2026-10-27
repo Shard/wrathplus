@@ -13,6 +13,7 @@ pub mod portrait;
 pub mod minimap;
 pub mod transport;
 pub mod video;
+pub mod app_icon;
 pub mod cursor;
 pub mod death;
 pub mod nameplates;

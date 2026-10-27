@@ -692,9 +692,9 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
     )?;
 
     // GameTooltip:SetLootRollItem(rollId): the roll window's hover (`0x5364a0`,
-    // `LootFrame.xml:343`). Like `SetLootItem`: p6=1 with `+0x424` = `[roll+0x20]`, the roll's
-    // randomPropertyId, every enchant slot zero and no item object, so the suffix-row copy
-    // (`0x52b7bf`) is the only enchant source.
+    // `LootFrame.xml:343`), over the build-12340 roll `GetLootRollItemInfo` reads. Like
+    // `SetLootItem`: p6=1, `+0x424` = `[roll+0x20]` (a negative suffix id resolves no enchants,
+    // labelled), no item object, so the suffix-row copy (`0x52b7bf`) is the only enchant source.
     m.set(
         "SetLootRollItem",
         lua.create_function(|lua, (this, roll_id): (Table, u32)| {
@@ -702,12 +702,12 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
             let entry = {
                 let model = lua.app_data_mut::<Model>().expect("model app_data");
                 model
-                    .loot_rolls
+                    .wrath_loot_rolls
                     .rolls
                     .iter()
                     .find(|r| r.roll_id == roll_id)
                     .cloned()
-                    .filter(|r| r.item_id != 0)
+                    .filter(|r| r.entry != 0)
             };
             let Some(entry) = entry else {
                 return Ok(());
@@ -719,10 +719,10 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
             fire_cleared(lua, h);
             let inst = render::ItemInstance {
                 name: entry.name.clone(),
-                enchants: roll_enchants(lua, entry.random_property_id),
+                enchants: roll_enchants(lua, u32::try_from(entry.random_property).unwrap_or(0)),
                 ..Default::default()
             };
-            match view_of(lua, entry.item_id) {
+            match view_of(lua, entry.entry) {
                 Some(v) => render_view(lua, &this, &v, BuilderFlags::default(), Some(&inst))?,
                 None => {
                     if let Some(name) = entry.name.clone() {
@@ -1104,7 +1104,6 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
             },
         )?,
     )?;
-
 
     Ok(())
 }

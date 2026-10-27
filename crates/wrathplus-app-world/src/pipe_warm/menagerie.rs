@@ -1,11 +1,10 @@
 //! The menagerie, `pipe_warm`'s warm set: one tiny rig per reachable pipeline variant, and the
 //! lane-coverage tests that keep a new lane from shipping unwarmed.
 
-use wrathplus_formats::{FogPolicy, ModelBlend, RenderSubmesh};
-use bevy::asset::RenderAssetUsages;
+use wrathplus_formats::{FogPolicy, ModelBlend};
 use bevy::camera::primitives::MeshAabb;
 use bevy::ecs::system::SystemParam;
-use bevy::mesh::{Indices, MeshTag, PrimitiveTopology};
+use bevy::mesh::MeshTag;
 use bevy::prelude::*;
 use bevy::render::render_resource::Buffer;
 
@@ -18,6 +17,10 @@ use wrathplus_world::sky::SkyMaterial;
 use wrathplus_world::sun::{CelestialMaterial, StarMaterial};
 
 use super::WarmRig;
+
+#[path = "warm_meshes.rs"]
+mod warm_meshes;
+use warm_meshes::{warm_liquid_mesh, warm_pos_uv_mesh, warm_quad};
 
 // --------------------------------------------------------------------------------------------
 // The warm set: the model lane (4 vertex layouts by the blend and depth-flag families), its
@@ -71,8 +74,9 @@ pub(super) fn spawn_menagerie(
     cache: &mut MaterialCache,
     light: &Buffer,
 ) -> usize {
-    // The model lane's four layouts (strides 32/48/56/72): static and skinned, plain and
-    // vertex-coloured. Statics are render-world-only, so their Aabb is inserted explicitly.
+    // The model lane's four layouts (strides 40/56/64/80, every model mesh carrying a second UV
+    // set): static and skinned, plain and vertex-coloured. Statics are render-world-only, so
+    // their Aabb is inserted explicitly.
     let mut layouts: Vec<(Handle<Mesh>, Option<bevy::camera::primitives::Aabb>, bool)> = Vec::new();
     for colors in [false, true] {
         let stat = wrathplus_assets::submesh_to_static_mesh(&warm_quad(colors, false));
@@ -378,10 +382,17 @@ pub(super) fn spawn_menagerie(
         }
     }
 
+    // The skybox rows and the sky and water lanes draw with no second UV set: the static plain
+    // and colour layouts without it.
+    let [plain, colours] = [0, 2].map(|i| {
+        let mut m = meshes.get(&layouts[i].0).expect("added above").clone();
+        m.remove_attribute(Mesh::ATTRIBUTE_UV_1);
+        (meshes.add(m), layouts[i].1)
+    });
     // The WMO-skybox rows: `skybox::build_skybox` inserts POSITION + NORMAL + UV_0, exactly
-    // `layouts[0]`, on the world camera only.
+    // `plain`, on the world camera only.
     {
-        let (plain_mesh, plain_aabb, _) = &layouts[0];
+        let (plain_mesh, plain_aabb) = &plain;
         for mat in &sky_mats {
             spawn_model_rig(commands, cam, None, plain_mesh, plain_aabb, false, mat);
             count += 1;
@@ -389,9 +400,9 @@ pub(super) fn spawn_menagerie(
     }
 
     // The sky and water lanes: every material in these stores gets a rig with its production
-    // layout. `layouts` is [static plain, skinned plain, static colours, skinned colours].
-    let (plain_mesh, plain_aabb, _) = layouts[0].clone();
-    let (colours_mesh, colours_aabb, _) = layouts[2].clone();
+    // layout, without the model lane's second UV set.
+    let (plain_mesh, plain_aabb) = plain;
+    let (colours_mesh, colours_aabb) = colours;
     let posuv = meshes.add(warm_pos_uv_mesh());
     let liquid_mesh = meshes.add(warm_liquid_mesh(false));
     let liquid_color_mesh = meshes.add(warm_liquid_mesh(true));
@@ -646,113 +657,6 @@ fn spawn_lane_rig<M: Material>(
         e.insert(layers);
     }
     *count += 1;
-}
-
-/// A tiny triangle with POSITION + UV_0 only, the `Stars.m2` layout. Main-world-resident, so
-/// `calculate_bounds` covers it.
-fn warm_pos_uv_mesh() -> Mesh {
-    let mut m = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    );
-    m.insert_attribute(
-        Mesh::ATTRIBUTE_POSITION,
-        vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]],
-    );
-    m.insert_attribute(
-        Mesh::ATTRIBUTE_UV_0,
-        vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]],
-    );
-    m.insert_indices(Indices::U32(vec![0, 1, 2]));
-    m
-}
-
-/// A tiny quad in the liquid grid's layout: POSITION + NORMAL + UV_0 + UV_1, plus
-/// `ATTRIBUTE_COLOR` when `body_color` is set, as `liquid_bevy_mesh` does for a non-fullbright
-/// interior WMO pool.
-fn warm_liquid_mesh(body_color: bool) -> Mesh {
-    let mut m = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    );
-    let uvs = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
-    m.insert_attribute(
-        Mesh::ATTRIBUTE_POSITION,
-        vec![
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0],
-            [0.0, 1.0, 0.0],
-        ],
-    );
-    m.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; 4]);
-    m.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs.clone());
-    m.insert_attribute(Mesh::ATTRIBUTE_UV_1, uvs);
-    if body_color {
-        // As `liquid_bevy_mesh` inserts it: one RGBA per vertex, alpha 1.
-        m.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[1.0, 1.0, 1.0, 1.0]; 4]);
-    }
-    m.insert_indices(Indices::U32(vec![0, 1, 2, 0, 2, 3]));
-    m
-}
-
-/// A unit quad in each attribute combination the model lane ships. Every `RenderSubmesh` field is
-/// spelled out so a new field breaks this build.
-fn warm_quad(colors: bool, skinned: bool) -> RenderSubmesh {
-    let n = 4usize;
-    RenderSubmesh {
-        positions: vec![
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0],
-            [0.0, 1.0, 0.0],
-        ],
-        normals: vec![[0.0, 0.0, 1.0]; n],
-        uvs: vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
-        uvs2: Vec::new(),
-        stage2: None,
-        indices: vec![0, 1, 2, 0, 2, 3],
-        texture: None,
-        skin_slot: None,
-        geoset_id: 0,
-        char_slot: None,
-        blend: ModelBlend::Opaque,
-        wrap_x: true,
-        wrap_y: true,
-        two_sided: false,
-        joints: if skinned { vec![[0; 4]; n] } else { Vec::new() },
-        weights: if skinned {
-            vec![[1.0, 0.0, 0.0, 0.0]; n]
-        } else {
-            Vec::new()
-        },
-        vertex_colors: if colors {
-            vec![[1.0, 1.0, 1.0, 1.0]; n]
-        } else {
-            Vec::new()
-        },
-        interior: false,
-        emissive: false,
-        icon_slot: false,
-        uv_rot_seq: None,
-        uv_scale_seq: None,
-        sidn: None,
-        window: false,
-        additive: false,
-        no_depth_write: false,
-        no_depth_test: false,
-        fog_policy: FogPolicy::Scene,
-        env_map: false,
-        billboard: None,
-        welded_billboard: false,
-        alpha_anim: None,
-        uv_anim: None,
-        uv_seq: None,
-        rgb_anim: None,
-        rgb_seq: None,
-        wmo_batch: None,
-        section: None,
-    }
 }
 
 #[cfg(test)]
