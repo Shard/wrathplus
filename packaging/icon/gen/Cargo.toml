@@ -1,0 +1,12 @@
+# Generates the WrathPlus app icon (our own art, drawn procedurally) and its size set.
+# Standalone, outside the workspace: `cargo run --release` from this directory.
+[package]
+name = "wrathplus-icon-gen"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "ico"] }
+
+[workspace]
