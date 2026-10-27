@@ -49,6 +49,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     install_frame_methods(lua)?;
     wrath_cooldown::install(lua)?;
     super::wrath_quest_poi::blob::install(lua)?;
+    super::wrath_quest_poi::order::install(lua)?;
     super::wrath_input_verbs::install(lua)?;
     install_compat(lua)
 }
