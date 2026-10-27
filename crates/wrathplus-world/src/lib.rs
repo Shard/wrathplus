@@ -109,6 +109,7 @@ pub mod bgwin;
 pub mod billboard;
 pub mod boot;
 pub mod build_id;
+pub mod clean_exit;
 pub mod clouds;
 pub mod clutter;
 pub mod collision;
