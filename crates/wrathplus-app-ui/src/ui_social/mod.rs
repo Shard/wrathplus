@@ -8,8 +8,8 @@
 //! is matched by name, vmangos `FriendsResult` to `ERR_FRIEND_*`/`ERR_IGNORE_*`; the reference's
 //! own mapping is untraced.
 
-use wrathplus_protocol::types::{friend_result, friend_status, FriendEntry, FriendStatusUpdate};
 use bevy::prelude::*;
+use wrathplus_protocol::types::{friend_result, friend_status, FriendEntry, FriendStatusUpdate};
 
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
@@ -79,7 +79,7 @@ pub(crate) mod net {
     use crate::net::NetHandlerApp;
 
     /// Register the handlers, one per kind, and the session-end listener.
-    pub(super) fn register(app: &mut App) {
+    pub(crate) fn register(app: &mut App) {
         use SessionEventKind as K;
         app.net_handler(K::FriendList, on_friend_list)
             .net_handler(K::IgnoreList, on_ignore_list)
