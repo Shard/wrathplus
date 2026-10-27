@@ -50,7 +50,7 @@ fn a_success_takes_the_actions_line_and_an_error_its_code() {
 
 #[test]
 fn events_keep_their_strings_and_errors_name_the_bracket() {
-    let changed = event_line(7, &["Old".into(), "New".into(), "Gladiators".into()]).unwrap();
+    let changed = event_line(7, &["Old".into(), "New".into(), "Gladiators".into()], None);
     assert_eq!(
         (changed.key, strings(&changed)),
         (
@@ -58,7 +58,17 @@ fn events_keep_their_strings_and_errors_name_the_bracket() {
             vec!["Old".into(), "New".into(), "Gladiators".into()]
         )
     );
-    assert!(event_line(2, &[]).is_none());
+    assert_eq!(event_line(2, &[], None).key, "ERR_GUILD_INTERNAL");
+    let pair = ["Arthas".to_string(), "Gladiators".to_string()];
+    assert_eq!(
+        event_line(3, &pair, Some("Jaina")).key,
+        "ERR_ARENA_TEAM_JOIN_SS"
+    );
+    let mine = event_line(3, &pair, Some("arthas"));
+    assert_eq!(
+        (mine.key, strings(&mine)),
+        ("ERR_ARENA_TEAM_YOU_JOIN_S", vec!["Gladiators".into()])
+    );
     let no_team = error_line(0, Some(3)).unwrap();
     assert_eq!(
         (no_team.key, strings(&no_team)),
@@ -90,7 +100,8 @@ fn the_arena_keys_resolve_in_the_real_global_strings() {
             keys.extend(command_line(act, "t", "p", error).map(|e| e.key));
         }
     }
-    keys.extend((3..=8).filter_map(|e| event_line(e, &[]).map(|l| l.key)));
+    keys.extend((2..=8).map(|e| event_line(e, &[], None).key));
+    keys.push(event_line(3, &["me".into()], Some("me")).key);
     keys.extend(error_line(0, Some(2)).map(|e| e.key));
     for key in keys {
         assert!(
@@ -105,7 +116,9 @@ fn the_drain_takes_the_line_packets_and_leaves_the_unit_destroyed() {
     let mut app = App::new();
     app.init_resource::<crate::ui_battlefield::NativeBattlegroundRest>()
         .init_resource::<crate::app_core::errors::UiErrorKeys>()
-        .init_resource::<crate::ui_arena_team::ArenaRosterRefresh>()
+        .init_resource::<crate::ui_arena_team::ArenaRosterStale>()
+        .init_resource::<crate::app_core::session::SelfGuid>()
+        .init_resource::<crate::names::NameCache>()
         .add_systems(Update, drain_arena_lines);
     app.world_mut()
         .resource_mut::<crate::ui_battlefield::NativeBattlegroundRest>()
@@ -131,10 +144,7 @@ fn the_drain_takes_the_line_packets_and_leaves_the_unit_destroyed() {
         .map(|e| e.key)
         .collect();
     assert_eq!(keys, ["ERR_ARENA_TEAM_JOIN_SS", "ERR_ARENA_NO_TEAM_II"]);
-    assert_eq!(
-        w.resource::<crate::ui_arena_team::ArenaRosterRefresh>().0,
-        ["Gladiators"]
-    );
+    assert_eq!(w.resource::<crate::ui_arena_team::ArenaRosterStale>().0, 1);
     let rest = &w
         .resource::<crate::ui_battlefield::NativeBattlegroundRest>()
         .0;

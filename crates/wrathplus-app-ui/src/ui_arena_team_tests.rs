@@ -194,28 +194,26 @@ fn table_follows_descriptor_and_drops_strangers() {
 }
 
 #[test]
-fn a_refresh_by_team_name_asks_its_slot_under_the_throttle() {
+fn an_arena_event_clears_every_throttle_and_fires_three_stale_updates() {
     let mut table = ArenaTable::default();
     let mut fx = Effects::default();
     let mut words = [[0; 7]; 3];
     words[2] = [91, 5, 0, 0, 0, 0, 0];
     table.sync_descriptor(words, 0.0, &mut fx);
-    table.apply(
-        Packet::Query {
-            team_id: 91,
-            name: b"Penta".to_vec(),
-            team_type: 5,
-            emblem: [0; 5],
-        },
-        &mut fx,
-    );
+    assert_eq!(fx.sends[0], Command::Roster { team_id: 91 });
     let mut fx = Effects::default();
-    table.refresh_team("Penta", 3.0, &mut fx);
-    table.refresh_team("Other", 30.0, &mut fx);
-    assert!(
-        fx.sends.is_empty(),
-        "inside the 10 s, and a stranger: nothing"
+    table.request_roster(2, 3.0, &mut fx);
+    assert!(fx.sends.is_empty(), "inside the 10 s");
+    table.mark_stale(&mut fx);
+    assert_eq!(
+        fx.events,
+        vec![("ARENA_TEAM_ROSTER_UPDATE", vec![ScriptValue::Int(1)]); 3],
+        "0x5a28e0(slot, 1) for each of the three slots"
     );
-    table.refresh_team("Penta", 10.0, &mut fx);
-    assert_eq!(fx.sends, [Command::Roster { team_id: 91 }]);
+    table.request_roster(2, 3.0, &mut fx);
+    assert_eq!(
+        fx.sends,
+        [Command::Roster { team_id: 91 }],
+        "the throttle is cleared, so the frame's re-ask goes out at once"
+    );
 }
