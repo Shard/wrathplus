@@ -29,12 +29,16 @@ enum Channel {
 
 /// The walk order (`0x765f10`): keyboard-enabled, effectively-visible frames, strata TOOLTIP down
 /// to WORLD, then level descending, ties oldest registration first as the inserter keeps them
-/// (`0x764aa0`).
+/// (`0x764aa0`). Every EditBox is a member whatever its flag: its ctor registers it in both
+/// buckets (`0x779ce8`), so a focused box ranks above a keyboard frame it sits in (the create
+/// screen's name box inside `CharacterCreate`, whose `OnChar` would otherwise eat every key).
 fn walk_order(model: &Model) -> Vec<FrameHandle> {
     let mut candidates: Vec<(FrameHandle, u8, u16, u32)> = model
         .arena
         .iter_frames()
-        .filter(|(_, f)| f.effective_visible && f.keyboard_enabled)
+        .filter(|(_, f)| {
+            f.effective_visible && (f.keyboard_enabled || f.kind == FrameKind::EditBox)
+        })
         .map(|(h, f)| (h, f.strata as u8, f.level, f.insertion_seq))
         .collect();
     candidates.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)).then(a.3.cmp(&b.3)));
