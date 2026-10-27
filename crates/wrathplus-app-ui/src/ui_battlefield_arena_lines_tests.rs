@@ -29,17 +29,22 @@ fn a_success_takes_the_actions_line_and_an_error_its_code() {
         command_line(0x02, "x", "", 0).is_none(),
         "no line for an unlisted action"
     );
-    // AC fills the name into either field; a `_S` code takes the player, else the team.
-    let exists = command_line(action::CREATE, "Gladiators", "", 0x07).unwrap();
+    // `0x6ccb20`: each `_S` row reads one fixed field, never the other as a fallback.
+    let exists = command_line(action::CREATE, "Gladiators", "Arthas", 0x07).unwrap();
     assert_eq!(strings(&exists), ["Gladiators"]);
-    let low = command_line(action::CREATE, "", "Arthas", 0x15).unwrap();
+    let full = command_line(action::INVITE, "Gladiators", "Arthas", 0x17).unwrap();
+    assert_eq!(strings(&full), ["Gladiators"]);
+    let low = command_line(action::CREATE, "Gladiators", "Arthas", 0x15).unwrap();
     assert_eq!(
         (low.key, strings(&low)),
         ("ERR_ARENA_TEAM_TARGET_TOO_LOW_S", vec!["Arthas".into()])
     );
+    let in_team = command_line(action::INVITE, "Gladiators", "", 0x03).unwrap();
+    assert_eq!(strings(&in_team), [""], "the player field, empty as sent");
+    let leave = command_line(action::QUIT, "Gladiators", "", 0x08).unwrap();
     assert_eq!(
-        command_line(action::QUIT, "", "", 0x08).unwrap().key,
-        "ERR_ARENA_TEAM_LEADER_LEAVE_S"
+        (leave.key, strings(&leave)),
+        ("ERR_ARENA_TEAM_LEADER_LEAVE_S", vec!["Gladiators".into()])
     );
     assert_eq!(
         command_line(action::CREATE, "", "", 0x08).unwrap().key,
@@ -74,7 +79,12 @@ fn events_keep_their_strings_and_errors_name_the_bracket() {
         (no_team.key, strings(&no_team)),
         ("ERR_ARENA_NO_TEAM_II", vec!["3".into(), "3".into()])
     );
-    assert!(error_line(1, None).is_none());
+    assert_eq!(error_line(1, None).unwrap().key, "ERR_ARENA_EXPIRED_CAIS");
+    assert_eq!(
+        error_line(2, None).unwrap().key,
+        "ERR_LFG_CANT_USE_BATTLEGROUND"
+    );
+    assert!(error_line(3, None).is_none());
 }
 
 /// Every key the tables name is a real 3.3.5 global string; skips without client data.
@@ -102,7 +112,7 @@ fn the_arena_keys_resolve_in_the_real_global_strings() {
     }
     keys.extend((2..=8).map(|e| event_line(e, &[], None).key));
     keys.push(event_line(3, &["me".into()], Some("me")).key);
-    keys.extend(error_line(0, Some(2)).map(|e| e.key));
+    keys.extend((0..3).filter_map(|w| error_line(w, Some(2)).map(|e| e.key)));
     for key in keys {
         assert!(
             vm.lua().globals().get::<String>(key).is_ok(),

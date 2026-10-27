@@ -21,16 +21,15 @@ queue reply and eject. 04F7 world-state UI timer keeps its existing capture (sta
 028C PvP credit.
 
 **Arena lines** (`A/ui_battlefield_arena_lines.rs`, drained from `ui_battlefield::NativeBattlegroundRest`
-after Experience's `drain_native`): 0349 command result → its action's line on error 0
+after Experience's `drain_native`): 0349 is 12340's `0x6ccb20`: its action's line on error 0
 (`ERR_ARENA_TEAM_CREATE_S`, `_INVITE_SS`, `_QUIT_S`, `_FOUNDER_S`), else the error code's
-`ERR_ARENA_TEAM_*`/`ERR_*_ARENA_TEAM*` line; 0357 is 12340's `0x6cc980`: event 3..8 →
+`ERR_ARENA_TEAM_*`/`ERR_*_ARENA_TEAM*` line, each `_S` row reading one fixed field (player or team);
+0357 is 12340's `0x6cc980`: event 3..8 →
 `ERR_ARENA_TEAM_JOIN_SS` .. `_DISBANDED_S` with its strings as they arrived (a join naming us →
 `_YOU_JOIN_S` with the team; any other event → `ERR_GUILD_INTERNAL`), then every slot marked stale
 (`ui_arena_team::ArenaRosterStale`: throttle cleared, `ARENA_TEAM_ROSTER_UPDATE(1)` ×3); 0376 with a
-leading 0 → `ERR_ARENA_NO_TEAM_II` (the team type twice). Each is a `UiErrorKeys` catalog line.
-Labelled: the 0349 and 0376 handlers are untraced; their tables mirror the guild command-result
-handler, whose codes AC's arena enums copy.
-A `_S` code takes the player name, else the team name. 04C7 stays in the rest FIFO, capture-only:
+leading 0 → `ERR_ARENA_NO_TEAM_II` (the team type twice), 1 → `ERR_ARENA_EXPIRED_CAIS`, 2 →
+`ERR_LFG_CANT_USE_BATTLEGROUND` (12340's `0x6cce90`). Each is a `UiErrorKeys` catalog line. 04C7 stays in the rest FIFO, capture-only:
 no arena-opponent model consumes it.
 
 **Since then (2026-10-23 audit):** the FIFO is no longer terminal. `ui_battlefield::drain_native`

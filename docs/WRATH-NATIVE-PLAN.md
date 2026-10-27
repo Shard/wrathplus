@@ -90,6 +90,9 @@ Crate `wrathplus-ui` (`script/*`), reading data the app pushes into the `Model`.
   to the `Model` setters; WS4 or the manager wires the app side.
 - Done when: the census lists no FrameXML-called global or method; stock frames open without Lua
   errors in a headless census with fixture data; vanilla UI tests green.
+- Status (2026-10-28): closed on the installed census (`wrath_framexml_tests`, `--ignored`) at
+  native/ui 98fc4ecb: missing surface 0, hard failures 0, all 22 Blizzard addons load, PlayerFrame
+  shown; 25 native-absent names evidenced; every ARITY SHORT/UNPROBED name is in the reviewed lists.
 - Arity audit (`wrath_census_arity.rs`, fixtures in `wrath_census_fixtures.rs`): after the load,
   every name the stock Lua unpacks into two or more values is probed against seeded state; a hit
   narrower than the widest unpack (SHORT) or a name no probe reaches (UNPROBED) must sit in a
@@ -121,6 +124,8 @@ Crate `wrathplus-ui` (`loader/`, `widget/`, `script/object*`, `script/event.rs`)
   any, `inherits` lists), re-parent and visibility rules, `HybridScrollFrame` needs.
 - Done when: the census lists no missing method or script kind; loader reports no unknown element
   or attribute for the installed UI.
+- Status (2026-10-28): closed on the same census: no missing method or script kind; the loader's
+  only attribute rows are `ACCEPTED-ATTR` (five reviewed attributes), no unknown element.
 
 ### WS6: assets and data (parallel)
 Crates `wrathplus-formats`, `wrathplus-m2`, `wrathplus-assets`, `wrathplus-world`.
