@@ -83,7 +83,7 @@ fn setup_counted(extra: &[&str]) -> (UiScript, usize) {
     (s, built)
 }
 
-fn setup() -> UiScript {
+pub(super) fn setup() -> UiScript {
     setup_counted(&[]).0
 }
 
@@ -93,7 +93,7 @@ const SWORD_LINK: &str = "|cffffffff|Hitem:25:0:0:0|h[Worn Shortsword]|h|r";
 
 /// One resolved 3.3.5 roll every vote may take (`vote_mask` pass/need/greed/disenchant, reasons
 /// all eligible).
-fn roll(
+pub(super) fn roll(
     roll_id: u32,
     entry: u32,
     name: &str,

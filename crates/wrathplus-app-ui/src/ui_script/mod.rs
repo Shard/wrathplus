@@ -401,6 +401,8 @@ mod loot_tests;
 
 #[cfg(test)]
 mod group_loot_tests;
+#[cfg(test)]
+mod group_loot_tooltip_tests;
 
 #[cfg(test)]
 mod chat_tests;
