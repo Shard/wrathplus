@@ -13,6 +13,9 @@ fn built_client_has_one_native_owner_separate_from_vanilla() {
     let owners = &census[&SessionEventKind::WrathStable];
     assert_eq!(owners.len(), 1);
     assert!(owners[0].contains("ui_stable::wrath::receive"));
-    assert!(census[&SessionEventKind::ListStabledPets][0].contains("ui_stable::net::on_list"));
+    // The list also ends an open gossip menu (`ui_gossip::net::on_service_window`).
+    assert!(census[&SessionEventKind::ListStabledPets]
+        .iter()
+        .any(|h| h.contains("ui_stable::net::on_list")));
     assert!(census[&SessionEventKind::StableResult][0].contains("ui_stable::net::on_result"));
 }

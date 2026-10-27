@@ -5,9 +5,9 @@
 
 use std::collections::BTreeSet;
 
+use bevy::prelude::*;
 use wrathplus_formats::{SkillLineCatalog, SpellCatalog};
 use wrathplus_protocol::types::TrainerSpell;
-use bevy::prelude::*;
 
 use wrathplus_ui::script::{
     ScriptValue, TrainerAbilityReq, TrainerService, TrainerServiceCategory, TrainerSkillReq,
@@ -17,19 +17,19 @@ use wrathplus_ui::script::{
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::names::NameCache;
+use bevy::ecs::system::SystemParam;
 use wrathplus_protocol::types::PLAYER_SKILL_SLOTS;
 use wrathplus_protocol::types::{Field, ObjectType};
-use bevy::ecs::system::SystemParam;
 
-use crate::net::{ClientCommand, FieldChanged, NetCommands};
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::PlayerActions;
-use crate::app_core::state::Spells;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
-use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 use crate::app_core::state::SkillLines;
+use crate::app_core::state::Spells;
+use crate::net::{ClientCommand, FieldChanged, NetCommands};
+use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 
 /// `SMSG_TRAINER_LIST`'s `trainer_type` for a tradeskill trainer (0 class, 1 mount, 2 tradeskill,
 /// 3 pet). `IsTrainerServiceTradeSkill` answers it for every service, where the 1.12 verb
@@ -424,7 +424,7 @@ impl NpcSession for TrainerOpen {
 }
 
 /// Each `BuyTrainerService` becomes `CMSG_TRAINER_BUY_SPELL`; a close sends nothing.
-fn drain_trainer(
+pub(crate) fn drain_trainer(
     script: Option<NonSendMut<UiScript>>,
     mut open: ResMut<TrainerOpen>,
     commands: Res<NetCommands>,
