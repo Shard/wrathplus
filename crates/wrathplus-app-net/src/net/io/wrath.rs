@@ -15,6 +15,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
+use crossbeam_channel::{Receiver, Sender};
 use wrathplus_protocol::wrath_authority::{
     self, ForceRootOrder, GroundPose, MoverOrder, OnFootPose, UnsetCanFlyOrder,
 };
@@ -30,7 +31,6 @@ use wrathplus_protocol::wrath_world::{
     WrathWorldSession,
 };
 use wrathplus_protocol::{CharEnumItem, Character, LoginStage, SessionEnd, SessionEvent};
-use crossbeam_channel::{Receiver, Sender};
 
 use super::{note_inbound, Parks, PingClock, PING_INTERVAL, SEND_WARN_CAP};
 use crate::net::{CharRequest, ClientCommand, RealmRequest, SessionCommand, SessionCommandSender};
@@ -238,7 +238,10 @@ fn run(
                     wrathplus_protocol::wrath_world::WRATH_WORLD_PORT,
                 );
                 (
-                    format!("{host}:{}", wrathplus_protocol::wrath_world::WRATH_WORLD_PORT),
+                    format!(
+                        "{host}:{}",
+                        wrathplus_protocol::wrath_world::WRATH_WORLD_PORT
+                    ),
                     0,
                     None,
                 )
@@ -419,7 +422,10 @@ fn run(
                     }
                 }
                 Err(error) => {
-                    bevy::log::warn!("net(wrath): bootstrap {:#06x} dropped: {error}", packet.opcode);
+                    bevy::log::warn!(
+                        "net(wrath): bootstrap {:#06x} dropped: {error}",
+                        packet.opcode
+                    );
                     send(
                         events,
                         SessionEvent::PacketDropped {
@@ -491,15 +497,16 @@ fn run(
                         .record_pong(sequence);
                 }
                 0x003e..=0x0040 => {
-                    let packet =
-                        match wrathplus_protocol::wrath_transfer::decode(packet.opcode, &packet.body)
-                        {
-                            Ok(packet) => packet,
-                            Err(error) => {
-                                authority.revoke();
-                                return Err(error.into());
-                            }
-                        };
+                    let packet = match wrathplus_protocol::wrath_transfer::decode(
+                        packet.opcode,
+                        &packet.body,
+                    ) {
+                        Ok(packet) => packet,
+                        Err(error) => {
+                            authority.revoke();
+                            return Err(error.into());
+                        }
+                    };
                     authority.publish_transfer(packet, |event| send(events, event))?;
                 }
                 SMSG_CLIENT_CONTROL_UPDATE => {
@@ -654,7 +661,8 @@ fn dispatch_packet(
             Err(error) => return Err(error).context("Wrath on-foot movement relay"),
         };
         if let SessionEvent::UnitMove { guid, .. } = &event {
-            let raw = wrathplus_protocol::wrath_gameplay::OutboundMovement::from_bytes(&packet.body)?;
+            let raw =
+                wrathplus_protocol::wrath_gameplay::OutboundMovement::from_bytes(&packet.body)?;
             authority.observe_server_pose(*guid, &raw.movement)?;
             let seat = movement_seat(&raw.movement);
             if let Some(change) = authority.observe_seat(*guid, seat) {
@@ -738,7 +746,10 @@ fn dispatch_packet(
 enum WrathWriterCommand {
     Reply(WrathReply),
     UnsetCanFly(UnsetCanFlyOrder),
-    ForceRoot { order: ForceRootOrder, rooted: bool },
+    ForceRoot {
+        order: ForceRootOrder,
+        rooted: bool,
+    },
     /// A speed, mode, knockback or collision-height order the writer acknowledges itself.
     Mover(MoverOrder),
     PoseReady,
@@ -897,7 +908,10 @@ impl MovementAuthorityState {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum PendingAuthorityOrder {
     UnsetCanFly(UnsetCanFlyOrder),
-    ForceRoot { order: ForceRootOrder, rooted: bool },
+    ForceRoot {
+        order: ForceRootOrder,
+        rooted: bool,
+    },
     /// Every other self order. A near teleport waits for the controller's `TeleportAck`; the
     /// rest the writer acknowledges from the last reported pose.
     Mover(MoverOrder),
@@ -958,7 +972,9 @@ impl MovementAuthorityHandle {
         }
         let reported = match movement {
             MovementPosition::Living(movement) => Ok(living_pose(movement)),
-            MovementPosition::Stationary(position) => GroundPose::stationary(position).map(Into::into),
+            MovementPosition::Stationary(position) => {
+                GroundPose::stationary(position).map(Into::into)
+            }
             _ => Err(wrath_authority::AuthorityCodecError::UnsupportedGroundState),
         };
         let pose = reported.context("Wrath self create pose")?;
@@ -982,7 +998,8 @@ impl MovementAuthorityHandle {
             return;
         };
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
-        if state.epoch != self.epoch || state.self_guid != self.self_guid || guid == self.self_guid {
+        if state.epoch != self.epoch || state.self_guid != self.self_guid || guid == self.self_guid
+        {
             return;
         }
         state.set_pose_of(guid, living_pose(movement));
@@ -1009,7 +1026,9 @@ impl MovementAuthorityHandle {
         // reported pose rather than ending the session.
         match OnFootPose::from_movement(&movement) {
             Ok(pose) => state.set_pose_of(guid, pose),
-            Err(error) => bevy::log::debug!("net(wrath): pose of {guid:#x} not representable ({error}); last pose kept"),
+            Err(error) => bevy::log::debug!(
+                "net(wrath): pose of {guid:#x} not representable ({error}); last pose kept"
+            ),
         }
         Ok(())
     }
@@ -1123,10 +1142,8 @@ impl MovementAuthorityHandle {
             Some(seat) => state.riders.insert(passenger, seat),
             None => state.riders.remove(&passenger),
         };
-        (previous != seat).then_some(wrathplus_protocol::wrath_vehicle::VehicleEvent::Seat {
-            passenger,
-            seat,
-        })
+        (previous != seat)
+            .then_some(wrathplus_protocol::wrath_vehicle::VehicleEvent::Seat { passenger, seat })
     }
 
     /// The controller claims `guid` with `CMSG_SET_ACTIVE_MOVER`: only the mover the server handed
@@ -1301,7 +1318,9 @@ impl MovementAuthorityHandle {
             return Ok(UnsetAckResult::Stale);
         }
         let expected = PendingAuthorityOrder::ForceRoot { order, rooted };
-        if !state.drives_or_parked(order.mover_guid) || state.pending_orders.front() != Some(&expected) {
+        if !state.drives_or_parked(order.mover_guid)
+            || state.pending_orders.front() != Some(&expected)
+        {
             state.self_control = false;
             state.control_decided = true;
             bail!("Wrath force-root ACK did not match the pending order head");
@@ -1352,7 +1371,9 @@ impl MovementAuthorityHandle {
             return Ok(UnsetAckResult::Stale);
         }
         let expected = PendingAuthorityOrder::UnsetCanFly(order);
-        if !state.drives_or_parked(order.mover_guid) || state.pending_orders.front() != Some(&expected) {
+        if !state.drives_or_parked(order.mover_guid)
+            || state.pending_orders.front() != Some(&expected)
+        {
             state.self_control = false;
             state.control_decided = true;
             bail!("Wrath UNSET_CAN_FLY ACK did not match the pending order head");
@@ -1421,25 +1442,31 @@ impl MovementAuthorityHandle {
             return Ok(UnsetAckResult::PendingSelfPose);
         };
         let (opcode, body, reported) = match order {
-            MoverOrder::Speed { kind, counter, speed, .. } => (
+            MoverOrder::Speed {
+                kind,
+                counter,
+                speed,
+                ..
+            } => (
                 kind.ack_opcode(),
                 wrath_authority::encode_value_ack(guid, counter, pose, timestamp, speed)?,
                 pose,
             ),
-            MoverOrder::CollisionHeight { counter, height, .. } => (
+            MoverOrder::CollisionHeight {
+                counter, height, ..
+            } => (
                 wrath_authority::CMSG_MOVE_SET_COLLISION_HGT_ACK,
                 wrath_authority::encode_value_ack(guid, counter, pose, timestamp, height)?,
                 pose,
             ),
-            MoverOrder::Mode { kind, apply, counter, .. } => {
-                let body = wrath_authority::encode_mode_ack(
-                    guid,
-                    counter,
-                    pose,
-                    timestamp,
-                    kind,
-                    apply,
-                )?;
+            MoverOrder::Mode {
+                kind,
+                apply,
+                counter,
+                ..
+            } => {
+                let body =
+                    wrath_authority::encode_mode_ack(guid, counter, pose, timestamp, kind, apply)?;
                 // Water walking, slow fall and can-fly are bits the mover keeps reporting (losing
                 // can-fly lands a flier); hover and gravity stay outside the reported pose.
                 let mut reported = if kind == wrath_authority::ModeOrderKind::CanFly && !apply {
@@ -1459,13 +1486,7 @@ impl MovementAuthorityHandle {
             }
             MoverOrder::KnockBack { counter, .. } => (
                 wrath_authority::CMSG_MOVE_KNOCK_BACK_ACK,
-                wrath_authority::encode_knock_back_ack(
-                    guid,
-                    counter,
-                    pose,
-                    timestamp,
-                    &order,
-                )?,
+                wrath_authority::encode_knock_back_ack(guid, counter, pose, timestamp, &order)?,
                 pose.landed(),
             ),
             MoverOrder::TeleportNear { .. } => unreachable!("refused above"),
@@ -1487,7 +1508,8 @@ impl MovementAuthorityHandle {
         send: impl FnOnce(&[u8]) -> Result<()>,
     ) -> Result<bool> {
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
-        if state.epoch != self.epoch || state.self_guid != self.self_guid || guid != self.self_guid {
+        if state.epoch != self.epoch || state.self_guid != self.self_guid || guid != self.self_guid
+        {
             return Ok(false);
         }
         let Some(&PendingAuthorityOrder::Mover(
@@ -1628,8 +1650,12 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::PageTextQuery { .. } => WrathRoute::NativeInventory,
         ClientCommand::NativeInspectAchievements { .. } => WrathRoute::NativeInspectAchievements,
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
-        ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
-        ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => WrathRoute::NativeChatLine,
+        ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => {
+            WrathRoute::NativeQuest
+        }
+        ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => {
+            WrathRoute::NativeChatLine
+        }
         ClientCommand::SetFactionAtWar { .. }
         | ClientCommand::SetFactionInactive { .. }
         | ClientCommand::SetWatchedFaction { .. } => WrathRoute::NativeFaction,
@@ -2047,8 +2073,11 @@ fn writer_loop(
                         let timestamp = active.clock.now_ms();
                         authority
                             .with_vehicle_pose(|vehicle, pose| {
-                                let body = request.encode(vehicle, pose, timestamp)?;
-                                active.writer.send_raw(request.opcode(), &body)
+                                let body = request.encode(vehicle, pose, timestamp);
+                                match encoded_or_dropped("vehicle request", body) {
+                                    Some(body) => active.writer.send_raw(request.opcode(), &body),
+                                    None => Ok(()),
+                                }
                             })
                             .unwrap_or_else(|| {
                                 bevy::log::warn!("net(wrath): {request:?} without a driven vehicle; withheld");
@@ -2438,13 +2467,19 @@ fn lfg_packet(
 fn chat_line(command: ClientCommand, own_language: u32) -> std::io::Result<(u32, Vec<u8>)> {
     use wrathplus_protocol::wrath_chat::{encode, Command, LANGUAGE_ADDON};
     let command = match command {
-        ClientCommand::Chat { kind, target, text, language } => {
+        ClientCommand::Chat {
+            kind,
+            target,
+            text,
+            language,
+        } => {
             let chat_type = kind.wrath_chat_type();
             Command {
                 chat_type,
                 language: language.unwrap_or(own_language),
                 // Whisper and channel name their target; the rest send none.
-                target: matches!(chat_type, 0x07 | 0x11).then(|| target.unwrap_or_default().into_bytes()),
+                target: matches!(chat_type, 0x07 | 0x11)
+                    .then(|| target.unwrap_or_default().into_bytes()),
                 text: text.into_bytes(),
             }
         }
@@ -2505,7 +2540,10 @@ fn death_command(command: ClientCommand) -> wrathplus_protocol::wrath_death::Com
         ClientCommand::CorpseQuery => D::CorpseQuery,
         ClientCommand::ReclaimCorpse { corpse } => D::ReclaimCorpse { corpse },
         // The shared command is the accept; a decline sends nothing and lets the summon lapse.
-        ClientCommand::SummonResponse { summoner } => D::SummonResponse { summoner, agree: true },
+        ClientCommand::SummonResponse { summoner } => D::SummonResponse {
+            summoner,
+            agree: true,
+        },
         ClientCommand::SelfRes => D::SelfRes,
         other => unreachable!("not a death route: {other:?}"),
     }
@@ -2539,11 +2577,19 @@ fn contacts_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
     match command {
         // Friends, ignores and mutes: AC lists the contacts carrying any asked flag.
         ClientCommand::FriendListRequest => social(S::ContactList { flags: 0x07 }),
-        ClientCommand::AddFriend { name } => social(S::AddFriend { name: name.into_bytes(), note: Vec::new() }),
+        ClientCommand::AddFriend { name } => social(S::AddFriend {
+            name: name.into_bytes(),
+            note: Vec::new(),
+        }),
         ClientCommand::DelFriend { guid } => social(S::DeleteFriend { guid }),
-        ClientCommand::AddIgnore { name } => social(S::AddIgnore { name: name.into_bytes() }),
+        ClientCommand::AddIgnore { name } => social(S::AddIgnore {
+            name: name.into_bytes(),
+        }),
         ClientCommand::DelIgnore { guid } => social(S::DeleteIgnore { guid }),
-        ClientCommand::SetContactNotes { guid, note } => social(S::SetContactNotes { guid, note: note.into_bytes() }),
+        ClientCommand::SetContactNotes { guid, note } => social(S::SetContactNotes {
+            guid,
+            note: note.into_bytes(),
+        }),
         ClientCommand::DuelAccepted { arbiter } => duel(D::Accepted { arbiter }),
         ClientCommand::DuelCancelled { arbiter } => duel(D::Cancelled { arbiter }),
         other => unreachable!("not a contacts route: {other:?}"),
@@ -2580,16 +2626,43 @@ fn battleground_packet(command: ClientCommand) -> (u32, Vec<u8>) {
 /// The native channel, emote and ignore command for a [`WrathRoute::NativeChannel`] route.
 fn channel_command(command: ClientCommand) -> wrathplus_protocol::wrath_chat_notices::Command {
     use wrathplus_protocol::wrath_chat_notices::Command as C;
-    let pair = |opcode, name, other| C::NamedPair { opcode, name, other };
+    let pair = |opcode, name, other| C::NamedPair {
+        opcode,
+        name,
+        other,
+    };
     match command {
-        ClientCommand::JoinChannel { name, password, channel_id } => C::Join { channel_id, name, password },
+        ClientCommand::JoinChannel {
+            name,
+            password,
+            channel_id,
+        } => C::Join {
+            channel_id,
+            name,
+            password,
+        },
         ClientCommand::LeaveChannel { name } => C::Leave { name },
-        ClientCommand::ChannelList { name } => C::Named { opcode: 0x009a, name },
+        ClientCommand::ChannelList { name } => C::Named {
+            opcode: 0x009a,
+            name,
+        },
         ClientCommand::ClearChannelWatch => C::ClearWatch,
-        ClientCommand::DeclineChannelInvite { name } => C::Named { opcode: 0x0410, name },
-        ClientCommand::ChannelOwner { name } => C::Named { opcode: 0x009e, name },
-        ClientCommand::ChannelAnnouncements { name } => C::Named { opcode: 0x00a7, name },
-        ClientCommand::ChannelModerate { name } => C::Named { opcode: 0x00a8, name },
+        ClientCommand::DeclineChannelInvite { name } => C::Named {
+            opcode: 0x0410,
+            name,
+        },
+        ClientCommand::ChannelOwner { name } => C::Named {
+            opcode: 0x009e,
+            name,
+        },
+        ClientCommand::ChannelAnnouncements { name } => C::Named {
+            opcode: 0x00a7,
+            name,
+        },
+        ClientCommand::ChannelModerate { name } => C::Named {
+            opcode: 0x00a8,
+            name,
+        },
         ClientCommand::ChannelPassword { name, password } => pair(0x009c, name, password),
         ClientCommand::ChannelSetOwner { name, player } => pair(0x009d, name, player),
         ClientCommand::ChannelModerator { name, player } => pair(0x009f, name, player),
@@ -2601,7 +2674,11 @@ fn channel_command(command: ClientCommand) -> wrathplus_protocol::wrath_chat_not
         ClientCommand::ChannelBan { name, player } => pair(0x00a5, name, player),
         ClientCommand::ChannelUnban { name, player } => pair(0x00a6, name, player),
         // AC echoes the emote number and uses nothing else of it.
-        ClientCommand::TextEmote { text_id, target } => C::TextEmote { text_emote: text_id, emote_num: 0, target },
+        ClientCommand::TextEmote { text_id, target } => C::TextEmote {
+            text_emote: text_id,
+            emote_num: 0,
+            target,
+        },
         ClientCommand::ChatIgnored { guid } => C::ChatIgnored { guid },
         other => unreachable!("not a channel route: {other:?}"),
     }
@@ -2625,7 +2702,9 @@ fn quest_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
     use wrathplus_protocol::wrath_quest::{encode, encode_push_result};
     match command {
         ClientCommand::NativeQuest(command) => encode(&command),
-        ClientCommand::QuestPushResult { sharer, quest, msg } => Ok(encode_push_result(sharer, quest, msg.0)),
+        ClientCommand::QuestPushResult { sharer, quest, msg } => {
+            Ok(encode_push_result(sharer, quest, msg.0))
+        }
         other => unreachable!("not a quest route: {other:?}"),
     }
 }
@@ -3187,7 +3266,9 @@ fn living_pose(movement: &wrathplus_protocol::wrath_gameplay::MovementInfo) -> O
     let mut movement = movement.clone();
     movement.flags &= !wrath_authority::MOVEMENT_FLAG_ROOT;
     OnFootPose::from_movement(&movement).unwrap_or_else(|error| {
-        bevy::log::debug!("net(wrath): living pose not reportable ({error}); standing at its position");
+        bevy::log::debug!(
+            "net(wrath): living pose not reportable ({error}); standing at its position"
+        );
         OnFootPose {
             flags: 0,
             position: [
@@ -3255,10 +3336,27 @@ fn send_ground_movement(active: &mut WrathWriterSwap, command: ClientCommand) ->
     authority
         .with_on_foot_send(active.active_mover, pose, |mover, pose| {
             let opcode = u32::from(kind.opcode());
-            let body = pose.encode(opcode, mover, timestamp)?;
-            active.writer.send_raw(opcode, &body)
+            match encoded_or_dropped("movement", pose.encode(opcode, mover, timestamp)) {
+                Some(body) => active.writer.send_raw(opcode, &body),
+                None => Ok(()),
+            }
         })
         .unwrap_or(Ok(()))
+}
+
+/// An outbound body, or `None` with a warning when the client's own pose would not encode: a
+/// bad pose is dropped like an invalid chat line, never a session error.
+fn encoded_or_dropped<E: std::fmt::Display>(
+    what: &str,
+    body: Result<Vec<u8>, E>,
+) -> Option<Vec<u8>> {
+    match body {
+        Ok(body) => Some(body),
+        Err(error) => {
+            bevy::log::warn!("net(wrath): {what} not encodable, dropped: {error}");
+            None
+        }
+    }
 }
 
 /// `CMSG_MOVE_NOT_ACTIVE_MOVER`: our own body's parting pose as we hand control to a vehicle or a
@@ -3289,7 +3387,10 @@ fn send_not_active_mover(active: &mut WrathWriterSwap, command: ClientCommand) -
         pitch: None,
         transport: None,
     };
-    let body = wrath_authority::encode_mover_pose(guid, pose, active.clock.now_ms())?;
+    let body = wrath_authority::encode_mover_pose(guid, pose, active.clock.now_ms());
+    let Some(body) = encoded_or_dropped("NOT_ACTIVE_MOVER", body) else {
+        return Ok(());
+    };
     active
         .writer
         .send_raw(wrath_authority::CMSG_MOVE_NOT_ACTIVE_MOVER, &body)
@@ -3361,10 +3462,15 @@ fn send_force_root(
 /// speed, water walk, feather fall, hover, can-fly, knockback and the near-teleport snap. Gravity
 /// and collision height are acknowledged without one.
 fn mover_order_event(order: &MoverOrder) -> Option<SessionEvent> {
-    use wrathplus_protocol::types::{JumpInfo, MoveMode, SpeedKind};
     use wrath_authority::{ModeOrderKind, SpeedOrderKind};
+    use wrathplus_protocol::types::{JumpInfo, MoveMode, SpeedKind};
     Some(match *order {
-        MoverOrder::Speed { kind, mover_guid, counter, speed } => SessionEvent::ForceSpeedChange {
+        MoverOrder::Speed {
+            kind,
+            mover_guid,
+            counter,
+            speed,
+        } => SessionEvent::ForceSpeedChange {
             guid: mover_guid,
             kind: match kind {
                 SpeedOrderKind::Walk => SpeedKind::Walk,
@@ -3380,7 +3486,12 @@ fn mover_order_event(order: &MoverOrder) -> Option<SessionEvent> {
             counter,
             speed,
         },
-        MoverOrder::Mode { kind, apply, mover_guid, counter } => SessionEvent::MoveMode {
+        MoverOrder::Mode {
+            kind,
+            apply,
+            mover_guid,
+            counter,
+        } => SessionEvent::MoveMode {
             guid: mover_guid,
             counter,
             mode: match kind {
@@ -3409,9 +3520,17 @@ fn mover_order_event(order: &MoverOrder) -> Option<SessionEvent> {
                 xy_speed: horizontal_speed,
             },
         },
-        MoverOrder::TeleportNear { mover_guid, counter, position, orientation } => {
-            SessionEvent::Teleport { guid: mover_guid, counter, position, orientation }
-        }
+        MoverOrder::TeleportNear {
+            mover_guid,
+            counter,
+            position,
+            orientation,
+        } => SessionEvent::Teleport {
+            guid: mover_guid,
+            counter,
+            position,
+            orientation,
+        },
         MoverOrder::CollisionHeight { .. } => return None,
     })
 }
@@ -3579,6 +3698,9 @@ fn drain<T>(receiver: &Receiver<T>) {
 mod tests {
     use super::*;
     use wrathplus_protocol::wrath_world::WrathCharEnumItem;
+    /// Movement authority: grants, denials, the self create and the vehicle hand-off.
+    #[path = "authority.rs"]
+    mod authority;
 
     pub(super) fn test_self_position() -> MovementPosition {
         MovementPosition::Stationary(wrathplus_protocol::wrath_gameplay::Position {
@@ -3907,30 +4029,89 @@ mod tests {
             text: "hi".into(),
             language,
         };
-        assert_eq!(route(&line(ChatKind::Say, None, None)), WrathRoute::NativeChatLine);
-        assert_eq!(chat_line(line(ChatKind::Say, None, None), 1).unwrap(), (0x95, [1u32.to_le_bytes(), 1u32.to_le_bytes()].concat().into_iter().chain(*b"hi\0").collect()));
         assert_eq!(
-            chat_line(line(ChatKind::Whisper, Some("Bob"), Some(7)), 1).unwrap().1,
-            [7u32.to_le_bytes(), 7u32.to_le_bytes()].concat().into_iter().chain(*b"Bob\0hi\0").collect::<Vec<_>>()
+            route(&line(ChatKind::Say, None, None)),
+            WrathRoute::NativeChatLine
         );
-        let addon = ClientCommand::AddonMessage { distribution: wrathplus_ui::script::AddonDistribution::Guild, text: "p\tm".into(), target: None };
-        assert_eq!(chat_line(addon, 1).unwrap().1[..8], [4u32.to_le_bytes(), u32::MAX.to_le_bytes()].concat()[..]);
-        // The 12340 WHISPER lane: chat type 0x07, LANG_ADDON, the target before the text.
-        let whisper = ClientCommand::AddonMessage { distribution: wrathplus_ui::script::AddonDistribution::Whisper, text: "p\tm".into(), target: Some("Bob".into()) };
-        assert_eq!(chat_line(whisper, 1).unwrap().1, [7u32.to_le_bytes(), u32::MAX.to_le_bytes()].concat().into_iter().chain(*b"Bob\0p\tm\0").collect::<Vec<_>>());
-        let embedded = ClientCommand::Chat { kind: ChatKind::Say, target: None, text: "a\0b".into(), language: None };
-        assert!(chat_line(embedded, 1).is_err(), "an embedded NUL is refused before send");
-        assert_eq!(route(&ClientCommand::LeaveChannel { name: "x".into() }), WrathRoute::NativeChannel);
         assert_eq!(
-            wrathplus_protocol::wrath_chat_notices::encode(&channel_command(ClientCommand::ChannelKick { name: "x".into(), player: "Bob".into() })),
+            chat_line(line(ChatKind::Say, None, None), 1).unwrap(),
+            (
+                0x95,
+                [1u32.to_le_bytes(), 1u32.to_le_bytes()]
+                    .concat()
+                    .into_iter()
+                    .chain(*b"hi\0")
+                    .collect()
+            )
+        );
+        assert_eq!(
+            chat_line(line(ChatKind::Whisper, Some("Bob"), Some(7)), 1)
+                .unwrap()
+                .1,
+            [7u32.to_le_bytes(), 7u32.to_le_bytes()]
+                .concat()
+                .into_iter()
+                .chain(*b"Bob\0hi\0")
+                .collect::<Vec<_>>()
+        );
+        let addon = ClientCommand::AddonMessage {
+            distribution: wrathplus_ui::script::AddonDistribution::Guild,
+            text: "p\tm".into(),
+            target: None,
+        };
+        assert_eq!(
+            chat_line(addon, 1).unwrap().1[..8],
+            [4u32.to_le_bytes(), u32::MAX.to_le_bytes()].concat()[..]
+        );
+        // The 12340 WHISPER lane: chat type 0x07, LANG_ADDON, the target before the text.
+        let whisper = ClientCommand::AddonMessage {
+            distribution: wrathplus_ui::script::AddonDistribution::Whisper,
+            text: "p\tm".into(),
+            target: Some("Bob".into()),
+        };
+        assert_eq!(
+            chat_line(whisper, 1).unwrap().1,
+            [7u32.to_le_bytes(), u32::MAX.to_le_bytes()]
+                .concat()
+                .into_iter()
+                .chain(*b"Bob\0p\tm\0")
+                .collect::<Vec<_>>()
+        );
+        let embedded = ClientCommand::Chat {
+            kind: ChatKind::Say,
+            target: None,
+            text: "a\0b".into(),
+            language: None,
+        };
+        assert!(
+            chat_line(embedded, 1).is_err(),
+            "an embedded NUL is refused before send"
+        );
+        assert_eq!(
+            route(&ClientCommand::LeaveChannel { name: "x".into() }),
+            WrathRoute::NativeChannel
+        );
+        assert_eq!(
+            wrathplus_protocol::wrath_chat_notices::encode(&channel_command(
+                ClientCommand::ChannelKick {
+                    name: "x".into(),
+                    player: "Bob".into()
+                }
+            )),
             (0xa4, b"x\0Bob\0".to_vec())
         );
     }
 
     #[test]
     fn the_world_enter_status_request_is_native_and_other_queries_keep_their_routes() {
-        assert_eq!(route(&ClientCommand::BattlefieldStatusRequest), WrathRoute::NativeBattleground);
-        assert_eq!(battleground_packet(ClientCommand::BattlefieldStatusRequest), (0x02d3, Vec::new()));
+        assert_eq!(
+            route(&ClientCommand::BattlefieldStatusRequest),
+            WrathRoute::NativeBattleground
+        );
+        assert_eq!(
+            battleground_packet(ClientCommand::BattlefieldStatusRequest),
+            (0x02d3, Vec::new())
+        );
         assert_eq!(
             route(&ClientCommand::QueryTime),
             WrathRoute::NativeSessionMisc
@@ -4030,374 +4211,6 @@ mod tests {
             route(&ClientCommand::QueryTime),
             WrathRoute::NativeSessionMisc
         );
-    }
-
-    #[test]
-    fn player_action_authority_requires_current_self_control_but_not_movement_permission() {
-        let shared = Arc::new(MovementAuthority::default());
-        let old = shared.install(60, 0x55);
-        assert!(old.with_player_action(|| ()).is_none());
-        old.observe_self_create(0x55, &test_self_position())
-            .unwrap();
-        assert_eq!(old.with_player_action(|| 1), Some(1));
-        let root = ForceRootOrder {
-            mover_guid: 0x55,
-            counter: 1,
-        };
-        old.raise_root_barrier(root, true).unwrap();
-        old.send_root_ack(root, true, 2, |_, _| Ok(())).unwrap();
-        assert!(old.with_movement_send(|| ()).is_none());
-        assert_eq!(
-            old.with_player_action(|| 2),
-            Some(2),
-            "root cannot disable selection/melee"
-        );
-        old.revoke();
-        assert!(old.with_player_action(|| ()).is_none());
-        let current = shared.install(61, 0x55);
-        current
-            .observe_self_create(0x55, &test_self_position())
-            .unwrap();
-        assert!(old.with_player_action(|| ()).is_none());
-        assert_eq!(current.with_player_action(|| 3), Some(3));
-    }
-
-    #[test]
-    fn movement_authority_requires_self_create_before_normal_initial_grant() {
-        let shared = Arc::new(MovementAuthority::default());
-        let authority = shared.install(1, 0x55);
-        let sends = AtomicU64::new(0);
-
-        assert_eq!(
-            authority.with_movement_send(|| sends.fetch_add(1, Ordering::SeqCst)),
-            None
-        );
-        let error = authority
-            .observe_self_create(0x66, &test_self_position())
-            .unwrap_err();
-        assert!(error.to_string().contains("foreign mover"));
-        assert_eq!(
-            authority.with_movement_send(|| sends.fetch_add(1, Ordering::SeqCst)),
-            None
-        );
-        let authority = shared.install(2, 0x55);
-        authority
-            .observe_self_create(0x55, &test_self_position())
-            .unwrap();
-        assert_eq!(
-            authority.with_movement_send(|| sends.fetch_add(1, Ordering::SeqCst)),
-            Some(0)
-        );
-        assert_eq!(sends.load(Ordering::SeqCst), 1);
-    }
-
-    #[test]
-    fn pre_self_order_timeout_revokes_and_queues_epoch_fatal() {
-        let shared = Arc::new(MovementAuthority::default());
-        let authority = shared.install(35, 0x351);
-        authority.observe_control(0x351, true).unwrap();
-        let (control_tx, control_rx) = crossbeam_channel::unbounded();
-
-        expire_pre_self_orders(&authority, 35, 2, &control_tx);
-
-        let WrathWriterControl::Fatal { epoch, reason } = control_rx.recv().unwrap() else {
-            panic!("expected fatal control");
-        };
-        assert_eq!(epoch, 35);
-        assert!(reason.contains("self pose did not arrive"));
-        assert!(reason.contains("2 pending movement order(s)"));
-        authority
-            .observe_self_create(0x351, &test_self_position())
-            .unwrap();
-        assert!(authority.with_movement_send(|| ()).is_none());
-    }
-
-    #[test]
-    fn self_control_grant_and_deny_gate_movement() {
-        let shared = Arc::new(MovementAuthority::default());
-        let authority = shared.install(2, 0x77);
-        authority
-            .observe_self_create(0x77, &test_self_position())
-            .unwrap();
-        authority.observe_control(0x77, false).unwrap();
-        assert!(authority.with_movement_send(|| ()).is_none());
-        authority.observe_control(0x77, true).unwrap();
-        assert_eq!(authority.with_movement_send(|| 9), Some(9));
-        authority.observe_control(0x77, false).unwrap();
-        assert!(authority.with_movement_send(|| ()).is_none());
-    }
-
-    #[test]
-    fn deny_before_self_create_prevents_implicit_grant() {
-        let shared = Arc::new(MovementAuthority::default());
-        let authority = shared.install(8, 0xee);
-
-        authority.observe_control(0xee, false).unwrap();
-        authority
-            .observe_self_create(0xee, &test_self_position())
-            .unwrap();
-
-        assert!(authority.with_movement_send(|| ()).is_none());
-    }
-
-    #[test]
-    fn repeated_self_create_does_not_restore_revoked_control() {
-        let shared = Arc::new(MovementAuthority::default());
-        let authority = shared.install(9, 0xff);
-
-        authority
-            .observe_self_create(0xff, &test_self_position())
-            .unwrap();
-        assert_eq!(authority.with_movement_send(|| 1), Some(1));
-        authority.revoke();
-        authority
-            .observe_self_create(0xff, &test_self_position())
-            .unwrap();
-
-        assert!(authority.with_movement_send(|| ()).is_none());
-    }
-
-    #[test]
-    fn explicit_grant_before_self_create_still_requires_create() {
-        let shared = Arc::new(MovementAuthority::default());
-        let authority = shared.install(10, 0x110);
-
-        authority.observe_control(0x110, true).unwrap();
-        assert!(authority.with_movement_send(|| ()).is_none());
-        authority
-            .observe_self_create(0x110, &test_self_position())
-            .unwrap();
-
-        assert_eq!(authority.with_movement_send(|| 2), Some(2));
-    }
-
-    #[test]
-    fn new_epoch_resets_explicit_control_decision() {
-        let shared = Arc::new(MovementAuthority::default());
-        let denied = shared.install(11, 0x120);
-        denied.observe_control(0x120, false).unwrap();
-        denied
-            .observe_self_create(0x120, &test_self_position())
-            .unwrap();
-        assert!(denied.with_movement_send(|| ()).is_none());
-
-        let replacement = shared.install(12, 0x130);
-        replacement
-            .observe_self_create(0x130, &test_self_position())
-            .unwrap();
-
-        assert_eq!(replacement.with_movement_send(|| 3), Some(3));
-        assert!(denied.with_movement_send(|| ()).is_none());
-    }
-
-    #[test]
-    fn a_vehicle_handed_to_us_is_driven_and_acked_from_its_own_pose() {
-        use wrathplus_protocol::wrath_gameplay::{MovementInfo, Position};
-        let shared = Arc::new(MovementAuthority::default());
-        let authority = shared.install(3, 0x88);
-        authority
-            .observe_self_create(0x88, &test_self_position())
-            .unwrap();
-        // The vehicle's create gives the pose its first orders ACK from.
-        let car = MovementInfo {
-            flags: 0,
-            flags2: 0,
-            timestamp: 0,
-            position: Position {
-                x: 50.0,
-                y: 60.0,
-                z: 70.0,
-                orientation: 1.0,
-            },
-            transport: None,
-            pitch: None,
-            fall_time: 0,
-            jump: None,
-            spline_elevation: None,
-        };
-        authority.observe_unit_create(0x99, &MovementPosition::Living(car));
-        // `SetClientControl(vehicle, true)`, then the root AzerothCore puts on a DISABLE_MOVE one.
-        authority.observe_control(0x99, true).unwrap();
-        let root = ForceRootOrder {
-            mover_guid: 0x99,
-            counter: 1,
-        };
-        assert!(authority.raise_root_barrier(root, true).unwrap());
-        let mut sent = Vec::new();
-        assert_eq!(
-            authority
-                .send_root_ack(root, true, 5, |opcode, body| {
-                    sent.push((opcode, body.to_vec()));
-                    Ok(())
-                })
-                .unwrap(),
-            UnsetAckResult::Sent
-        );
-        assert_eq!(
-            sent,
-            vec![(
-                wrath_authority::CMSG_FORCE_MOVE_ROOT_ACK,
-                wrath_authority::encode_force_root_on_foot_ack(
-                    0x99,
-                    1,
-                    GroundPose::new(0, [50.0, 60.0, 70.0], 1.0).unwrap().into(),
-                    5,
-                    true,
-                )
-                .unwrap()
-            )]
-        );
-        // Rooted, the vehicle may only turn: a turn goes out under its guid with ROOT, a step
-        // does not, and our body's claim is not the mover.
-        let turning = OnFootPose {
-            flags: wrath_ground::MOVE_TURN_LEFT,
-            ..GroundPose::new(0, [50.0, 60.0, 70.0], 1.2).unwrap().into()
-        };
-        let mut wrote = None;
-        assert!(authority
-            .with_on_foot_send(0x99, turning, |guid, pose| {
-                wrote = Some((guid, pose.flags));
-                Ok(())
-            })
-            .unwrap()
-            .is_ok());
-        assert_eq!(
-            wrote,
-            Some((0x99, wrath_ground::MOVE_TURN_LEFT | wrath_ground::MOVE_ROOT))
-        );
-        let stepping = OnFootPose {
-            flags: wrath_ground::MOVE_FORWARD,
-            ..turning
-        };
-        assert!(authority
-            .with_on_foot_send(0x99, stepping, |_, _| panic!("rooted step"))
-            .is_none());
-        assert!(authority
-            .with_on_foot_send(0x88, turning, |_, _| panic!("our body is not the mover"))
-            .is_none());
-        // An order for a unit we never saw is ignored, not fatal.
-        assert!(!authority
-            .raise_unset_barrier(UnsetCanFlyOrder {
-                mover_guid: 0x777,
-                counter: 2,
-            })
-            .unwrap());
-        // Control returns to our body with its own pose and no root.
-        authority.observe_control(0x88, true).unwrap();
-        assert_eq!(authority.with_movement_send(|| 1), Some(1));
-        let state = authority.shared.state.lock().unwrap();
-        assert_eq!(state.mover, 0x88);
-        assert_eq!(state.ground_pose.unwrap().position, [1.0, 2.0, 3.0]);
-        assert!(state.parked[&0x99].rooted);
-    }
-
-    #[test]
-    fn a_rooted_passenger_keeps_its_deck_and_reports_from_it() {
-        let shared = Arc::new(MovementAuthority::default());
-        let authority = shared.install(4, 0x89);
-        authority
-            .observe_self_create(0x89, &test_self_position())
-            .unwrap();
-        let deck = wrath_ground::TransportTail {
-            guid: 0x1FC0_0000_0000_0042,
-            position: [1.0, 2.0, 3.0],
-            orientation: 0.5,
-            time: 7,
-        };
-        let riding = OnFootPose {
-            flags: wrath_ground::MOVE_ON_TRANSPORT | wrath_ground::MOVE_FORWARD,
-            position: [10.0, 20.0, 30.0],
-            orientation: 0.25,
-            fall_time: 0,
-            fall: None,
-            pitch: None,
-            transport: Some(deck),
-        };
-        assert!(authority.with_self_send(riding, || Ok(())).unwrap().is_ok());
-        let root = ForceRootOrder {
-            mover_guid: 0x89,
-            counter: 30,
-        };
-        authority.raise_root_barrier(root, true).unwrap();
-        let mut sent = Vec::new();
-        authority
-            .send_root_ack(root, true, 9, |opcode, body| {
-                sent.push((opcode, body.to_vec()));
-                Ok(())
-            })
-            .unwrap();
-        // A STOP (still on the deck), then the ACK with ROOT | ON_TRANSPORT.
-        let [(stop, stop_body), (ack, ack_body)] = &sent[..] else {
-            panic!("{sent:?}")
-        };
-        assert_eq!((*stop, *ack), (wrath_ground::MSG_MOVE_STOP, wrath_authority::CMSG_FORCE_MOVE_ROOT_ACK));
-        let stop_movement = wrathplus_protocol::wrath_gameplay::OutboundMovement::from_bytes(stop_body).unwrap().movement;
-        assert_eq!(stop_movement.flags, wrath_ground::MOVE_ON_TRANSPORT);
-        assert_eq!(stop_movement.transport.unwrap().guid, deck.guid);
-        // 0x89 packs to two bytes, so the flags follow at byte 6.
-        let flags = u32::from_le_bytes(ack_body[6..10].try_into().unwrap());
-        assert_eq!(flags, wrath_authority::MOVEMENT_FLAG_ROOT | wrath_ground::MOVE_ON_TRANSPORT);
-    }
-
-    #[test]
-    fn unsupported_mandatory_orders_are_classified_fail_closed() {
-        // Only the never-sent swim/fly transition pair remains undecodable; it is logged and ignored.
-        for opcode in [0x033e, 0x033f] {
-            assert!(mandatory_movement_order(opcode), "{opcode:#05x}");
-            assert!(!wrath_authority::is_mover_order(opcode), "{opcode:#05x}");
-        }
-        // Every other self order has a native ACK path.
-        for opcode in [
-            0x00c7, 0x00de, 0x00df, 0x00e2, 0x00e4, 0x00e6, 0x00ef, 0x00f2, 0x00f3, 0x00f4, 0x00f5,
-            0x02da, 0x02dc, 0x02de, 0x0343, 0x0381, 0x0383, 0x045c, 0x04ce, 0x04d0, 0x0516,
-        ] {
-            assert!(wrath_authority::is_mover_order(opcode), "{opcode:#05x}");
-            assert!(!mandatory_movement_order(opcode), "{opcode:#05x}");
-        }
-        // An observed teleport is a relay, not an order.
-        assert!(wrathplus_protocol::wrath_relay::handles(0x00c5));
-        assert!(!mandatory_movement_order(0x00c5));
-        for opcode in [
-            SMSG_PONG,
-            SMSG_CLIENT_CONTROL_UPDATE,
-            wrath_authority::SMSG_MOVE_UNSET_CAN_FLY,
-            wrath_authority::SMSG_FORCE_MOVE_ROOT,
-            wrath_authority::SMSG_FORCE_MOVE_UNROOT,
-            0x00dd,
-        ] {
-            assert!(!mandatory_movement_order(opcode), "{opcode:#05x}");
-        }
-
-        let shared = Arc::new(MovementAuthority::default());
-        let authority = shared.install(4, 0xaa);
-        authority
-            .observe_self_create(0xaa, &test_self_position())
-            .unwrap();
-        assert!(mandatory_movement_order(0x033e));
-        authority.revoke();
-        assert!(authority.with_movement_send(|| ()).is_none());
-    }
-
-    #[test]
-    fn stale_authority_handles_cannot_send_or_change_replacement_session() {
-        let shared = Arc::new(MovementAuthority::default());
-        let stale = shared.install(5, 0xbb);
-        stale
-            .observe_self_create(0xbb, &test_self_position())
-            .unwrap();
-        assert_eq!(stale.with_movement_send(|| 1), Some(1));
-
-        let current = shared.install(6, 0xcc);
-        stale
-            .observe_self_create(0xbb, &test_self_position())
-            .unwrap();
-        stale.observe_control(0xbb, true).unwrap();
-        assert!(stale.with_movement_send(|| ()).is_none());
-        assert!(current.with_movement_send(|| ()).is_none());
-        current
-            .observe_self_create(0xcc, &test_self_position())
-            .unwrap();
-        assert_eq!(current.with_movement_send(|| 2), Some(2));
     }
 
     #[test]
@@ -4597,10 +4410,7 @@ mod tests {
             pitch: None,
             transport: None,
         };
-        authority
-            .with_self_send(pose, || Ok(()))
-            .unwrap()
-            .unwrap();
+        authority.with_self_send(pose, || Ok(())).unwrap().unwrap();
         let newer = OnFootPose {
             position: [9.0, 9.0, 12.5],
             ..pose
@@ -4643,7 +4453,8 @@ mod tests {
         assert_eq!(packets.len(), 2);
         assert_eq!(packets[0].0, wrath_ground::MSG_MOVE_STOP);
         let stopped =
-            wrathplus_protocol::wrath_gameplay::OutboundMovement::from_bytes(&packets[0].1).unwrap();
+            wrathplus_protocol::wrath_gameplay::OutboundMovement::from_bytes(&packets[0].1)
+                .unwrap();
         assert_eq!(
             [
                 stopped.movement.position.x,
@@ -5123,11 +4934,17 @@ fn guild_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
         ClientCommand::GuildMotd { motd } => G::Motd {
             text: motd.into_bytes(),
         },
-        ClientCommand::GuildCreate { name } => G::Create { name: name.into_bytes() },
+        ClientCommand::GuildCreate { name } => G::Create {
+            name: name.into_bytes(),
+        },
         ClientCommand::GuildLeave => G::Leave,
         ClientCommand::GuildDisband => G::Disband,
-        ClientCommand::GuildLeader { name } => G::Leader { name: name.into_bytes() },
-        ClientCommand::GuildAddRank { name } => G::AddRank { name: name.into_bytes() },
+        ClientCommand::GuildLeader { name } => G::Leader {
+            name: name.into_bytes(),
+        },
+        ClientCommand::GuildAddRank { name } => G::AddRank {
+            name: name.into_bytes(),
+        },
         ClientCommand::GuildDelRank => G::DelRank,
         ClientCommand::GuildSetPublicNote { name, note } => G::SetNote {
             officer: false,
@@ -5139,7 +4956,9 @@ fn guild_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
             name: name.into_bytes(),
             note: note.into_bytes(),
         },
-        ClientCommand::GuildInfoText { text } => G::InfoText { text: text.into_bytes() },
+        ClientCommand::GuildInfoText { text } => G::InfoText {
+            text: text.into_bytes(),
+        },
         ClientCommand::SaveGuildEmblem { vendor, design } => G::SaveEmblem { vendor, design },
         ClientCommand::TabardVendorActivate { npc } => G::TabardVendorActivate { vendor: npc },
         ClientCommand::GuildEventLogQuery => G::EventLogQuery,
@@ -5339,7 +5158,9 @@ mod mover_order_tests {
                 .unwrap(),
             UnsetAckResult::Sent
         );
-        let [(opcode, body)] = &sent[..] else { panic!() };
+        let [(opcode, body)] = &sent[..] else {
+            panic!()
+        };
         assert_eq!(*opcode, 0x00e3);
         assert_eq!(body[body.len() - 4..], 14.0f32.to_le_bytes());
         assert_eq!(authority.with_movement_send(|| 1), Some(1));
@@ -5454,7 +5275,12 @@ mod mover_order_tests {
             panic!()
         };
         assert_eq!(
-            (launch.zspeed, launch.cos_angle, launch.sin_angle, launch.xy_speed),
+            (
+                launch.zspeed,
+                launch.cos_angle,
+                launch.sin_angle,
+                launch.xy_speed
+            ),
             (-9.0, 0.6, 0.8, 12.0)
         );
         assert!(matches!(
@@ -5473,7 +5299,11 @@ mod mover_order_tests {
                 mover_guid: 1,
                 counter: 2,
             }),
-            Some(SessionEvent::MoveMode { mode: MoveMode::CanFly, apply: true, .. })
+            Some(SessionEvent::MoveMode {
+                mode: MoveMode::CanFly,
+                apply: true,
+                ..
+            })
         ));
         for order in [
             MoverOrder::Mode {
@@ -5600,7 +5430,13 @@ mod observer_teleport_tests {
         .unwrap()
     }
 
-    type Snapshot = (Option<OnFootPose>, Vec<PendingAuthorityOrder>, Option<u32>, bool, bool);
+    type Snapshot = (
+        Option<OnFootPose>,
+        Vec<PendingAuthorityOrder>,
+        Option<u32>,
+        bool,
+        bool,
+    );
 
     fn snapshot(authority: &MovementAuthorityHandle) -> Snapshot {
         let state = authority.shared.state.lock().unwrap();
@@ -5648,7 +5484,10 @@ mod observer_teleport_tests {
             if dropped {
                 assert!(matches!(
                     event,
-                    SessionEvent::PacketDropped { opcode: 0x00c5, unparseable: true }
+                    SessionEvent::PacketDropped {
+                        opcode: 0x00c5,
+                        unparseable: true
+                    }
                 ));
             } else {
                 assert!(matches!(

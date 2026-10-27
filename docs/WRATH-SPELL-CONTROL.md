@@ -51,7 +51,7 @@ bodies as AC's handlers read them; no server acceptance is claimed:
 - Also with producers: 0375 cancel mount aura (`Dismount()`), 0414 totem destroyed
   (`DestroyTotem(slot)`), and 03F8 spell click (below).
 - Transport-only (`ClientCommand::NativeSpellControl`, no producer yet): 0279 request pet info,
-  029B cancel growth aura, 047A pet learn talent.
+  029B cancel growth aura. 047A pet learn talent has its producer ("Pet talents").
 
 **Not in this unit**: 01F0 pet cast spell (needs a native `SpellCastTargets` writer and a
 producer), the vehicle seat/exit requests 046D/0476..0479 (they carry movement info; movement
@@ -212,4 +212,22 @@ read). A category is met by carrying any item whose own template category has th
 covers the mask (`0x7548f0`; AzerothCore `IsTotemCategoryCompatibleWith`); the item template's
 `TotemCategory` word is now kept. Not built: the `RequiredAreasID` entry between the focus and the
 totems.
+
+## Pet talents
+
+The stock 3.3.5 talent frame shows a hunter pet's tree when `GetNumTalentGroups(false, true)` is
+non-zero, and with `previewTalents` off (12340's default) learns through `LearnTalent(tab, id,
+isPet, group)`.
+
+- The pet's page is its family's talent type (`CreatureFamily.dbc`) mapped to the first
+  `TalentTab` whose pet mask has that bit (`GetPetTalentTree` `0x5d3d80`), with the ranks and
+  unspent points of `SMSG_TALENTS_INFO`'s pet form (ranks are 0-based on the wire).
+  `ui_pet_talent_tree` pushes it when it changes and fires `PET_TALENT_UPDATE`.
+- The talent getters' `isPet` branch reads that page: tabs, talents, prerequisites, links,
+  `GetNumTalentGroups` (1 with a page), `GetUnspentTalentPoints`.
+- A pet `LearnTalent` sends `CMSG_PET_LEARN_TALENT` with the pet's guid, the talent and its
+  current rank; a maxed talent sends nothing.
+- Not built: the pet's preview ranks. With `previewTalents` on, `AddPreviewTalentPoints(..., true)`
+  and `LearnPreviewTalents(true)` stay no-ops, so `CMSG_LEARN_PREVIEW_TALENTS_PET` (`0x4C2`) is
+  still transport-only.
 

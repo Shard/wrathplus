@@ -100,14 +100,16 @@ impl TalentCatalog {
         Self { tabs, by_tab }
     }
 
-    /// The name of the first tab, in file order, whose pet mask has the pet talent type's bit
+    /// The first tab, in file order, whose pet mask has the pet talent type's bit
     /// (`GetPetTalentTree` `0x5d3d80`); `None` for a negative type or no tab.
-    pub fn pet_tab_name(&self, pet_talent_type: i32) -> Option<&str> {
+    pub fn pet_tab(&self, pet_talent_type: i32) -> Option<&TalentTabInfo> {
         let bit = 1u32.checked_shl(u32::try_from(pet_talent_type).ok()?)?;
-        self.tabs
-            .iter()
-            .find(|t| t.pet_talent_mask & bit != 0)
-            .map(|t| t.name.as_str())
+        self.tabs.iter().find(|t| t.pet_talent_mask & bit != 0)
+    }
+
+    /// [`Self::pet_tab`]'s name.
+    pub fn pet_tab_name(&self, pet_talent_type: i32) -> Option<&str> {
+        self.pet_tab(pet_talent_type).map(|t| t.name.as_str())
     }
 
     /// A race and class's tabs (unit bytes, 1-based) in file order, as `0x4f2e50` filters them.

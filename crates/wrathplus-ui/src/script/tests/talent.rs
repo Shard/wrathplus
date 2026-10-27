@@ -101,7 +101,7 @@ fn learn_talent_queues_for_the_app_drain() {
     let mut s = script();
     s.set_talents(one_tab_state());
     s.run("LearnTalent(1, 1); LearnTalent(1, 2)").unwrap();
-    assert_eq!(s.take_talent_learns(), vec![(1, 1), (1, 2)]);
+    assert_eq!(s.take_talent_learns(), vec![(1, 1, false), (1, 2, false)]);
     assert!(s.take_talent_learns().is_empty(), "drain empties the queue");
     assert!(s.take_errors().is_empty());
 }
