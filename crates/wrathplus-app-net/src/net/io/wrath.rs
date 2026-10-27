@@ -2631,7 +2631,7 @@ fn quest_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
 }
 
 /// The native trade, auction and master-loot body for a [`WrathRoute::NativeExchange`] command.
-fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
+pub(super) fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use wrathplus_protocol::wrath_exchange::{encode, Command as X};
     use wrathplus_protocol::wrath_trade::Command as T;
     let trade = |command: T| (command.opcode(), command.encode());

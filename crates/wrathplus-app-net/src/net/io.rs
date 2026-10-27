@@ -22,6 +22,12 @@ pub fn session_packet(command: super::ClientCommand) -> (u32, Vec<u8>) {
     wrath::session_packet(command)
 }
 
+/// The opcode and body the writer sends for an exchange-route command: the trade, auction and
+/// master-loot requests.
+pub fn exchange_packet(command: super::ClientCommand) -> (u32, Vec<u8>) {
+    wrath::exchange_packet(command)
+}
+
 /// The inbound census: every packet off the world socket, and the unix ms of the latest, which
 /// tell a silent server from a dead socket for the runaway watch ([`crate::motion`]).
 pub(crate) static INBOUND_PACKETS: AtomicU64 = AtomicU64::new(0);
