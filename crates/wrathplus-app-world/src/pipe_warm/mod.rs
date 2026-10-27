@@ -269,6 +269,10 @@ pub(crate) struct WarmPass {
     last_reveal: f32,
     reveal_frames: u32,
     showing: Vec<Entity>,
+    /// `Time<Real>` of the last progress (a rig revealed or a pipeline settled), and the settled
+    /// count it saw, for [`verdict`]'s stall test.
+    last_progress: f32,
+    settled_seen: usize,
 }
 
 impl WarmPass {
@@ -317,9 +321,36 @@ type WarmRigVis<'w, 's> = Query<
     (With<WarmRig>, Without<WarmBoothCam>),
 >;
 
-/// Never hold a cover unbounded: on timeout the pass warns and releases, and what remains
-/// compiles live.
-const WARM_TIMEOUT_SECS: f32 = 10.0;
+/// The pass holds the cover while it progresses, however slow the machine: a flat timeout released
+/// it with rigs unrevealed on a loaded machine (8 of 10 probe runs, 2026-10-27), and what was left
+/// compiled live in play. It releases on [`WARM_STALL_SECS`] with neither a rig revealed nor a
+/// pipeline settled (a hung or erroring build), and at [`WARM_HARD_CAP_SECS`] whatever the progress.
+const WARM_STALL_SECS: f32 = 5.0;
+/// The safety net: six times an unloaded drain (7–10 s), past any loaded one seen.
+const WARM_HARD_CAP_SECS: f32 = 60.0;
+
+/// What the pass does this frame.
+#[derive(Debug, PartialEq)]
+enum Verdict {
+    Drained,
+    Stalled,
+    Capped,
+    Wait,
+}
+
+/// The release rule, in seconds of `Time<Real>`: drained once every rig is revealed, nothing is
+/// pending and the settle window has passed; else a stall or the cap; else wait.
+fn verdict(now: f32, spawned: f32, last_progress: f32, drained: bool) -> Verdict {
+    if drained {
+        Verdict::Drained
+    } else if now - spawned >= WARM_HARD_CAP_SECS {
+        Verdict::Capped
+    } else if now - last_progress >= WARM_STALL_SECS {
+        Verdict::Stalled
+    } else {
+        Verdict::Wait
+    }
+}
 fn run_warm_pass(
     mut commands: Commands,
     mut warm: ResMut<WarmPass>,
@@ -370,6 +401,8 @@ fn run_warm_pass(
         }
         warm.spawned_at = Some(now);
         warm.last_reveal = now;
+        warm.last_progress = now;
+        warm.settled_seen = watch.0.settled.load(Ordering::Relaxed);
         warm.revealed = 0;
         warm.reveal_frames = 0;
         // The twin booth warms the custom-projection view key real bakes install; the real
@@ -440,28 +473,51 @@ fn run_warm_pass(
     }
     let all_revealed = revealed_now == 0;
     let last_reveal = warm.last_reveal;
+    let settled = watch.0.settled.load(Ordering::Relaxed);
     let pending = watch
         .0
         .created
         .load(Ordering::Relaxed)
-        .saturating_sub(watch.0.settled.load(Ordering::Relaxed));
-    if all_revealed && pending == 0 && now - last_reveal >= WARM_SETTLE_SECS {
-        warm.done = true;
-        warm.warmed_once = true;
-        warm.effect_tex = None;
-        despawn_rigs(&mut commands, &rigs);
-        info!(
-            "pipeline warm: {} rigs drained in {:.2}s over {} paced frames",
-            warm.revealed,
-            now - spawned,
-            warm.reveal_frames,
-        );
-    } else if now - spawned >= WARM_TIMEOUT_SECS {
-        warm.done = true;
-        warm.effect_tex = None;
-        despawn_rigs(&mut commands, &rigs);
-        warn!("pipeline warm: TIMED OUT with {pending} pipelines pending — cover released");
+        .saturating_sub(settled);
+    if revealed_now > 0 || settled != warm.settled_seen {
+        warm.last_progress = now;
+        warm.settled_seen = settled;
     }
+    let drained = all_revealed && pending == 0 && now - last_reveal >= WARM_SETTLE_SECS;
+    let release = match verdict(now, spawned, warm.last_progress, drained) {
+        Verdict::Wait => return,
+        Verdict::Drained => {
+            warm.warmed_once = true;
+            info!(
+                "pipeline warm: {} rigs drained in {:.2}s over {} paced frames",
+                warm.revealed,
+                now - spawned,
+                warm.reveal_frames,
+            );
+            return finish(&mut warm, &mut commands, &rigs);
+        }
+        Verdict::Stalled => format!("no progress for {WARM_STALL_SECS} s"),
+        Verdict::Capped => format!("the {WARM_HARD_CAP_SECS} s cap"),
+    };
+    let unrevealed = rig_vis.iter().filter(|(_, _, w)| !w).count();
+    // Loud on purpose: the cover is meant to hold until the drain, so either net firing in play
+    // is a bug to chase.
+    error!(
+        "pipeline warm: released on {release}, {unrevealed} rigs unrevealed and {pending} \
+         pipelines pending; they compile live"
+    );
+    finish(&mut warm, &mut commands, &rigs);
+}
+
+/// Close the pass: the gate opens and the menagerie goes.
+fn finish(
+    warm: &mut WarmPass,
+    commands: &mut Commands,
+    rigs: &Query<(Entity, Option<&ChildOf>), With<WarmRig>>,
+) {
+    warm.done = true;
+    warm.effect_tex = None;
+    despawn_rigs(commands, rigs);
 }
 
 /// The view-class census: warn once per `Camera3d` view key that no rig rendered through, since
@@ -704,66 +760,5 @@ fn warm_effect_lane(
 }
 
 #[cfg(test)]
-mod census_tests {
-    use super::{view_class, ViewClass};
-    use bevy::camera::{OrthographicProjection, PerspectiveProjection, Projection};
-    use bevy::render::view::Msaa;
-
-    fn perspective() -> Projection {
-        Projection::Perspective(PerspectiveProjection::default())
-    }
-
-    fn orthographic() -> Projection {
-        Projection::Orthographic(OrthographicProjection::default_3d())
-    }
-
-    /// A warm set with no orthographic arm: the world camera's Perspective and the two
-    /// `Msaa::Off` booth classes.
-    fn warm_set_without_an_orthographic_arm() -> Vec<ViewClass> {
-        vec![
-            view_class(Some(&perspective()), Some(&Msaa::Off), true),
-            view_class(Some(&perspective()), Some(&Msaa::Sample4), true),
-            view_class(None, Some(&Msaa::Off), true),
-        ]
-    }
-
-    /// The tile camera is `Msaa::Off` like every booth, so a census keyed on sample count alone
-    /// would miss it.
-    #[test]
-    fn the_census_fires_for_an_unwarmed_orthographic_camera() {
-        let warm = warm_set_without_an_orthographic_arm();
-        let tile_cam = view_class(Some(&orthographic()), Some(&Msaa::Off), true);
-        assert!(
-            !warm.contains(&tile_cam),
-            "the ui_models tile camera's view key must read as unwarmed against a warm set that \
-             has no orthographic arm — the census must report it"
-        );
-        assert_eq!(
-            tile_cam.samples, 1,
-            "the tile camera is Msaa::Off, like every booth"
-        );
-    }
-
-    #[test]
-    fn the_census_is_silent_for_every_warmed_class() {
-        let warm = warm_set_without_an_orthographic_arm();
-        for class in &warm {
-            assert!(warm.contains(class));
-        }
-        let booth_after_first_bake = view_class(None, Some(&Msaa::Off), true);
-        assert!(
-            warm.contains(&booth_after_first_bake),
-            "a booth's runtime-installed custom projection is the NONSTANDARD class, warmed by \
-             the twin booth"
-        );
-    }
-
-    /// `Hdr` is a key bit and gates two more (`bevy_pbr` `mesh.rs:418`).
-    #[test]
-    fn dropping_hdr_is_a_different_view_key() {
-        let with = view_class(Some(&perspective()), Some(&Msaa::Off), true);
-        let without = view_class(Some(&perspective()), Some(&Msaa::Off), false);
-        assert_ne!(with, without);
-        assert!(!warm_set_without_an_orthographic_arm().contains(&without));
-    }
-}
+#[path = "census_tests.rs"]
+mod census_tests;

@@ -345,6 +345,14 @@ fn scene_fog(token: &str) -> Option<([f32; 3], f32)> {
     })
 }
 
+/// Whether the stage stands fogged: a race stage at create only (`0x472110` replaces the fog
+/// callback at select), the main menu always, and never one without a [`scene_fog`] row. The one
+/// value both the spawn stores and the in-place rebuild compares, or an unfogged stage respawns
+/// every create frame.
+fn scene_fogs(which: GlueScene, create: bool) -> bool {
+    (create || which == GlueScene::MainMenu) && scene_fog(scene_token(which)).is_some()
+}
+
 /// One assembled preview mesh, the tuple-driven counterpart of [`super::PortraitPart`].
 #[derive(Clone)]
 pub struct PreviewPart {
@@ -658,14 +666,7 @@ pub(super) fn sync_glue_scene(
     }
 
     let token = scene_token(which);
-    // A race stage fogs at create and not at select (`0x472110` replaces the fog callback); the
-    // main menu always fogs.
-    let fog = match which {
-        GlueScene::MainMenu => true,
-        GlueScene::Race { .. } | GlueScene::Stage(_) => {
-            matches!(preview.look, Some(GlueLook::Create(_)))
-        }
-    };
+    let fog = scene_fogs(which, matches!(preview.look, Some(GlueLook::Create(_))));
     // The ghost light fork (`0x472150`, [`ghost_rig`]), shared by the scene, character and pet.
     let ghost = matches!(
         preview.look,
@@ -730,7 +731,6 @@ pub(super) fn sync_glue_scene(
                 scene_rig(&model.lights)
             };
             let (fog_rgb, fog_far) = scene_fog(token).unwrap_or_default();
-            let fog = fog && scene_fog(token).is_some();
             scene_light_blob(&rig, fog_rgb, fog_far, fog).write(&queue, &light);
             scene.ghost = ghost;
             // The character and the pet re-bake onto the rewritten buffer.
@@ -764,7 +764,6 @@ pub(super) fn sync_glue_scene(
             scene_rig(&model.lights)
         };
         let (fog_rgb, fog_far) = scene_fog(token).unwrap_or_default();
-        let fog = fog && scene_fog(token).is_some();
         let blob = scene_light_blob(&rig, fog_rgb, fog_far, fog);
         let light = scene
             .light
@@ -1570,9 +1569,15 @@ mod tests {
     /// the fog there; the login keeps `AccountLogin.xml`'s.
     #[test]
     fn stages_without_a_fog_row_are_unfogged() {
+        // Shannon's 10-27 create: the in-place rebuild compared the asked-for fog with the stored
+        // one, so these stages respawned every frame and their character never stood.
         for token in ["BloodElf", "Draenei", "DeathKnight"] {
             assert_eq!(scene_fog(token), None, "{token}");
+            assert!(!scene_fogs(GlueScene::Stage(token), true), "{token}");
         }
+        assert!(scene_fogs(GlueScene::Stage("Human"), true));
+        assert!(!scene_fogs(GlueScene::Stage("Human"), false));
+        assert!(scene_fogs(GlueScene::MainMenu, false));
         assert_eq!(
             scene_fog("MainMenu_Northrend"),
             Some(([0.25, 0.06, 0.015], 1200.0))

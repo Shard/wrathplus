@@ -799,14 +799,14 @@ pub(in crate::motion) struct SwimEvaluated;
 const CREATURE_SWIM_EXIT_BAND: f32 = 1.0 / 36.0;
 
 /// A server-moved body ([`ground_derived`]) past the swim boundary, which no packet carries for
-/// one. The 1.12 client runs its depth decision `0x6030c0` on every linked CMovement (the frame
-/// walk `0x616800 → 0x615b10 → 0x616620`, the move apply `0x618c30`) and sets SWIMMING itself on
-/// a unit it does not steer (`0x60df70 → 0x61a130 → 0x61a230 → 0x7c6e50`).
+/// one. 12340 runs its depth decision `0x730d10` (from `0x73ab20`) on any unit, the one it
+/// steers or not, and starts a non-mover's swim itself (`0x721210`'s second arm, a unit on a
+/// live spline through `0x6ebf70`, labelled: unread).
 ///
 /// The decision reads `UNIT_FIELD_FLAGS` on both legs ([`crate::app_core::movement::may_swim`]): a
-/// unit with none of the three bits walks the lakebed, where vmangos paths it (`Object.cpp:2007`).
-/// Depth uses the unit's own collision height; the point the reference measures it from is
-/// untraced.
+/// unit without a permit walks the lakebed, where the server paths it. Depth is the liquid
+/// surface over the unit's position (`0x77f1e0`) less that position's Z, the feet, against the
+/// unit's own collision height.
 /// The levitating bail (`0x400`) is not read: a spline-walked unit has no live flag word, and
 /// vmangos sets the bit on a creature only from a script (`boss_onyxia.cpp:679`). The splash
 /// (`sound::water`) sits outside the flag gate, as `0x60314a` does.
@@ -841,15 +841,15 @@ impl GroundClamped {
     }
 }
 
-/// The reference's `0x6030c0` decision for one creature:
+/// 12340's `0x730d10` decision for one creature:
 ///
 /// ```text
-/// enter iff  flags ∧ depth >  0.75·h              (0x603106 test ah,0x41 + jne: ZF, strict)
-/// stay  iff  flags ∧ depth >= 0.75·h − 1/36       (0x6031c5 test ah,5 + jnp: parity, inclusive)
+/// enter iff  flags ∧ depth >  0.75·h              (0.75·h < depth, strict)
+/// stay  iff  flags ∧ depth >= 0.75·h − 1/36       (the stop takes depth < 0.75·h − 1/36)
 /// ```
 ///
-/// A false flag term forces a stop at any depth (`0x6031eb → 0x60dff0`), not only a refused start.
-fn creature_swim_state(marked: bool, depth: f32, boundary: f32, unit_flags: u32) -> bool {
+/// A false flag term forces a stop at any depth (the `0x721290` arm), not only a refused start.
+pub(super) fn creature_swim_state(marked: bool, depth: f32, boundary: f32, unit_flags: u32) -> bool {
     if !crate::app_core::movement::may_swim(unit_flags) {
         return false; // both legs: without a permit a unit can neither start nor stay
     }

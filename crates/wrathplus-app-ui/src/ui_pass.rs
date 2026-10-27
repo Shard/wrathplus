@@ -453,21 +453,8 @@ fn rebuild_ui_mesh(
     mut mesh_cost: ResMut<UiMeshCost>,
     cost_wanted: Res<crate::ui_script::UiCostWanted>,
 ) {
-    // Forget the materials of removed images first, before any early return, since a missed read
-    // leaks: a cached material holds a strong image handle and, prepared, its GPU texture.
-    // `Removed`, not `Unused`: this cache is itself a strong handle, so `Unused` never fires for a
-    // cached image, and a producer retiring an image removes the asset explicitly.
-    let retired: Vec<AssetId<Image>> = stores
-        .2
-        .read()
-        .filter_map(|e| match e {
-            AssetEvent::Removed { id } => Some(*id),
-            _ => None,
-        })
-        .collect();
-    if !retired.is_empty() {
-        pools.materials.retain(|key, _| !retired.contains(&key.0));
-    }
+    // First, before any early return ([`images::sync_cached_images`]).
+    images::sync_cached_images(&mut pools.materials, &mut stores.2, &mut stores.1);
     // The meter is off unless asked (the hover recorder, `WOW_UI_COST=1`): one bool test.
     let cost_on = cost_wanted.0 || crate::ui_script::extract::ui_cost_enabled();
     *mesh_cost = UiMeshCost::default();
@@ -861,6 +848,9 @@ fn rebuild_ui_mesh(
         };
     }
 }
+
+#[path = "ui_pass_images.rs"]
+mod images;
 
 #[cfg(test)]
 mod tests {

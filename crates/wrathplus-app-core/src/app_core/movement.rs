@@ -6,8 +6,8 @@
 use std::time::Instant;
 
 use avian3d::prelude::Collider;
-use wrathplus_assets::coords::{wow_rotation_to_bevy, wow_to_bevy};
 use bevy::prelude::*;
+use wrathplus_assets::coords::{wow_rotation_to_bevy, wow_to_bevy};
 
 /// The client's `MOVEMENTFLAGS` bits (cached at `unit+0x9e8`), tested as the binary tests them.
 pub mod move_flags {
@@ -169,22 +169,25 @@ pub const CREATURE_STEP_UP_HEIGHT: f32 = 2.0;
 #[derive(Resource)]
 pub struct PlayerCapsule(pub Collider);
 
-/// The share of the unit's collision height the water must cover to swim (`0x8012cc`, compared
-/// at `0x6030c0`).
+/// The share of the unit's collision height the water must cover to swim: 12340's swim decision
+/// `0x730d10` compares the depth with `[+0x854] × 0.75` (`0x9e9ee4`), exit band 1/36 (`0xa3f854`).
 const SWIM_DEPTH_FRAC: f32 = 0.75;
 
-/// The `UNIT_FIELD_FLAGS` bits that let a unit swim: `PLAYER_CONTROLLED` (0x8, set on every
-/// player, vmangos `Player.cpp:462`), `PET_IN_COMBAT` (0x800) and `USE_SWIM_ANIMATION` (0x8000,
-/// from the creature's `CAN_SWIM`). `0x6030c0` tests them on both legs: with none set a unit
-/// cannot enter and is stopped at any depth (`0x6031b4`, then `0x60dff0`). The client's only reads
-/// of 0x8000 are this predicate (`0x5fb922`, `0x603111`, `0x6031d0`). Every body a player can be
-/// [`super::session::Embodied`] in has 0x8, so only the creature marker
+/// The `UNIT_FIELD_FLAGS` bits that let a unit swim, 12340's permit `0x4f53d0`, which `0x730d10`
+/// reads on both legs: `PLAYER_CONTROLLED` (0x8, on every player), `RENAME` (0x10, a renamed pet),
+/// `PET_IN_COMBAT` (0x800) and `SWIMMING` (0x8000, the creature's `CAN_SWIM`), any one of them,
+/// unless [`CANNOT_SWIM`] is set. Without a permit a unit cannot enter and is stopped at any depth.
+/// Labelled: `0x730d10` also requires a unit vfunc (`+0x40`) to answer 0, unread. Every body a
+/// player can be [`super::session::Embodied`] in has 0x8, so only the creature marker
 /// (`motion`'s `mark_swimming_creatures`) needs this.
-pub const SWIM_UNIT_FLAGS: u32 = 0x8 | 0x800 | 0x8000;
+pub const SWIM_UNIT_FLAGS: u32 = 0x8 | 0x10 | 0x800 | 0x8000;
+
+/// `UNIT_FLAG_CANNOT_SWIM` (AzerothCore `UnitDefines.h`): `0x4f53d0` refuses before any permit bit.
+pub const CANNOT_SWIM: u32 = 0x4000;
 
 /// Whether a unit may swim at all ([`SWIM_UNIT_FLAGS`]): false blocks entry and forces an exit.
 pub fn may_swim(unit_flags: u32) -> bool {
-    unit_flags & SWIM_UNIT_FLAGS != 0
+    unit_flags & CANNOT_SWIM == 0 && unit_flags & SWIM_UNIT_FLAGS != 0
 }
 
 /// The depth over the feet (yd) past which a unit swims: 0.75 × its own collision height
@@ -277,9 +280,7 @@ pub const TERMINAL_VELOCITY: f32 = 60.148_003;
 /// carries no timetable and answers no: the server re-sends the destination's transports on
 /// arrival (`SendInitTransports`), so a lift despawns and streams back like any object.
 #[derive(Component, Clone)]
-pub struct TransportMaps(
-    pub Option<std::sync::Arc<wrathplus_formats::TransportTimetable>>,
-);
+pub struct TransportMaps(pub Option<std::sync::Arc<wrathplus_formats::TransportTimetable>>);
 
 impl TransportMaps {
     /// Whether any leg of the cycle lies on `map_id`.

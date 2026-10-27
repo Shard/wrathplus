@@ -330,7 +330,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // `text, type, finished` of line `i`, for any row as above (`QuestLogFrame.lua:635`).
+    // `text, type, finished` (1/nil, `0x5e5f60`) of line `i`, any row (`QuestLogFrame.lua:635`).
     g.set(
         "GetQuestLogLeaderBoard",
         lua.create_function(|lua, (i, quest): (usize, Option<u32>)| {
@@ -349,7 +349,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(&l.text)?),
                 Value::String(lua.create_string(&l.kind)?),
-                Value::Boolean(l.finished),
+                flag(l.finished),
             ]))
         })?,
     )?;
@@ -1085,13 +1085,13 @@ mod tests {
         assert!(s
             .eval::<bool>(
                 "local t, k, f = GetQuestLogLeaderBoard(1, 2)\n\
-                 return t == 'Kobold Worker slain: 10/10' and k == 'monster' and f == true"
+                 return t == 'Kobold Worker slain: 10/10' and k == 'monster' and f == 1"
             )
             .unwrap());
         assert!(s
             .eval::<bool>(
                 "local t, k, f = GetQuestLogLeaderBoard(1)\n\
-                 return t == 'Kobold Vermin slain: 3/10' and k == 'monster' and f == false"
+                 return t == 'Kobold Vermin slain: 3/10' and k == 'monster' and f == nil"
             )
             .unwrap());
         assert_eq!(
