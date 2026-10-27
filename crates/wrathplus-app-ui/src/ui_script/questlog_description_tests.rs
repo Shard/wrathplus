@@ -173,3 +173,111 @@ fn the_completion_text_falls_back_to_the_objectives() {
     t.flags |= 0x0004_0000;
     assert_eq!(crate::npc_text::completion_text(&t, &ctx), OBJECTIVES);
 }
+
+/// Quest 62, "The Fargodeep Mine", as AzerothCore sends it: no creature or item objective, an
+/// area description, exploration flags (`Flags` 12).
+fn fargodeep() -> QuestTemplate {
+    let mut t = template();
+    t.quest_id = 62;
+    t.flags = 12;
+    t.title = "The Fargodeep Mine".into();
+    t.objectives_text =
+        "Explore the Fargodeep Mine, then return to Marshal Dughan in Goldshire.".into();
+    t.details = String::new();
+    t.end_text = "Return to Marshal Dughan at Goldshire in Elwynn Forest.".into();
+    t.wrath = Some(WrathQuestInfo {
+        flags: 12,
+        area_description: "Scout through the Fargodeep Mine".into(),
+        ..Default::default()
+    });
+    t
+}
+
+/// Quest 62's objective lines with the log slot's state word `state`.
+fn fargodeep_lines(state: u8) -> Vec<wrathplus_ui::script::QuestLogObjectiveView> {
+    let slot = wrathplus_protocol::types::QuestLogSlot {
+        quest_id: 62,
+        counters: [0; 4],
+        state,
+        timer: 0,
+    };
+    let store = wrathplus_protocol::ObjectFields::default();
+    let mut objs = crate::items::TestObjects::new();
+    let (tx, _rx) = crossbeam_channel::unbounded();
+    crate::ui_quest_log::build_objectives(
+        &fargodeep(),
+        &slot,
+        &store,
+        &objs.get(),
+        &crate::items::Items::default(),
+        &crate::names::NameCache::default(),
+        &crate::net::NetCommands(tx),
+        &|_| None,
+    )
+}
+
+/// An exploration quest's one leaderboard row is its area description, type `event`
+/// (`0x5e1460`), unfinished until the server sets the slot's COMPLETE bit on the trigger.
+#[test]
+fn an_exploration_quest_lists_its_area_description_as_an_event_line() {
+    let open = fargodeep_lines(0);
+    assert_eq!(open.len(), 1, "{open:#?}");
+    assert_eq!(
+        (
+            open[0].text.as_str(),
+            open[0].kind.as_str(),
+            open[0].finished
+        ),
+        ("Scout through the Fargodeep Mine", "event", false)
+    );
+    let done = fargodeep_lines(wrathplus_protocol::types::quest_slot_state::COMPLETE);
+    assert!(done[0].finished, "{done:#?}");
+}
+
+/// The stock API over quest 62: one leaderboard row (so WatchFrame does not count it complete,
+/// `WatchFrame.lua:808`), `(text, "event", nil)` while open, finished once explored, and the end
+/// text as the completion line then.
+#[test]
+fn the_stock_log_reads_the_event_line_until_the_area_is_explored() {
+    let _data = wrathplus_formats::wow_data_or_skip!();
+    let mut s = UiScript::new().unwrap();
+    s.set_screen_size(1024.0, 768.0);
+    load_ui(&mut s, "Interface\\FrameXML\\QuestLogFrame.xml");
+    s.fire_event("PLAYER_ENTERING_WORLD", vec![]);
+    let log = |state: u8, complete| QuestLogState {
+        num_quests: 1,
+        entries: vec![QuestLogEntryView {
+            quest_id: 62,
+            title: "The Fargodeep Mine".into(),
+            level: 7,
+            complete,
+            objectives: fargodeep_lines(state),
+            ..Default::default()
+        }],
+        hidden_quest_ids: Vec::new(),
+    };
+    s.set_quest_log(log(0, 0));
+    s.fire_event("QUEST_LOG_UPDATE", vec![]);
+    assert_eq!(
+        s.eval::<i64>("return GetNumQuestLeaderBoards(1)").unwrap(),
+        1
+    );
+    let (text, kind, finished) = s
+        .eval::<(String, String, Option<i64>)>("return GetQuestLogLeaderBoard(1, 1)")
+        .unwrap();
+    assert_eq!(
+        (text.as_str(), kind.as_str(), finished),
+        ("Scout through the Fargodeep Mine", "event", None)
+    );
+
+    s.set_quest_log(log(
+        wrathplus_protocol::types::quest_slot_state::COMPLETE,
+        1,
+    ));
+    s.fire_event("QUEST_LOG_UPDATE", vec![]);
+    let finished = s
+        .eval::<Option<i64>>("return select(3, GetQuestLogLeaderBoard(1, 1))")
+        .unwrap();
+    assert_eq!(finished, Some(1), "explored");
+    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
+}

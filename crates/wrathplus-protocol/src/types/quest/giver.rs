@@ -60,6 +60,9 @@ pub struct WrathQuestInfo {
     pub reward_rep_show_mask: u32,
     /// The objectives' `ItemDrop` and `ItemDropQuantity`, the source items the quest log lists.
     pub item_drops: [(u32, u32); 4],
+    /// The query response's fourth text, AzerothCore's `AreaDescription` (12340 template `+0x1a24`):
+    /// an exploration or event quest's objective line, the log's first leaderboard row (`0x5e1460`).
+    pub area_description: String,
 }
 
 /// The quest-log slot counter a PvP objective counts in, `QUEST_PVP_KILL_SLOT`: the server bumps

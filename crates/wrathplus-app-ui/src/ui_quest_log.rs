@@ -413,8 +413,8 @@ fn resolve_template_item(
 /// One quest's objective lines, for every quest, as the watch frame reads any quest's
 /// (`QuestLogFrame.lua:613-663`). The reference walks the array once per kind, `event`, creature
 /// or GameObject, item, reputation (`0x4e0000`, `0x4e0110`), so one quad can give two lines. The
-/// `event` and reputation lines are not built.
-fn build_objectives(
+/// reputation line is not built; [`crate::npc_text::event_objective`] heads the list.
+pub(crate) fn build_objectives(
     template: &QuestTemplate,
     log_slot: &QuestLogSlot,
     store: &ObjectFields,
@@ -425,7 +425,7 @@ fn build_objectives(
     // The VM's own `GlobalStrings.lua`, for the leaderboard's three format keys.
     get: &dyn Fn(&str) -> Option<String>,
 ) -> Vec<QuestLogObjectiveView> {
-    let mut objectives = Vec::with_capacity(template.objectives.len());
+    let mut objectives = crate::npc_text::event_objective(template, log_slot.state);
     // Creature or GameObject: the counter index is the array index, empty elements included.
     for (i, obj) in template.objectives.iter().enumerate() {
         let is_go = obj.creature_or_go & GO_OBJECTIVE_BIT != 0;
