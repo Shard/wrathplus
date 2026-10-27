@@ -311,12 +311,7 @@ impl Cooldowns {
 
     /// A 3.3.5 cast of ours went off: its `Spell.dbc` recovery and category recovery start now,
     /// or an on-event spell parks. The GCD is the cast send's ([`Self::start_gcd`]), so none here.
-    pub fn start_cast_recovery(
-        &mut self,
-        spell_id: u32,
-        spell: &SpellDisplay,
-        now: Instant,
-    ) {
+    pub fn start_cast_recovery(&mut self, spell_id: u32, spell: &SpellDisplay, now: Instant) {
         let on_hold = spell.cooldown_on_event();
         self.add(
             now,
@@ -339,12 +334,7 @@ impl Cooldowns {
     }
 
     /// `SMSG_ITEM_COOLDOWN` (`0x6e95d0`): the client's hardcoded 30 s on the item's on-use spell.
-    pub fn apply_wire_item_cooldown(
-        &mut self,
-        item_entry: u32,
-        spell_id: u32,
-        now: Instant,
-    ) {
+    pub fn apply_wire_item_cooldown(&mut self, item_entry: u32, spell_id: u32, now: Instant) {
         self.add(
             now,
             spell_id,
@@ -364,11 +354,7 @@ impl Cooldowns {
 
     /// One `SMSG_INITIAL_SPELLS` cooldown: the wire carries the remainder, so the record starts
     /// now. A permanent cooldown (the category word's top bit) arrives as 1 ms and is kept.
-    pub fn seed_initial(
-        &mut self,
-        cd: &wrathplus_protocol::types::SpellCooldown,
-        now: Instant,
-    ) {
+    pub fn seed_initial(&mut self, cd: &wrathplus_protocol::types::SpellCooldown, now: Instant) {
         self.add(
             now,
             cd.spell_id,
