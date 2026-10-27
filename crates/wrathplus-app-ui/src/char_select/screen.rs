@@ -646,18 +646,18 @@ pub(super) fn hide_under_world_cover(
     }
 }
 
+#[path = "preview_exit.rs"]
+pub(super) mod preview_exit;
+
 pub(super) fn exit_select(
     mut commands: Commands,
     roots: Query<Entity, With<CharSelectUi>>,
-    mut preview: ResMut<GluePreview>,
     mut dialog: ResMut<super::dialog::DeleteDialog>,
     mut glue_dialog: ResMut<crate::glue::dialog::GlueDialog>,
 ) {
     for e in &roots {
         commands.entity(e).despawn();
     }
-    preview.look = None;
-    preview.scene = None;
     dialog.close();
     // The glue dialog must not follow into the world or the create screen. Its tree is despawned
     // here, since its driver runs on the glue screens only.
