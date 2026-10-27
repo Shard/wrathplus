@@ -9,12 +9,11 @@ fn rect() -> ZoneRect {
     }
 }
 
-fn row(map_id: u32, area_id: u32, default_floor: i32) -> RowEntry {
+fn row(map_id: u32, area_id: u32) -> RowEntry {
     RowEntry {
         map_id,
         area_id,
         rect: rect(),
-        default_floor,
     }
 }
 
@@ -57,15 +56,15 @@ fn data() -> WorldMapUiData {
         ..Default::default()
     };
     let mut rows = HashMap::from([
-        (13, row(1, 0, 0)),
-        (14, row(0, 0, 0)),
-        (30, row(0, 12, 0)),
-        (462, row(530, 3430, 0)),
-        (443, row(489, 3277, 0)),
-        (535, row(533, 3456, 0)),
+        (13, row(1, 0)),
+        (14, row(0, 0)),
+        (30, row(0, 12)),
+        (462, row(530, 3430)),
+        (443, row(489, 3277)),
+        (535, row(533, 3456)),
     ]);
     for i in 0..10 {
-        rows.entry(900 + i).or_insert(row(0, 900 + i, 0));
+        rows.entry(900 + i).or_insert(row(0, 900 + i));
     }
     let floor_rect = |left| ZoneRect {
         left,
@@ -108,14 +107,10 @@ fn data() -> WorldMapUiData {
         floors: vec![
             FloorEntry {
                 id: 56,
-                map_id: 533,
-                floor_index: 1,
                 rect: floor_rect(1.0),
             },
             FloorEntry {
                 id: 57,
-                map_id: 533,
-                floor_index: 2,
                 rect: floor_rect(3.0),
             },
         ],
@@ -176,7 +171,7 @@ fn an_unresolved_zone_falls_back_to_the_continent_not_the_world() {
 }
 
 #[test]
-fn an_instance_map_opens_on_the_players_floor_else_floor_one() {
+fn an_instance_map_opens_on_the_players_floor_else_its_terrain() {
     let d = data();
     let inst = |floor| PlayerSelection {
         zone: None,
@@ -185,7 +180,8 @@ fn an_instance_map_opens_on_the_players_floor_else_floor_one() {
     };
     assert_eq!(
         resolve_player_selection(&d, 533, (0.0, 0.0), None, None),
-        inst(Some(56))
+        inst(None),
+        "no floor found and no override: the area's terrain (0x5475a5 with a floor <= 0)"
     );
     let floor = floor_at(&d, 533, Some(7000), 150.0);
     assert_eq!(floor, Some(57));
@@ -198,6 +194,29 @@ fn an_instance_map_opens_on_the_players_floor_else_floor_one() {
     assert_eq!(
         resolve_player_selection(&d, 533, (0.0, 0.0), None, floor),
         inst(Some(57))
+    );
+    // A transform region naming a floor stands in when no floor is found (`0x5474fd`).
+    let mut over = data();
+    over.transforms.push(WorldMapTransform {
+        id: 3,
+        map_id: 533,
+        min_x: -10.0,
+        min_y: -10.0,
+        max_x: 10.0,
+        max_y: 10.0,
+        new_map_id: 533,
+        offset_x: 0.0,
+        offset_y: 0.0,
+        new_dungeon_map_id: 56,
+    });
+    assert_eq!(
+        resolve_player_selection(&over, 533, (0.0, 0.0), None, None),
+        inst(Some(56))
+    );
+    assert_eq!(
+        resolve_player_selection(&over, 533, (0.0, 0.0), None, floor),
+        inst(Some(57)),
+        "the player's own floor wins over the override"
     );
     // A battleground has no floors.
     assert_eq!(

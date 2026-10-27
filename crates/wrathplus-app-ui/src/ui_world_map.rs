@@ -17,10 +17,12 @@
 //!
 //! The floor a position is on is `0x5439e0`'s scan of `DungeonMapChunk.dbc` ([`floor_at`]).
 //!
-//! Labelled, untraced:
-//! - `SetMapToCurrentZone`'s resolver (`0x547170`) is this one: the continent drawn with the
-//!   player's moved map and its zone, a zone opening on a floor as that floor's instance map;
-//!   else the instance map on the player's map, on the player's floor, else its default floor.
+//! `SetMapToCurrentZone`'s resolver is 12340's `0x547170` ([`resolve_player_selection`]). Labelled,
+//! not ported: on a continent, a zone row with an all-zero rect takes the player's floor or its
+//! `ParentWorldMapID` zone (`0x5477de`), which the catalog does not carry; off one, an instance
+//! with no area row maps to the continent cell under its `Map.dbc` entrance (`0x5477ae`, "Inside
+//! Instance"), and failing that the cosmic sheet (`0x5477bd`, "True Orphan"); both give the
+//! default selection here.
 
 use bevy::ecs::system::NonSendMut;
 use bevy::prelude::*;
@@ -75,14 +77,11 @@ struct RowEntry {
     map_id: u32,
     area_id: u32,
     rect: ZoneRect,
-    default_floor: i32,
 }
 
 #[derive(Clone)]
 struct FloorEntry {
     id: u32,
-    map_id: u32,
-    floor_index: u32,
     /// The floor's `DungeonMap` rect as a loc rect: `MaxX`/`MinX` are its left and right edges,
     /// `MaxY`/`MinY` its top and bottom (`0x544140`).
     rect: ZoneRect,
@@ -366,7 +365,6 @@ pub(crate) fn build_catalog(
                     map_id: a.map_id,
                     area_id: a.area_id,
                     rect: zone_rect(a),
-                    default_floor: default_floor(id),
                 },
             )
         })
@@ -395,8 +393,6 @@ pub(crate) fn build_catalog(
         .iter()
         .map(|f| FloorEntry {
             id: f.id,
-            map_id: f.map_id,
-            floor_index: f.floor_index,
             rect: ZoneRect {
                 left: f.max_x,
                 right: f.min_x,
@@ -651,7 +647,12 @@ fn floor_at(data: &WorldMapUiData, map: u32, group: Option<u32>, z: f32) -> Opti
     floor
 }
 
-/// `SetMapToCurrentZone`'s resolver (labelled: `0x547170` is untraced; see the module note).
+/// `SetMapToCurrentZone`'s resolver, 12340's `0x547170`, as its setter calls `0x546310` give it:
+/// - the continent drawn with the player's moved map (`0x543920`) and its zone, by area, at
+///   `0x547a56`; the setter then opens a zone with `DefaultDungeonFloor >= 1` (Dalaran) as that
+///   row's instance map on that default floor;
+/// - else the area row on the player's map (`0x5475a5`), on the player's floor when it is above 0,
+///   else on the transform's override floor, else on none: the area's terrain ("NO MAP FOUND").
 fn resolve_player_selection(
     data: &WorldMapUiData,
     map_id: u32,
@@ -659,14 +660,7 @@ fn resolve_player_selection(
     top_zone: Option<u32>,
     floor: Option<u32>,
 ) -> PlayerSelection {
-    let (drawn, ..) = transform(data, map_id, pos.0, pos.1);
-    let on_map = |row: &RowEntry| {
-        floor.filter(|f| {
-            data.floors
-                .iter()
-                .any(|x| x.id == *f && x.map_id == row.map_id)
-        })
-    };
+    let (drawn, _, _, override_floor) = transform(data, map_id, pos.0, pos.1);
     if let Some(ci) = data.continents.iter().position(|c| c.map_id == drawn) {
         let zone = top_zone.and_then(|top| {
             data.continents[ci]
@@ -677,11 +671,10 @@ fn resolve_player_selection(
         if let Some(zi) = zone {
             let z = &data.continents[ci].zones[zi];
             if z.default_floor >= 1 {
-                let row = data.rows.get(&z.wma_id);
                 return PlayerSelection {
                     zone: None,
                     direct: Some(z.wma_id),
-                    floor: row.and_then(on_map).or(Some(z.default_floor as u32)),
+                    floor: Some(z.default_floor as u32),
                 };
             }
         }
@@ -694,22 +687,10 @@ fn resolve_player_selection(
     let Some(d) = data.direct.iter().find(|d| d.map_id == map_id) else {
         return PlayerSelection::default();
     };
-    let row = data.rows.get(&d.id);
-    let floor = row
-        .and_then(on_map)
-        .or_else(|| match row.map_or(0, |r| r.default_floor) {
-            f if f >= 1 => Some(f as u32),
-            -1 => None,
-            _ => data
-                .floors
-                .iter()
-                .find(|f| f.map_id == map_id && f.floor_index == 1)
-                .map(|f| f.id),
-        });
     PlayerSelection {
         zone: None,
         direct: Some(d.id),
-        floor,
+        floor: floor.filter(|&f| f >= 1).or(override_floor),
     }
 }
 
@@ -1210,7 +1191,6 @@ mod tests {
                 top: 1.0,
                 bottom: 0.0,
             },
-            default_floor: 27,
         };
         let other = RowEntry {
             area_id: 65,
@@ -1390,10 +1370,7 @@ mod direct_area_tests {
             assert!(direct.contains(&id), "{id} is an instance map");
         }
         assert!(!direct.contains(&504), "Dalaran is a Northrend zone");
-        assert!(data
-            .floors
-            .iter()
-            .any(|f| f.map_id == 533 && f.floor_index == 1));
+        assert!(!data.floors.is_empty());
         assert!(!data.transforms.is_empty());
     }
 
