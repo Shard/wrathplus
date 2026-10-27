@@ -57,6 +57,8 @@ impl PluginGroup for WorldPlugins {
             // The ground-fx decal lane, which orders itself on the billboard place set.
             .add(crate::ground_fx::plugin)
             .add(crate::frame_pace::plugin)
+            // A covered window draws nothing and paces at the background rate (`maxFPSBk`).
+            .add(crate::occluded::OccludedFramesPlugin)
             // The skin palette: every rig's joint matrices, skinned in `wow_model.wgsl` in place of
             // Bevy's `SkinnedMesh`.
             .add(crate::rig_palette::plugin)

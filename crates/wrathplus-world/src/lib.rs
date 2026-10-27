@@ -140,6 +140,7 @@ pub mod model_fade;
 pub mod model_forms;
 pub mod model_render;
 pub mod modkeys;
+pub mod occluded;
 pub mod particles;
 pub mod light_anim;
 pub mod ribbons;
