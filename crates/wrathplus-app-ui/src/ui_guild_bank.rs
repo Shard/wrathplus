@@ -4,7 +4,8 @@
 //! and the tab texts fill [`GuildBank`], published as Native UI's `WrathGuildBankView` with the
 //! frame's events fired here: `GUILDBANKFRAME_OPENED`/`CLOSED`, `GUILDBANKBAGSLOTS_CHANGED`,
 //! `GUILDBANK_UPDATE_MONEY`, `GUILDBANK_UPDATE_TABS`, `GUILDBANK_UPDATE_WITHDRAWMONEY`,
-//! `GUILDBANK_UPDATE_TEXT(tab)` and `GUILDBANKLOG_UPDATE`. The frame's gestures become the
+//! `GUILDBANK_UPDATE_TEXT(tab)` and `GUILDBANKLOG_UPDATE`, plus `GUILDBANK_TEXT_CHANGED(tab)` off
+//! `SMSG_GUILD_EVENT`. The frame's gestures become the
 //! native queries and swaps; a held bank item (Native UI's mode-11 cursor) moves to another bank
 //! slot, a bag slot or a worn slot. Labelled: the frame does not close by distance.
 use std::collections::BTreeMap;
@@ -18,7 +19,7 @@ use wrathplus_protocol::wrath_guild_bank_log::{Log, Payload};
 use wrathplus_protocol::wrath_guild_bank_swap::{BankSlot, Swap, Transfer};
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use wrathplus_ui::script::{
-    ScriptValue, UiScript, WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankRankRights,
+    UiScript, WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankRankRights,
     WrathGuildBankRequest, WrathGuildBankSlot, WrathGuildBankTab, WrathGuildBankView,
 };
 use bevy::prelude::*;
@@ -44,6 +45,8 @@ pub(crate) struct GuildBank {
     money_remaining: Option<i32>,
     logs: BTreeMap<u8, Log>,
     texts: BTreeMap<u8, String>,
+    /// `GE_BANK_TEXT_CHANGED` tabs, 0-based, each one `GUILDBANK_TEXT_CHANGED` at the next feed.
+    text_changed: Vec<u8>,
 }
 
 impl GuildBank {
@@ -59,6 +62,7 @@ impl Plugin for UiGuildBankPlugin {
         app.init_resource::<GuildBank>()
             .init_resource::<GuildBankOpen>()
             .net_handler(SessionEventKind::WrathGuildBank, receive)
+            .net_handler(SessionEventKind::GuildEvent, text_changed)
             .net_handler(SessionEventKind::Connected, clear)
             .net_handler(SessionEventKind::Disconnected, clear)
             .add_systems(
@@ -290,6 +294,7 @@ pub(crate) fn feed_guild_bank(
     let Some(mut script) = script else {
         return;
     };
+    events::fire_text_changed(&mut bank, &mut script);
     if open.pending {
         open.pending = false;
         if let Some(banker) = open.banker {
@@ -456,51 +461,9 @@ pub(crate) fn feed_guild_bank(
     }
 }
 
-/// The frame's events for a change of view, in the order the reference's reply handler raises
-/// them; a closed bank is the default view.
-fn events(
-    before: Option<&WrathGuildBankView>,
-    after: &WrathGuildBankView,
-) -> Vec<(&'static str, Vec<ScriptValue>)> {
-    let closed = WrathGuildBankView::default();
-    let was_open = before.is_some_and(|b| *b != closed);
-    let is_open = *after != closed;
-    let before = before.unwrap_or(&closed);
-    let mut out = Vec::new();
-    match (was_open, is_open) {
-        (false, true) => out.push(("GUILDBANKFRAME_OPENED", Vec::new())),
-        (true, false) => {
-            out.push(("GUILDBANKFRAME_CLOSED", Vec::new()));
-            return out;
-        }
-        (false, false) => return out,
-        (true, true) => {}
-    }
-    if before.tabs != after.tabs {
-        out.push(("GUILDBANK_UPDATE_TABS", Vec::new()));
-    }
-    if before.money != after.money {
-        out.push(("GUILDBANK_UPDATE_MONEY", Vec::new()));
-    }
-    if before.withdraw_money_remaining != after.withdraw_money_remaining {
-        out.push(("GUILDBANK_UPDATE_WITHDRAWMONEY", Vec::new()));
-    }
-    if before.slots != after.slots {
-        out.push(("GUILDBANKBAGSLOTS_CHANGED", Vec::new()));
-    }
-    for (i, text) in after.tab_text.iter().enumerate() {
-        if before.tab_text.get(i) != Some(text) {
-            out.push((
-                "GUILDBANK_UPDATE_TEXT",
-                vec![ScriptValue::Int(i as i64 + 1)],
-            ));
-        }
-    }
-    if before.money_log != after.money_log || before.tab_logs != after.tab_logs {
-        out.push(("GUILDBANKLOG_UPDATE", Vec::new()));
-    }
-    out
-}
+#[path = "ui_guild_bank_events.rs"]
+mod events;
+use events::{events, text_changed};
 
 #[cfg(test)]
 #[path = "ui_guild_bank_tests.rs"]

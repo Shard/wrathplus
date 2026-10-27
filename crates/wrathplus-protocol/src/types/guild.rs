@@ -121,6 +121,9 @@ pub mod guild_event {
     pub const SIGNED_ON: u8 = 0x0C;
     /// `GE_SIGNED_OFF`, param: the guildmate's name; carries the trailing guid.
     pub const SIGNED_OFF: u8 = 0x0D;
+    /// `GE_BANK_TEXT_CHANGED`, param: the 0-based tab. 12340's handler (`0x6d92d0`, case `0x13`)
+    /// fires `GUILDBANK_TEXT_CHANGED(tab + 1)` and no roster update.
+    pub const BANK_TEXT_CHANGED: u8 = 0x13;
 }
 
 /// `SMSG_GUILD_COMMAND_RESULT`'s leading `u32`, the verb the result is about

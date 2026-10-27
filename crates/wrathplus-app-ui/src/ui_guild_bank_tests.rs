@@ -2,6 +2,7 @@ use super::*;
 use wrathplus_protocol::wrath_guild_bank::Slot;
 use wrathplus_protocol::wrath_guild_bank_log::Entry;
 use wrathplus_protocol::wrath_guild_bank_text::Text;
+use wrathplus_ui::script::ScriptValue;
 
 fn dbg(command: Option<ClientCommand>) -> String {
     format!("{command:?}")
@@ -313,4 +314,28 @@ fn held_bank_items_move_to_bank_bag_and_worn_slots() {
         }))),
         "the head slot"
     );
+}
+
+/// `GE_BANK_TEXT_CHANGED` (`0x6d92d0` case `0x13`) queues its 0-based tab; no other event does.
+#[test]
+fn a_bank_text_change_event_queues_its_tab() {
+    use bevy::ecs::system::RunSystemOnce;
+    use wrathplus_protocol::types::{guild_event, GuildEventNotice};
+    let mut world = World::new();
+    world.init_resource::<GuildBank>();
+    for (event, param) in [
+        (guild_event::BANK_TEXT_CHANGED, "2"),
+        (guild_event::MOTD, "3"),
+        (guild_event::BANK_TEXT_CHANGED, "x"),
+    ] {
+        let notice = GuildEventNotice {
+            event,
+            params: vec![param.into()],
+            guid: None,
+        };
+        world
+            .run_system_once_with(text_changed, SessionEvent::GuildEvent(notice))
+            .unwrap();
+    }
+    assert_eq!(world.resource::<GuildBank>().text_changed, [2]);
 }
