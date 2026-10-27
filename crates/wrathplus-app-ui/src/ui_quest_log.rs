@@ -466,7 +466,7 @@ fn build_objectives(
 }
 
 /// A quest's detail pane from its template: description, money, rewards and choices.
-fn build_detail(
+pub(crate) fn build_detail(
     template: &QuestTemplate,
     items: &Items,
     icons: Option<&ItemDisplays>,
@@ -498,9 +498,9 @@ fn build_detail(
         // the honor table, so do not present the raw addition as a resolved reward.
         reward_talents: template.wrath.as_ref().map_or(0, |w| w.bonus_talents),
         reward_arena_points: template.wrath.as_ref().map_or(0, |w| w.arena_points),
-        // Empty end text is still a string: stock concatenates it (`WorldMapFrame.lua:1872`).
+        // Always a string, never nil: stock concatenates it (`WorldMapFrame.lua:1872`).
         completion_text: (template.wrath.is_some())
-            .then(|| crate::npc_text::substitute(&template.end_text, macros)),
+            .then(|| crate::npc_text::completion_text(template, macros)),
         choices,
         rewards,
         reward_spell: crate::ui_quest::reward_spell_view(template.reward_spell, spells),

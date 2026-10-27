@@ -98,12 +98,13 @@ fn snap_block_top_law(y: f32) -> f32 {
 /// message-band scissor in [`crate::ui_script`] widens by it to admit the ink.
 pub const UI_SEAT_NUDGE: f32 = 1.0;
 
-/// `SetAlphaGradient`'s alpha at a character: opaque before `start`, linear to 0 over `length`.
+/// `SetAlphaGradient`'s alpha at a character: opaque before `start`, linear to 0 over `length`;
+/// `0x6c78f0` fades nothing at length 0, so the quest log's `(0, 0)` shows it all.
 fn gradient_alpha(index: usize, start: f32, length: f32) -> f32 {
     let i = index as f32;
-    if i < start {
+    if i < start || length <= 0.0 {
         1.0
-    } else if length > 0.0 && i < start + length {
+    } else if i < start + length {
         1.0 - (i - start) / length
     } else {
         0.0
@@ -380,9 +381,9 @@ mod gradient_tests {
         assert!((gradient_alpha(25, 10.0, 30.0) - 0.5).abs() < 1e-6);
         assert_eq!(gradient_alpha(40, 10.0, 30.0), 0.0);
         assert_eq!(gradient_alpha(1000, 10.0, 30.0), 0.0);
-        // Zero length: a hard reveal edge, never a divide by zero.
-        assert_eq!(gradient_alpha(5, 10.0, 0.0), 1.0);
-        assert_eq!(gradient_alpha(15, 10.0, 0.0), 0.0);
+        // Zero length fades nothing (`0x6c78f0`): `QuestInfo_ShowDescriptionText`'s `(0, 0)`.
+        assert_eq!(gradient_alpha(15, 10.0, 0.0), 1.0);
+        assert_eq!(gradient_alpha(0, 0.0, 0.0), 1.0);
     }
 }
 
