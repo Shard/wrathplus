@@ -80,7 +80,7 @@ impl super::UiScript {
     /// Push or clear the last `MSG_INSPECT_HONOR_STATS` reply, paired with the pane's
     /// `INSPECT_HONOR_UPDATE`. Its presence is `HasInspectHonorData`, so the app clears it on
     /// `ClearInspectPlayer` and the pane's `OnShow` asks again for the next player. Either way
-    /// the in-flight latch clears, as the engine's reply (`0x4c6f4c`) and re-key (`0x4c6f9d`) do.
+    /// the in-flight latch clears, as the engine's reply (`0x5e7ae4`) and re-key (`0x5e76de`) do.
     pub fn set_inspect_honor(&mut self, data: Option<InspectHonorData>) {
         let mut model = self.model_mut();
         model.inspect_honor = data;
@@ -88,7 +88,7 @@ impl super::UiScript {
     }
 
     /// Drain the queued `RequestInspectHonorData` calls, each a `MSG_INSPECT_HONOR_STATS` send for
-    /// the app's inspect target. At most 1: the `pending` latch (`0x4c80b6`) refuses another until
+    /// the app's inspect target. At most 1: the `pending` latch `[0xc2422c]` refuses another until
     /// [`Self::set_inspect_honor`] resolves the first.
     pub fn take_inspect_honor_requests(&mut self) -> u32 {
         std::mem::take(&mut self.model_mut().inspect_honor_requests)
@@ -398,13 +398,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
     // RequestInspectHonorData(): `InspectHonorFrame_OnShow` calls it while
     // `HasInspectHonorData()` is false; the app sends `MSG_INSPECT_HONOR_STATS` for its inspect
-    // target. Zero return values (`0x4c9610`).
+    // target. Zero return values.
     //
-    // `0x4c80a0` bails silently if data is held (`0x4c80a6`), if a query is in flight (`pending`,
-    // `0x4c80b6`, `[0xb71fcc]`) or if the target guid is 0 (`0x4c80c2`). The first two are here;
+    // 12340's `0x5e9140` bails silently if data is held (`[0xc24228]`), if a query is in flight
+    // (`pending`, `[0xc2422c]`) or if the target guid `[0xc24220]` is 0. The first two are here;
     // the guid is the app's, which drops a request with no target. Our `pending` latches on
-    // queue, not send, so a dropped request holds it until the next `set_inspect_honor`, which
-    // `ClearInspectPlayer` calls as `0x4c6f70` clears the engine's.
+    // queue, not send (`0x5e9207`), so a dropped request holds it until the next
+    // `set_inspect_honor`, as the target setter `0x5e76b0` clears the engine's.
     g.set(
         "RequestInspectHonorData",
         lua.create_function(|lua, ()| {

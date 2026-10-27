@@ -391,8 +391,8 @@ pub(crate) struct Model {
     pub(crate) inspect_honor: Option<pvp::InspectHonorData>,
     /// `RequestInspectHonorData` calls; the pending gate keeps this at 0 or 1.
     pub(crate) inspect_honor_requests: u32,
-    /// An inspect-honor query is out (`0xb71fcc`); `RequestInspectHonorData` (`0x4c80a0`) refuses
-    /// while set. Cleared by a reply (`0x4c6f4c`) or by the app clearing the slot (`0x4c6f9d`).
+    /// An inspect-honor query is out (`[0xc2422c]`); `RequestInspectHonorData` (`0x5e9140`) refuses
+    /// while set. Cleared by a reply (`0x5e7ae4`) or by a new inspect target (`0x5e76de`).
     pub(crate) inspect_honor_pending: bool,
     /// `ShowingHelm()`: `PLAYER_FLAGS`' `HIDE_HELM` bit as pushed, set ahead on `ShowHelm` because
     /// the wire verb is a blind toggle. Starts shown, as a fresh character's flags are 0.

@@ -7,6 +7,8 @@
 
 mod native;
 mod units;
+#[path = "ui_aura_tracking_order.rs"]
+pub(crate) mod tracking_order;
 
 use bevy::prelude::*;
 
@@ -55,6 +57,14 @@ impl Plugin for UiAuraPlugin {
             .init_resource::<AuraFeedMemory>()
             // Feed before the VM dispatch, drain after it.
             .add_systems(Update, feed_auras.in_set(UnitFeed).in_set(AuraEvents))
+            .init_resource::<tracking_order::TrackingOrder>()
+            // A reader of the book, after its writers.
+            .add_systems(
+                Update,
+                tracking_order::feed_tracking_spells
+                    .in_set(UnitFeed)
+                    .after(crate::ui_action::ActionBook),
+            )
             .add_systems(Update, drain_aura_cancels.after(UiInput))
             // Torn down only at the session's end, not with the avatar, which a worldport drops.
             .add_systems(OnExit(ClientState::InWorld), end_session_aura_state);
@@ -110,8 +120,8 @@ struct AuraFeedMemory {
 struct AuraFeedMemo {
     present: bool,
     last: Vec<AuraProjection>,
-    /// The tracking spell: a tracking switch changes no list, but the minimap needs the event.
-    tracking_last: Option<u32>,
+    /// The tracking aura's spell and receipt stamp: each landing is a setter call (`0x57ea30`).
+    tracking_last: Option<(u32, u64)>,
     native_last: Option<Vec<crate::net::wrath_auras::StampedAura>>,
     /// Every other unit's list, by guid, the resolver's inputs and their pushes.
     units: units::UnitAuras,
@@ -285,19 +295,6 @@ fn shown_in_aura_ui(catalog: Option<&SpellCatalog>, spell_id: u32) -> bool {
 /// tracking spell carries the hidden-aura attributes. The last one wins; a catalog miss cannot be
 /// told apart. Read by `GetTrackingTexture`, `CancelTrackingBuff` and
 /// `GameTooltip:SetTrackingSpell` ([`UiScript::set_tracking`]).
-/// The tracking menu's spells (12340 `[0xbe8dec]`): a learned spell joins (`0x542030`) when any
-/// aura slot is 44, 45 or 151 (`0x7fdf60`). Labelled: book order here, learn order there.
-pub(crate) fn tracking_spells(
-    book: &wrathplus_ui::script::SpellBookState,
-    catalog: &SpellCatalog,
-) -> Vec<u32> {
-    book.slots
-        .iter()
-        .filter(|s| catalog.get(s.spell_id).is_some_and(|d| d.tracking_aura()))
-        .map(|s| s.spell_id)
-        .collect()
-}
-
 fn tracking_state_of(
     catalog: Option<&SpellCatalog>,
     occupied: &[UnitAuraSlot],
@@ -474,7 +471,13 @@ fn feed_auras(
     } else {
         tracking_state_of(catalog, &occupied)
     };
-    let tracking_spell = tracking.as_ref().map(|t| t.spell_id);
+    // A re-landed same aura is restamped (`received_at`), so it moves the key as well.
+    let tracking_key = tracking.as_ref().map(|t| {
+        let stamp = packet_player
+            .and_then(|a| a.iter().rev().find(|s| s.aura.spell_id == t.spell_id))
+            .map_or(0, |s| s.received_at.to_bits());
+        (t.spell_id, stamp)
+    });
 
     if let Some(period) = trace_period() {
         if bevy_now - mem.traced_at >= period {
@@ -490,10 +493,10 @@ fn feed_auras(
     let projection = projection_of(&list);
     let native_changed = memo.native_last.as_deref() != packet_player.map(Vec::as_slice);
     memo.native_last = packet_player.cloned();
-    let tracking_moved = !memo.present || tracking_spell != memo.tracking_last;
+    let tracking_moved = !memo.present || tracking_key != memo.tracking_last;
     let changed = !memo.present || native_changed || projection != memo.last || tracking_moved;
     memo.last = projection;
-    memo.tracking_last = tracking_spell;
+    memo.tracking_last = tracking_key;
     memo.present = true;
 
     if changed && std::env::var_os("BENILLA_AURA_DUMP").is_some() {
@@ -588,8 +591,8 @@ fn feed_auras(
 
     script.set_player_auras(list);
     script.set_tracking(tracking);
-    // `MINIMAP_UPDATE_TRACKING` (Minimap.xml:479-482) is queued by the setter `0x57ea30` on every
-    // call; labelled: the feed sees only the tracked spell changing, so a re-landed aura is mute.
+    // `MINIMAP_UPDATE_TRACKING` (Minimap.xml:479-482), queued by the setter `0x57ea30` on every
+    // call: each landing of the tracking aura, a re-landed same aura included.
     if tracking_moved {
         script.fire_event("MINIMAP_UPDATE_TRACKING", vec![]);
     }
