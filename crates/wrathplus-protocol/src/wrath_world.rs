@@ -10,10 +10,10 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
-use wrathplus_srp::wrath_header::{DecrypterHalf, EncrypterHalf, HeaderCrypto};
-use wrathplus_srp::{NormalizedString, SESSION_KEY_LENGTH};
 use flate2::write::ZlibEncoder;
 use sha1::{Digest, Sha1};
+use wrathplus_srp::wrath_header::{DecrypterHalf, EncrypterHalf, HeaderCrypto};
+use wrathplus_srp::{NormalizedString, SESSION_KEY_LENGTH};
 
 /// The 3.3.5a client build accepted by AzerothCore.
 pub const WRATH_CLIENT_BUILD: u32 = 12_340;
@@ -39,6 +39,8 @@ const SMSG_LOGIN_VERIFY_WORLD: u16 = 0x236;
 const AUTH_OK: u8 = 0x0c;
 const AUTH_WAIT_QUEUE: u8 = 0x1b;
 pub const CHAR_CREATE_SUCCESS: u8 = 0x2f;
+/// AzerothCore `ResponseCodes::CHAR_CREATE_ERROR`, "Error creating character".
+pub const CHAR_CREATE_ERROR: u8 = 0x30;
 pub const CHAR_DELETE_SUCCESS: u8 = 0x47;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -89,9 +91,9 @@ impl std::error::Error for WrathWorldAuthReject {}
 
 /// A normal 3.3.5a `CMSG_CHAR_CREATE` request.
 ///
-/// Appearance values and the race/class combination remain server-authoritative. This layer only
-/// rejects unencodable names (empty or embedded NUL), and invalid playable IDs. Name policy
-/// belongs to the server: Unicode, punctuation and length are not locally restricted.
+/// Appearance values, the race/class combination and every name rule are the server's: the name
+/// goes out as the C string 12340's `0x4e0380` copies, cut at a NUL, and an empty one draws
+/// AzerothCore's `CHAR_NAME_NO_NAME`. This layer only rejects unplayable ids.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WrathCreateCharacter {
     pub name: String,
@@ -436,9 +438,14 @@ impl WrathWorldSession {
         parse_create_character_result(&[code])
     }
 
-    /// General select-screen operation: server refusals are raw results, not transport errors.
+    /// General select-screen operation: server refusals are raw results, not transport errors. A
+    /// request this layer cannot encode sends nothing and answers `CHAR_CREATE_ERROR`, a refusal
+    /// like the server's, never a session error.
     pub fn create_character_result(&mut self, request: &WrathCreateCharacter) -> Result<u8> {
-        self.send_raw(CMSG_CHAR_CREATE, &create_character_body(request)?)
+        let Ok(body) = create_character_body(request) else {
+            return Ok(CHAR_CREATE_ERROR);
+        };
+        self.send_raw(CMSG_CHAR_CREATE, &body)
             .context("sending CMSG_CHAR_CREATE")?;
         self.character_action_result(SMSG_CHAR_CREATE)
     }
@@ -725,38 +732,29 @@ impl WrathInitialLoginObservation {
 }
 
 fn create_character_body(request: &WrathCreateCharacter) -> Result<Vec<u8>> {
-    let name = request.name.as_bytes();
-    // Previously a probe-only ASCII 2..12 policy. The general screen must let the server
-    // report CHAR_NAME_* failures; only C-string encoding constraints belong here.
-    if name.is_empty() || name.contains(&0) {
-        return Err(WrathCreateValidationError {
-            reason: "name must be nonempty and contain no NUL",
-        }
-        .into());
-    }
-    if !matches!(request.race, 1..=8 | 10 | 11) {
-        return Err(WrathCreateValidationError {
-            reason: "race is not a playable 3.3.5 race",
-        }
-        .into());
-    }
-    if !matches!(request.class, 1..=9 | 11) {
-        return Err(WrathCreateValidationError {
-            reason: "class is not a playable 3.3.5 class",
-        }
-        .into());
-    }
-    if request.gender > 1 {
-        return Err(WrathCreateValidationError {
-            reason: "gender must be 0 or 1",
-        }
-        .into());
-    }
-    if request.outfit_id != 0 {
-        return Err(WrathCreateValidationError {
-            reason: "normal character creation requires outfit_id 0",
-        }
-        .into());
+    let name = request
+        .name
+        .as_bytes()
+        .split(|&b| b == 0)
+        .next()
+        .unwrap_or_default();
+    let refusals = [
+        (
+            !matches!(request.race, 1..=8 | 10 | 11),
+            "race is not a playable 3.3.5 race",
+        ),
+        (
+            !matches!(request.class, 1..=9 | 11),
+            "class is not a playable 3.3.5 class",
+        ),
+        (request.gender > 1, "gender must be 0 or 1"),
+        (
+            request.outfit_id != 0,
+            "normal character creation requires outfit_id 0",
+        ),
+    ];
+    if let Some(&(_, reason)) = refusals.iter().find(|(bad, _)| *bad) {
+        return Err(WrathCreateValidationError { reason }.into());
     }
 
     let mut body = Vec::with_capacity(name.len() + 10);
@@ -1521,12 +1519,13 @@ mod tests {
     }
 
     #[test]
-    fn character_create_validation_rejects_bad_names_ids_gender_and_outfit() {
-        for name in ["", "Bad\0name"] {
+    fn character_create_names_are_c_strings_and_bad_ids_are_rejected() {
+        // The server judges names: an empty one goes out for `CHAR_NAME_NO_NAME`, a NUL ends it.
+        for (name, wire) in [("", &b"\0"[..]), ("Bad\0name", &b"Bad\0"[..])] {
             let mut request = create_fixture();
             request.name = name.into();
-            let error = create_character_body(&request).unwrap_err();
-            assert!(error.downcast_ref::<WrathCreateValidationError>().is_some());
+            let body = create_character_body(&request).unwrap();
+            assert_eq!(&body[..wire.len()], wire, "{name:?}");
         }
         for (field, value) in [("race", 9), ("class", 10), ("gender", 2), ("outfit", 1)] {
             let mut request = create_fixture();

@@ -35,7 +35,7 @@ impl Plugin for StockCreatePlugin {
             // Lua call (`SetGlueScreen`), so `CharacterCreate_OnShow` must find the catalog seeded.
             .add_systems(
                 Update,
-                seed_stock_create
+                (seed_stock_create, drop_stale_create)
                     .run_if(super::glue::stock_glue_up)
                     .before(super::UiInput),
             )
@@ -224,6 +224,22 @@ fn seed_stock_create(
         death_knight,
         name_gen,
     ));
+}
+
+/// A create still in flight off the create screen (the session dropped back to the login) gets no
+/// answer: its status dialog closes and nothing waits on it.
+fn drop_stale_create(
+    script: Option<NonSendMut<UiScript>>,
+    state: Res<State<ClientState>>,
+    mut pending: ResMut<StockCreate>,
+) {
+    if pending.pending.is_none() || *state.get() == ClientState::CharCreate {
+        return;
+    }
+    pending.pending = None;
+    if let Some(mut script) = script {
+        script.fire_event("CLOSE_STATUS_DIALOG", vec![]);
+    }
 }
 
 /// Entering the create screen on the stock glue: a fresh randomizer seed and no create in flight.

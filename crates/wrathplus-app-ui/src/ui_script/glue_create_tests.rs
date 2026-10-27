@@ -91,12 +91,19 @@ fn the_stock_character_create_drives_the_selection_on_the_installed_data() {
     );
     script.run("CharCreateRandomizeButton:Click()").unwrap();
     // The stock Random Name button fills the box from the Troll female `NameGen.dbc` walk.
-    assert!(script.eval::<bool>("return CharacterCreateRandomName:IsVisible() == 1").unwrap());
+    assert!(script
+        .eval::<bool>("return CharacterCreateRandomName:IsVisible() == 1")
+        .unwrap());
     script.run("CharacterCreateRandomName:Click()").unwrap();
-    let random = script.eval::<String>("return CharacterCreateNameEdit:GetText()").unwrap();
+    let random = script
+        .eval::<String>("return CharacterCreateNameEdit:GetText()")
+        .unwrap();
     assert!(
         (4..=10).contains(&random.len())
-            && random.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+            && random
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_uppercase())
             && random.chars().all(|c| c.is_ascii_alphabetic()),
         "{random:?}"
     );
@@ -235,4 +242,93 @@ fn the_host_sends_the_create_and_answers_its_result() {
         events(&mut app),
         "CLOSE_STATUS_DIALOG:nil:nil SET_GLUE_SCREEN:charselect:nil"
     );
+}
+
+/// An empty name goes out as 12340 sends it (`0x4e0380` has no check), and AzerothCore's
+/// `CHAR_NAME_NO_NAME` (0x59) answers on the status dialog: the session and the screen stay.
+#[test]
+fn an_empty_name_is_the_servers_to_refuse() {
+    let (mut app, rx) = host_app();
+    app.world_mut()
+        .non_send_resource_mut::<UiScript>()
+        .run("CreateCharacter('')")
+        .unwrap();
+    app.update();
+    let Ok(crate::net::CharRequest::Create(req)) = rx.try_recv() else {
+        panic!("the empty name is sent");
+    };
+    assert_eq!(req.name, "");
+    let _ = events(&mut app);
+    app.insert_resource(GlueStrings::from_map(HashMap::from([(
+        "CHAR_NAME_NO_NAME".to_string(),
+        "Enter a name for your character".to_string(),
+    )])));
+    app.world_mut()
+        .write_message(crate::net::WrathCharActionResultMessage {
+            action: CharAction::Create,
+            code: 0x59,
+        });
+    app.update();
+    assert!(
+        events(&mut app).starts_with("UPDATE_STATUS_DIALOG:Enter a name for your character:"),
+        "the stock refusal text"
+    );
+}
+
+/// A create stranded by a dropped session closes its dialog once the client is off the create
+/// screen, so "Creating character" never stays up over the login.
+#[test]
+fn a_create_stranded_by_a_disconnect_closes_its_dialog() {
+    let (mut app, _rx) = host_app();
+    app.add_systems(Update, drop_stale_create);
+    app.world_mut()
+        .non_send_resource_mut::<UiScript>()
+        .run("CreateCharacter('Thrallson')")
+        .unwrap();
+    app.update();
+    let _ = events(&mut app);
+    // `host_app` sits in the default state, the login, as after the teardown.
+    app.update();
+    assert_eq!(events(&mut app), "CLOSE_STATUS_DIALOG:nil:nil");
+    assert!(app.world().resource::<StockCreate>().pending.is_none());
+}
+
+/// Every refusal code AzerothCore's create can answer reads its own glue string on the status
+/// dialog and leaves the create screen up: no `SET_GLUE_SCREEN`, so the player can try again
+/// (the duplicate name 0x32 among them).
+#[test]
+fn each_create_refusal_reads_its_glue_string_and_stays_on_the_screen() {
+    for (code, key, text) in [
+        (0x30, "CHAR_CREATE_ERROR", "Error creating character"),
+        (0x32, "CHAR_CREATE_NAME_IN_USE", "That name is unavailable"),
+        (0x59, "CHAR_NAME_NO_NAME", "Enter a name for your character"),
+    ] {
+        assert_eq!(crate::char_select::wrath_char_result_key(code), Some(key));
+        let (mut app, _rx) = host_app();
+        app.insert_resource(GlueStrings::from_map(HashMap::from([(
+            key.to_string(),
+            text.to_string(),
+        )])));
+        app.world_mut()
+            .non_send_resource_mut::<UiScript>()
+            .run("CreateCharacter('Taken')")
+            .unwrap();
+        app.update();
+        let _ = events(&mut app);
+        app.world_mut()
+            .write_message(crate::net::WrathCharActionResultMessage {
+                action: CharAction::Create,
+                code,
+            });
+        app.update();
+        let shown = events(&mut app);
+        assert!(
+            shown.starts_with(&format!("UPDATE_STATUS_DIALOG:{text}:")),
+            "{code:#x}: {shown}"
+        );
+        assert!(
+            !shown.contains("SET_GLUE_SCREEN"),
+            "{code:#x} stays on the create screen"
+        );
+    }
 }
