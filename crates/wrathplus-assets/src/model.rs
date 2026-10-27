@@ -113,9 +113,14 @@ fn build_submesh_mesh(sub: &RenderSubmesh, usages: RenderAssetUsages) -> Mesh {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, usages);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, sub.uvs.clone());
-    if sub.uvs2.len() == sub.positions.len() {
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, sub.uvs2.clone());
-    }
+    // Always a second UV set, UV0 again without a second stage: the shader reads it only under
+    // `stage2`, and one vertex layout per family means the pipeline warm pass covers both.
+    let uvs2 = if sub.uvs2.len() == sub.positions.len() {
+        &sub.uvs2
+    } else {
+        &sub.uvs
+    };
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, uvs2.clone());
     mesh.insert_indices(Indices::U32(sub.indices.clone()));
     if sub.vertex_colors.len() == sub.positions.len() {
         mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, sub.vertex_colors.clone());
@@ -696,7 +701,6 @@ fn merged_static_mesh_impl(
     let mut normals: Vec<[f32; 3]> = Vec::new();
     let mut uvs: Vec<[f32; 2]> = Vec::new();
     let mut uvs2: Vec<[f32; 2]> = Vec::new();
-    let any_second = parts.iter().any(|(s, _)| s.stage2.is_some());
     let mut colors: Vec<[f32; 4]> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     let mut fade: Vec<[f32; 4]> = Vec::new();
@@ -756,9 +760,8 @@ fn merged_static_mesh_impl(
     );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    if any_second {
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, uvs2);
-    }
+    // Always, as `build_submesh_mesh` does: one layout per family.
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, uvs2);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     if any_colors {
         mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);

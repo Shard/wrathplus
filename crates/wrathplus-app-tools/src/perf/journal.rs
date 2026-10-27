@@ -31,7 +31,7 @@ pub struct FpsJournalSetting(pub bool);
 /// ever grow at the end, so an older journal still parses against its own header.
 const JOURNAL_HEADER: &str = "t,x,y,z,mean_ms,p95_ms,streamed,entities,cpu_ms,mats,meshes,images,\
                               m2,uv,tint,pmat,emat,skin,cmat,tex,cgeo,evicted,fx,fy,fz,main_ms,\
-                              gpu_ms,gpu_opaque,gpu_static,gpu_transp,gpu_glow,gpu_post,gpu_ui,\
+                              occluded_frames,unfocused_frames,gpu_ms,gpu_opaque,gpu_static,gpu_transp,gpu_glow,gpu_post,gpu_ui,\
                               gpu_other\n";
 
 /// The `fpsJournal` change callback: a flag, int-parsed and `!= 0`.
@@ -59,7 +59,11 @@ impl Plugin for FpsJournalPlugin {
                 cpu_at_flush: None,
                 main_at_flush: None,
                 gpu: GpuAccum::default(),
+                occluded_frames: 0,
+                unfocused_frames: 0,
             })
+            .init_resource::<super::WindowState>()
+            .add_systems(First, super::window_state::track_window_state)
             .add_systems(Update, journal_fps);
     }
 }
@@ -80,6 +84,10 @@ struct FpsJournal {
     main_at_flush: Option<f64>,
     /// This second's GPU spans, folded per frame from the diagnostics store.
     gpu: GpuAccum,
+    /// This row's frames with the window covered, or not key ([`super::WindowState`]): a covered
+    /// macOS window runs at ~1 fps, so a row with any is not the game's frame time.
+    occluded_frames: u32,
+    unfocused_frames: u32,
 }
 
 /// The GPU columns after `gpu_ms`, in header order.
@@ -278,6 +286,7 @@ fn journal_fps(
     entities: Query<()>,
     residency: JournalResidency,
     gpu: JournalGpu,
+    window: Option<Res<super::WindowState>>,
 ) {
     let now = time.elapsed_secs();
     // Read every frame: turning on opens the file and restarts every baseline; turning off
@@ -300,7 +309,9 @@ fn journal_fps(
             else {
                 return; // hermetic: no state folder
             };
-            // The header goes in once, at creation; rows append across runs.
+            // The header goes in once, at creation; rows append across runs. A file with another
+            // header is an older layout: it moves aside rather than take misaligned rows.
+            rotate_if_stale(&path);
             if !path.exists() {
                 let head = format!(
                     "{}{JOURNAL_HEADER}",
@@ -325,6 +336,10 @@ fn journal_fps(
         (true, true) => {}
     }
     journal.window.push(time.delta_secs() * 1000.0);
+    if let Some(w) = window.as_deref() {
+        journal.occluded_frames += u32::from(w.frame_occluded);
+        journal.unfocused_frames += u32::from(w.frame_unfocused);
+    }
     if let Some(store) = gpu.store.as_deref() {
         journal.gpu.fold(store);
     }
@@ -382,6 +397,11 @@ fn journal_fps(
         _ => line.push(','),
     }
     journal.main_at_flush = main_now;
+    line.push_str(&format!(
+        ",{},{}",
+        journal.occluded_frames, journal.unfocused_frames
+    ));
+    (journal.occluded_frames, journal.unfocused_frames) = (0, 0);
     let gpu_cells = journal.gpu.columns();
     line.push_str(&gpu_cells);
     line.push('\n');
@@ -398,131 +418,26 @@ fn journal_fps(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bevy::diagnostic::{Diagnostic, DiagnosticMeasurement, DiagnosticPath};
-    use std::time::Duration;
-
-    #[test]
-    fn buckets_name_every_pass_we_draw_and_skip_what_is_not_a_gpu_span() {
-        use GpuBucket::*;
-        let b = |p: &str| gpu_bucket(p);
-        assert_eq!(b("render/main_opaque_pass_3d/elapsed_gpu"), Some(Opaque));
-        assert_eq!(b("render/static_gx/elapsed_gpu"), Some(Static));
-        assert_eq!(
-            b("render/main_transparent_pass_3d/elapsed_gpu"),
-            Some(Transparent)
-        );
-        assert_eq!(b("render/ffx_glow_gauss_h/elapsed_gpu"), Some(Glow));
-        assert_eq!(b("render/ffx_glow_combine/elapsed_gpu"), Some(Glow));
-        assert_eq!(b("render/tonemapping/elapsed_gpu"), Some(Post));
-        assert_eq!(b("render/upscaling/elapsed_gpu"), Some(Post));
-        assert_eq!(b("render/ui/elapsed_gpu"), Some(Ui));
-        assert_eq!(b("render/ui_gamma_decode/elapsed_gpu"), Some(Ui));
-        assert_eq!(b("render/main_transparent_pass_2d/elapsed_gpu"), Some(Ui));
-        assert_eq!(
-            b("render/early_mesh_preprocessing/elapsed_gpu"),
-            Some(Other)
-        );
-        // CPU spans, non-render diagnostics and nested spans are not GPU cells.
-        assert_eq!(b("render/main_opaque_pass_3d/elapsed_cpu"), None);
-        assert_eq!(b("fps"), None);
-        assert_eq!(b("render/outer/inner/elapsed_gpu"), None);
+/// Move a journal aside (`.csv` → `.old.csv`, replacing an older one) when its header line is not
+/// [`JOURNAL_HEADER`].
+fn rotate_if_stale(path: &std::path::Path) {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let header = text
+        .lines()
+        .find(|l| !l.starts_with('#'))
+        .unwrap_or_default();
+    if header == JOURNAL_HEADER.trim_end() {
+        return;
     }
-
-    fn push(store: &mut DiagnosticsStore, path: &str, time: Instant, value: f64) {
-        let p = DiagnosticPath::new(path.to_string());
-        if store.get(&p).is_none() {
-            store.add(Diagnostic::new(p.clone()));
-        }
-        store
-            .get_mut(&p)
-            .unwrap()
-            .add_measurement(DiagnosticMeasurement { time, value });
-    }
-
-    #[test]
-    fn a_flush_averages_per_frame_read_and_a_fold_takes_only_what_arrived() {
-        let mut store = DiagnosticsStore::default();
-        let t0 = Instant::now();
-        let t1 = t0 + Duration::from_millis(10);
-        let t2 = t0 + Duration::from_millis(20);
-        // Frame 1: opaque 2, static 3, and the full-screen tail on two cameras (0.5 + 0.3).
-        push(
-            &mut store,
-            "render/main_opaque_pass_3d/elapsed_gpu",
-            t0,
-            2.0,
-        );
-        push(&mut store, "render/static_gx/elapsed_gpu", t0, 3.0);
-        push(&mut store, "render/tonemapping/elapsed_gpu", t0, 0.5);
-        push(&mut store, "render/tonemapping/elapsed_gpu", t0, 0.3);
-        // A CPU span beside them, never counted.
-        push(
-            &mut store,
-            "render/main_opaque_pass_3d/elapsed_cpu",
-            t0,
-            99.0,
-        );
-        let mut acc = GpuAccum::default();
-        acc.fold(&store);
-        assert_eq!(acc.frames, 1);
-        // Frame 2 lands; the fold reads only it (frame 1's values would double otherwise).
-        push(
-            &mut store,
-            "render/main_opaque_pass_3d/elapsed_gpu",
-            t1,
-            4.0,
-        );
-        acc.fold(&store);
-        acc.fold(&store); // nothing new: a no-op, not a double count
-        assert_eq!(acc.frames, 2);
-        let cols = acc.columns();
-        // gpu_ms = (2 + 3 + 0.8 + 4) / 2; opaque (2 + 4) / 2; static 3 / 2; post 0.8 / 2.
-        assert_eq!(cols, ",4.90,3.00,1.50,0.00,0.00,0.40,0.00,0.00");
-        // The reset: a second with nothing read writes empty cells, one per column.
-        assert_eq!(acc.columns(), ",,,,,,,,");
-        // And a later frame is still read after the reset.
-        push(
-            &mut store,
-            "render/main_opaque_pass_3d/elapsed_gpu",
-            t2,
-            1.0,
-        );
-        acc.fold(&store);
-        assert_eq!(acc.columns(), ",1.00,1.00,0.00,0.00,0.00,0.00,0.00,0.00");
-    }
-
-    #[test]
-    fn the_header_ends_with_the_gpu_cells_in_bucket_order() {
-        let cols: Vec<&str> = JOURNAL_HEADER.trim_end().split(',').collect();
-        let gpu: Vec<&str> = cols[cols.len() - (GPU_BUCKETS + 1)..].to_vec();
-        assert_eq!(
-            gpu,
-            [
-                "gpu_ms",
-                "gpu_opaque",
-                "gpu_static",
-                "gpu_transp",
-                "gpu_glow",
-                "gpu_post",
-                "gpu_ui",
-                "gpu_other"
-            ]
-        );
-        // An empty second writes exactly one cell per GPU column.
-        assert_eq!(
-            GpuAccum::default().columns().matches(',').count(),
-            gpu.len()
-        );
-    }
-
-    #[test]
-    fn the_preamble_names_the_adapter_or_says_it_cannot() {
-        assert_eq!(
-            preamble(None, None),
-            "# wrathplus fps journal | gpu ? | backend ? | driver ? | gpu_spans ?\n"
-        );
+    let aside = path.with_extension("old.csv");
+    match std::fs::rename(path, &aside) {
+        Ok(()) => info!("fps journal: older layout moved to {}", aside.display()),
+        Err(e) => warn!("fps journal: cannot move {} aside: {e}", path.display()),
     }
 }
+
+#[cfg(test)]
+#[path = "journal_tests.rs"]
+mod tests;
