@@ -1505,8 +1505,8 @@ fn feed_units(
         script.fire_event("PLAYER_FOCUS_CHANGED", vec![]);
     }
 
-    // `PLAYER_REGEN_DISABLED`/`ENABLED` on our in-combat flag's edge (`UNIT_FLAG_IN_COMBAT`
-    // `0x00080000`, vmangos `UnitDefines.h:564`); the reference's own trigger is untraced.
+    // `PLAYER_REGEN_*` on the in-combat flag's (`0x80000`) edge, 12340's `0x524600`; a first sight
+    // fires only DISABLED (`0x528010`). Labelled: `0x528f00`'s in-combat ENABLED is unplaced.
     if let Some((store, _)) = self_pair {
         let in_combat = store.0.unit_flags() & 0x0008_0000 != 0;
         if memo.in_combat != Some(in_combat) {
