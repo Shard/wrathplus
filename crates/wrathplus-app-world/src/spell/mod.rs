@@ -14,7 +14,6 @@ use crate::app_core::schedule::UnitFeed;
 use wrathplus_world::schedule::WorldStage;
 
 mod bind_gates;
-pub mod cast_bar;
 pub mod cast_fail_keys;
 mod cast_send;
 pub mod cast_target;
