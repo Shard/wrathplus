@@ -1,7 +1,6 @@
-//! The engine unit tooltip, in `0x529fe0`'s line order: the name (gold; FrameXML recolours it by
-//! reaction), the creature subtitle, the level line, the faction name, then "PvP", "Skinnable",
-//! "Civilian" and "Leader", with health on the `<name>StatusBar` child. The world mouseover drives
-//! it through [`super::UiScript::world_tooltip_unit`]; unit-frame hovers call `SetUnit` from Lua.
+//! The engine unit tooltip in `0x529fe0`'s line order: name (gold; FrameXML recolours it by
+//! reaction), subtitle, level, faction, "PvP", the gather line, "Civilian", "Leader", and health
+//! on `<name>StatusBar`; driven by [`super::UiScript::world_tooltip_unit`] and Lua's `SetUnit`.
 
 use mlua::{Lua, Table};
 
@@ -156,8 +155,9 @@ fn render_unit_view(lua: &Lua, this: &Table, unit: Option<UnitState>) -> mlua::R
     if u.pvp {
         append_line(lua, this, ("PvP".into(), WHITE), None, false)?;
     }
-    if u.skinnable {
-        append_line(lua, this, ("Skinnable".into(), RED), None, false)?;
+    if let Some((key, difficulty)) = u.skinnable {
+        let line = super::tooltip_gather::line(lua, key, difficulty);
+        append_line(lua, this, line, None, false)?;
     }
     // "Civilian" (`0x612550`): PvP-flagged, a civilian, hostile, and grey to kill (`0x5f0700`).
     if is_civilian_kill(&u, player_level) {

@@ -69,31 +69,91 @@ fn track_learned_abilities(
     }
     // The last match in id order: each learned rank overwrites the reference's latch, and a rank
     // chain ascends by id (Skinning 8613, 8617, 8618, 10768).
-    let last_with = |effect: u32| {
-        actions.spells.iter().copied().rfind(|&id| {
-            spells
-                .catalog
-                .get(id)
-                .is_some_and(|d| d.effects[0] == effect)
-        })
+    let last_where = |keep: &dyn Fn(&wrathplus_formats::SpellDisplay) -> bool| {
+        actions
+            .spells
+            .iter()
+            .copied()
+            .rfind(|&id| spells.catalog.get(id).is_some_and(keep))
     };
-    let (skinning, skin_player_corpse, feed_pet) = (
-        last_with(wrathplus_formats::SPELL_EFFECT_SKINNING),
-        last_with(SPELL_EFFECT_SKIN_PLAYER_CORPSE),
-        last_with(SPELL_EFFECT_FEED_PET),
-    );
-    if (skinning, skin_player_corpse, feed_pet)
-        != (
-            learned.skinning,
-            learned.skin_player_corpse,
-            learned.feed_pet,
-        )
+    let last_with = |effect: u32| last_where(&|d| d.effects[0] == effect);
+    // `0x542030`'s skinning arm writes `[0xbe5d6c + 4×EffectMiscValue[0]]`, so each gather trade
+    // keeps its own spell: learning Mining's corpse spell never replaces Skinning.
+    let gather: [Option<u32>; 4] = std::array::from_fn(|kind| {
+        last_where(&|d| {
+            d.effects[0] == wrathplus_formats::SPELL_EFFECT_SKINNING
+                && d.effect_misc_value[0] == kind as i32
+        })
+    });
+    let next = LearnedAbilities {
+        gather,
+        skin_player_corpse: last_with(SPELL_EFFECT_SKIN_PLAYER_CORPSE),
+        feed_pet: last_with(SPELL_EFFECT_FEED_PET),
+    };
+    if (next.gather, next.skin_player_corpse, next.feed_pet)
+        != (learned.gather, learned.skin_player_corpse, learned.feed_pet)
     {
-        *learned = LearnedAbilities {
-            skinning,
-            skin_player_corpse,
-            feed_pet,
-        };
+        *learned = next;
+    }
+}
+
+/// A skinnable creature's tooltip line key by its gather trade (12340 `0x620fc3` on `0x715e50`),
+/// Skinning while its record is uncached, at difficulty 4 (red) until [`gather_difficulty`] shades
+/// it; `None` when `UNIT_FIELD_FLAGS` bit 26 is clear.
+pub(crate) fn gather_line_key(
+    store: &crate::app_core::session::ObjectStore,
+    names: Option<&crate::names::NameCache>,
+) -> Option<(&'static str, u8)> {
+    (store.0.unit_flags() & 0x0400_0000 != 0).then(|| {
+        (
+            crate::app_core::gather::LINE_KEYS[corpse_trade(store, names)],
+            4,
+        )
+    })
+}
+
+/// The creature's gather trade off its template (`0x715e50`), 0 while uncached.
+fn corpse_trade(
+    store: &crate::app_core::session::ObjectStore,
+    names: Option<&crate::names::NameCache>,
+) -> usize {
+    let record = (store.0.object_type() == Some(wrathplus_protocol::types::ObjectType::Unit))
+        .then(|| store.0.object_entry())
+        .flatten()
+        .and_then(|entry| names?.creature_record(entry));
+    crate::app_core::gather::gather_kind(record.map_or(0, |r| r.type_flags))
+}
+
+/// The gather line's difficulty, `0x620ee0`'s colour leg: with the trade's spell learned
+/// (`0x53bce0`) and a positive skill in its line (`0x8016c0`), the creature level's required
+/// skill (1 to level 10, then `10×level − 100` below 20, else `5×level`) against that skill
+/// (`0x61a1f0`): 0 grey at +100, 1 green at +50, 2 yellow at +25, 3 orange at par, else 4 red.
+pub(crate) fn gather_difficulty(
+    store: &crate::app_core::session::ObjectStore,
+    names: Option<&crate::names::NameCache>,
+    me: Option<&crate::app_core::session::ObjectStore>,
+    learned: &LearnedAbilities,
+    skill_lines: Option<&wrathplus_formats::SkillLineCatalog>,
+) -> u8 {
+    let Some(spell) = learned.gather[corpse_trade(store, names)] else {
+        return 4;
+    };
+    let skill = crate::spell::spell_skill_value(me, skill_lines, spell) as i64;
+    if skill <= 0 {
+        return 4;
+    }
+    let level = i64::from(store.0.unit_level().unwrap_or(0));
+    let required = match level {
+        ..=10 => 1,
+        11..=19 => 10 * level - 100,
+        _ => 5 * level,
+    };
+    match skill - required {
+        100.. => 0,
+        50.. => 1,
+        25.. => 2,
+        0.. => 3,
+        _ => 4,
     }
 }
 
@@ -247,3 +307,6 @@ fn load_spells(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
         Err(e) => warn!("ui_action: Spell.dbc failed to load — bar icons disabled: {e:#}"),
     }
 }
+
+#[cfg(test)]
+mod gather_tests;

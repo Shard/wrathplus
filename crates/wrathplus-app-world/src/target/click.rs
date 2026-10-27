@@ -216,8 +216,8 @@ pub(crate) struct Dispatch<'w, 's> {
     gestures: ResMut<'w, crate::creature_anim::GestureQueue>,
     go_inputs: GoLockInputs<'w, 's>,
     player_actions: Res<'w, crate::app_core::state::PlayerActions>,
-    // The skin leg's spells (`[0xb700e4]`, `[0xb700e8]`), already gated by the classifier.
-    learned: Res<'w, crate::app_core::state::LearnedAbilities>,
+    // The skin leg's spells (`0x53bce0`: the corpse trade's latch, `[0xbe5d7c]`).
+    gather: super::cursor_mode::GatherSpells<'w>,
     // The GameObject leg also reads the object's anim state (the Action gate).
     stores: Query<
         'w,
@@ -847,7 +847,7 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
         } else if insignia {
             // Leg 2. `skin_player_corpse` mirrors `[0xb700e8]`, `None` for every 1.12.1 player,
             // so this is inert as in the reference; the unfriendly test is not built.
-            if let Some(spell_id) = dispatch.learned.skin_player_corpse {
+            if let Some(spell_id) = dispatch.gather.learned.skin_player_corpse {
                 dispatch.skin(
                     entity,
                     guid,
@@ -877,7 +877,7 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
         dead_fork,
         target.is_some_and(|s| s.0.unit_lootable()),
         target.is_some_and(|s| s.0.unit_flags() & cursor_mode::UNIT_FLAG_SKINNABLE != 0),
-        dispatch.learned.skinning.is_some(),
+        target.and_then(|s| dispatch.gather.spell_for(s)).is_some(),
     );
     if wrathplus_assets::trace::enabled_for("use") {
         wrathplus_assets::trace::line(
@@ -982,9 +982,14 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
             }
         }
         UnitBranch::Dead(DeadUnitLeg::Skin) => {
-            // The skin leg (`0x60c01f`): the known Skinning spell (`[0xb700e4]`) at a corpse the
-            // loot leg declined, lootable ones included while mounted.
-            if let Some(spell_id) = dispatch.learned.skinning {
+            // The skin leg (`0x60c01f`): the corpse trade's learned spell (`0x53bce0`) at a corpse
+            // the loot leg declined, lootable ones included while mounted.
+            let spell = dispatch
+                .stores
+                .get(entity)
+                .ok()
+                .and_then(|(s, _)| dispatch.gather.spell_for(s));
+            if let Some(spell_id) = spell {
                 dispatch.skin(
                     entity,
                     guid,
@@ -1100,9 +1105,10 @@ pub(super) fn act_on_arrival(
         // The spell by the target: a corpse or a player's body takes `[0xb700e8]` (`0x5f0608`).
         ApproachVerb::Skin => {
             let spell = if matches!(kind, Some(EntityKind::Corpse | EntityKind::Player)) {
-                dispatch.learned.skin_player_corpse
+                dispatch.gather.learned.skin_player_corpse
             } else {
-                dispatch.learned.skinning
+                let store = dispatch.stores.get(entity).ok().map(|(s, _)| s);
+                store.and_then(|s| dispatch.gather.spell_for(s))
             };
             if let Some(spell_id) = spell {
                 let subject = if kind == Some(EntityKind::Corpse) {
@@ -1288,7 +1294,8 @@ fn route_lock_refusal(
 /// 0. a corpse: `HEALTH <= 0` and the feign-death bit `UNIT_DYNFLAG_DEAD` clear, else alive;
 /// 1. the player mounted (`0x60bf98`): straight to the skin leg, silently;
 /// 2. lootable (`0x6003a0`): [`DeadUnitLeg::Loot`];
-/// 3. skinnable (`UNIT_FIELD_FLAGS` bit 26) with Skinning known (`[0xb700e4]`): the skin leg;
+/// 3. skinnable (`UNIT_FIELD_FLAGS` bit 26) with the corpse trade's spell known (`0x53bce0`): the
+///    skin leg;
 /// 4. otherwise nothing (`0x60c25f`).
 ///
 /// Step 1 never reads the target: a lootable and skinnable corpse skins mounted, loots on foot.
@@ -2958,7 +2965,7 @@ mod tests {
         let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), false);
         world
             .resource_mut::<crate::app_core::state::LearnedAbilities>()
-            .skinning = Some(SKINNING);
+            .gather[0] = Some(SKINNING);
         let body = skinnable(&mut world);
         index(&mut world, BODY, body);
         interact_with(&mut world, body);
@@ -2969,7 +2976,7 @@ mod tests {
         let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), true);
         world
             .resource_mut::<crate::app_core::state::LearnedAbilities>()
-            .skinning = Some(SKINNING);
+            .gather[0] = Some(SKINNING);
         let body = skinnable(&mut world);
         index(&mut world, BODY, body);
         world.resource_mut::<crate::player::Approach>().arrived =

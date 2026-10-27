@@ -77,7 +77,7 @@ impl Plugin for CharSelectPlugin {
             )
             .add_systems(
                 OnExit(ClientState::CharSelect),
-                (screen::exit_select, clear_select_entry),
+                (screen::exit_select, screen::preview_exit::clear_preview, clear_select_entry),
             )
             .add_systems(Update, (debug_glue_roundtrip, debug_logout_smoke))
             .add_systems(

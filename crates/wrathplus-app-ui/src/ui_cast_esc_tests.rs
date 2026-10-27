@@ -1,5 +1,5 @@
 //! `SpellStopCasting()` from the VM against the cast lifecycle: the Esc ladder's casting half,
-//! which needs the VM, the cast-bar feed and `script_calls`, so it lives on the UI side of
+//! which needs the VM, the casting flag and `script_calls`, so it lives on the UI side of
 //! `spell::inflight`'s local cancel.
 
 use std::collections::HashMap;
@@ -10,8 +10,7 @@ use wrathplus_ui::script::{ScriptCall, UiScript};
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 
-use super::feed_cast_bar;
-use crate::spell::cast_bar::{CastBarEdge, CastBarFeed};
+use super::push_casting_flag;
 use crate::spell::cast_test_support::{harness, mark_casting, ARCANE_MISSILES, HEROIC_STRIKE};
 use crate::spell::{ActiveChannel, AutoRepeatActive, PendingCast, QueuedMeleeSpell, SelfCancel};
 
@@ -40,14 +39,14 @@ fn esc_cannot_stop_a_channel() {
         .resource_mut::<ActiveChannel>()
         .start(ARCANE_MISSILES, 5_000, now);
 
-    app.world_mut().run_system_once(feed_cast_bar).unwrap();
+    app.world_mut().run_system_once(push_casting_flag).unwrap();
     assert_eq!(
         app.world()
             .non_send_resource::<UiScript>()
             .eval::<Option<i64>>("return SpellStopCasting()")
             .unwrap(),
         None,
-        "mid-channel the binding answers nil — the vanilla /stopcasting quirk"
+        "mid-channel the binding answers nil — the /stopcasting quirk"
     );
     apply_stops(&mut app);
     assert!(
@@ -73,7 +72,7 @@ fn esc_cancels_the_auto_repeat_first_and_the_cast_on_the_next_press() {
     mark_casting(&mut app, FIREBALL);
 
     // Press 1 stops the auto-repeat only.
-    app.world_mut().run_system_once(feed_cast_bar).unwrap();
+    app.world_mut().run_system_once(push_casting_flag).unwrap();
     assert_eq!(
         app.world()
             .non_send_resource::<UiScript>()
@@ -97,13 +96,9 @@ fn esc_cancels_the_auto_repeat_first_and_the_cast_on_the_next_press() {
             .in_flight(Instant::now()),
         "the send guard still holds — one press stopped one thing"
     );
-    assert!(
-        app.world().resource::<CastBarFeed>().0.is_empty(),
-        "an auto-repeat cancel paints no bar edge"
-    );
 
     // Press 2 cancels the cast.
-    app.world_mut().run_system_once(feed_cast_bar).unwrap();
+    app.world_mut().run_system_once(push_casting_flag).unwrap();
     assert_eq!(
         app.world()
             .non_send_resource::<UiScript>()
@@ -138,7 +133,7 @@ fn esc_unqueues_a_strike_and_eats_the_press() {
         .resource_mut::<QueuedMeleeSpell>()
         .arm(HEROIC_STRIKE);
 
-    app.world_mut().run_system_once(feed_cast_bar).unwrap();
+    app.world_mut().run_system_once(push_casting_flag).unwrap();
     assert_eq!(
         app.world()
             .non_send_resource::<UiScript>()
@@ -163,14 +158,6 @@ fn esc_unqueues_a_strike_and_eats_the_press() {
         None,
         "the slot opens locally — the checked ring darkens this frame, not one RTT later"
     );
-    assert!(
-        matches!(
-            app.world().resource::<CastBarFeed>().0[..],
-            [CastBarEdge::Stop]
-        ),
-        "the reference's `0x152` STOP and nothing else: no red INTERRUPTED for a \
-         spell that never opened a bar"
-    );
 }
 
 /// A cast nested over a queued strike (`PushPopNestedCast 0x6e4ad0`) dies on the first
@@ -187,7 +174,7 @@ fn esc_takes_the_cast_first_and_the_strike_on_the_next_press() {
         .arm(FIREBALL, Instant::now(), true);
     mark_casting(&mut app, FIREBALL);
 
-    app.world_mut().run_system_once(feed_cast_bar).unwrap();
+    app.world_mut().run_system_once(push_casting_flag).unwrap();
     assert_eq!(
         app.world()
             .non_send_resource::<UiScript>()
@@ -211,7 +198,7 @@ fn esc_takes_the_cast_first_and_the_strike_on_the_next_press() {
     );
 
     // Press 2: the pop put the strike back in the slot.
-    app.world_mut().run_system_once(feed_cast_bar).unwrap();
+    app.world_mut().run_system_once(push_casting_flag).unwrap();
     assert_eq!(
         app.world()
             .non_send_resource::<UiScript>()
@@ -228,39 +215,4 @@ fn esc_takes_the_cast_first_and_the_strike_on_the_next_press() {
         })
     ));
     assert_eq!(app.world().resource::<QueuedMeleeSpell>().current(), None);
-}
-
-/// The cast bar drains in the frame the spell queues it: an edge queued in the local cancel's
-/// slot reaches the VM as `SPELLCAST_START` within the same `update`, so the bar never shows a
-/// frame late.
-#[test]
-fn a_queued_edge_reaches_the_vm_the_same_frame() {
-    let (mut app, _rx) = harness(HashMap::new());
-    let script = UiScript::new().unwrap();
-    script
-        .run(
-            "local f = CreateFrame('Frame') f:RegisterEvent('SPELLCAST_START') \
-             f:SetScript('OnEvent', function(self, event, name, ms) SEEN = ms end)",
-        )
-        .unwrap();
-    app.insert_non_send_resource(script);
-    app.add_plugins(super::UiCastPlugin);
-    app.add_systems(
-        Update,
-        (|mut feed: ResMut<CastBarFeed>| {
-            feed.0.push(CastBarEdge::Start {
-                spell_id: HEROIC_STRIKE,
-                cast_time_ms: 1500,
-            });
-        })
-        .in_set(crate::spell::LocalCancel),
-    );
-    app.update();
-    assert_eq!(
-        app.world()
-            .non_send_resource::<UiScript>()
-            .eval::<Option<i64>>("return SEEN")
-            .unwrap(),
-        Some(1500)
-    );
 }

@@ -33,7 +33,7 @@ fn wolf() -> UnitState {
         reaction: 2, // hostile
         creature_type_name: Some("Beast".into()),
         rank: 2, // rare-elite prints ELITE (the byte table)
-        skinnable: true,
+        skinnable: Some(("UNIT_SKINNABLE_LEATHER", 4)),
         ..Default::default()
     }
 }
@@ -85,7 +85,7 @@ fn unqueried_wolf() -> UnitState {
         max_health: 50,
         level: 10,
         reaction: 2, // hostile
-        skinnable: true,
+        skinnable: Some(("UNIT_SKINNABLE_LEATHER", 4)),
         guid: 0xF130_0000_0000_0001,
         ..Default::default()
     }

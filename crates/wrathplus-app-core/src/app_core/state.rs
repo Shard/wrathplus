@@ -47,14 +47,14 @@ impl Spells {
     }
 }
 
-/// The reference's learned-ability latches: at learn time `0x4b25e0` stores a spell's id by its
-/// `Effect[0]`, and the unlearn path `0x4b2c50` clears it. The skin cursor requires the latch
-/// (`0x482589`), so a player who never learned Skinning gets no skin cursor.
+/// The reference's learned-ability latches: at learn time 12340's `0x542030` stores a spell's id
+/// by its `Effect[0]`, and unlearning (`0x53fb37`) clears it. The gather cursor needs the corpse
+/// trade's latch (`0x4f7e17`), so a player who never learned that trade gets no gather cursor.
 #[derive(Resource, Default)]
 pub struct LearnedAbilities {
-    /// `[0xb700e4]`: the known `SPELL_EFFECT_SKINNING` spell, which the skin click also casts.
-    pub skinning: Option<u32>,
-    /// `[0xb700e8]`: the known `SPELL_EFFECT_SKIN_PLAYER_CORPSE` spell; no cursor reads it yet.
+    /// `[0xbe5d6c + 4×EffectMiscValue[0]]`: each [`super::gather::gather_kind`]'s skinning spell.
+    pub gather: [Option<u32>; 4],
+    /// `[0xbe5d7c]`: the known `SPELL_EFFECT_SKIN_PLAYER_CORPSE` spell; no cursor reads it yet.
     pub skin_player_corpse: Option<u32>,
     /// `[0xcecad8]`: the known `SPELL_EFFECT_FEED_PET` spell, latched by `0x6ea1d0` (from
     /// `0x5e9e49`); gate 3 of `ui_action::drop_item::drop_item_on_unit` and the spell it casts.

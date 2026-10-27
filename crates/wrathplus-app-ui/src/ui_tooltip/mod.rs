@@ -103,6 +103,15 @@ fn locked_line_tint(outcome: Option<crate::target::lock::LockOutcome>) -> Toolti
     }
 }
 
+/// [`SnapshotTables`] and the gather line's difficulty inputs (`0x620ee0`): the learned trade
+/// spells and `SkillLineAbility.dbc`, one parameter at the 16-parameter limit.
+#[derive(bevy::ecs::system::SystemParam)]
+struct TooltipTables<'w> {
+    snapshot: SnapshotTables<'w>,
+    learned: Option<Res<'w, crate::app_core::state::LearnedAbilities>>,
+    skill_lines: Option<Res<'w, crate::app_core::state::SkillLines>>,
+}
+
 fn drive_mouseover_tooltip(
     script: Option<NonSendMut<UiScript>>,
     hovered: Res<Hovered>,
@@ -125,8 +134,8 @@ fn drive_mouseover_tooltip(
     ui_scale: Res<crate::app_core::ui_flags::UiScaleCvar>,
     mut memo: HoverMemo,
     // `ChrClasses.dbc` field 16, `UnitHasRelicSlot`'s input, and the form table the creature type
-    // reads.
-    tables: SnapshotTables,
+    // reads; with the gather line's difficulty inputs.
+    tables: TooltipTables,
     // `UnitReaction`'s live inputs: the group roster, forced reactions and owner lookup.
     relations: crate::target::RelationInputs,
 ) {
@@ -138,8 +147,8 @@ fn drive_mouseover_tooltip(
     let last_lines = last_lines.get(&script);
     let published = memo.published.get(&script);
     let self_store = self_q.iter().next();
-    let chr = tables.classes();
-    let types = tables.types(&names);
+    let chr = tables.snapshot.classes();
+    let types = tables.snapshot.types(&names);
 
     let unit = hovered.mouseover(&hovered_go).and_then(|(entity, guid)| {
         let store = stores.get(entity).ok()?;
@@ -164,6 +173,15 @@ fn drive_mouseover_tooltip(
             rx.factions.as_deref(),
             self_store,
         );
+        if let (Some((_, difficulty)), Some(learned)) = (s.skinnable.as_mut(), &tables.learned) {
+            *difficulty = crate::ui_action::gather_difficulty(
+                store,
+                Some(&names),
+                self_store,
+                learned,
+                tables.skill_lines.as_deref().map(|l| &l.catalog),
+            );
+        }
         Some((guid, s))
     });
     // The hovered GameObject, when nothing else was picked or it is nearer. Not gated on

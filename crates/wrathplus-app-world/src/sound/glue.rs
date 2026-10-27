@@ -196,9 +196,11 @@ pub(super) fn plugin(app: &mut App) {
             (
                 play_glue_sounds,
                 // The theme starts at the login screen (`AccountLogin_OnShow` plays the same
-                // `GS_LichKing`) and keeps across the glue screens.
+                // `GS_LichKing`) and keeps across the glue screens; not under the startup cover,
+                // whose warm pass would starve it.
                 start_glue_music
-                    .run_if(in_state(ClientState::Login).or(in_state(ClientState::CharSelect))),
+                    .run_if(in_state(ClientState::Login).or(in_state(ClientState::CharSelect)))
+                    .run_if(crate::loading_screen::no_startup_cover),
                 // No run condition: the theme plays into `InWorld`, and the entry load burst is
                 // the window the watch exists for.
                 hand_off_glue_music,

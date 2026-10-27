@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 
-use super::cast_bar::{CastBarEdge, CastBarFeed};
 use crate::creature_anim::{CastEvent, CastEventKind, Casting};
 use crate::app_core::anim::PlaySeq;
 use crate::net::{ClientCommand, GuidIndex, NetCommands};
@@ -232,7 +231,7 @@ pub struct AutoRepeatActive(pub Option<u32>);
 /// The per-spell movement gates of the local self-cancel, tested at `0x51511e` and `0x515175`.
 /// The move keybinds' dispatcher `0x515090` cancels on mask `0x10f0` (forward, back, strafe,
 /// autorun; not turn or pitch) and `Script::Jump 0x513bd0` likewise, both calling `AbortCast`
-/// for event 0x152 `SPELLCAST_STOP` and `CMSG_CANCEL_CAST`.
+/// for `CMSG_CANCEL_CAST`.
 pub const SPELL_INTERRUPT_MOVEMENT: u32 = 0x1; // SpellRec+0x54 InterruptFlags (SPELL_INTERRUPT_FLAG_MOVEMENT)
 const CHANNEL_INTERRUPT_MOVING: u32 = 0x8; // SpellRec+0x5c ChannelInterruptFlags (AURA_INTERRUPT_MOVING_CANCELS)
 
@@ -245,18 +244,13 @@ pub struct LocalMoveStart(pub(crate) bool);
 ///
 /// - Esc first stops a running auto-repeat (`SpellStopCasting 0x6e6e80`, then `0x6ea080`),
 ///   and that spends the press; the cast survives to the next one.
-/// - The cast: `CMSG_CANCEL_CAST`, the self `Casting` reaped with a `Fail` cast event, and the
-///   `Stop` then `Interrupted` bar edges. Movement tests the spell's `InterruptFlags`; Esc does
-///   not.
+/// - The cast: `CMSG_CANCEL_CAST` and the self `Casting` reaped with a `Fail` cast event.
+///   Movement tests the spell's `InterruptFlags`; Esc does not.
 /// - The channel, on movement only: `CMSG_CANCEL_CHANNELLING` (`0x6e9b70`) and nothing local;
-///   the bar and [`ActiveChannel`] close on `MSG_CHANNEL_UPDATE(0)` (`0x6e75f0`). Esc cannot
-///   stop a channel: `0x6e6e80` never calls `0x6e9b70`, and the inflight id is 0 mid-channel.
+///   [`ActiveChannel`] closes on `MSG_CHANNEL_UPDATE(0)` (`0x6e75f0`). Esc cannot stop a
+///   channel: `0x6e6e80` never calls `0x6e9b70`, and the inflight id is 0 mid-channel.
 ///
-/// The client's own event is the silent 0x152 `SPELLCAST_STOP`, but vmangos answers the cancel
-/// with `SMSG_SPELL_FAILED_OTHER` and a failing `SMSG_CAST_RESULT` 0x23, which the client turns
-/// into 0x154 `SPELLCAST_INTERRUPTED` (`0x6e1a00`). Our bar edges key on the self `Casting` this
-/// reap removes, so the pair is pushed here. The stock `CastingBarFrame.lua:132-139` then steps
-/// the flash once per OnUpdate after the 1 s hold, followed by the fade.
+/// The bar's `UNIT_SPELLCAST_*` events are `unit_cast`'s.
 pub(super) fn local_self_cancel(mut moved: ResMut<LocalMoveStart>, mut cancel: SelfCancel) {
     if std::mem::take(&mut moved.0) {
         cancel.cancel(false, true);
@@ -271,7 +265,6 @@ pub struct SelfCancel<'w, 's> {
     queued_melee: ResMut<'w, QueuedMeleeSpell>,
     channel: Res<'w, ActiveChannel>,
     auto_repeat: ResMut<'w, AutoRepeatActive>,
-    feed: ResMut<'w, CastBarFeed>,
     spells: Option<Res<'w, Spells>>,
     net: Res<'w, NetCommands>,
     self_guid: Res<'w, SelfGuid>,
@@ -294,7 +287,6 @@ impl SelfCancel<'_, '_> {
             queued_melee,
             channel,
             auto_repeat,
-            feed,
             spells,
             net,
             self_guid,
@@ -348,10 +340,6 @@ impl SelfCancel<'_, '_> {
                 match slot {
                     Inflight::Cast(_) => {
                         pending.clear_if(spell_id);
-                        // STOP arms the flash, INTERRUPTED paints red and holds, so the flash bursts
-                        // after the hold; an interrupt by an enemy has no STOP and no burst.
-                        feed.0.push(CastBarEdge::Stop);
-                        feed.0.push(CastBarEdge::Interrupted);
                         // `spell_failed_other`'s self reap, run early so the echo finds it done.
                         if let Some(e) = self_e {
                             if casting.get(e).is_ok_and(|c| c.spell_id == spell_id) {
@@ -366,10 +354,8 @@ impl SelfCancel<'_, '_> {
                         }
                     }
                     Inflight::Strike(_) => {
-                        // Clearing the slot darkens the checked ring now. `AbortCast` fires 0x152
-                        // here too, inert on a hidden bar; there is no INTERRUPTED.
+                        // Clearing the slot darkens the checked ring now.
                         queued_melee.clear_if(spell_id);
-                        feed.0.push(CastBarEdge::Stop);
                     }
                 }
             }
@@ -412,7 +398,6 @@ pub mod cast_test_support {
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut app = App::new();
         app.add_message::<CastEvent>()
-            .init_resource::<CastBarFeed>()
             .init_resource::<PendingCast>()
             .init_resource::<QueuedMeleeSpell>()
             .init_resource::<ActiveChannel>()
@@ -606,17 +591,6 @@ mod tests {
                     .in_flight(Instant::now()),
                 "the in-flight guard opens with the local cancel"
             );
-            let feed = &app.world().resource::<CastBarFeed>().0;
-            assert_eq!(feed.len(), 2);
-            assert!(
-                matches!(
-                    (&feed[0], &feed[1]),
-                    (CastBarEdge::Stop, CastBarEdge::Interrupted)
-                ),
-                "the bar edges are the reference's own two-step at RTT→0 — STOP (arms the \
-                 flash overlay) then the red INTERRUPTED (the echo's repaint: hold, burst, fade); \
-                 the keyed reap silences the real echo"
-            );
             let self_e = app.world().resource::<GuidIndex>().0[&10];
             assert!(
                 app.world().entity(self_e).get::<Casting>().is_none(),
@@ -652,7 +626,6 @@ mod tests {
                     .in_flight(Instant::now()),
                 "the guard keeps holding — the cast runs on"
             );
-            assert!(app.world().resource::<CastBarFeed>().0.is_empty());
         }
 
         #[test]
@@ -718,7 +691,6 @@ mod tests {
                 .world()
                 .resource::<PendingCast>()
                 .in_flight(Instant::now()));
-            assert!(app.world().resource::<CastBarFeed>().0.is_empty());
         }
 
         /// Heroic Strike's `InterruptFlags` are 0, so movement leaves it queued.
@@ -774,10 +746,6 @@ mod tests {
                 app.world().resource::<ActiveChannel>().current(now),
                 Some(ARCANE_MISSILES),
                 "the mirror stays live — the server's UPDATE(0) is what clears it"
-            );
-            assert!(
-                app.world().resource::<CastBarFeed>().0.is_empty(),
-                "no local bar edge — the bar closes on the wire's SPELLCAST_CHANNEL_STOP"
             );
         }
     }

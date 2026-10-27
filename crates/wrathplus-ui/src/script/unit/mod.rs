@@ -163,8 +163,8 @@ pub struct UnitState {
     pub racial_leader: bool,
     /// `UNIT_FIELD_FLAGS`' PvP bit: `UnitIsPVP` and the tooltip's PvP line.
     pub pvp: bool,
-    /// `UNIT_FIELD_FLAGS`' skinnable bit, the tooltip's red Skinnable line.
-    pub skinnable: bool,
+    /// `UNIT_FIELD_FLAGS`' skinnable bit: the gather line's key and difficulty, 0 grey to 4 red.
+    pub skinnable: Option<(&'static str, u8)>,
     /// The faction name ("Stormwind"), the tooltip line after the level line, from `Faction.dbc`
     /// through the faction template with its hiding gates applied; `None` shows no line.
     pub faction_name: Option<String>,
@@ -530,14 +530,14 @@ fn unit_predicate(
 
 /// The `Unit*` and `GetQuestGreenRange` registrations.
 mod bindings;
-pub(crate) mod wrath_queries;
 #[cfg(test)]
 mod chain_tests;
 mod resolve;
 #[cfg(test)]
 mod tests;
+pub(crate) mod wrath_queries;
 
 pub use resolve::{parse_unit_token, parse_unit_token_in, UnitBase, UnitGuids, UnitTokenParse};
 
-pub(super) use bindings::install;
 pub(super) use bindings::class_pair;
+pub(super) use bindings::install;

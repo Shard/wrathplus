@@ -28,6 +28,8 @@ use wrathplus_world::world_map::CurrentMap;
 /// The cover's input half: while it is up the client takes no input (a source cut in `PreUpdate`).
 mod input;
 pub use input::CoverInput;
+/// The startup cover: up until the warm pass has compiled the pipelines, before the login draws.
+mod startup;
 
 // The bar, from the `LoadingScreen.cpp` descriptor table at `0x7ffd34` (read by `0x407150`):
 // entry {cx, cy, halfW, halfH}, rect [cx ± halfW·0.5] × [cy ± halfH·0.5], fill right edge
@@ -82,7 +84,7 @@ impl EntryCover {
         self.frames > 0 && self.frames < COVER_PRESENT_FRAMES
     }
 
-    /// A cover is up and the client is in world.
+    /// A cover is up and the client is in world, or the startup cover is up.
     pub(crate) fn covering(&self) -> bool {
         self.frames > 0
     }
@@ -112,7 +114,7 @@ fn count_entry_cover(
     mut cover: ResMut<EntryCover>,
 ) {
     let in_world = *state.get() == crate::app_core::state::ClientState::InWorld;
-    cover.tick(screen.covering() && in_world);
+    cover.tick(screen.covering() && (in_world || screen.startup));
 }
 
 /// The `LoadingScreenID` → BLP path table; [`MapCatalogRes`] maps a map to its `LoadingScreenID`.
@@ -158,6 +160,8 @@ pub struct LoadingScreen {
     pub(crate) tip_edge: Option<TipEdge>,
     /// Capture only: the clear is skipped while set ([`Self::hold_for_capture`]).
     held: bool,
+    /// The startup cover ([`startup`]): black, lifted by the warm pass, never by residency.
+    startup: bool,
 
     /// `Time::elapsed_secs` at the last raise and at the last wait log line.
     active_since: f32,
@@ -172,6 +176,19 @@ impl LoadingScreen {
         self.active
     }
 
+    /// Whether the startup cover is up: the glue screens wait for it to lift.
+    pub fn startup_covering(&self) -> bool {
+        self.active && self.startup
+    }
+}
+
+/// Run condition: no startup cover is up. The glue's theme waits on it, since the warm pass under
+/// the cover stalls the main thread and would starve the stream.
+pub(crate) fn no_startup_cover(screen: Option<Res<LoadingScreen>>) -> bool {
+    !screen.is_some_and(|s| s.startup_covering())
+}
+
+impl LoadingScreen {
     /// An active cover, for tests.
     #[cfg(any(test, feature = "test-support"))]
     pub fn test_covering() -> Self {
@@ -245,6 +262,7 @@ impl LoadingScreen {
         self.tip_edge = Some(TipEdge::Clear);
         // `0x407ed7` clears `[0x882e04]`: the next screen resolves its own art.
         self.art_resolved = false;
+        self.startup = false;
     }
 }
 
@@ -275,6 +293,7 @@ impl Plugin for LoadingScreenPlugin {
             .add_systems(Update, drive_loading_screen.in_set(WorldStage::Present));
         // The cover's input rule, registered here so the two cannot be registered apart.
         input::build(app);
+        startup::build(app);
     }
 }
 
@@ -546,7 +565,8 @@ fn drive_loading_screen(
     }
 
     // --- Clear, sustained a few frames. ---
-    if screen.active && !screen.held {
+    startup::drive(&mut screen, &warm, now);
+    if screen.active && !screen.held && !screen.startup {
         if progress.is_ready()
             && progress.presentable()
             && !screen.awaiting_snap
@@ -597,7 +617,7 @@ fn drive_loading_screen(
             Visibility::Hidden
         };
     }
-    let content_vis = if screen.blackout {
+    let content_vis = if screen.blackout || screen.startup {
         Visibility::Hidden
     } else {
         Visibility::Inherited
@@ -666,126 +686,4 @@ fn drive_loading_screen(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_cover_counts_frames_to_the_glass_and_resets_the_moment_it_drops() {
-        let mut cover = EntryCover::default();
-        assert!(
-            cover.presented(),
-            "no cover up: nothing is watching the previous present, so nothing waits"
-        );
-        assert!(!cover.owes_a_present(), "no cover owes no present");
-
-        cover.tick(true);
-        assert_eq!(cover.frames(), 1);
-        assert!(
-            !cover.presented(),
-            "the cover's own render has not committed yet"
-        );
-        assert!(cover.owes_a_present());
-
-        cover.tick(true);
-        assert!(!cover.presented(), "one render committed, not two");
-
-        cover.tick(true);
-        assert!(
-            cover.presented(),
-            "at COVER_PRESENT_FRAMES the cover is provably on the glass"
-        );
-        assert!(!cover.owes_a_present());
-
-        // A reveal drops the count to zero in one frame; the next raise earns its own.
-        cover.tick(false);
-        assert_eq!(cover.frames(), 0);
-        assert!(cover.presented());
-        cover.tick(true);
-        assert!(!cover.presented(), "the next raise starts its own count");
-    }
-    /// vmangos can relocate a character out of an expired instance inside `Player::LoadFromDB`, so
-    /// `SMSG_LOGIN_VERIFY_WORLD` names another map than the roster did.
-    #[test]
-    fn a_relocating_snap_cannot_move_the_art_the_screen_was_raised_with() {
-        let mut screen = LoadingScreen::default();
-        // The pick edge: art from the roster row, Shadowfang Keep, snap still to come.
-        screen.raise("world entry", true, Some(33), 0.0);
-        screen.tip_edge = Some(TipEdge::Pick);
-        screen.displayed = 0.4;
-
-        // `SMSG_LOGIN_VERIFY_WORLD`: the server seats us on map 0, at the instance's exit.
-        assert!(
-            !screen.far_snap(0),
-            "a screen is already up — its own snap must not raise a second one"
-        );
-        assert_eq!(
-            screen.map,
-            Some(33),
-            "the backdrop is the raise's and holds the whole way — the report"
-        );
-        assert!(
-            !screen.awaiting_snap,
-            "the snap the raise was waiting for has landed"
-        );
-        assert_eq!(
-            screen.tip_edge,
-            Some(TipEdge::Pick),
-            "and the tip just picked survives it — a raise is the only thing that could \
-             have cleared it, and no raise happened"
-        );
-        assert!(
-            (screen.displayed - 0.4).abs() < f32::EPSILON,
-            "nor does the bar restart mid-load"
-        );
-        assert!(screen.active, "the screen stays up across its own snap");
-    }
-
-    /// A cross-map port with no announcing edge still gets a cover: our backstop, which the
-    /// reference's blocking world load does not need.
-    #[test]
-    fn a_snap_with_nothing_covering_it_asks_for_a_raise() {
-        let mut screen = LoadingScreen::default();
-        assert!(screen.far_snap(1), "nothing is covering this load");
-        assert!(
-            !screen.active,
-            "far_snap answers the question; the caller does the raising, with its own reason"
-        );
-    }
-
-    #[test]
-    fn only_the_dismiss_clears_the_tip() {
-        let mut screen = LoadingScreen::default();
-        screen.raise("world entry", true, Some(0), 0.0);
-        screen.tip_edge = Some(TipEdge::Pick);
-
-        screen.raise("transfer pending", true, Some(389), 0.0);
-        assert_eq!(
-            screen.tip_edge,
-            Some(TipEdge::Pick),
-            "no raise clears a tip"
-        );
-
-        screen.dismiss();
-        assert_eq!(screen.tip_edge, Some(TipEdge::Clear), "the dismiss does");
-        assert!(!screen.active);
-    }
-
-    /// The reference's raises (`0x406640`/`0x4072c0`) store the map id with no guard.
-    #[test]
-    fn a_raise_onto_a_live_screen_repoints_the_map_but_never_the_picture() {
-        let mut screen = LoadingScreen::default();
-        screen.raise("world entry", true, Some(33), 0.0);
-        screen.art_resolved = true; // the first plain-draw frame resolved Shadowfang Keep's art
-
-        screen.raise("transfer pending", true, Some(389), 0.0);
-        assert_eq!(screen.map, Some(389), "the map id is re-pointed, unguarded");
-        assert!(
-            screen.art_resolved,
-            "…and the picture is not: the texture is still the one this screen resolved"
-        );
-
-        // The dismiss is the only thing that lets the next screen resolve its own.
-        screen.dismiss();
-        assert!(!screen.art_resolved);
-    }
-}
+mod tests;

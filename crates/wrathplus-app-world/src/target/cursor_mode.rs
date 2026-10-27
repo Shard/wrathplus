@@ -607,8 +607,8 @@ pub(super) struct CursorInputs<'w, 's> {
     self_q: Query<'w, 's, (&'static Transform, &'static ObjectStore), With<SelfPlayer>>,
     go_inputs: super::lock::GoLockInputs<'w, 's>,
     player_actions: Res<'w, crate::app_core::state::PlayerActions>,
-    // `[0xb700e4]` and `[0xb700e8]`, the skin legs' learned-spell latches.
-    learned: Res<'w, crate::app_core::state::LearnedAbilities>,
+    // The gather latches and the corpse's trade (`0x53bce0`), and `[0xbe5d7c]`.
+    gather: GatherSpells<'w>,
     quest: Res<'w, crate::app_core::state::QuestGiver>,
     loot_cfg: Res<'w, crate::app_core::state::LootConfig>,
     keys: Res<'w, ButtonInput<KeyCode>>,
@@ -616,6 +616,19 @@ pub(super) struct CursorInputs<'w, 's> {
     loot_latch: Res<'w, crate::app_core::state::LootLatch>,
     /// `CanAttack`'s creature metadata and controller lookup.
     relations: super::RelationInputs<'w, 's>,
+}
+
+#[path = "gather.rs"]
+mod gather;
+pub(crate) use gather::GatherSpells;
+
+/// A skinnable corpse's cursor by its gather trade (12340 `0x4f7ec0`, ids `0xc`/`0xd`/`0xb`).
+pub(crate) fn gather_cursor(kind: usize) -> CursorKind {
+    match kind {
+        1 => CursorKind::GatherHerbs,
+        2 | 3 => CursorKind::Mine,
+        _ => CursorKind::Skin,
+    }
 }
 
 /// The cursor and the attack fork over a pick; no pick, or nothing resolvable, reads Point.
@@ -633,7 +646,7 @@ pub(super) fn classify(
         self_q,
         go_inputs,
         player_actions,
-        learned,
+        gather,
         quest,
         loot_cfg,
         keys,
@@ -719,10 +732,12 @@ pub(super) fn classify(
                     !(can_auto_interact || in_melee),
                 ));
             }
-            // Skin also needs the learn latch `[0xb700e4 + 4×isPlayerTarget]` (`0x482589`): a
-            // player who has learned no Skinning spell sees Point.
-            if store.0.unit_flags() & UNIT_FLAG_SKINNABLE != 0 && learned.skinning.is_some() {
-                return Some((CursorKind::Skin, !in_melee));
+            // The gather cursor needs the corpse's own trade learned (`0x4f7e17` → `0x53bce0`): a
+            // miner over a boar sees Point. Its icon is the trade's (`0x4f7ec0`'s table on
+            // `0x715e50`): Skin, GatherHerbs, Mine, and Mine for Engineering.
+            if store.0.unit_flags() & UNIT_FLAG_SKINNABLE != 0 && gather.spell_for(store).is_some()
+            {
+                return Some((gather_cursor(gather.kind(store)), !in_melee));
             }
             return None; // a plain corpse: Point
         }
@@ -762,7 +777,7 @@ pub(super) fn classify(
         corpse_cursor(CorpseFacts {
             lootable: store.0.corpse_lootable(),
             insignia: store.0.corpse_pvp_insignia(),
-            skin_latch: learned.skin_player_corpse.is_some(),
+            skin_latch: gather.learned.skin_player_corpse.is_some(),
             dist_sq: corpse_tf.translation.distance_squared(self_tf.translation),
             looting_this: loot_latch.0.is_some() && loot_latch.0 == hovered.corpse_guid,
             can_auto_interact,
