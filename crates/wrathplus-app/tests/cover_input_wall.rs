@@ -104,6 +104,8 @@ const VERDICTS: &[(&str, Verdict)] = &[
     ("WindowMode", Plumbing),
     ("WindowPlugin", Plumbing),
     ("WindowPosition", Plumbing),
+    // `occluded`: which window a camera draws to, matched against the covered one.
+    ("WindowRef", Plumbing),
     ("WindowResolution", Plumbing),
 ];
 
