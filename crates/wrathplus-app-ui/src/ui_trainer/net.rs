@@ -1,8 +1,8 @@
 //! The trainer window's packet handlers, filling [`TrainerOpen`] and [`TrainerErrors`].
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::TrainerSpell;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::{TrainerErrors, TrainerOpen};
 use crate::net::NetHandlerApp;
@@ -14,7 +14,7 @@ pub(crate) const CVARS: &[crate::cvars::Registered] =
     &[crate::cvars::same("serviceTypeFilter", "3")];
 
 /// Register the trainer handlers, one per kind, plus the session-end listener and the filter CVar.
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     crate::cvars::RegisterCvars::register_cvars(app, CVARS);
     use SessionEventKind as K;
     app.net_handler(K::TrainerList, on_list)
