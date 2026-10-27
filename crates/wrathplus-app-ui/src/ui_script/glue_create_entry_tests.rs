@@ -176,3 +176,6 @@ fn a_post_logout_vm_is_seeded_and_the_roster_reseeds_the_death_knight() {
     assert_eq!(shown, "10 10");
     assert!(dk_enabled(&mut app), "the new VM carries the gate");
 }
+
+#[path = "glue_create_layout_tests.rs"]
+mod layout;
