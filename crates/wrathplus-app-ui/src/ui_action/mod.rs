@@ -40,9 +40,9 @@ pub(crate) struct ActionBook;
 
 pub(crate) use errors::global_string;
 pub(crate) use errors::{
-    attack_actor_refusal, keyed_line, keyed_line_s, show_messages,
-    ui_error_text, ui_error_text_for_script, CastErrors, Caster, MessageSink,
-    MountErrors, PetTameFailures, Shown, UiError, UiErrorKeys, UiErrorTexts,
+    attack_actor_refusal, keyed_line, keyed_line_s, show_messages, ui_error_text,
+    ui_error_text_for_script, CastErrors, Caster, MessageSink, MountErrors, PetTameFailures, Shown,
+    UiError, UiErrorKeys, UiErrorTexts,
 };
 pub(crate) use weapon_icon::{melee_auto_attack_icon, ranged_weapon_icon};
 
@@ -69,32 +69,49 @@ fn track_learned_abilities(
     }
     // The last match in id order: each learned rank overwrites the reference's latch, and a rank
     // chain ascends by id (Skinning 8613, 8617, 8618, 10768).
-    let last_with = |effect: u32| {
-        actions.spells.iter().copied().rfind(|&id| {
-            spells
-                .catalog
-                .get(id)
-                .is_some_and(|d| d.effects[0] == effect)
-        })
+    let last_where = |keep: &dyn Fn(&wrathplus_formats::SpellDisplay) -> bool| {
+        actions
+            .spells
+            .iter()
+            .copied()
+            .rfind(|&id| spells.catalog.get(id).is_some_and(keep))
     };
-    let (skinning, skin_player_corpse, feed_pet) = (
-        last_with(wrathplus_formats::SPELL_EFFECT_SKINNING),
-        last_with(SPELL_EFFECT_SKIN_PLAYER_CORPSE),
-        last_with(SPELL_EFFECT_FEED_PET),
-    );
-    if (skinning, skin_player_corpse, feed_pet)
-        != (
-            learned.skinning,
-            learned.skin_player_corpse,
-            learned.feed_pet,
-        )
+    let last_with = |effect: u32| last_where(&|d| d.effects[0] == effect);
+    // `0x542030`'s skinning arm writes `[0xbe5d6c + 4×EffectMiscValue[0]]`, so each gather trade
+    // keeps its own spell: learning Mining's corpse spell never replaces Skinning.
+    let gather: [Option<u32>; 4] = std::array::from_fn(|kind| {
+        last_where(&|d| {
+            d.effects[0] == wrathplus_formats::SPELL_EFFECT_SKINNING
+                && d.effect_misc_value[0] == kind as i32
+        })
+    });
+    let next = LearnedAbilities {
+        gather,
+        skin_player_corpse: last_with(SPELL_EFFECT_SKIN_PLAYER_CORPSE),
+        feed_pet: last_with(SPELL_EFFECT_FEED_PET),
+    };
+    if (next.gather, next.skin_player_corpse, next.feed_pet)
+        != (learned.gather, learned.skin_player_corpse, learned.feed_pet)
     {
-        *learned = LearnedAbilities {
-            skinning,
-            skin_player_corpse,
-            feed_pet,
-        };
+        *learned = next;
     }
+}
+
+/// A skinnable creature's tooltip line key by its gather trade (12340 `0x620fc3` on `0x715e50`),
+/// Skinning while its record is uncached; `None` when `UNIT_FIELD_FLAGS` bit 26 is clear.
+pub(crate) fn gather_line_key(
+    store: &crate::app_core::session::ObjectStore,
+    names: Option<&crate::names::NameCache>,
+) -> Option<&'static str> {
+    use crate::app_core::gather::{gather_kind, LINE_KEYS};
+    if store.0.unit_flags() & 0x0400_0000 == 0 {
+        return None;
+    }
+    let record = (store.0.object_type() == Some(wrathplus_protocol::types::ObjectType::Unit))
+        .then(|| store.0.object_entry())
+        .flatten()
+        .and_then(|entry| names?.creature_record(entry));
+    Some(LINE_KEYS[gather_kind(record.map_or(0, |r| r.type_flags))])
 }
 
 /// `SpellMechanic.dbc`: the name in `SPELL_FAILED_PREVENTED_BY_MECHANIC`'s `%s` (reason `0x8d`).
@@ -103,7 +120,10 @@ pub(crate) struct SpellMechanics {
     pub(crate) catalog: wrathplus_formats::SpellMechanicCatalog,
 }
 
-fn load_spell_mechanics(mut commands: Commands, assets: Option<Res<wrathplus_assets::WorldAssets>>) {
+fn load_spell_mechanics(
+    mut commands: Commands,
+    assets: Option<Res<wrathplus_assets::WorldAssets>>,
+) {
     let Some(assets) = assets else { return };
     let loaded = {
         let mut chain = wrathplus_assets::LockRecover::lock_recover(&*assets.chain);
@@ -244,3 +264,6 @@ fn load_spells(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
         Err(e) => warn!("ui_action: Spell.dbc failed to load — bar icons disabled: {e:#}"),
     }
 }
+
+#[cfg(test)]
+mod gather_tests;

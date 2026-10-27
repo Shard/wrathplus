@@ -800,7 +800,7 @@ pub(crate) fn snapshot(
         },
         // Direct replicated state only; reaction/ownership policy is evaluated separately.
         pvp: store.0.unit_is_pvp(),
-        skinnable: store.0.unit_flags() & 0x0400_0000 != 0,
+        skinnable: crate::ui_action::gather_line_key(store, types.names),
         // `UnitPlayerControlled`: bit `0x8`, set by pets and charmed creatures as well as players.
         player_controlled: store.0.unit_flags() & 0x8 != 0,
         flags: store.0.unit_flags(),
