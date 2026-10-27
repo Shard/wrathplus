@@ -179,3 +179,39 @@ fn a_post_logout_vm_is_seeded_and_the_roster_reseeds_the_death_knight() {
 
 #[path = "glue_create_layout_tests.rs"]
 mod layout;
+
+/// The name box takes typing: `CharacterCreateNameEdit` is `autoFocus`, so the keys typed after
+/// the screen shows land in it, and Accept sends what was typed.
+#[test]
+fn the_name_box_takes_typing_and_accept_sends_it() {
+    let Some((mut app, rx)) = select_app() else {
+        eprintln!("skipped: no installed client");
+        return;
+    };
+    {
+        let mut script = app.world_mut().non_send_resource_mut::<UiScript>();
+        script
+            .run("CharacterSelect_SelectCharacter(CharacterSelect.createIndex)")
+            .unwrap();
+        script.tick(0.1);
+        let focused: bool = script
+            .eval("return not not CharacterCreateNameEdit:HasFocus()")
+            .unwrap();
+        assert!(
+            focused,
+            "the name box holds the focus, not {:?}",
+            script.focused_editbox_name()
+        );
+        script.char_input("Typedname");
+        let typed: String = script
+            .eval("return CharacterCreateNameEdit:GetText()")
+            .unwrap();
+        assert_eq!(typed, "Typedname");
+        script.run("CharCreateOkayButton:Click()").unwrap();
+    }
+    app.update();
+    let Ok(crate::net::CharRequest::Create(req)) = rx.try_recv() else {
+        panic!("Accept sends one create");
+    };
+    assert_eq!(req.name, "Typedname");
+}
