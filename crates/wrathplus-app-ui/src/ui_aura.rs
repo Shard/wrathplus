@@ -285,8 +285,8 @@ fn shown_in_aura_ui(catalog: Option<&SpellCatalog>, spell_id: u32) -> bool {
 /// tracking spell carries the hidden-aura attributes. The last one wins; a catalog miss cannot be
 /// told apart. Read by `GetTrackingTexture`, `CancelTrackingBuff` and
 /// `GameTooltip:SetTrackingSpell` ([`UiScript::set_tracking`]).
-/// The tracking menu's spells (12340 `[0xbe8dec]`), in book order: the book's spells whose effect
-/// is a tracking aura. Labelled: the reference's own admission test is untraced.
+/// The tracking menu's spells (12340 `[0xbe8dec]`): a learned spell joins (`0x542030`) when any
+/// aura slot is 44, 45 or 151 (`0x7fdf60`). Labelled: book order here, learn order there.
 pub(crate) fn tracking_spells(
     book: &wrathplus_ui::script::SpellBookState,
     catalog: &SpellCatalog,
@@ -588,8 +588,8 @@ fn feed_auras(
 
     script.set_player_auras(list);
     script.set_tracking(tracking);
-    // 3.3.5's `MiniMapTracking` repaints only on `MINIMAP_UPDATE_TRACKING` (Minimap.xml:479-482); the
-    // 12340 fire site is untraced, so it fires on the tracking spell's change, as the feed sees it.
+    // `MINIMAP_UPDATE_TRACKING` (Minimap.xml:479-482) is queued by the setter `0x57ea30` on every
+    // call; labelled: the feed sees only the tracked spell changing, so a re-landed aura is mute.
     if tracking_moved {
         script.fire_event("MINIMAP_UPDATE_TRACKING", vec![]);
     }
