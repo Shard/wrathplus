@@ -45,8 +45,8 @@ impl super::UiScript {
 // GetNumTalentGroups `0x5c5df0`, GetActiveTalentGroup `0x5c5810`, GetUnspentTalentPoints
 // `0x5c6310`, GetTalentLink `0x5c7ce0`. The player has the one group the host pushes
 // (`set_talents`), whose preview ranks are [`super::wrath_talent_preview`]'s; the inspect branch
-// reads [`WrathInspectTalents`], whose preview ranks are its ranks. Labelled: pet talents and a
-// second player group are not carried and answer the native miss.
+// reads [`WrathInspectTalents`], whose preview ranks are its ranks; the pet branch reads the
+// hunter pet's one page (`set_pet_talents`). Labelled: a second player group is not carried.
 
 use mlua::{Lua, MultiValue, Value};
 
@@ -62,7 +62,7 @@ fn pages(
     group: Option<i64>,
 ) -> Option<&super::TalentUiState> {
     if pet {
-        return None;
+        return (!inspect && group.unwrap_or(1) == 1).then_some(model.pet_talents.as_ref()?);
     }
     if inspect {
         let t = model.wrath_inspect_talents.as_ref()?;
@@ -267,7 +267,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetNumTalentGroups([isInspect [, isPet]]): the inspected groups; the player's one; no pet.
+    // GetNumTalentGroups([isInspect [, isPet]]): the inspected groups; the player's one; the pet's.
     g.set(
         "GetNumTalentGroups",
         lua.create_function(|lua, args: MultiValue| {
@@ -277,7 +277,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     .wrath_inspect_talents
                     .as_ref()
                     .map_or(0, |t| t.groups.len()) as i64,
-                (false, true) => 0,
+                (false, true) => i64::from(model.pet_talents.is_some()),
                 (false, false) => 1,
             })
         })?,
@@ -308,7 +308,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let inspect = truth(&args, 0);
             let pet = truth(&args, 1);
             Ok(match (inspect, pet) {
-                (_, true) => 0,
+                (true, true) => 0,
+                (false, true) => model
+                    .pet_talents
+                    .as_ref()
+                    .map_or(0, |p| i64::from(p.points.0)),
                 (true, false) => {
                     let Some(t) = model.wrath_inspect_talents.as_ref() else {
                         return Ok(0);

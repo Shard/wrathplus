@@ -36,7 +36,9 @@ impl Plugin for StockCreatePlugin {
             .add_systems(
                 Update,
                 (seed_stock_create, drop_stale_create)
+                    .chain()
                     .run_if(super::glue::stock_glue_up)
+                    .after(wrathplus_world::schedule::WorldStage::Net)
                     .before(super::UiInput),
             )
             .add_systems(

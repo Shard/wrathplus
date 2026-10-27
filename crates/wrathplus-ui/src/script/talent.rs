@@ -90,8 +90,16 @@ impl super::UiScript {
         model.talents = state;
     }
 
-    /// Drain the queued `LearnTalent(tab, index)` clicks, both 1-based.
-    pub fn take_talent_learns(&mut self) -> Vec<(u32, u32)> {
+    /// Push the hunter pet's page (`GetPetTalentTree`'s tab), or `None` without a talented pet.
+    pub fn set_pet_talents(&mut self, pages: Option<TalentUiState>) {
+        let mut model = self.model_mut();
+        if model.pet_talents != pages {
+            model.pet_talents = pages;
+        }
+    }
+
+    /// Drain the queued `LearnTalent(tab, index [, isPet])` clicks, both 1-based.
+    pub fn take_talent_learns(&mut self) -> Vec<(u32, u32, bool)> {
         std::mem::take(&mut self.model_mut().talent_learns)
     }
 
@@ -206,9 +214,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // (vmangos `Player::LearnTalent`).
     g.set(
         "LearnTalent",
-        lua.create_function(|lua, (tab, i): (u32, u32)| {
+        lua.create_function(|lua, (tab, i, pet): (u32, u32, Value)| {
+            let pet = super::binding_abi::bool_or_default(Some(&pet), false);
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            model.talent_learns.push((tab, i));
+            model.talent_learns.push((tab, i, pet));
             Ok(())
         })?,
     )?;
@@ -303,3 +312,7 @@ pub(super) fn ask_next_rank(lua: &Lua, next_spell: u32) {
         let _ = spell_view_of(lua, next_spell, false); // a miss records the ask as a side effect
     }
 }
+
+#[cfg(test)]
+#[path = "talent_pet_tests.rs"]
+mod pet_tests;

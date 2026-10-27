@@ -516,14 +516,14 @@ pub(crate) struct Model {
     /// Spell targeting is on (`SpellIsTargeting`, `0x6e6cd0`); it gates `SpellStopTargeting()`,
     /// whose nil the ESC chain falls through on (`UIParent.lua:1490`).
     pub(crate) spell_targeting: bool,
-    /// The units, by guid, for which `SpellCanTargetUnit`'s armed unit word clears fully, which
-    /// stock unit frames ask before they call `SpellTargetUnit`; a token resolves to its guid
-    /// through [`Self::unit_guids`].
+    /// The units, by guid, whose armed `SpellCanTargetUnit` word clears fully, as stock unit frames
+    /// ask before `SpellTargetUnit`; a token resolves through [`Self::unit_guids`].
     pub(crate) spell_targetable_units: HashSet<u64>,
 
+    /// The player's pages, and the hunter pet's one (`isPet`'s answer; `None` without a pet).
     pub(crate) talents: super::talent::TalentUiState,
-    /// `LearnTalent(tab, index)` calls queued.
-    pub(crate) talent_learns: Vec<(u32, u32)>,
+    pub(crate) pet_talents: Option<super::talent::TalentUiState>,
+    pub(crate) talent_learns: Vec<(u32, u32, bool)>, // `LearnTalent(tab, index [, isPet])` calls
     /// `ConfirmTalentWipe()` calls, one `MSG_TALENT_WIPE_CONFIRM` each; the app holds the trainer.
     pub(crate) talent_wipe_confirms: u32,
     /// `CheckTalentMasterDist()`: the respec question is live and in range; false hides its dialog.
@@ -910,8 +910,7 @@ pub(crate) struct Model {
     pub(crate) wrath_runes: super::WrathRunes,
     /// The arena-team slots, rosters and the client's roster order (`wrath_arena`).
     pub(crate) wrath_arena: super::wrath_arena::ArenaState,
-    /// The vehicle view, the seat-indicator table and the vehicle verbs' requests
-    /// (`wrath_vehicle`).
+    /// The vehicle view, the seat-indicator table and the vehicle verbs' requests (`wrath_vehicle`).
     pub(crate) wrath_vehicles: super::WrathVehicles,
     pub(crate) vehicle_indicators: std::collections::HashMap<u32, super::VehicleIndicatorView>,
     pub(crate) vehicle_calls: Vec<super::VehicleCall>,
@@ -1326,6 +1325,7 @@ impl Model {
             spell_targeting: false,
             spell_targetable_units: HashSet::new(),
             talents: super::talent::TalentUiState::default(),
+            pet_talents: None,
             talent_learns: Vec::new(),
             talent_wipe_confirms: 0,
             talent_master_pending: false,
