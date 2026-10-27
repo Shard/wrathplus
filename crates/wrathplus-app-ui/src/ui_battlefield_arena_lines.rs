@@ -1,12 +1,12 @@
 //! The arena-team system lines: `SMSG_ARENA_TEAM_COMMAND_RESULT` (0349), `SMSG_ARENA_TEAM_EVENT`
 //! (0357) and `SMSG_ARENA_ERROR` (0376), drained from [`crate::ui_battlefield::NativeBattlegroundRest`]
 //! after Experience's reducer takes its own. Each becomes an `ERR_ARENA_*` catalog line, whose row
-//! picks the surface and the sound; an event also re-asks the named team's roster
-//! ([`crate::ui_arena_team::ArenaRosterRefresh`], the team name being its last string).
+//! picks the surface and the sound. An event is 12340's `0x6cc980`: its line, then every slot's
+//! roster marked stale ([`crate::ui_arena_team::ArenaRosterStale`]).
 //!
-//! Labelled: the client's arena handlers are untraced. The tables mirror the guild command-result
-//! and event handlers (`crate::ui_guild` `lines`, `0x5e7520`, `0x5e7180`), whose codes AzerothCore's
-//! `ArenaTeamCommandErrors` and `ArenaTeamEvents` copy (`ArenaTeam.h:30-69`). A `_S` result takes
+//! Labelled: the command-result and error handlers are untraced. Their tables mirror the guild
+//! command-result handler (`crate::ui_guild` `lines`, `0x5e7520`), whose codes AzerothCore's
+//! `ArenaTeamCommandErrors` copies (`ArenaTeam.h:30-69`). A `_S` result takes
 //! the player name, else the team name, as AC fills either field; 0376 is
 //! `ERR_ARENA_NO_TEAM_II` with the team type twice. `SMSG_ARENA_UNIT_DESTROYED` (04C7) stays in
 //! the rest FIFO: no arena-opponent model takes it.
@@ -77,19 +77,28 @@ fn command_line(action: u32, team: &str, player: &str, error: u32) -> Option<UiE
     }
 }
 
-/// The line one `SMSG_ARENA_TEAM_EVENT` prints, its strings as they arrived.
-fn event_line(event: u8, strings: &[String]) -> Option<UiError> {
+/// The line one `SMSG_ARENA_TEAM_EVENT` prints, its strings as they arrived (`0x6cc980`'s switch,
+/// message ids `0x216`-`0x21c`). A join naming us first is "You have joined %s." with the team;
+/// an unknown event prints row `0x72`, `ERR_GUILD_INTERNAL`. Labelled: the own-name test
+/// (`0x76ea40`) is read as a case-blind compare, and its copy (`0x76ed20`) as team over name.
+fn event_line(event: u8, strings: &[String], me: Option<&str>) -> UiError {
     let args: Vec<&str> = strings.iter().map(String::as_str).collect();
     let key = match event {
+        3 if me.is_some_and(|me| args.first().is_some_and(|n| n.eq_ignore_ascii_case(me))) => {
+            return UiError::s(
+                "ERR_ARENA_TEAM_YOU_JOIN_S",
+                args.get(1).copied().unwrap_or(""),
+            );
+        }
         3 => "ERR_ARENA_TEAM_JOIN_SS",
         4 => "ERR_ARENA_TEAM_LEAVE_SS",
         5 => "ERR_ARENA_TEAM_REMOVE_SSS",
         6 => "ERR_ARENA_TEAM_LEADER_IS_SS",
         7 => "ERR_ARENA_TEAM_LEADER_CHANGED_SSS",
         8 => "ERR_ARENA_TEAM_DISBANDED_S",
-        _ => return None,
+        _ => "ERR_GUILD_INTERNAL",
     };
-    Some(UiError::strings(key, &args))
+    UiError::strings(key, &args)
 }
 
 /// `SMSG_ARENA_ERROR`: a leading 0 carries the team type, "You are not in a %dv%d arena team."
@@ -104,7 +113,9 @@ fn error_line(raw_word: u32, team_type: Option<u8>) -> Option<UiError> {
 fn drain_arena_lines(
     mut rest: ResMut<crate::ui_battlefield::NativeBattlegroundRest>,
     mut errors: ResMut<crate::app_core::errors::UiErrorKeys>,
-    mut refresh: ResMut<crate::ui_arena_team::ArenaRosterRefresh>,
+    mut stale: ResMut<crate::ui_arena_team::ArenaRosterStale>,
+    self_guid: Res<crate::app_core::session::SelfGuid>,
+    names: Res<crate::names::NameCache>,
 ) {
     if rest.0.is_empty() {
         return;
@@ -118,12 +129,11 @@ fn drain_arena_lines(
                 player,
                 error,
             } => command_line(action, &team, &player, error),
+            // Every event, known or not, then marks the three slots stale.
             Packet::ArenaEvent { event, strings, .. } => {
-                let line = event_line(event, &strings);
-                if line.is_some() {
-                    refresh.0.extend(strings.last().cloned());
-                }
-                line
+                stale.0 += 1;
+                let me = self_guid.0.and_then(|g| names.answered_player_name(g));
+                Some(event_line(event, &strings, me))
             }
             Packet::ArenaError {
                 raw_word,
