@@ -52,13 +52,13 @@ mod macro_icons;
 pub use unit_blood::{load_blood_catalog, BloodCatalog};
 pub mod achievements;
 pub mod currencies;
+pub mod gems;
 pub mod glyphs;
+pub mod gm_survey;
 pub mod heirlooms;
+pub mod holidays;
 pub mod item_limit_category;
 mod itemsets;
-pub mod gems;
-pub mod gm_survey;
-pub mod holidays;
 pub mod lfg;
 pub mod vehicles;
 pub mod world_map_wrath;
@@ -84,9 +84,9 @@ pub use factions::{
     faction_flags, load_faction_catalog, reputation_rank, template_flags, FactionCatalog,
     FactionInfo, FactionTemplate, Reaction,
 };
+mod battlemaster;
 mod creature_types;
 mod summon_properties;
-mod battlemaster;
 pub use battlemaster::{
     load_battlemasters, BattlemasterType, Battlemasters, PvpBracket, RANDOM_BATTLEGROUND,
 };
@@ -95,12 +95,12 @@ pub use vehicle_indicators::{
     load_possess_cancel_icon, load_vehicle_indicators, VehicleIndicator, POSSESS_CANCEL_ICON,
 };
 mod item_extended_cost;
+pub use creature_types::{load_creature_type_flags, CreatureTypeFlags};
 pub use item_extended_cost::{load_item_extended_costs, ExtendedCost, ExtendedCosts};
 pub use summon_properties::{
     load_summon_properties, SummonProperties, SUMMON_CONTROL_PUPPET, SUMMON_FLAG_UNDISMISSABLE,
     SUMMON_SLOT_MINIPET,
 };
-pub use creature_types::{load_creature_type_flags, CreatureTypeFlags};
 /// The chat language scramble, the reference's `0x49b560`.
 mod garble;
 pub use garble::{garble, garble_chat, Garble, FLUENT_SKILL};
@@ -185,11 +185,11 @@ mod game_tables;
 pub use game_tables::{load_wrath_game_tables, GameTable, WrathGameTables, GAME_TABLE_MAX_LEVEL};
 mod barber;
 mod movies;
-pub use movies::{load_movies, Movie, Movies};
 pub use barber::{
     barber_kind, load_barber_cost_base, load_barber_styles, BarberCostBase, BarberStyle,
     BarberStyles,
 };
+pub use movies::{load_movies, Movie, Movies};
 mod quest_rewards;
 pub use quest_rewards::{
     load_char_titles, load_quest_faction_reward, load_quest_xp, load_team_contribution_points,
@@ -244,18 +244,19 @@ mod wmo_area;
 pub use wmo_area::{load_wmo_area_catalog, WmoArea, WmoAreaCatalog};
 mod spells;
 pub use spells::{
-    cc_exemption, grants_immunity, load_shapeshift_forms, load_spell_cast_times, PlayerTokens,
+    cc_exemption, grants_immunity, load_shapeshift_forms, load_spell_cast_times,
     load_spell_catalog, load_spell_dispel_types, load_spell_durations, load_spell_radii,
     load_spell_ranges, min_max_range, min_max_range_reads_units, soft_modify, substitute,
-    CcExemption, FormRefusal, LearnAnnouncement, LearnEffect, OpenLock, RangeTargets, RangeUnit,
-    RuneCost, ShapeshiftForm, SpellCastTime, SpellCastTimeCatalog, SpellCatalog, SpellDispelTypes,
-    SpellDisplay, SpellDuration, SpellDurationCatalog, SpellMods, SpellRadius, SpellRadiusCatalog,
-    SpellRange, SpellRangeCatalog, TokenContext, TokenNumber, UnitMotion, ATTR_CASTABLE_WHILE_DEAD,
-    ATTR_NOT_IN_COMBAT, ATTR_ONLY_STEALTHED, COMBAT_REACH_ADD, MELEE_RANGE_FLOOR,
-    MOVING_BONUS_FLAGS, MOVING_RANGE_BONUS, ON_NEXT_SWING_RANGE, SPELL_ATTR_IS_TRADESKILL,
-    SPELL_EFFECT_CREATE_ITEM, SPELL_EFFECT_ENCHANT_ITEM, SPELL_EFFECT_ENCHANT_ITEM_TEMPORARY,
-    SPELL_EFFECT_LEARN_PET_SPELL, SPELL_EFFECT_LEARN_SPELL, SPELL_EFFECT_PROSPECTING,
-    SPELL_EFFECT_SKILL_STEP, SPELL_EFFECT_SKINNING, SPELL_EFFECT_TRADE_SKILL,
+    CcExemption, FormRefusal, LearnAnnouncement, LearnEffect, OpenLock, PlayerTokens, RangeTargets,
+    RangeUnit, RuneCost, ShapeshiftForm, SpellCastTime, SpellCastTimeCatalog, SpellCatalog,
+    SpellDispelTypes, SpellDisplay, SpellDuration, SpellDurationCatalog, SpellMods, SpellRadius,
+    SpellRadiusCatalog, SpellRange, SpellRangeCatalog, TokenContext, TokenNumber, UnitMotion,
+    ATTR_CASTABLE_WHILE_DEAD, ATTR_NOT_IN_COMBAT, ATTR_ONLY_STEALTHED, COMBAT_REACH_ADD,
+    MELEE_RANGE_FLOOR, MOVING_BONUS_FLAGS, MOVING_RANGE_BONUS, ON_NEXT_SWING_RANGE,
+    SPELL_ATTR_IS_TRADESKILL, SPELL_EFFECT_CREATE_ITEM, SPELL_EFFECT_ENCHANT_ITEM,
+    SPELL_EFFECT_ENCHANT_ITEM_TEMPORARY, SPELL_EFFECT_LEARN_PET_SPELL, SPELL_EFFECT_LEARN_SPELL,
+    SPELL_EFFECT_PROSPECTING, SPELL_EFFECT_SKILL_STEP, SPELL_EFFECT_SKINNING,
+    SPELL_EFFECT_TRADE_SKILL,
 };
 mod skill_lines;
 pub use skill_lines::{
@@ -265,8 +266,10 @@ pub use skill_lines::{
 };
 mod spell_focus;
 mod spell_mechanic;
+mod totem_category;
 pub use spell_focus::{load_spell_focus_catalog, SpellFocusCatalog};
 pub use spell_mechanic::{load_spell_mechanic_catalog, SpellMechanicCatalog};
+pub use totem_category::{load_totem_categories, TotemCategory, TotemCategoryCatalog};
 mod talents;
 pub use talents::{load_talent_catalog, Talent, TalentCatalog, TalentTabInfo, MAX_TALENT_RANK};
 mod spell_visual;
@@ -287,7 +290,6 @@ pub use ribbons::{RibbonEmitterDef, RibbonVisibility};
 mod value_track;
 pub use value_track::{SeqClock, SeqTable, SeqTrack, TrackValue, ValueTrack};
 mod models;
-pub use wrathplus_m2::wrath::WrathCamera;
 pub use models::wrath::{
     parse_wrath_render_model, parse_wrath_render_model_with_animations, sample_wrath_camera,
     wrath_render_animation_dependencies, WrathBoneInterpolation, WrathCameraPose, WrathRenderModel,
@@ -303,13 +305,12 @@ pub use models::{
     wmo_group_doodad_refs, wmo_group_fixed_colors, wmo_group_footprint_tris, wmo_group_header,
     wmo_group_light_refs, wmo_group_liquid_mesh, wmo_group_liquid_mesh_of_kind,
     wmo_group_raw_colors, wmo_group_submeshes, wmo_root_id, AlphaAnim, AlphaMap, AlphaSeq,
-    AnimEvent, ArtExtent, BatchFootprint, Billboard,
-    BillboardKind, BoneKeys, BoneScaleAnim, BoneSpin, CharSkinSlot, CollisionMesh, Coverage,
-    CoverageReader, EventMarker, FogPolicy, FootprintTris, GlobalSeqBone,
-    GlobalSeqChannel, GroundQuad, KeyAnim, M2Attachment, M2Bounds, M2Light,
-    M2LightAnim, M2PortraitCamera, ModelAnimation, ModelBlend, ParentArm, ParentBasis, PlayableAnim,
-    RenderSubmesh, RgbAnim, ScalarAnim, SeqLoops, ShippedGlueScene, Skeleton, SkeletonBone,
-    StringAnchors, UvAnim, UvRotAnim, WmoBatchClass, WmoDoodad, WmoDoodadSet, WmoFog,
+    AnimEvent, ArtExtent, BatchFootprint, Billboard, BillboardKind, BoneKeys, BoneScaleAnim,
+    BoneSpin, CharSkinSlot, CollisionMesh, Coverage, CoverageReader, EventMarker, FogPolicy,
+    FootprintTris, GlobalSeqBone, GlobalSeqChannel, GroundQuad, KeyAnim, M2Attachment, M2Bounds,
+    M2Light, M2LightAnim, M2PortraitCamera, ModelAnimation, ModelBlend, ParentArm, ParentBasis,
+    PlayableAnim, RenderSubmesh, RgbAnim, ScalarAnim, SeqLoops, ShippedGlueScene, Skeleton,
+    SkeletonBone, StringAnchors, UvAnim, UvRotAnim, WmoBatchClass, WmoDoodad, WmoDoodadSet, WmoFog,
     WmoGroupHeader, WmoGroupInfo, WmoLight, WmoPortalInfo, WmoPortalRef, WmoPortals, WmoRoot,
     ALPHA_KEY_REF, DEGENERATE_RING_FOOTPRINT, GLUE_AUTHORED_ASPECT, NO_GROUP_LIQUID,
     OWNER_RUNG_BUCKETS, SHIPPED_GLUE_SCENES,
@@ -318,21 +319,21 @@ pub use models::{
     resolve_wrath_wmo_liquid_id, wmo_group_wrath_liquid, wmo_root_flags, WrathWmoLiquidGrid,
     WrathWmoLiquidMode, WrathWmoLiquidState,
 };
+pub use wrathplus_m2::wrath::WrathCamera;
 mod terrain;
-pub use wrathplus_adt::Mh2oChunk;
 pub use terrain::{
     adt_to_tile_mesh, adt_to_tile_mesh_with_options, area_id_at, find_tile_near, ground_effect_at,
     impassable_at, load_tile_mesh, load_tiles_around, mcsh_shadowed_at, terrain_height_at,
     triangle_z_at, ChunkMesh, Doodad, MapTiles, TerrainDecodeOptions, TileMesh, WmoInstance,
     ALPHA_MAP_SIZE, CHUNK_SIZE, SHADOW_MAP_SIZE, STORMWIND_XY, TERRAIN_LAYER_TILES, TILE_SIZE,
 };
+pub use wrathplus_adt::Mh2oChunk;
 mod wdl;
+pub use wdl::{WdlFile, WdlTileMesh};
 /// World (x, y) to ADT tile `(col, row)`; minimap `map<X>_<Y>.blp` names use the same order.
 pub use wrathplus_wdt::{
     tile_to_world, world_to_chunk, world_to_tile, GlobalWmo, WdtFile, WdtReader, WowVersion,
 };
-pub use wdl::{WdlFile, WdlTileMesh};
-
 // The minimap tile hash catalog and the world-map DBCs.
 mod minimap_translate;
 pub use minimap_translate::{load_minimap_translate, MinimapTranslate};
@@ -384,8 +385,7 @@ pub use elevators::{
     elevator_period_ms, elevator_sample, load_elevator_paths, ElevatorKeyframe, ElevatorPaths,
 };
 
-// The flight-master catalogs: nodes (`TaxiNodes.dbc`) and direct-hop fares (`TaxiPath.dbc`).
-// `taxi` above holds a path's waypoints.
+// The flight-master catalogs, nodes and direct-hop fares; `taxi` above holds the waypoints.
 mod taxi_nodes;
 pub use taxi_nodes::{load_taxi_nodes, TaxiNode, TaxiNodes};
 mod taxi_path;
@@ -643,9 +643,9 @@ fn schema_for(dbc_name: &str) -> Option<Schema> {
         "creaturedisplayinfoextra.dbc" => Some(creatures::creature_display_info_extra_schema(
             &DataProfile::default(),
         )),
-        "creaturemodeldata.dbc" => {
-            Some(creatures::creature_model_data_schema(&DataProfile::default()))
-        }
+        "creaturemodeldata.dbc" => Some(creatures::creature_model_data_schema(
+            &DataProfile::default(),
+        )),
         "charhairgeosets.dbc" => {
             Some(characters::char_hair_geosets_schema(&DataProfile::default()))
         }

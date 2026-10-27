@@ -4,12 +4,12 @@
 use bevy::prelude::*;
 
 use crate::app_core::errors::CastErrors;
-use crate::inventory::{count_of, InventoryScope};
 use crate::app_core::session::ObjectStore;
+use crate::inventory::{count_of, InventoryScope};
 
 /// The reference's pre-send check `0x6e4000`, run on every cast path before any packet: the first
 /// missing totem (a presence test), then the first short reagent (a count), refuses locally as
-/// `0x78` or `0x5c` and returns `true`. It is the only source of "Requires Mining Pick": vmangos
+/// TOTEMS or REAGENTS and returns `true`. It is the only source of "Requires Mining Pick": vmangos
 /// answers a pickless cast with `ITEM_GONE` (`Spell.cpp:7301`). A missing self store skips the
 /// check, as the reference's active-player gate does.
 pub fn reagent_totem_refusal(
@@ -24,9 +24,9 @@ pub fn reagent_totem_refusal(
     };
     // Totems before reagents, the reference's order.
     let reason = if first_missing_totem(d, store, objects).is_some() {
-        0x78
+        crate::spell::cast_fail_keys::reason::TOTEMS
     } else if first_short_reagent(d, store, objects).is_some() {
-        0x5c
+        crate::spell::cast_fail_keys::reason::REAGENTS
     } else {
         return false;
     };

@@ -40,9 +40,9 @@ pub(crate) struct ActionBook;
 
 pub(crate) use errors::global_string;
 pub(crate) use errors::{
-    attack_actor_refusal, keyed_line, keyed_line_s, show_messages,
-    ui_error_text, ui_error_text_for_script, CastErrors, Caster, MessageSink,
-    MountErrors, PetTameFailures, Shown, UiError, UiErrorKeys, UiErrorTexts,
+    attack_actor_refusal, keyed_line, keyed_line_s, show_messages, ui_error_text,
+    ui_error_text_for_script, CastErrors, MessageSink, MountErrors, PetTameFailures, Shown,
+    UiError, UiErrorKeys, UiErrorTexts,
 };
 pub(crate) use weapon_icon::{melee_auto_attack_icon, ranged_weapon_icon};
 
@@ -103,7 +103,10 @@ pub(crate) struct SpellMechanics {
     pub(crate) catalog: wrathplus_formats::SpellMechanicCatalog,
 }
 
-fn load_spell_mechanics(mut commands: Commands, assets: Option<Res<wrathplus_assets::WorldAssets>>) {
+fn load_spell_mechanics(
+    mut commands: Commands,
+    assets: Option<Res<wrathplus_assets::WorldAssets>>,
+) {
     let Some(assets) = assets else { return };
     let loaded = {
         let mut chain = wrathplus_assets::LockRecover::lock_recover(&*assets.chain);

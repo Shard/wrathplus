@@ -1,23 +1,22 @@
 //! The UI error line's queues and resolvers, which `super::feed_actions` drains into
 //! [`show_messages`]; cast failures resolve in [`super::cast_fail`].
 
+use bevy::prelude::*;
 use wrathplus_ui::messages::MessageRecord;
 use wrathplus_ui::script::{ScriptValue, UiScript};
-use bevy::prelude::*;
 
-use crate::app_core::session::ObjectStore;
-use crate::sound::MessageSounds;
-use crate::target::attack_gate::attack_actor_blocked;
 use crate::app_core::chat::ChatEvent;
 use crate::app_core::chat::ChatEventKind;
 use crate::app_core::chat::ChatLog;
+use crate::app_core::session::ObjectStore;
+use crate::sound::MessageSounds;
+use crate::target::attack_gate::attack_actor_blocked;
 
-pub(crate) use crate::app_core::errors::{
-    CastErrors, Caster, FillArg, MountErrors, PetTameFailures, UiError, UiErrorKeys,
-    UiErrorTexts,
-};
 #[cfg(test)]
 pub(crate) use crate::app_core::errors::CastFail;
+pub(crate) use crate::app_core::errors::{
+    CastErrors, FillArg, MountErrors, PetTameFailures, UiError, UiErrorKeys, UiErrorTexts,
+};
 
 /// Where a message shows: the `kind` field (`+0x04`) of the reference's message record, read from
 /// the catalog ([`wrathplus_ui::messages`]).
@@ -213,11 +212,9 @@ pub(crate) fn attack_actor_refusal(
     true
 }
 
-pub(crate) use crate::spell::reagents::{
-    first_missing_totem, first_short_reagent,
-};
 #[cfg(test)]
 pub(crate) use crate::spell::reagents::reagent_totem_refusal;
+pub(crate) use crate::spell::reagents::{first_missing_totem, first_short_reagent};
 
 /// A (dis)mount result code to its GlobalStrings key, by vmangos `UnitMountResult` and
 /// `UnitDismountResult` (`UnitDefines.h:842-863`); every key ships in 1.12, `ERR_MOUNT_OTHER`'s
@@ -250,8 +247,8 @@ pub(super) fn mount_result_key(mount: bool, code: u32) -> Option<&'static str> {
 mod shown_tests {
     use super::{MessageSink, MessageSounds, MsgKind, Shown};
     use crate::app_core::chat::ChatLog;
-    use wrathplus_ui::script::UiScript;
     use bevy::prelude::*;
+    use wrathplus_ui::script::UiScript;
 
     /// Through [`super::show_messages`]: a keyed line queues its catalog row; an unkeyed line and
     /// an unknown key queue nothing.
@@ -601,6 +598,7 @@ mod attack_actor_tests {
 #[cfg(test)]
 mod totem_reagent_tests {
     use super::*;
+    use crate::spell::cast_fail_keys::reason::{REAGENTS, TOTEMS};
     use wrathplus_formats::SpellDisplay;
     use wrathplus_protocol::ObjectFields;
 
@@ -622,7 +620,7 @@ mod totem_reagent_tests {
         }
     }
 
-    /// Against empty bags: a totem spell refuses `0x78`, a reagent spell `0x5c`, totems first; a
+    /// Against empty bags: a totem spell refuses TOTEMS, a reagent spell REAGENTS, totems first; a
     /// spell with neither passes, and no spell or no store skips the check.
     #[test]
     fn missing_materials_refuse_with_the_refs_reasons() {
@@ -637,7 +635,7 @@ mod totem_reagent_tests {
             &objs.get(),
             &mut errors
         ));
-        assert_eq!(errors.0.as_slice(), &[CastFail::local(2575, 0x78)]);
+        assert_eq!(errors.0.as_slice(), &[CastFail::local(2575, TOTEMS)]);
 
         let mut reagents = [(0, 0); 8];
         reagents[0] = (17056, 1); // Slow Fall's Light Feather
@@ -650,7 +648,7 @@ mod totem_reagent_tests {
             &objs.get(),
             &mut errors
         ));
-        assert_eq!(errors.0.as_slice(), &[CastFail::local(130, 0x5c)]);
+        assert_eq!(errors.0.as_slice(), &[CastFail::local(130, REAGENTS)]);
 
         let both = spell([2901, 0], reagents);
         let mut errors = CastErrors::default();
@@ -661,7 +659,7 @@ mod totem_reagent_tests {
             &objs.get(),
             &mut errors
         ));
-        assert_eq!(errors.0.as_slice(), &[CastFail::local(1, 0x78)]);
+        assert_eq!(errors.0.as_slice(), &[CastFail::local(1, TOTEMS)]);
 
         let plain = spell([0, 0], [(0, 0); 8]);
         let mut errors = CastErrors::default();

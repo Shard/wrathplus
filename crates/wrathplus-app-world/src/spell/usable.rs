@@ -18,13 +18,13 @@ use wrathplus_formats::{
     SPELL_EFFECT_TRADE_SKILL,
 };
 
+use crate::app_core::cooldowns::Cooldowns;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::state::Factions;
 use crate::items::Items;
 use crate::net::{NetCommands, Objects, Reputations};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::cooldowns::Cooldowns;
 use crate::spell::{SpellModifiers, OP_COST};
 use crate::target::{can_assist, can_attack};
-use crate::app_core::state::Factions;
 
 use crate::app_core::state::Spells;
 
@@ -215,16 +215,16 @@ pub fn slot_item_cached(
     })
 }
 
-/// The equipped-item refusal reason, keyed on `AttributesEx3` alone (`0x6e40e0` at
-/// `6e416e`..`6e4180`): main-hand-only `0x1a`, off-hand-only `0x1b`, else `0x19`. All three render
-/// "Must have a %s equipped" with the item subclass name.
+/// The equipped-item refusal, keyed on `AttributesEx3` alone: the main- or off-hand-only reason,
+/// else the plain one; all three render "Must have a %s equipped" with the subclass name.
 pub(crate) fn equipped_item_reason(d: &SpellDisplay) -> u8 {
+    use crate::spell::cast_fail_keys::reason;
     if d.attributes_ex3 & ATTR_EX3_MAIN_HAND_ONLY != 0 {
-        0x1a
+        reason::EQUIPPED_ITEM_CLASS_MAINHAND
     } else if d.attributes_ex3 & ATTR_EX3_OFF_HAND_ONLY != 0 {
-        0x1b
+        reason::EQUIPPED_ITEM_CLASS_OFFHAND
     } else {
-        0x19
+        reason::EQUIPPED_ITEM_CLASS
     }
 }
 

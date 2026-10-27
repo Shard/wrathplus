@@ -152,6 +152,9 @@ pub(crate) struct ServiceArms<'w> {
     pub(crate) interact: Res<'w, crate::app_core::state::InteractNpc>,
     /// The cursor, for the vendor arm's sell fork (`0x5df5d7`); `None` when no VM is mounted.
     pub(crate) script: Option<NonSendMut<'w, wrathplus_ui::script::UiScript>>,
+    /// The roster and the guid index, for the spell click's group gate (`0x52c8c0`, `0x573200`).
+    pub(crate) group: Option<Res<'w, crate::app_core::group::GroupState>>,
+    pub(crate) index: Option<Res<'w, crate::net::GuidIndex>>,
 }
 
 /// The re-click gate (`0x5f0251`), before the ladder: a right-click on the NPC whose window is
@@ -186,9 +189,9 @@ impl Feedback<'_> {
         match started {
             Ok(()) => true,
             Err(crate::player::Refused::TooFar) => {
-                self.errors
-                    .0
-                    .push(crate::app_core::errors::UiError::key("ERR_AUTOFOLLOW_TOO_FAR"));
+                self.errors.0.push(crate::app_core::errors::UiError::key(
+                    "ERR_AUTOFOLLOW_TOO_FAR",
+                ));
                 false
             }
             Err(crate::player::Refused::Silent) => false,
@@ -543,7 +546,7 @@ impl Dispatch<'_, '_> {
             }
             return;
         }
-        // The cast's mounted check (`0x6094f0`, reason `0x39`), the one place a rider is told
+        // The cast's mounted check (`0x6094f0`, NOT_MOUNTED), the one place a rider is told
         // anything; the record comes off [`GoLockInputs`]' catalog, this system's only `Spells`.
         let mounted = self.mounted();
         let def = self
@@ -552,8 +555,10 @@ impl Dispatch<'_, '_> {
             .as_ref()
             .and_then(|s| s.catalog.get(spell_id));
         if crate::spell::validator::cast_mounted_refusal(mounted, def) {
-            debug!("right-click skin: refused locally — mounted (0x39)");
-            self.feedback.cast_errors.push_local(spell_id, 0x39);
+            debug!("right-click skin: refused locally — mounted");
+            self.feedback
+                .cast_errors
+                .push_local(spell_id, crate::spell::cast_fail_keys::reason::NOT_MOUNTED);
         } else {
             debug!("right-click skin: {guid:#x} (spell {spell_id})");
             let _ = self.seam.net.0.send(ClientCommand::CastSpell {
@@ -608,6 +613,15 @@ impl Dispatch<'_, '_> {
         let ghost = self_store.is_some_and(|s| s.0.player_is_ghost());
         let status = { self.service.quest.wrath_statuses().get(&guid).copied() };
         let Some(arm) = service_arm_native(npc_flags, status) else {
+            // The rung after every service bit (`0x6de0a6`): `CMSG_SPELLCLICK` (`0x6d2740`), and
+            // the ladder returns before the Talk gesture.
+            if self.spell_clickable(entity, guid) {
+                debug!("right-click interact: {guid:#x} (spell click)");
+                let _ = self.seam.net.0.send(ClientCommand::NativeSpellControl(
+                    wrathplus_protocol::wrath_spell_control::Command::SpellClick { unit: guid },
+                ));
+                return;
+            }
             // `0x5f05ca`: no consulted bit does nothing, gesture included.
             debug!("right-click interact: {guid:#x} matches no service bit — nothing sent");
             return;
@@ -664,6 +678,33 @@ impl Dispatch<'_, '_> {
             self.gestures
                 .push(my_guid, crate::creature_anim::Gesture::Talk);
         }
+    }
+
+    /// `0x71c570`: the NPC flag SPELLCLICK and not `UNIT_FLAG2_PREVENT_SPELL_CLICK`; under
+    /// `UNIT_FLAG2_RESTRICT_PARTY_INTERACTION` the unit must be the group's ([`group_owns`]).
+    fn spell_clickable(&self, entity: Entity, guid: u64) -> bool {
+        let Ok((store, _)) = self.stores.get(entity) else {
+            return false;
+        };
+        // `UNIT_FIELD_FLAGS_2`: `0x1000` keeps it to the group (AzerothCore
+        // `UNIT_FLAG2_RESTRICT_PARTY_INTERACTION`), `0x2000` forbids it (`_PREVENT_SPELL_CLICK`).
+        let flags_2 = (store.0)
+            .get(wrathplus_protocol::types::Field::UnitFlags2)
+            .unwrap_or(0);
+        let service = wrathplus_protocol::types::NpcService::SpellClick;
+        if !store.0.unit_npc_services().has(service) || flags_2 & 0x2000 != 0 {
+            return false;
+        }
+        let held = |member: u64| {
+            let entity = self.service.index.as_deref()?.0.get(&member).copied()?;
+            self.stores.get(entity).ok().map(|(s, _)| &s.0)
+        };
+        flags_2 & 0x1000 == 0
+            || self
+                .service
+                .group
+                .as_deref()
+                .is_some_and(|g| group_owns(g, guid, held))
     }
 }
 
@@ -794,7 +835,9 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
                     .feedback
                     .errors
                     .0
-                    .push(crate::app_core::errors::UiError::key("ERR_LOOT_NOTSTANDING"));
+                    .push(crate::app_core::errors::UiError::key(
+                        "ERR_LOOT_NOTSTANDING",
+                    ));
                 return;
             }
             // Range rides the cursor's gray, so the pouch is never lit where the click refuses.
@@ -931,7 +974,9 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
                     .feedback
                     .errors
                     .0
-                    .push(crate::app_core::errors::UiError::key("ERR_LOOT_NOTSTANDING"));
+                    .push(crate::app_core::errors::UiError::key(
+                        "ERR_LOOT_NOTSTANDING",
+                    ));
             } else {
                 dispatch.loot_unit(entity, guid, !cursor.unable, walk);
             }
@@ -1464,6 +1509,21 @@ pub fn service_action(
     }
 }
 
+/// The spell click's group gate: a member, or a member's pet as `partypetN` (`0x52c8c0`) or
+/// `raidpetN` (`0x573200`) reads it, off its descriptor while `held` has it, else its record.
+pub(crate) fn group_owns<'a>(
+    group: &crate::app_core::group::GroupState,
+    unit: u64,
+    held: impl Fn(u64) -> Option<&'a wrathplus_protocol::types::ObjectFields>,
+) -> bool {
+    group.members.iter().any(|m| {
+        let live = held(m.guid);
+        m.guid == unit
+            || group.party_pet_guid(m.guid, live) == Some(unit)
+            || group.raid_pet_guid(m.guid, live) == Some(unit)
+    })
+}
+
 /// Drain the guid-scoped deselects ([`DeselectGuid`]). `ClearTarget()`, the last leg of the Esc
 /// chain (`UIParent.lua:1492`), is a script call and lands in call order
 /// (the UI's `script_calls` pass).
@@ -1727,185 +1787,6 @@ mod tests {
         );
     }
 
-    /// Every arm of `0x5f0130`'s walk over `UNIT_NPC_FLAGS`, in the reference's order.
-    #[test]
-    fn the_service_ladder_walks_the_reference_bit_order() {
-        use cursor_mode::npc_flags as f;
-        let has = Some(wrathplus_protocol::types::dialog_status::AVAILABLE);
-        for (flags, arm) in [
-            (f::GOSSIP, ServiceArm::Gossip),
-            (f::VENDOR, ServiceArm::Vendor),
-            (f::FLIGHTMASTER, ServiceArm::FlightMaster),
-            (f::TRAINER, ServiceArm::Trainer),
-            (f::SPIRITHEALER, ServiceArm::SpiritHealer),
-            (f::SPIRITGUIDE, ServiceArm::SpiritGuide),
-            (f::INNKEEPER, ServiceArm::Innkeeper),
-            (f::BANKER, ServiceArm::Banker),
-            (f::PETITIONER, ServiceArm::Petitioner),
-            (f::TABARDDESIGNER, ServiceArm::TabardDesigner),
-            (f::BATTLEMASTER, ServiceArm::Battlemaster),
-            (f::AUCTIONEER, ServiceArm::Auctioneer),
-            (f::STABLEMASTER, ServiceArm::StableMaster),
-        ] {
-            assert_eq!(service_arm(flags, None), Some(arm), "flags {flags:#x}");
-        }
-        // Bit 1 is the one arm with a second conjunct: the target's cached questgiver status.
-        assert_eq!(
-            service_arm(f::QUESTGIVER, has),
-            Some(ServiceArm::Questgiver)
-        );
-        assert_eq!(service_arm(f::QUESTGIVER, None), None);
-        // REPAIR (`0x1000` on 12340) has no arm, and an empty field matches nothing.
-        assert_eq!(service_arm(0x1000, None), None);
-        assert_eq!(service_arm(0, None), None);
-    }
-
-    #[test]
-    fn the_service_ladder_is_first_match_wins() {
-        use cursor_mode::npc_flags as f;
-        // Anything gossip-flagged keeps its menu.
-        for other in [
-            f::VENDOR,
-            f::TRAINER,
-            f::INNKEEPER,
-            f::STABLEMASTER,
-            f::BANKER,
-        ] {
-            assert_eq!(
-                service_arm(f::GOSSIP | other, None),
-                Some(ServiceArm::Gossip)
-            );
-        }
-        // Banker (bit 8) before auctioneer (bit 12), both Buy(3) to the cursor.
-        assert_eq!(
-            service_arm(f::BANKER | f::AUCTIONEER, None),
-            Some(ServiceArm::Banker)
-        );
-        // Trainer (bit 4) before innkeeper (bit 7).
-        assert_eq!(
-            service_arm(f::TRAINER | f::INNKEEPER, None),
-            Some(ServiceArm::Trainer)
-        );
-    }
-
-    #[test]
-    fn the_service_arms_send_what_the_reference_sends() {
-        let sent = |arm, ghost| match service_action(arm, 0x42, ghost, None) {
-            ServiceAction::Send(cmd) => format!("{cmd:?}"),
-            ServiceAction::SellFromCursor(cmd) => format!("sell {cmd:?}"),
-            ServiceAction::AskBinder => "ask-binder".to_string(),
-            ServiceAction::AskSpiritHealer => "ask-spirit-healer".to_string(),
-            ServiceAction::AcquireSpiritGuide => "acquire-spirit-guide".to_string(),
-            ServiceAction::Silent(_) => "silent".to_string(),
-        };
-        assert!(matches!(
-            service_action(ServiceArm::Questgiver, 0x42, false, None),
-            ServiceAction::Send(ClientCommand::QuestgiverHello { npc: 0x42 })
-        ));
-        assert!(matches!(
-            service_action(ServiceArm::Trainer, 0x42, false, None),
-            ServiceAction::Send(ClientCommand::TrainerList { trainer: 0x42 })
-        ));
-        assert!(matches!(
-            service_action(ServiceArm::Petitioner, 0x42, false, None),
-            ServiceAction::Send(ClientCommand::PetitionShowList { npc: 0x42 })
-        ));
-        assert!(matches!(
-            service_action(ServiceArm::Vendor, 0x42, false, None),
-            ServiceAction::Send(ClientCommand::ListInventory { guid: 0x42 })
-        ));
-        assert!(matches!(
-            service_action(ServiceArm::FlightMaster, 0x42, false, None),
-            ServiceAction::Send(ClientCommand::TaxiQueryNodes { guid: 0x42 })
-        ));
-        assert!(matches!(
-            service_action(ServiceArm::Banker, 0x42, false, None),
-            ServiceAction::Send(ClientCommand::BankerActivate { guid: 0x42 })
-        ));
-        assert!(matches!(
-            service_action(ServiceArm::Auctioneer, 0x42, false, None),
-            ServiceAction::Send(ClientCommand::AuctionHello { auctioneer: 0x42 })
-        ));
-        assert!(matches!(
-            service_action(ServiceArm::StableMaster, 0x42, false, None),
-            ServiceAction::Send(ClientCommand::ListStabledPets { npc: 0x42 })
-        ));
-        // The innkeeper asks and sends nothing.
-        assert_eq!(sent(ServiceArm::Innkeeper, false), "ask-binder");
-        // The two ghost-gated arms give a living player nothing, as in the reference.
-        assert_eq!(sent(ServiceArm::SpiritHealer, false), "silent");
-        assert_eq!(sent(ServiceArm::SpiritGuide, false), "silent");
-        assert_eq!(sent(ServiceArm::SpiritHealer, true), "ask-spirit-healer");
-        assert!(matches!(
-            service_action(ServiceArm::TabardDesigner, 0x42, false, None),
-            ServiceAction::Send(ClientCommand::TabardVendorActivate { npc: 0x42 })
-        ));
-        assert!(matches!(
-            service_action(ServiceArm::Battlemaster, 0x42, false, None),
-            ServiceAction::Send(ClientCommand::BattlemasterHello { npc: 0x42 })
-        ));
-    }
-
-    /// The sell fork lives in the vendor handler alone (`0x5df5d0`), so no other arm may change
-    /// with the cursor.
-    #[test]
-    fn only_the_vendor_arm_reads_the_cursor() {
-        const VENDOR: u64 = 0xF130_0000_0000_0042;
-        const ITEM: u64 = 0x4000_0000_0000_0099;
-
-        // Empty cursor: the list opens.
-        assert!(matches!(
-            service_action(ServiceArm::Vendor, VENDOR, false, None),
-            ServiceAction::Send(ClientCommand::ListInventory { guid: VENDOR })
-        ));
-        // An item held: the sale to the clicked NPC, count 0 (the whole stack).
-        assert!(matches!(
-            service_action(ServiceArm::Vendor, VENDOR, false, Some(ITEM)),
-            ServiceAction::SellFromCursor(ClientCommand::SellItem {
-                vendor: VENDOR,
-                item_guid: ITEM,
-                count: 0,
-            })
-        ));
-        // Every other arm answers the same, held or not.
-        for arm in [
-            ServiceArm::Gossip,
-            ServiceArm::Questgiver,
-            ServiceArm::FlightMaster,
-            ServiceArm::Trainer,
-            ServiceArm::SpiritHealer,
-            ServiceArm::SpiritGuide,
-            ServiceArm::Innkeeper,
-            ServiceArm::Banker,
-            ServiceArm::Petitioner,
-            ServiceArm::TabardDesigner,
-            ServiceArm::Battlemaster,
-            ServiceArm::Auctioneer,
-            ServiceArm::StableMaster,
-        ] {
-            for ghost in [false, true] {
-                let describe = |a: ServiceAction| match a {
-                    ServiceAction::Send(cmd) => format!("{cmd:?}"),
-                    ServiceAction::SellFromCursor(cmd) => format!("SELL {cmd:?}"),
-                    ServiceAction::AskBinder => "ask-binder".into(),
-                    ServiceAction::AskSpiritHealer => "ask-xp-loss".into(),
-                    ServiceAction::AcquireSpiritGuide => "acquire-spirit-guide".into(),
-                    ServiceAction::Silent(w) => format!("silent {w}"),
-                };
-                let empty = describe(service_action(arm, VENDOR, ghost, None));
-                let held = describe(service_action(arm, VENDOR, ghost, Some(ITEM)));
-                assert_eq!(
-                    empty, held,
-                    "{arm:?} (ghost={ghost}) changed its answer because an item was on the cursor"
-                );
-                assert!(
-                    !held.starts_with("SELL"),
-                    "{arm:?} (ghost={ghost}) reached the vendor arm's sale"
-                );
-            }
-        }
-    }
-
     /// A corpse and a refused `NOT_SELECTABLE` unit reach `select_on_click`'s `_` arm with no
     /// `target`, but are object hits, and only the terrain and nothing legs deselect.
     #[test]
@@ -1977,18 +1858,18 @@ mod tests {
         );
     }
 
-    use crate::net::{ClientCommand, NetCommands};
     use crate::app_core::session::ObjectStore;
+    use crate::net::{ClientCommand, NetCommands};
     use bevy::ecs::system::RunSystemOnce;
 
-    const F_HEALTH: u16 = Field::UnitHealth.index();
-    const F_MAXHEALTH: u16 = Field::UnitMaxHealth.index();
+    pub(super) const F_HEALTH: u16 = Field::UnitHealth.index();
+    pub(super) const F_MAXHEALTH: u16 = Field::UnitMaxHealth.index();
     /// `GAMEOBJECT_BYTES_1`, whose byte 1 is the type the GameObject arms fork on.
     const GO_BYTES_1: u16 = Field::GameobjectBytes1.index();
     const BOAR: u64 = 0xB0A2;
     const ME: u64 = 0x5E1F;
 
-    fn store(pairs: &[(u16, u32)]) -> ObjectStore {
+    pub(super) fn store(pairs: &[(u16, u32)]) -> ObjectStore {
         ObjectStore(wrathplus_protocol::ObjectFields::from_pairs(pairs))
     }
 
@@ -2213,10 +2094,10 @@ mod tests {
         assert!(!world.is_resource_changed::<Selection>());
     }
 
-    const VENDOR: u64 = 0x7E0D;
+    pub(super) const VENDOR: u64 = 0x7E0D;
 
     /// Our body alive at the origin, Click to Move set as `walk`, and a vendor at `at`.
-    fn walking_world(
+    pub(super) fn walking_world(
         at: Vec3,
         walk: bool,
     ) -> (World, Entity, crossbeam_channel::Receiver<ClientCommand>) {
@@ -2252,7 +2133,7 @@ mod tests {
         (world, vendor, rx)
     }
 
-    fn click_vendor(world: &mut World, vendor: Entity) {
+    pub(super) fn click_vendor(world: &mut World, vendor: Entity) {
         *world.resource_mut::<PressPick>() = PressPick {
             hovered: Hovered {
                 target: Some(vendor),
@@ -2388,7 +2269,7 @@ mod tests {
     }
 
     /// A crate's [`Interact`] on `entity`, the selection's change tick cleared first.
-    fn interact_with(world: &mut World, entity: Entity) {
+    pub(super) fn interact_with(world: &mut World, entity: Entity) {
         world.clear_trackers();
         world
             .resource_mut::<Messages<Interact>>()
@@ -2963,7 +2844,9 @@ mod tests {
         assert!(!world.resource::<crate::player::Approach>().active());
         assert_eq!(
             world.resource::<crate::app_core::errors::UiErrorKeys>().0,
-            vec![crate::app_core::errors::UiError::key("ERR_AUTOFOLLOW_TOO_FAR")]
+            vec![crate::app_core::errors::UiError::key(
+                "ERR_AUTOFOLLOW_TOO_FAR"
+            )]
         );
         assert!(rx
             .try_iter()
@@ -3203,3 +3086,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "click_ladder_tests.rs"]
+mod ladder_tests;

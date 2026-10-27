@@ -4,7 +4,7 @@
 //! `u32` `entry | 0x8000_0000`.
 
 /// One item template, as `SMSG_ITEM_QUERY_SINGLE_RESPONSE` carries it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ItemInfo {
     pub class: u32,
     pub subclass: u32,
@@ -110,6 +110,9 @@ pub struct ItemInfo {
     /// 7 enchanting, 8 engineering, 9 keyring; 0 none). An enum, not a mask, in 1.12: the
     /// reference's `HasKey` (`0x48ae90`) tests `== 9`.
     pub bag_family: u32,
+    /// `TotemCategory.dbc` row this item counts as for a recipe's tool (a Blacksmith Hammer),
+    /// 0 for none; 3.3.5 only.
+    pub totem_category: u32,
 }
 
 impl ItemInfo {

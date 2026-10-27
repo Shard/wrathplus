@@ -12,24 +12,25 @@
 //! An item use takes the same ladder: `CGItem::Use 0x5d8d00` calls `0x6e5a90`, whose body is
 //! `call 0x6e4b60` with the item as TryCast's third argument (read at `6e4d76` and `6e4f33`). Three
 //! rungs fork on it, hence [`CastCommit`]: the not-ready rung (`60952b`: item cooldown `0x6e2ed0`
-//! and 0x28, else `0x6e2ea0` and 0x3c), the power gate `0x60962c` (items skip it), and the opcode
-//! (`0x6e57d8`: `0xab` vs `0x12e`).
+//! and ITEM_NOT_READY, else `0x6e2ea0` and NOT_READY), the power gate `0x60962c` (items skip it),
+//! and the opcode (`0x6e57d8`: `0xab` vs `0x12e`).
 
+use crate::spell::cast_fail_keys::reason;
 use crate::spell::cooldowns::CooldownsSpell;
 use std::time::Instant;
 
-use wrathplus_protocol::types::UseItemTarget;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use wrathplus_protocol::types::UseItemTarget;
 
+use crate::app_core::session::SelfPlayer;
 use crate::items::Items;
 use crate::net::{ClientCommand, NetCommands, Objects};
-use crate::app_core::session::SelfPlayer;
 
 use super::{cast_target, validator, AutoRepeatActive, SpellsCastTime};
-use crate::spell::reagents::reagent_totem_refusal;
 use crate::app_core::errors::CastErrors;
 use crate::app_core::state::Spells;
+use crate::spell::reagents::reagent_totem_refusal;
 
 /// What the commit sends: `SendCast 0x6e54f0` branches on whether the pending-cast guid
 /// (`0xceac48`, the item's when TryCast got one, else the caster's) is the caster's; the item arm
@@ -65,9 +66,9 @@ impl CastCommit {
     /// The local not-ready reason for this commit (`0x6094f0`'s forked first rung).
     fn not_ready_reason(self) -> u8 {
         if self.is_item() {
-            0x28
+            reason::ITEM_NOT_READY
         } else {
-            0x3c
+            reason::NOT_READY
         }
     }
 }
@@ -93,8 +94,7 @@ pub struct HeldCast {
 #[derive(SystemParam)]
 pub struct CastLadder<'w, 's> {
     pub commands: Res<'w, NetCommands>,
-    pub self_player:
-        Query<'w, 's, (Entity, Has<crate::creature_anim::Engaged>), With<SelfPlayer>>,
+    pub self_player: Query<'w, 's, (Entity, Has<crate::creature_anim::Engaged>), With<SelfPlayer>>,
     pub spells: Option<Res<'w, Spells>>,
     pub items: Res<'w, Items>,
     /// The reagent check walks the bags through it; the item arms resolve an instance guid here.
@@ -141,12 +141,7 @@ impl CastLadder<'_, '_> {
     /// The targeting cursor's commit: the ladder ran when the cursor went up, so the click owes
     /// only `SendCast 0x6e54f0`'s tail (the packet, the pending arm, the GCD), then clears the
     /// word.
-    pub fn commit_targeted(
-        &mut self,
-        spell_id: u32,
-        commit: CastCommit,
-        bound: TargetedBind,
-    ) {
+    pub fn commit_targeted(&mut self, spell_id: u32, commit: CastCommit, bound: TargetedBind) {
         if let CastCommit::Pet { caster } = commit {
             // The pet's cast: its own counter, cooldowns and GCD, none of ours to arm.
             use wrathplus_protocol::wrath_session::CastTarget;
@@ -263,23 +258,13 @@ impl CastLadder<'_, '_> {
 
     /// Run the ladder for `spell_id` and commit as `commit` says, with no attack pick: no 1.12
     /// item use, form, craft or `modalNextSpell` chain casts a spell of predicate `0x6e5200`.
-    pub fn send(
-        &mut self,
-        spell_id: u32,
-        ctx: &cast_target::CastContext,
-        commit: CastCommit,
-    ) {
+    pub fn send(&mut self, spell_id: u32, ctx: &cast_target::CastContext, commit: CastCommit) {
         self.send_bound(spell_id, ctx, commit, None, None);
     }
 
     /// A player's spell press (`UseAction`, `CastSpell`, `CastSpellByName`): the ladder with
     /// TryCast's attack pick, where the cast may stop in [`HeldForPick`].
-    pub fn send_spell(
-        &mut self,
-        spell_id: u32,
-        ctx: &cast_target::CastContext,
-        on_self: bool,
-    ) {
+    pub fn send_spell(&mut self, spell_id: u32, ctx: &cast_target::CastContext, on_self: bool) {
         let held = HeldCast { spell_id, on_self };
         self.send_bound(spell_id, ctx, CastCommit::Spell, None, Some(held));
     }
@@ -298,12 +283,7 @@ impl CastLadder<'_, '_> {
     /// The ladder for a cast the caller already bound to a GameObject (a lock opener): TryCast
     /// takes the guid pair it is passed (`6e4ef4` → `0x612df0`), and the GameObject use-sender
     /// passes one (`0x5f35c0 → 0x6e5a90 → 0x6e4b60`).
-    pub fn send_at_object(
-        &mut self,
-        spell_id: u32,
-        ctx: &cast_target::CastContext,
-        go_guid: u64,
-    ) {
+    pub fn send_at_object(&mut self, spell_id: u32, ctx: &cast_target::CastContext, go_guid: u64) {
         self.send_bound(spell_id, ctx, CastCommit::Spell, Some(go_guid), None);
     }
 
@@ -343,8 +323,8 @@ impl CastLadder<'_, '_> {
 }
 
 /// TryCast's dead rung (`0x6e4c49`), after the profession intercept and ahead of the Attack
-/// short-circuit (`0x6e4c7a`): a dead or ghost caster (`0x605f30`) is refused with 0x13, "You are
-/// dead", unless the spell is castable while dead (`Attributes & 0x800000`, `0x6e4c55`).
+/// short-circuit (`0x6e4c7a`): a dead or ghost caster (`0x605f30`) is refused with CASTER_DEAD,
+/// "You are dead", unless the spell is castable while dead (`Attributes & 0x800000`, `0x6e4c55`).
 fn caster_dead_refusal(
     spell_id: u32,
     def: Option<&wrathplus_formats::SpellDisplay>,
@@ -356,8 +336,8 @@ fn caster_dead_refusal(
     {
         return false;
     }
-    debug!("ui_action: cast {spell_id} refused locally — dead or a ghost (0x13)");
-    cast_errors.push_local(spell_id, 0x13);
+    debug!("ui_action: cast {spell_id} refused locally — dead or a ghost (CASTER_DEAD)");
+    cast_errors.push_local(spell_id, reason::CASTER_DEAD);
     true
 }
 
@@ -434,11 +414,11 @@ fn send_spell_cast(
     }
     if pending.in_flight(now) {
         // The already-casting refusal: the same spell bails silently (`6e4d43`), another errors
-        // 0x61 "Another action is in progress" (`6e4d97`). The gate reads the in-flight record's
-        // `Attributes & 0x404`, never the pressed spell's, and a guarding record is always an
-        // ordinary cast or an item use, so every press class is refused here.
+        // SPELL_IN_PROGRESS "Another action is in progress" (`6e4d97`). The gate reads the
+        // in-flight record's `Attributes & 0x404`, never the pressed spell's, and a guarding record
+        // is always an ordinary cast or an item use, so every press class is refused here.
         if pending.current(now) != Some(spell_id) {
-            cast_errors.push_local(spell_id, 0x61);
+            cast_errors.push_local(spell_id, reason::SPELL_IN_PROGRESS);
         }
         debug!("ui_action: cast {spell_id} suppressed — a cast is already in flight");
         return;
@@ -462,16 +442,16 @@ fn send_spell_cast(
             }
         }
     }
-    // The finisher rung (`6e4e50`–`6e4ecd`), above the attack pick: a finishing move
-    // (`AttributesEx & 0x500000`) with the combo-point byte at 0 refuses 0x46 "That ability
-    // requires combo points" for a rogue (class byte 4, `6e4e98`), else 0x12. Like the button
+    // The finisher rung (`6e4e50`–`6e4ecd`), above the attack pick: a finishing move (`AttributesEx
+    // & 0x500000`) with the combo-point byte at 0 refuses NO_COMBO_POINTS "That ability requires
+    // combo points" for a rogue (class byte 4, `6e4e98`), else CASTER_AURASTATE. Like the button
     // greying, it reads no target.
     if let (Some(d), Some(store)) = (def, ctx.rel.self_store) {
         if d.needs_combo_points() && crate::net::wrath_combo_points::banked(combo).0 == 0 {
             let reason = if store.0.unit_class() == Some(CLASS_ROGUE) {
-                0x46
+                reason::NO_COMBO_POINTS
             } else {
-                0x12
+                reason::CASTER_AURASTATE
             };
             debug!("ui_action: cast {spell_id} refused locally — no combo points ({reason:#x})");
             cast_errors.push_local(spell_id, reason);
@@ -560,9 +540,10 @@ fn send_spell_cast(
     }
     // ── The validator `0x6094f0` ──
     //
-    // Not-ready (`0x60952b`): an item press queries (use-spell, entry) and refuses 0x28, a spell
-    // press queries (spell, 0) and refuses 0x3c. The GCD rides the same query, matched on
-    // `StartRecoveryCategory`. Local, because the server's NOT_READY fail clears the running GCD.
+    // Not-ready (`0x60952b`): an item press queries (use-spell, entry) and refuses ITEM_NOT_READY,
+    // a spell press queries (spell, 0) and refuses NOT_READY. The GCD rides the same query,
+    // matched on `StartRecoveryCategory`. Local, because the server's NOT_READY fail clears the
+    // running GCD.
     let queried_item = match commit {
         CastCommit::Item { entry, .. } => entry,
         CastCommit::Spell | CastCommit::Pet { .. } => 0,
@@ -597,13 +578,13 @@ fn send_spell_cast(
     }
     // The power gate (`0x60962c`, spells only: the item fork jumps past it to `0x6096b3`): raw
     // `UNIT_FIELD_POWER[type]` (a negative PowerType reads health) signed-compared against the
-    // cost, refusing 0x4d. Local, because vmangos accepts the cast and its NO_POWER fail clears
+    // cost, refusing NO_POWER. Local, because vmangos accepts the cast and its NO_POWER fail clears
     // the running GCD.
     if !commit.is_item() {
         if let (Some(d), Some(store)) = (def, ctx.rel.self_store) {
             if !super::usable::can_afford(d, store, spell_mods) {
-                debug!("ui_action: cast {spell_id} refused locally — not enough power (0x4d)");
-                cast_errors.push_local(spell_id, 0x4d);
+                debug!("ui_action: cast {spell_id} refused locally — not enough power (NO_POWER)");
+                cast_errors.push_local(spell_id, reason::NO_POWER);
                 return;
             }
         }
@@ -650,8 +631,8 @@ fn send_spell_cast(
         }
         return;
     }
-    // The mounted block (`0x609c6c`): a live `UNIT_FIELD_MOUNTDISPLAYID` refuses 0x39 "You are
-    // mounted" unless `Attributes & 0x01000000`. Local, because vmangos silently dismounts
+    // The mounted block (`0x609c6c`): a live `UNIT_FIELD_MOUNTDISPLAYID` refuses NOT_MOUNTED "You
+    // are mounted" unless `Attributes & 0x01000000`. Local, because vmangos silently dismounts
     // instead. The range gate runs first, so mounted and out of range reads "Out of range.".
     if validator::cast_mounted_refusal(
         ctx.rel
@@ -659,19 +640,19 @@ fn send_spell_cast(
             .is_some_and(|s| s.0.unit_mount_display_id() > 0),
         def,
     ) {
-        debug!("ui_action: cast {spell_id} refused locally — mounted (0x39)");
-        cast_errors.push_local(spell_id, 0x39);
+        debug!("ui_action: cast {spell_id} refused locally — mounted (NOT_MOUNTED)");
+        cast_errors.push_local(spell_id, reason::NOT_MOUNTED);
         return;
     }
-    // The water leg (`0x609d39–0x609d7b`): 0x50 "Cannot use while swimming" for mounts, Travel
-    // Form and food, 0x58 "Can only use while swimming" for Aquatic Form. Local, because vmangos's
-    // CheckCast has no such arm and would grant Aquatic Form on land.
+    // The water leg (`0x609d39–0x609d7b`): ONLY_ABOVEWATER "Cannot use while swimming" for mounts,
+    // Travel Form and food, 0x58 "Can only use while swimming" for Aquatic Form. Local, because
+    // vmangos's CheckCast has no such arm and would grant Aquatic Form on land.
     if let Some(reason) = validator::cast_water_refusal(ctx.self_move_flags, def) {
         debug!("ui_action: cast {spell_id} refused locally — water side ({reason:#x})");
         cast_errors.push_local(spell_id, reason);
         return;
     }
-    // The moving leg (`0x609de3`): a cast-time press while moving refuses 0x2e. Local, because
+    // The moving leg (`0x609de3`): a cast-time press while moving refuses MOVING. Local, because
     // vmangos accepts the cast and then interrupts it mid-bar.
     if let Some(d) = def {
         let caster_level = ctx
@@ -681,8 +662,8 @@ fn send_spell_cast(
             .unwrap_or(0);
         let cast_time_ms = spells.map_or(0, |s| s.cast_time_ms(d, caster_level, spell_mods));
         if validator::cast_moving_refusal(ctx.self_move_flags, cast_time_ms, def) {
-            debug!("ui_action: cast {spell_id} refused locally — moving (0x2e)");
-            cast_errors.push_local(spell_id, 0x2e);
+            debug!("ui_action: cast {spell_id} refused locally — moving (MOVING)");
+            cast_errors.push_local(spell_id, reason::MOVING);
             return;
         }
     }
@@ -845,11 +826,11 @@ fn send_spell_cast(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::Reputations;
     use crate::app_core::errors::CastFail;
-    use wrathplus_protocol::types::Field;
+    use crate::net::Reputations;
     use bevy::ecs::system::RunSystemOnce;
     use crossbeam_channel::Receiver;
+    use wrathplus_protocol::types::Field;
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
@@ -932,7 +913,7 @@ mod tests {
     }
 
     /// TryCast's dead rung (`0x6e4c49`): a corpse and a ghost (health 1, the `PLAYER_FLAGS` bit)
-    /// are refused with 0x13 and no packet, after the profession intercept; `Attributes &
+    /// are refused with CASTER_DEAD and no packet, after the profession intercept; `Attributes &
     /// 0x800000` waives it, and the Attack button's own entry takes the same rung.
     #[test]
     fn a_dead_or_ghost_caster_is_refused_as_dead_unless_the_spell_waives_it() {
@@ -1010,7 +991,7 @@ mod tests {
             );
             assert_eq!(
                 std::mem::take(&mut world.resource_mut::<CastErrors>().0),
-                vec![CastFail::local(PLAIN, 0x13)],
+                vec![CastFail::local(PLAIN, reason::CASTER_DEAD)],
                 "{label}: \"You are dead\""
             );
             let refused = world
@@ -1021,14 +1002,16 @@ mod tests {
             assert!(refused, "{label}: the Attack button stops at the same rung");
             assert_eq!(
                 std::mem::take(&mut world.resource_mut::<CastErrors>().0),
-                vec![CastFail::local(ATTACK, 0x13)]
+                vec![CastFail::local(ATTACK, reason::CASTER_DEAD)]
             );
         }
 
         // The profession intercept (`6e4bce`) comes first: the book opens, no error.
         press(&mut world, PROFESSION, ghost);
         assert_eq!(
-            world.resource::<crate::app_core::interaction::TradeSkillOpens>().0,
+            world
+                .resource::<crate::app_core::interaction::TradeSkillOpens>()
+                .0,
             vec![PROFESSION]
         );
         assert!(world.resource::<CastErrors>().0.is_empty());
@@ -1072,8 +1055,8 @@ mod tests {
         assert!(rx.try_recv().is_err());
         assert_eq!(
             world.resource::<CastErrors>().0,
-            vec![CastFail::local(MOUNT, 0x61)],
-            "a different spell mid-cast still errors 0x61"
+            vec![CastFail::local(MOUNT, reason::SPELL_IN_PROGRESS)],
+            "a different spell mid-cast still errors SPELL_IN_PROGRESS"
         );
     }
 
@@ -1131,7 +1114,7 @@ mod tests {
     }
 
     /// Every commit is recorded (`0xceca88`, written at `0x6e5026`), but a ranged shot does not
-    /// guard: it must not refuse the next press with `0x61`.
+    /// guard: it must not refuse the next press with SPELL_IN_PROGRESS.
     #[test]
     fn a_committed_ranged_shot_is_recorded_but_does_not_guard() {
         let (mut world, _rx) = combat_world(false);
@@ -1187,8 +1170,8 @@ mod tests {
         );
     }
 
-    /// A shot pressed mid-cast meets `6e4d97`'s `0x61` like any press (the gate reads the in-flight
-    /// record's attributes), and the cast keeps its guard.
+    /// A shot pressed mid-cast meets `6e4d97`'s SPELL_IN_PROGRESS like any press (the gate reads
+    /// the in-flight record's attributes), and the cast keeps its guard.
     #[test]
     fn a_shot_pressed_mid_cast_is_refused_and_the_cast_keeps_its_guard() {
         const FROSTBOLT: u32 = 116;
@@ -1202,7 +1185,7 @@ mod tests {
         assert!(rx.try_recv().is_err(), "nothing goes out on the wire");
         assert_eq!(
             world.resource::<CastErrors>().0,
-            vec![CastFail::local(AUTO_SHOT, 0x61)],
+            vec![CastFail::local(AUTO_SHOT, reason::SPELL_IN_PROGRESS)],
             "a different spell mid-cast is \"Another action is in progress\", whatever its class"
         );
         assert_eq!(
@@ -1276,9 +1259,9 @@ mod tests {
         assert_eq!(world.resource::<HeldForPick>().0, None, "not a press");
     }
 
-    /// The rungs above the pick refuse before it: a press mid-cast (`6e4d97`) and a finisher with no
-    /// combo points (`6e4e50`) hold nothing, so they never select a unit. A rogue reads 0x46, any
-    /// other class 0x12 (`6e4e98`).
+    /// The rungs above the pick refuse before it: a press mid-cast (`6e4d97`) and a finisher with
+    /// no combo points (`6e4e50`) hold nothing, so they never select a unit. A rogue reads
+    /// NO_COMBO_POINTS, any other class CASTER_AURASTATE (`6e4e98`).
     #[test]
     fn the_rungs_above_the_attack_pick_refuse_before_it() {
         use wrathplus_protocol::ObjectFields;
@@ -1295,13 +1278,16 @@ mod tests {
         assert_eq!(held, None, "in flight");
         assert_eq!(
             world.resource::<CastErrors>().0,
-            vec![CastFail::local(RAPTOR_STRIKE, 0x61)]
+            vec![CastFail::local(RAPTOR_STRIKE, reason::SPELL_IN_PROGRESS)]
         );
         assert!(rx.try_recv().is_err());
 
         // `UNIT_FIELD_BYTES_0` (field 36) byte 1 is the class; `PLAYER_FIELD_BYTES` holds no
         // combo points.
-        for (class, reason) in [(4u32, 0x46), (11, 0x12)] {
+        for (class, refusal) in [
+            (4u32, reason::NO_COMBO_POINTS),
+            (11, reason::CASTER_AURASTATE),
+        ] {
             let (mut world, rx) = combat_world(false);
             let held = world
                 .run_system_once(move |mut ladder: CastLadder| {
@@ -1323,7 +1309,7 @@ mod tests {
             assert_eq!(held, None, "class {class}: no combo points");
             assert_eq!(
                 world.resource::<CastErrors>().0,
-                vec![CastFail::local(EVISCERATE, reason)],
+                vec![CastFail::local(EVISCERATE, refusal)],
                 "class {class}"
             );
             assert!(rx.try_recv().is_err());
@@ -1440,7 +1426,7 @@ mod tests {
     }
 
     /// An item use runs the same in-flight rung: a double-click bails silently (`6e4d43`), a
-    /// different spell errors 0x61 (`6e4d97`), and nothing reaches the wire.
+    /// different spell errors SPELL_IN_PROGRESS (`6e4d97`), and nothing reaches the wire.
     #[test]
     fn a_double_clicked_item_never_ships_the_duplicate() {
         let (mut world, rx) = world();
@@ -1462,13 +1448,13 @@ mod tests {
         assert!(rx.try_recv().is_err());
         assert_eq!(
             world.resource::<CastErrors>().0,
-            vec![CastFail::local(MOUNT, 0x61)],
+            vec![CastFail::local(MOUNT, reason::SPELL_IN_PROGRESS)],
             "a different spell mid-cast is 6e4d97's \"Another action is in progress\""
         );
     }
 
-    /// The not-ready rung forks at `60952b`: an item refuses 0x28 "Item is not ready yet."
-    /// (`609549`), a spell 0x3c (`609616`).
+    /// The not-ready rung forks at `60952b`: an item refuses ITEM_NOT_READY "Item is not ready
+    /// yet." (`609549`), a spell NOT_READY (`609616`).
     #[test]
     fn the_not_ready_reason_forks_on_item_present() {
         let (mut world, rx) = world();
@@ -1478,18 +1464,15 @@ mod tests {
             category: 0,
             category_cooldown_ms: 0,
         };
-        world.resource_mut::<crate::app_core::cooldowns::Cooldowns>().start_item(
-            6948,
-            &use_spell,
-            None,
-            Instant::now(),
-        );
+        world
+            .resource_mut::<crate::app_core::cooldowns::Cooldowns>()
+            .start_item(6948, &use_spell, None, Instant::now());
 
         send(&mut world, HEARTHSTONE, HEARTH_COMMIT);
         assert!(rx.try_recv().is_err(), "an item on cooldown never sends");
         assert_eq!(
             world.resource::<CastErrors>().0,
-            vec![CastFail::local(HEARTHSTONE, 0x28)]
+            vec![CastFail::local(HEARTHSTONE, reason::ITEM_NOT_READY)]
         );
 
         // The record is keyed (use-spell, entry); a spell press queries (spell, 0) and passes.
@@ -1554,7 +1537,7 @@ mod tests {
         ));
     }
 
-    /// The power gate (`0x60962c`): an unaffordable spell refuses 0x4d locally; an item press
+    /// The power gate (`0x60962c`): an unaffordable spell refuses NO_POWER locally; an item press
     /// skips it.
     #[test]
     fn an_unaffordable_press_refuses_locally_and_items_skip_the_gate() {
@@ -1598,7 +1581,7 @@ mod tests {
         assert!(rx.try_recv().is_err(), "an unaffordable press never sends");
         assert_eq!(
             world.resource::<CastErrors>().0,
-            vec![CastFail::local(HEARTHSTONE, 0x4d)]
+            vec![CastFail::local(HEARTHSTONE, reason::NO_POWER)]
         );
 
         world.resource_mut::<CastErrors>().0.clear();
@@ -1622,7 +1605,7 @@ mod tests {
         assert!(world.resource::<CastErrors>().0.is_empty());
     }
 
-    /// TryCast's IsCasting refusal (`0x61`) precedes the not-ready rung.
+    /// TryCast's IsCasting refusal (SPELL_IN_PROGRESS) precedes the not-ready rung.
     #[test]
     fn in_flight_outranks_not_ready() {
         let (mut world, rx) = world();
@@ -1633,12 +1616,9 @@ mod tests {
             category: 0,
             category_cooldown_ms: 0,
         };
-        world.resource_mut::<crate::app_core::cooldowns::Cooldowns>().start_item(
-            0,
-            &use_spell,
-            None,
-            Instant::now(),
-        );
+        world
+            .resource_mut::<crate::app_core::cooldowns::Cooldowns>()
+            .start_item(0, &use_spell, None, Instant::now());
         // ...and a different cast in flight.
         send(&mut world, HEARTHSTONE, CastCommit::Spell);
         assert!(matches!(rx.try_recv(), Ok(ClientCommand::CastSpell { .. })));
@@ -1647,7 +1627,7 @@ mod tests {
         assert!(rx.try_recv().is_err());
         assert_eq!(
             world.resource::<CastErrors>().0,
-            vec![CastFail::local(MOUNT, 0x61)],
+            vec![CastFail::local(MOUNT, reason::SPELL_IN_PROGRESS)],
             "mid-cast outranks the cooldown rung (the reference's IsCasting precedes the validator)"
         );
     }
