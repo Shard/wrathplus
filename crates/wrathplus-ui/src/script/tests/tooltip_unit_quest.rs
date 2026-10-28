@@ -77,6 +77,28 @@ fn a_hovered_quest_creature_lists_its_quest_and_objective() {
         "the quest block is the last line: {shown:?}"
     );
 
+    // Both native tails share the builder: quest title/objectives precede master and looter,
+    // including a name-arrival refresh of an already visible tooltip.
+    s.run("MASTER_LOOTER = '[master]'; LOOT = '[loot]'")
+        .unwrap();
+    s.set_unit_looters(HashMap::from([(
+        kobold().guid,
+        (Some("Alice".into()), Some("Bob".into())),
+    )]));
+    let shown = lines(&s);
+    assert_eq!(shown[at + 1].0, " - Kobold Vermin slain: 3/10");
+    assert_eq!(shown[at + 2].0, "[master]: Alice");
+    assert_eq!(shown[at + 3].0, "[loot]: Bob");
+    assert_eq!(shown[at + 2].1, [1.0, 1.0, 1.0]);
+    s.run("SetCVar('showQuestTrackingTooltips', '0')").unwrap();
+    assert!(s.world_tooltip_unit("mouseover"));
+    let shown = lines(&s);
+    assert!(!shown.iter().any(|(t, _)| t == "Kobold Camp Cleanup"));
+    assert_eq!(shown[shown.len() - 2].0, "[master]: Alice");
+    assert_eq!(shown[shown.len() - 1].0, "[loot]: Bob");
+    s.run("SetCVar('showQuestTrackingTooltips', '1')").unwrap();
+    s.set_unit_looters(HashMap::new());
+
     // `SetUnit` reaches the same builder.
     s.run("GameTooltip:SetOwner(UIParent, 'ANCHOR_NONE'); GameTooltip:SetUnit('mouseover')")
         .unwrap();
