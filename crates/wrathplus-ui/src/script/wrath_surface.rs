@@ -196,6 +196,17 @@ fn install_trusted_secure_environment(lua: &Lua) -> mlua::Result<()> {
         function issecurevariable() return 1, nil end
         function forceinsecure() end
         function InCombatLockdown() return nil end
+        -- `scrub(...)` (`0x817bf0`): every argument, a table, function, userdata or thread as nil.
+        function scrub(...)
+            local n, values = select("#", ...), { ... }
+            for i = 1, n do
+                local kind = type(values[i])
+                if kind ~= "boolean" and kind ~= "number" and kind ~= "string" then
+                    values[i] = nil
+                end
+            end
+            return unpack(values, 1, n)
+        end
         function securecall(f, ...)
             if type(f) == "string" then f = _G[f] end
             if type(f) == "function" then return f(...) end
@@ -414,6 +425,21 @@ mod tests {
                  hooksecurefunc('Probe', function(a) calls = calls + 10 end) \
                  return issecure() and securecall(Probe, 3) == 6 and securecall('Probe', 1) == 2 \
                     and calls == 24"
+            )
+            .unwrap());
+    }
+
+    /// `scrub` keeps nil, booleans, numbers and strings and nils every other value in place, so
+    /// the count holds (`RestrictedExecution.lua:17` captures it at load).
+    #[test]
+    fn scrub_nils_reference_values_and_keeps_the_count() {
+        let script = UiScript::new().unwrap();
+        assert!(script
+            .eval::<bool>(
+                "local a, b, c, d, e, f, g, h = scrub(1, {}, 'x', print, true, newproxy(), false, nil) \
+                 return select('#', scrub(1, {}, 'x', print, true, newproxy(), false, nil)) == 8 \
+                    and a == 1 and b == nil and c == 'x' and d == nil and e == true \
+                    and f == nil and g == false and h == nil and select('#', scrub()) == 0"
             )
             .unwrap());
     }
