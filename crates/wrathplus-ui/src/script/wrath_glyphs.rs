@@ -142,6 +142,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
+    // GetNumGlyphSockets() (`0x5b71e0`) → the constant 6 (`0xa0b708`), whatever the level.
+    g.set("GetNumGlyphSockets", lua.create_function(|_, ()| Ok(6))?)?;
+
     g.set(
         "GlyphMatchesSocket",
         lua.create_function(|lua, args: MultiValue| {
@@ -336,6 +339,16 @@ mod tests {
             0
         );
         assert!(s.run("GetGlyphLink()").is_err());
+    }
+
+    #[test]
+    fn the_socket_count_is_the_constant_six() {
+        let s = UiScript::new().unwrap();
+        assert_eq!(
+            s.eval::<(i64, i64)>("return select('#', GetNumGlyphSockets()), GetNumGlyphSockets()")
+                .unwrap(),
+            (1, 6)
+        );
     }
 
     #[test]
