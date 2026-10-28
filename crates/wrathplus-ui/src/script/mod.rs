@@ -183,10 +183,12 @@ mod tooltip_item;
 mod tooltip_links;
 mod tooltip_spell;
 mod tooltip_unit;
+mod tooltip_unit_quest;
 mod ui_errors;
 #[cfg(test)]
 mod wrath_widget;
 pub use tooltip_unit::TooltipTint;
+pub use tooltip_unit_quest::{QuestRowLines, UnitQuestBlock};
 mod trade;
 mod tradeskill;
 mod trainer;

@@ -548,6 +548,7 @@ pub mod net {
             civilian,
             racial_leader,
             modifiers,
+            ..
         } = ev
         {
             creature_name(

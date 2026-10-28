@@ -102,6 +102,7 @@ pub mod ui_tradeskill;
 pub mod ui_trainer;
 pub mod ui_unit;
 pub mod ui_unit_popup;
+pub mod ui_unit_quest_tooltip;
 pub mod ui_vehicle;
 pub mod ui_world_map;
 

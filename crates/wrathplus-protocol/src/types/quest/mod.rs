@@ -11,7 +11,7 @@ pub use giver::{
     QUEST_PVP_KILL_COUNTER,
 };
 pub use log::{
-    quest_flags, QuestObjective,
+    quest_flags, CreatureQuestLinks, QuestObjective,
     QuestTemplate, QUEST_OBJECTIVES_COUNT, QUEST_REWARDS_COUNT, QUEST_REWARD_CHOICES_COUNT,
 };
 pub use share::{

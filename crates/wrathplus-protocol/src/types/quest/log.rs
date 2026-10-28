@@ -75,6 +75,15 @@ pub struct QuestTemplate {
     pub objectives: [QuestObjective; QUEST_OBJECTIVES_COUNT as usize],
 }
 
+/// A creature template's quest links (`SMSG_CREATURE_QUERY_RESPONSE`'s `KillCredit1/2` and
+/// `QuestItems[6]`): the unit tooltip's quest lines read them beside the entry itself (12340
+/// `0x621070`, creature cache `+0x1c` and `+0x40`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CreatureQuestLinks {
+    pub kill_credit: [u32; 2],
+    pub quest_items: [u32; 6],
+}
+
 // ── CMSG encoders ────────────────────────────────────────────────────────────────────────────────
 
 // ── SMSG parsers ─────────────────────────────────────────────────────────────────────────────────

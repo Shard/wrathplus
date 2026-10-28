@@ -164,7 +164,7 @@ pub use progression::{
 pub use pvp::{InspectHonorStats, PvpCredit};
 pub use quest::{
     dialog_status, quest_confirm_accept, quest_flags, quest_push_result,
-    QuestComplete, QuestConfirmAccept, QuestDetails,
+    CreatureQuestLinks, QuestComplete, QuestConfirmAccept, QuestDetails,
     QuestGiverList, QuestListEntry, QuestObjective, QuestOfferReward, QuestPushResult,
     QuestRequestItems, QuestRequiredItem, QuestRewardItem, QuestShareMsg, QuestTemplate,
     WrathQuestInfo, QUEST_EMOTE_COUNT, QUEST_OBJECTIVES_COUNT, QUEST_PVP_KILL_COUNTER,

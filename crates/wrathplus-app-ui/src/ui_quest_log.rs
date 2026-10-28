@@ -47,6 +47,8 @@ struct Row {
 #[derive(Resource, Default)]
 pub struct QuestLog {
     templates: QueryCache<u32, QuestTemplate>,
+    /// All cached quest rows, including folded rows, for the creature tooltip (`0x621f30`).
+    pub(crate) tooltip_rows: Vec<wrathplus_ui::script::QuestRowLines>,
     row_slots: Vec<(u32, u8)>,
     /// The collapsed headers, by title.
     collapsed: HashSet<String>,
@@ -90,6 +92,7 @@ impl QuestLog {
     /// Disconnect: drops everything, the templates included.
     pub(crate) fn clear_session(&mut self) {
         self.templates.clear();
+        self.tooltip_rows.clear();
         self.row_slots.clear();
         self.collapsed.clear();
         self.header_keys.clear();
@@ -135,6 +138,7 @@ pub struct UiQuestLogPlugin;
 impl Plugin for UiQuestLogPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        crate::ui_unit_quest_tooltip::register(app);
         crate::query_cache::register::<QuestLog>(app);
         app.init_resource::<QuestLog>()
             .add_systems(
@@ -720,6 +724,7 @@ pub(crate) fn feed_quest_log(
     // Quests under a collapsed header: out of the visible list, still in the log, and counted by
     // the watch prune, as the reference's scans the whole row array (`0x4de7a7`-`0x4de80f`).
     let mut hidden_quest_ids: Vec<u32> = Vec::new();
+    let mut tooltip_rows = Vec::new();
     for (_, name, row_idxs) in &groups {
         let collapsed = quest_log.collapsed.contains(name);
         entries.push(QuestLogEntryView {
@@ -739,10 +744,6 @@ pub(crate) fn feed_quest_log(
         header_keys.push(Some(name.clone()));
         for &ri in row_idxs {
             let r = &rows[ri];
-            if collapsed {
-                hidden_quest_ids.push(r.quest_id);
-                continue;
-            }
             let (title, level, tag, pushable, objectives, detail) =
                 match quest_log.template(r.quest_id, &commands) {
                     Some(t) => (
@@ -800,6 +801,19 @@ pub(crate) fn feed_quest_log(
             } else {
                 0
             };
+            tooltip_rows.push((
+                r.quest_id,
+                title.clone(),
+                complete == 1,
+                objectives
+                    .iter()
+                    .map(|o| (o.poi_bit, o.text.clone()))
+                    .collect(),
+            ));
+            if collapsed {
+                hidden_quest_ids.push(r.quest_id);
+                continue;
+            }
             entries.push(QuestLogEntryView {
                 suggested_group: quest_log
                     .template(r.quest_id, &commands)
@@ -834,6 +848,7 @@ pub(crate) fn feed_quest_log(
     // Every cached row, folded or not: the table `AbandonQuest` searches.
     quest_log.row_slots = rows.iter().map(|r| (r.quest_id, r.slot)).collect();
     quest_log.header_keys = header_keys;
+    quest_log.tooltip_rows = tooltip_rows;
 
     // Build 12340's quest reputation rewards (`0x58d050`): each quest's staged list, which
     // `ProcessQuestLogRewardFactions` stages for the selected quest.
@@ -842,7 +857,10 @@ pub(crate) fn feed_quest_log(
         factions.as_deref(),
     ) {
         let catalog = factions.catalog();
-        let (race, class) = (store.0.unit_race().unwrap_or(0), store.0.unit_class().unwrap_or(0));
+        let (race, class) = (
+            store.0.unit_race().unwrap_or(0),
+            store.0.unit_class().unwrap_or(0),
+        );
         let standing = |f: u32| {
             catalog.faction(f).map_or(0, |info| {
                 let wire = usize::try_from(info.rep_index)
@@ -874,7 +892,11 @@ pub(crate) fn feed_quest_log(
         rows.iter()
             .filter_map(|r| {
                 let t = quest_log.templates.get(r.quest_id)?;
-                let drops = t.wrath.as_ref().map(|w| w.item_drops.to_vec()).unwrap_or_default();
+                let drops = t
+                    .wrath
+                    .as_ref()
+                    .map(|w| w.item_drops.to_vec())
+                    .unwrap_or_default();
                 Some((r.quest_id, (t.src_item_id, drops)))
             })
             .collect(),
@@ -1797,11 +1819,13 @@ mod tests {
             SelfPlayer,
         ));
         app.insert_non_send_resource(UiScript::new().unwrap());
+        app.init_resource::<crate::ui_unit_quest_tooltip::CreatureQuestLinksCache>();
         app.add_systems(
             Update,
             (
                 drain_quest_log_collapses,
                 feed_quest_log,
+                crate::ui_unit_quest_tooltip::publish,
                 drain_quest_log_abandons,
             )
                 .chain(),
@@ -1814,6 +1838,7 @@ mod tests {
         };
 
         app.update();
+        assert_eq!(app.world().resource::<QuestLog>().tooltip_rows.len(), 3);
         run(&mut app, "SelectQuestLogEntry(4); SetAbandonQuest()");
         assert_eq!(
             app.world()
@@ -1825,6 +1850,8 @@ mod tests {
         // With the popup up, fold Z1: B moves to row 3 and C takes row 4.
         run(&mut app, "CollapseQuestHeader(1)");
         app.update();
+        assert_eq!(app.world().resource::<QuestLog>().tooltip_rows.len(), 3,
+            "folding a header must not hide its quest from the creature tooltip");
         run(&mut app, "AbandonQuest()");
         app.update();
 

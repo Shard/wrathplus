@@ -212,32 +212,31 @@ fn creature_query(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
             civilian: false,
             racial_leader: false,
             modifiers: None,
+            quest_links: Default::default(),
         }])
     };
     if raw & 0x8000_0000 != 0 {
         return unknown(r);
     }
     let name = cstring(r)?;
-    for _ in 0..3 {
-        cstring(r)?;
-    }
+    (0..3).try_for_each(|_| cstring(r).map(drop))?;
     let subname = cstring(r)?;
     let _icon = cstring(r)?;
     let type_flags = u32_le(r)?;
     let creature_type = u32_le(r)?;
     let pet_family = u32_le(r)?;
     let rank = u32_le(r)?;
-    let _kill_credit = (u32_le(r)?, u32_le(r)?);
+    let kill_credit = [u32_le(r)?, u32_le(r)?];
     let display_id = u32_le(r)?;
-    for _ in 0..3 {
-        u32_le(r)?;
-    }
+    (0..3).try_for_each(|_| u32_le(r).map(drop))?;
     let modifiers = [u32_le(r)?, u32_le(r)?];
     let racial_leader = u8_le(r)? != 0;
-    // `MAX_CREATURE_QUEST_ITEMS` quest drops and the `CreatureMovementInfo` id, unread here.
-    for _ in 0..7 {
-        u32_le(r)?;
-    }
+    // `MAX_CREATURE_QUEST_ITEMS` quest drops, then the unread `CreatureMovementInfo` id.
+    let mut quest_items = [0; 6];
+    quest_items
+        .iter_mut()
+        .try_for_each(|q| u32_le(r).map(|v| *q = v))?;
+    u32_le(r)?;
     strict(r, r.get_ref(), "CREATURE_QUERY_RESPONSE")?;
     Ok(vec![SessionEvent::CreatureName {
         entry,
@@ -253,6 +252,10 @@ fn creature_query(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
         civilian: false,
         racial_leader,
         modifiers: Some(modifiers),
+        quest_links: crate::types::CreatureQuestLinks {
+            kill_credit,
+            quest_items,
+        },
     }])
 }
 
@@ -850,14 +853,14 @@ mod tests {
             b.extend(text.as_bytes());
             b.push(0);
         }
-        for v in [0x10u32, 7, 0, 1, 0, 0, 3140, 0, 0, 0] {
+        for v in [0x10u32, 7, 0, 1, 6, 9, 3140, 0, 0, 0] {
             b.extend(v.to_le_bytes());
         }
         b.extend(1.0f32.to_le_bytes());
         b.extend(1.0f32.to_le_bytes());
         b.push(0);
         let short = b.clone();
-        for v in [0u32; 6].iter().chain(&[100]) {
+        for v in [1307u32, 750, 42, 43, 44, 45].iter().chain(&[100]) {
             b.extend(v.to_le_bytes());
         }
         let events = decode(SMSG_CREATURE_QUERY_RESPONSE, &b, None).unwrap();
@@ -868,22 +871,36 @@ mod tests {
             creature_type: Some(7),
             rank: 1,
             display_id: 3140,
+            quest_links,
             ..
         }] = &events[..]
         else {
             panic!("one creature: {events:?}")
         };
         assert_eq!(name, "Kobold Vermin");
+        assert_eq!(quest_links.kill_credit, [6, 9]);
+        assert_eq!(quest_links.quest_items, [1307, 750, 42, 43, 44, 45]);
+        for n in 0..b.len() {
+            assert!(
+                decode(SMSG_CREATURE_QUERY_RESPONSE, &b[..n], None).is_err(),
+                "prefix {n}"
+            );
+        }
         assert!(
             decode(SMSG_CREATURE_QUERY_RESPONSE, &short, None).is_err(),
             "the quest items and movement id are part of the body"
         );
         assert!(decode(SMSG_CREATURE_QUERY_RESPONSE, &[&b[..], &[0]].concat(), None).is_err());
-        let gone = decode(SMSG_CREATURE_QUERY_RESPONSE, &(3100u32 | 0x8000_0000).to_le_bytes(), None)
-            .unwrap();
+        let gone = decode(
+            SMSG_CREATURE_QUERY_RESPONSE,
+            &(3100u32 | 0x8000_0000).to_le_bytes(),
+            None,
+        )
+        .unwrap();
         assert!(matches!(
             &gone[..],
-            [SessionEvent::CreatureName { entry: 3100, name: None, .. }]
+            [SessionEvent::CreatureName { entry: 3100, name: None, quest_links, .. }]
+                if *quest_links == crate::types::CreatureQuestLinks::default()
         ));
     }
 }

@@ -431,6 +431,8 @@ pub enum SessionEvent {
         racial_leader: bool,
         /// Wrath's HealthModifier/PowerModifier as f32 bits ([`crate::types::CreatureQueryInfo`]).
         modifiers: Option<[u32; 2]>,
+        /// Build-12340 KillCredit1/2 and QuestItems[6] (AC QueryHandler.cpp).
+        quest_links: crate::types::CreatureQuestLinks,
     },
     /// `SMSG_GAMEOBJECT_QUERY_RESPONSE`, keyed by template `entry`; `data` is the type-specific
     /// raw tail. An unknown entry still fires, every field zero or empty.

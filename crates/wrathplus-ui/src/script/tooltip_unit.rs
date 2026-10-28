@@ -167,6 +167,7 @@ fn render_unit_view(lua: &Lua, this: &Table, unit: Option<UnitState>) -> mlua::R
     if u.racial_leader && u.pvp {
         append_line(lua, this, ("Leader".into(), WHITE), None, false)?;
     }
+    super::tooltip_unit_quest::append(lua, this, u.guid)?;
     // An unresolved guid (0) is no subject: nothing can push for it.
     set_subject(lua, h, Some(u.guid).filter(|&g| g != 0));
     update_bar(lua, h, Some(&u));
