@@ -163,3 +163,91 @@ fn typed_lines_reach_the_wire_per_chat_type() {
         );
     }
 }
+
+/// AC UpdateLocalChannels joins the replacement before silently removing the old channel.
+/// Exercise the receive feed, VM roster, stock `/1`, drain and 12340 packet, not a direct send.
+#[test]
+fn general_zone_handoffs_keep_typed_channel_one_after_reload() {
+    use super::{feed::ChatLogFeed, native_roster::NativeChannelNotices};
+    use wrathplus_protocol::{
+        types::{channel_notice, ChannelNoticeTail},
+        wrath_channel::decode_notify,
+    };
+    wrathplus_formats::wow_data_or_skip!();
+    let (mut world, rx) = world(chat_vm());
+    world.init_resource::<super::frames::ChatWindows>();
+    world.init_resource::<super::native_membership::NativeMembership>();
+    world.init_resource::<NativeChannelNotices>();
+    world.init_resource::<crate::names::NameCache>();
+    world.init_resource::<crate::chat_bubble::BubbleQueue>();
+    world.init_resource::<crate::chat_bubble::BubbleConfig>();
+    world.init_resource::<crate::creature_anim::GestureQueue>();
+    world.init_resource::<crate::app_core::session::SelfGuid>();
+    world.init_resource::<crate::net::GuidIndex>();
+    world.init_resource::<crate::app_core::state::WorldStates>();
+    world.init_resource::<super::language::ChatLanguages>();
+    world.init_resource::<crate::items::Items>();
+    world.init_resource::<crate::text_filter::TextFilter>();
+    world.init_resource::<crate::text_filter::TextFilterSwitches>();
+    // More replacements than the ten-slot limit, with no old-name YOU_LEFT (the server's path).
+    for zone in [
+        "Ironforge",
+        "Deeprun Tram",
+        "Stormwind City",
+        "Elwynn Forest",
+        "Burning Steppes",
+        "Searing Gorge",
+        "Dun Morogh",
+        "Ironforge",
+        "Dun Morogh",
+        "Ironforge",
+        "Dun Morogh",
+    ] {
+        let name = format!("General - {zone}");
+        world.resource_mut::<super::ChatLog>().push_channel_notice(
+            channel_notice::YOU_JOINED,
+            name.clone(),
+            &ChannelNoticeTail::YouJoined { flags: 24 },
+        );
+        let mut packet = vec![2];
+        packet.extend(name.bytes().chain([0]));
+        packet.push(24);
+        packet.extend(1_u32.to_le_bytes());
+        packet.extend(0_u32.to_le_bytes());
+        world
+            .resource_mut::<NativeChannelNotices>()
+            .0
+            .push_back(decode_notify(&packet).unwrap());
+        world.run_system_once(super::feed::feed_chat).unwrap();
+        let slot: i64 = world
+            .non_send_resource::<UiScript>()
+            .eval(&format!("return GetChannelName('{name}')"))
+            .unwrap();
+        assert_eq!(slot, 1, "{zone}: replacement must preserve /1");
+        type_line(&mut world, "/1 hello");
+        world
+            .run_system_once(super::input::drain_addon_chat_sends)
+            .unwrap();
+        let sent: Vec<_> = rx.try_iter().collect();
+        assert_eq!(sent.len(), 1, "{zone}: {sent:?}");
+        assert_eq!(wire(&sent[0]), ac_bytes(0x11, 1, Some(&name), "hello"));
+        assert_eq!(
+            world.resource::<super::edit::ChannelState>().joined.len(),
+            1
+        );
+    }
+    world.insert_non_send_resource(chat_vm());
+    world
+        .run_system_once(super::channels::seed_channels)
+        .unwrap();
+    type_line(&mut world, "/1 reloaded");
+    world
+        .run_system_once(super::input::drain_addon_chat_sends)
+        .unwrap();
+    let sent: Vec<_> = rx.try_iter().collect();
+    assert_eq!(sent.len(), 1, "reload: {sent:?}");
+    assert_eq!(
+        wire(&sent[0]),
+        ac_bytes(0x11, 1, Some("General - Dun Morogh"), "reloaded")
+    );
+}
