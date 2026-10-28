@@ -1,12 +1,13 @@
 <div align="center">
-  <h1>benilla (AzerothBench fork)</h1>
+  <h1>WrathPlus</h1>
   <p><b>A World of Warcraft 3.3.5a (build 12340) client, written from scratch in Rust and <a href="https://bevy.org">Bevy</a></b></p>
 </div>
 
-This fork ports [benilla](https://github.com/samwhosung/benilla), a from-scratch 1.12.1 client,
-to Wrath of the Lich King 3.3.5a against an AzerothCore server. The 1.12 client paths are being
-removed ([`docs/VANILLA-REMOVAL-PLAN.md`](docs/VANILLA-REMOVAL-PLAN.md)); the product is renamed
-`wrathplus` in one scheduled step ([`docs/WRATHPLUS-RENAME-PLAN.md`](docs/WRATHPLUS-RENAME-PLAN.md)).
+[WrathPlus](https://github.com/artivus-labs/wrathplus) is the AzerothBench fork of
+[benilla](https://github.com/samwhosung/benilla), porting its from-scratch 1.12.1 client to
+Wrath of the Lich King 3.3.5a against an AzerothCore server. The launcher and workspace crates
+use the `wrathplus` name; remaining 1.12 client paths are being removed
+([`docs/VANILLA-REMOVAL-PLAN.md`](docs/VANILLA-REMOVAL-PLAN.md)).
 Every file format, the network protocol and the interface engine are written from scratch, with
 no original client code and no bundled game assets. The fork's scope and its evaluation contract
 are in [`docs/AZEROTHBENCH.md`](docs/AZEROTHBENCH.md).
@@ -40,14 +41,66 @@ The format readers and the UI engine core are plain Rust with no Bevy in them, a
 renderer runs with no game attached. [`docs/MAP.md`](docs/MAP.md) maps every crate and subsystem,
 generated from the code.
 
+## Server requirements and modules
+
+WrathPlus is a client, not a server distribution. Run a separate **AzerothCore WotLK / 3.3.5a
+(build 12340)** realm; other expansions and server implementations are not qualified here.
+Follow the [AzerothCore installation guide](https://www.azerothcore.org/wiki/installation) for
+its platform dependencies, database initialization and updates, and extraction of the server's
+DBC, maps, vmaps and mmaps from your own compatible install. Those files and databases are not
+included in this repository.
+
+For a basic connection you need:
+
+- Running `authserver` and `worldserver` processes with their database connections configured.
+- An auth endpoint reachable by the client (normally TCP **3724**) and the realm's advertised
+  world endpoint reachable too (normally TCP **8085**). Setting `--server` selects auth; it
+  does not override an incorrect address in the server's realm list.
+- A regular player account created on that realm. No GM privileges, bot account or LLM API key
+  is needed for ordinary play. Keep account passwords, database credentials and API keys out of
+  this repository.
+
+### Playerbots development realm
+
+Our development realm uses the **[`Playerbot` branch of mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk/tree/Playerbot)**
+with **[mod-playerbots](https://github.com/mod-playerbots/mod-playerbots)**. The module requires
+that server fork; do not add it to stock AzerothCore and expect it to build. Follow the module's
+installation guide for a mutually compatible server/module pair and its additional database
+and configuration setup. The local source revisions used for this setup are core
+`7f12e89ee5f467a50e62eba1d525eac7dc953d03` and mod-playerbots
+`7bae1b5c58c76a0aa20381155edc08096d1485b2`; these identify the development sources, not a promise
+that arbitrary newer module combinations work.
+
+The realm's generated module loader includes the following modules. They are **server-side
+additions, not mandatory WrathPlus client dependencies**:
+
+| Module | Purpose and local configuration |
+| --- | --- |
+| [mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) | Player-like companions and world population; enabled with `AiPlayerbot.Enabled = 1`. |
+| [mod-ah-bot](https://github.com/azerothcore/mod-ah-bot) | Auction-house population; seller enabled, buyer disabled in our configuration. |
+| [mod-guildhouse](https://github.com/azerothcore/mod-guildhouse) | Phased guild housing and its NPC services. |
+| [mod-player-bot-guildhouse](https://github.com/DustinHendrickson/mod-player-bot-guildhouse) | Connects Playerbots to guild housing; compiled in, but **disabled** locally (`PlayerbotGuildhouse.Enable = false`). Requires mod-playerbots and mod-guildhouse. |
+| [mod-llm-chatter](https://github.com/Hokken/mod-llm-chatter) | LLM-backed bot dialogue; enabled locally. Requires Playerbots plus a separately configured model service; not needed for client login or normal gameplay. |
+| [mod-multibot-bridge](https://github.com/Wishmaster117/mod-multibot-bridge) | Structured addon-message bridge for [MultiBot-Chatless](https://github.com/Wishmaster117/MultiBot-Chatless). Its UI is a separate client addon, not supplied by the server module or bundled with WrathPlus. |
+
+To reproduce this realm, place compatible module checkouts under the server's `modules/`
+directory, rerun CMake, rebuild/install the server, apply each module's documented SQL updates
+to the appropriate databases, and configure its installed `.conf` files. Back up existing
+databases before updates. Follow each module's own dependency and configuration instructions;
+simply copying a configuration file does not install its schema or scripts. LLM Chatter and
+MultiBot's presence on the realm does not establish complete addon compatibility in WrathPlus.
+The client still has work in progress; see the coverage and bug documents above.
+
 ## Running it
 
 You need:
 
 - **A 3.3.5a client (build 12340)** for the game data. The client only reads it. `enUS` is the
   default locale; `WOW_LOCALE` selects another.
-- **An AzerothCore 3.3.5a server**, on the stock auth port by default.
-- **Stable Rust and a C compiler**, because the client's Lua is built from source: on macOS the
+- **An AzerothCore 3.3.5a server**, with auth/world services, initialized databases, extracted
+  server data and a player account. See [Server requirements and modules](#server-requirements-and-modules).
+- **Rust 1.98.1** (pinned in `rust-toolchain.toml`, installed by rustup) **and a C compiler**,
+  because the client's Lua is built from source: on macOS the
   Xcode command line tools, on Linux the ALSA and udev development packages and pkg-config, on
   Windows the MSVC build tools that the Rust installer sets up.
 
