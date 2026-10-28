@@ -123,10 +123,16 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
             function methods.IgnoreDepth() end
             local attributes = setmetatable({}, { __mode = "k" })
             local clamp = setmetatable({}, { __mode = "k" })
+            local lower = string.lower
+            -- One store per frame object (`+0x1cc`), by its `[0]`; names fold case (`0x55f4d0`).
+            local function key_of(self) return rawget(self, 0) or self end
             function methods.SetAttribute(self, name, value)
-                local own = attributes[self]
-                if not own then own = {} attributes[self] = own end
+                local key = key_of(self)
+                local own = attributes[key]
+                if not own then own = {} attributes[key] = own end
+                name = lower(name)
                 own[name] = value
+                -- `OnAttributeChanged` gets the name lowercased (`0x48ec10`).
                 local handler = self:GetScript("OnAttributeChanged")
                 if handler then handler(self, name, value) end
             end
@@ -134,10 +140,10 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
             -- (`SecureButton_GetModifiedAttribute`): `prefix..name..suffix`, then each side
             -- wildcarded with "*", then the bare name.
             function methods.GetAttribute(self, prefix, name, suffix)
-                local own = attributes[self]
+                local own = attributes[key_of(self)]
                 if not own then return nil end
-                if name == nil then return own[prefix] end
-                prefix, suffix = prefix or "", suffix or ""
+                if name == nil then return own[lower(prefix)] end
+                prefix, name, suffix = lower(prefix or ""), lower(name), lower(suffix or "")
                 local value = own[prefix .. name .. suffix]
                 if value == nil then value = own["*" .. name .. suffix] end
                 if value == nil then value = own[prefix .. name .. "*"] end
@@ -435,6 +441,25 @@ mod tests {
                  local other = CreateFrame('Frame') \
                  return Unitish:GetAttribute('unit') == 'target' and SEEN == 'unit=target' \
                     and other:GetAttribute('unit') == nil and Unitish:IsProtected() == nil"
+            )
+            .unwrap());
+    }
+
+    /// Names fold case and `OnAttributeChanged` hears them lowercased, and the store is the
+    /// frame's, so `RestrictedFrames.lua:95`'s stand-in sharing its `[0]` reaches it.
+    #[test]
+    fn attributes_fold_case_and_belong_to_the_frame_not_its_table() {
+        let script = UiScript::new().unwrap();
+        assert!(script
+            .eval::<bool>(
+                "local f, seen = CreateFrame('Frame') \
+                 f:SetScript('OnAttributeChanged', function(_, name) seen = name end) \
+                 f:SetAttribute('FooBar', 1) \
+                 local stand_in = setmetatable({ [0] = f[0], [1] = f }, getmetatable(f)) \
+                 stand_in:SetAttribute('Shift-Type1', 'spell') \
+                 return seen == 'shift-type1' and f:GetAttribute('foobar') == 1 \
+                    and stand_in:GetAttribute('FOOBAR') == 1 \
+                    and f:GetAttribute('SHIFT-', 'type', '1') == 'spell'"
             )
             .unwrap());
     }
