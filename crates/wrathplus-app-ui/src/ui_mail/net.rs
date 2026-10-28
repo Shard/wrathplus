@@ -1,9 +1,9 @@
 //! The mailbox's packet handlers: they fill [`MailOpen`] and [`MailPending`] and send the wire
 //! re-syncs; the events fire from [`super::feed_mail`].
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{mail_action, mail_error, mail_message_type, MailListEntry};
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::{mail_refusal, send_supported, MailOpen, MailPending, MailSendAck};
 use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
@@ -17,7 +17,21 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::MailItemText, on_mail_item_text)
         .net_handler(K::ReceivedMail, on_received_mail)
         .net_handler(K::NextMailTime, on_next_mail_time)
+        .net_handler(K::WrathMailMutation, on_show_mailbox)
         .net_handler(K::Disconnected, on_session_end);
+}
+
+/// `SMSG_SHOW_MAILBOX`, which AzerothCore sends for the mailbox pet (`pet_generic.cpp:319`) and
+/// `.mailbox`: 12340's `0x56dbc0` stores the guid as the mailbox (`[0xbeb030]`), lists, and fires
+/// `MAIL_SHOW` (event `0x192`), a mailbox right-click's open.
+fn on_show_mailbox(In(ev): In<SessionEvent>, mut mail: ResMut<MailOpen>) {
+    use wrathplus_protocol::wrath_mail_mutations::Packet;
+    if let SessionEvent::WrathMailMutation {
+        packet: Packet::ShowMailbox { mailbox },
+    } = ev
+    {
+        mail.click(mailbox);
+    }
 }
 
 fn on_mail_list(In(ev): In<SessionEvent>, mut mail: ResMut<MailOpen>) {
@@ -256,5 +270,26 @@ mod tests {
         assert!(!app.world().resource::<MailPending>().has_new_mail());
         assert_eq!(app.world().resource::<MailOpen>().mailbox, None);
         assert!(app.world().resource::<MailOpen>().wrath_inbox.is_none());
+    }
+
+    /// The server's open lands as a right-click on the object would: the mailbox, then the feed's
+    /// `MAIL_SHOW` and list.
+    #[test]
+    fn show_mailbox_opens_the_mail_window_at_the_guid() {
+        const PENGU: u64 = 0xF130_0070_2A00_0042;
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let mut app = App::new();
+        app.init_resource::<MailOpen>()
+            .init_resource::<MailPending>()
+            .init_resource::<EquipErrors>()
+            .insert_resource(NetCommands(tx));
+        register(&mut app);
+        let show = |guid| SessionEvent::WrathMailMutation {
+            packet: wrathplus_protocol::wrath_mail_mutations::Packet::ShowMailbox { mailbox: guid },
+        };
+        crate::net::handlers::dispatch(app.world_mut(), vec![show(PENGU)]);
+        let mail = app.world().resource::<MailOpen>();
+        assert_eq!(mail.mailbox, Some(PENGU));
+        assert!(mail.show_requested, "MAIL_SHOW owed");
     }
 }

@@ -1,6 +1,6 @@
 //! The mail feed: the app half of [`wrathplus_ui::script`]'s `mail` module.
 //!
-//! The mailbox window is client-side, with no `SMSG_SHOW_MAILBOX`: a mailbox right-click opens the
+//! The mailbox window opens locally on a right-click or from `SMSG_SHOW_MAILBOX`. A click opens the
 //! session and sends nothing (the MAILBOX use handler `0x5f6820` opens locally, never
 //! `CMSG_GAMEOBJ_USE`), and the window's `MAIL_SHOW` handler calls `CheckInbox()`, the first
 //! `CMSG_GET_MAIL_LIST` (`MailFrame.lua:42`).
@@ -10,20 +10,20 @@
 //! the icon because opening a letter arms a deferred refresh (`[0xb6efcc]`) and the mailbox close
 //! re-asks the server.
 
-use wrathplus_protocol::types::mail_error;
 use bevy::prelude::*;
+use wrathplus_protocol::types::mail_error;
 
 use wrathplus_ui::script::{MailInboxRow, ScriptValue, StationeryView, UiScript};
 
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
+use crate::app_core::session::EnteredWorldMessage;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, NetCommands, Objects};
-use crate::app_core::session::EnteredWorldMessage;
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
 mod net;
@@ -88,7 +88,9 @@ impl Plugin for UiMailPlugin {
                     // Range-close, feed, then drain after input, so each edge lands the same
                     // frame; the feed runs after `UnitFeed` so `SetInboxItem` reads the template.
                     close_npc_session_out_of_range::<MailOpen>.before(feed_mail),
-                    feed_mail.after(crate::app_core::schedule::UnitFeed).in_set(UiFeed),
+                    feed_mail
+                        .after(crate::app_core::schedule::UnitFeed)
+                        .in_set(UiFeed),
                     drain_mail.after(UiInput),
                     send_query_next_mail_time_on_enter,
                 ),
@@ -258,7 +260,8 @@ fn stationeries(
 /// The feed's remaining parameters, bundled under Bevy's 16-parameter limit.
 #[derive(bevy::ecs::system::SystemParam)]
 struct MailFeedExtras<'w, 's> {
-    wrath_snapshot: Local<'s, crate::app_core::vm_memo::VmMemo<Option<wrathplus_ui::script::WrathMailInbox>>>,
+    wrath_snapshot:
+        Local<'s, crate::app_core::vm_memo::VmMemo<Option<wrathplus_ui::script::WrathMailInbox>>>,
     props: Option<Res<'w, crate::items::RandomProperties>>,
     enchants: Option<Res<'w, crate::items::Enchants>>,
     sink: crate::ui_action::MessageSink<'w>,
@@ -313,7 +316,10 @@ fn feed_mail(
     mut last_mailbox: Local<crate::app_core::vm_memo::VmMemo<Option<u64>>>,
     mut last_has_new_mail: Local<crate::app_core::vm_memo::VmMemo<bool>>,
     // The local player, the letter body's `$`-macro subject.
-    self_q: Query<(&crate::app_core::session::ObjectStore, &crate::net::Guid), With<crate::app_core::session::SelfPlayer>>,
+    self_q: Query<
+        (&crate::app_core::session::ObjectStore, &crate::net::Guid),
+        With<crate::app_core::session::SelfPlayer>,
+    >,
     extras: MailFeedExtras,
 ) {
     let Some(mut script) = script else {
@@ -787,3 +793,6 @@ mod latest_senders_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod open_tests;
