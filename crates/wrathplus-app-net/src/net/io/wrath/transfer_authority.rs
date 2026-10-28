@@ -204,6 +204,84 @@ mod tests {
     }
 
     #[test]
+    fn transport_post_ack_self_create_restores_full_passenger_pose_and_order_ack() {
+        use wrathplus_protocol::wrath_gameplay::{MovementInfo, Position, TransportInfo};
+        let shared = Arc::new(MovementAuthority::default());
+        let authority = shared.install(4, 7);
+        self_create(&authority);
+        authority
+            .observe_transfer(&Packet::Pending {
+                map_id: 0,
+                transport: Some(wrathplus_protocol::wrath_transfer::Transport {
+                    entry: 176081,
+                    source_map: 369,
+                }),
+            })
+            .unwrap();
+        let token = authority.observe_transfer(&port()).unwrap().unwrap();
+        let movement = MovementPosition::Living(MovementInfo {
+            flags: wrath_ground::MOVE_ON_TRANSPORT,
+            flags2: 0,
+            timestamp: 1,
+            position: Position {
+                x: -4838.95,
+                y: -1318.46,
+                z: 501.868,
+                orientation: 1.42372,
+            },
+            transport: Some(TransportInfo {
+                guid: 0x1FC0_0000_0000_0042,
+                position: Position {
+                    x: 0.3486,
+                    y: -2.3648,
+                    z: -10.4624,
+                    orientation: 2.30331,
+                },
+                time: 1,
+                seat: -1,
+                time2: None,
+            }),
+            pitch: None,
+            fall_time: 0,
+            jump: None,
+            spline_elevation: None,
+        });
+        authority.observe_self_create(7, &movement).unwrap();
+        assert!(shared.state.lock().unwrap().ground_pose.is_none());
+        authority.send_worldport_ack(token, || Ok(())).unwrap();
+        let order = UnsetCanFlyOrder {
+            mover_guid: 7,
+            counter: 1,
+        };
+        authority.raise_unset_barrier(order).unwrap();
+        assert_eq!(
+            authority
+                .send_unset_ack(order, 2, |_| panic!("no fresh pose"))
+                .unwrap(),
+            UnsetAckResult::PendingSelfPose
+        );
+        authority.observe_self_create(7, &movement).unwrap();
+        let mut ack = Vec::new();
+        assert_eq!(
+            authority
+                .send_unset_ack(order, 2, |body| {
+                    ack = body.to_vec();
+                    Ok(())
+                })
+                .unwrap(),
+            UnsetAckResult::Sent
+        );
+        assert!(!ack.is_empty());
+        assert!(authority.with_movement_send(|| ()).is_some());
+        let pose = shared.state.lock().unwrap().ground_pose.unwrap();
+        assert_eq!(pose.position, [-4838.95, -1318.46, 501.868]);
+        assert_eq!(
+            pose.transport.unwrap().position,
+            [0.3486, -2.3648, -10.4624]
+        );
+    }
+
+    #[test]
     fn double_new_world_rejects_delayed_ack_and_consumes_current_once() {
         let shared = Arc::new(MovementAuthority {
             state: Mutex::new(Default::default()),

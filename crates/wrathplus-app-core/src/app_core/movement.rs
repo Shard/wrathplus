@@ -216,8 +216,8 @@ pub struct ElevatorSeed {
     pub base_pos: [f32; 3],
     /// Spawn facing (WoW radians), the car's constant heading.
     pub yaw: f32,
-    /// `GAMEOBJECT_ROTATION`, the spawn quaternion the keyframe offsets rotate through; `None`
-    /// falls back to the pure-yaw quat, which is what spawn rows encode.
+    /// `GAMEOBJECT_PARENTROTATION`, the path quaternion, NOT the movement block's model
+    /// rotation. `None` falls back to pure yaw for legacy seeds without descriptor data.
     pub quat: Option<[f32; 4]>,
 }
 

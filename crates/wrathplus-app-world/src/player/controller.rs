@@ -104,6 +104,8 @@ pub(super) fn control(
         wrathplus_world::world_point::WorldPoint,
         TransportQuery,
         Query<&ChildOf>,
+        Query<&crate::app_core::movement::TransportRider>,
+        Res<crate::net::GuidIndex>,
     ),
 ) {
     let (world, transports, child_of) = (&world_q.0, &world_q.1, &world_q.2);
@@ -317,6 +319,10 @@ pub(super) fn control(
         body.single()
             .ok()
             .map(|(_, t, ..)| (t.translation, server_ride::yaw_of(t.rotation))),
+        body.single()
+            .ok()
+            .and_then(|(entity, ..)| world_q.3.get(entity).ok()),
+        &world_q.4,
     );
 
     let flat = |v: Vec3| Vec3::new(v.x, 0.0, v.z).normalize_or_zero();
@@ -328,14 +334,9 @@ pub(super) fn control(
     let wrath_limit = movement_net::wrath_ground_limit(&player, wrath_surface);
 
     if player.active && !player.detached {
-        // Not driving, while the camera stays on the body and input, physics and the stream yield:
-        // - `server_riding`: a server spline (Charge, knockback, taxi, a flee path) owns the body;
-        //   `drive_self_ride` has mirrored it into `Player`, reporting FORWARD on purpose.
-        // - `control_lost`: someone else, or fear, drives our body. The server neither roots nor
-        //   validates the victim, so this gate is the immobility.
-        // - `reseat`: the mover guid is changing and the claimed unit has not streamed in; moves
-        //   carry no guid, so driving would write one body's pose onto another.
-        // Possession is none of these: it runs the ordinary path below, on the creature.
+        // Yield input, physics and streaming to a server spline, lost control, or an unresolved
+        // mover/transport handoff. Possession drives the claimed creature normally below.
+        // A spline deliberately reports FORWARD; never flush it with a ground STOP.
         if player.server_riding || player.control_lost || player.reseat || wrath_limit.is_some() {
             if let Some(limit) = wrath_limit {
                 wrath_ground_gate.report(limit);
@@ -389,7 +390,6 @@ pub(super) fn control(
             }
             return;
         }
-        // Wrath returns above before a transport pose can be recomposed locally.
         ride::carry(&mut player, &mut cam, transports);
         // `0x514560`, after `apply_server_moves`, so this frame's root edge is already in `modes`.
         let may_translate = mover.may_translate(player.modes.rooted);

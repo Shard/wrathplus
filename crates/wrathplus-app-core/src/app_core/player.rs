@@ -1,8 +1,8 @@
 //! Our avatar's mover state, which the wire writes and the world drives; `player` keeps the
 //! systems and re-exports the types from its old paths.
 
-use wrathplus_protocol::{JumpInfo, MoveMode};
 use bevy::prelude::*;
+use wrathplus_protocol::{JumpInfo, MoveMode};
 
 /// The mover modes the server grants, as typed state: the outbound flag word is rebuilt from these
 /// every frame, and a mode missing from it is cleared by the server's next echo. Four arrive
@@ -124,6 +124,8 @@ pub struct Player {
     /// `pos` and the facing still describe the last one. Set when the mover guid changes, cleared
     /// at the take-control edge.
     pub reseat: bool,
+    /// A native transport worldport was ACKed; wait for the new self and its deck before driving.
+    pub transport_worldport: bool,
     /// Feet position in Bevy coords, converted to WoW coords only for the wire.
     pub pos: Vec3,
     /// Vertical velocity (yd/s, Bevy +Y up), zeroed while grounded.

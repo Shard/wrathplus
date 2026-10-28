@@ -5,15 +5,18 @@
 //! speed acks and the bare self-addressed move ([`apply_self_move`]): a `MSG_MOVE_*` naming our
 //! own guid, which owes no ack and which the reference applies.
 
-use wrathplus_protocol::MoveMode;
 use bevy::prelude::*;
+use wrathplus_protocol::MoveMode;
 
 use wrathplus_assets::coords::{bevy_to_wow, wow_to_bevy};
 
 use crate::app_core::movement::move_flags;
 use crate::app_core::movement::wrap_pi;
-use crate::net::{ClientCommand, ClientControlMessage, Guid, KnockBackMessage, MoveModeMessage, NetCommands, SelfMoveMessage, SpeedChangeMessage, TeleportMessage, WorldportMessage};
 use crate::app_core::session::Embodied;
+use crate::net::{
+    ClientCommand, ClientControlMessage, Guid, KnockBackMessage, MoveModeMessage, NetCommands,
+    SelfMoveMessage, SpeedChangeMessage, TeleportMessage, WorldportMessage,
+};
 use crate::transport::Transport;
 use wrathplus_world::world_map::CurrentMap;
 
@@ -61,6 +64,10 @@ fn yield_own_body(net_cmds: &NetCommands, player: &mut Player, self_guid: Option
     });
 }
 
+#[path = "wire_in/transport_worldport.rs"]
+mod transport_worldport;
+use transport_worldport::{begin_transport_worldport, restore_transport_worldport};
+
 /// `self_guid` is `None` before login names us, when no update can be about our body.
 fn control_verdict(mover: u64, allow_move: bool, self_guid: Option<u64>) -> ControlVerdict {
     match (self_guid == Some(mover), allow_move) {
@@ -107,6 +114,8 @@ pub(super) fn apply_server_moves(
         (With<Transport>, Without<Embodied>, Without<FlyCam>),
     >,
     self_pose: Option<(Vec3, f32)>,
+    self_rider: Option<&crate::app_core::movement::TransportRider>,
+    guid_index: &crate::net::GuidIndex,
 ) -> Vec<SpeedChangeMessage> {
     // A grant must be claimed: vmangos drops every `MSG_MOVE_*` for an unconfirmed mover
     // (`MovementHandler.cpp:291-293`, `Player.cpp:20257-20272`).
@@ -168,7 +177,20 @@ pub(super) fn apply_server_moves(
         }
     }
     // Cross-map worldport: snap, bump `CurrentMap` for the terrain streamer, ack if required.
+    let mut native_destination = false;
     for w in worldports.read() {
+        native_destination = true;
+        if let Some(token) = w.native_token.filter(|_| w.transport_entry.is_some()) {
+            // 12340 destroys/rebuilds its objects at NEW_WORLD (0x401bc0); AzerothCore
+            // sends the passenger's world pose and transport tail only after WORLDPORT_ACK.
+            begin_transport_worldport(player);
+            commands.insert_resource(CurrentMap(w.map_id));
+            if w.needs_ack {
+                let _ = net_cmds.0.send(ClientCommand::NativeWorldportAck(token));
+            }
+            continue;
+        }
+        player.transport_worldport = false;
         // Native destinations supersede delayed native ACKs without changing Vanilla's bool.
         if w.native_token.is_some() {
             player.owes_worldport_ack = false;
@@ -316,8 +338,25 @@ pub(super) fn apply_server_moves(
 
     // Take control when the server first reports our position, and again on a mover change; only
     // the login (`first`) settles, flags a stale world and seats the camera.
+    if player.transport_worldport && !native_destination && self_pose.is_some() {
+        if let Some(rider) = self_rider {
+            if let Some(&entity) = guid_index.0.get(&rider.transport_guid) {
+                if let Ok((deck, guid, _)) = transports.get(entity) {
+                    restore_transport_worldport(player, cam, rider, entity, guid.0, deck);
+                }
+            }
+        } else {
+            // The server can remove the phantom old transport after streaming self on the
+            // destination (AC HandleMoveWorldportAck). The remaining self pose is WORLD space.
+            player.transport_worldport = false;
+            player.settling = true;
+            player.settle_since = time.elapsed_secs();
+            player.settle_deadline = time.elapsed_secs() + SETTLE_TIMEOUT;
+            player.world_stale = true;
+        }
+    }
     let seizing = !player.active || player.reseat;
-    if seizing {
+    if seizing && !player.transport_worldport {
         if let Some((pos, yaw)) = self_pose {
             let first = !player.active;
             player.reseat = false;
@@ -476,8 +515,8 @@ fn apply_self_move(
             player.vel_y = vel_y;
             player.horiz_vel = wow_to_bevy([xy[0], xy[1], 0.0]);
             // Where this arc launched, recovered from the pose it is at now: `z = z₀ + v₀t − ½gt²`.
-            player.fall_start_y =
-                player.pos.y - (player.jump_zspeed * t - 0.5 * crate::app_core::movement::GRAVITY * t * t);
+            player.fall_start_y = player.pos.y
+                - (player.jump_zspeed * t - 0.5 * crate::app_core::movement::GRAVITY * t * t);
             player.fall_far = player.move_flags & move_flags::FALLING_FAR != 0;
             player.airborne_dirs = player.move_flags & move_flags::ANY_MOVE;
         }
@@ -511,105 +550,8 @@ pub(super) fn release_on_session_end(
 }
 
 #[cfg(test)]
-mod session_end_tests {
-    use super::*;
-    use crate::net::LoggedOutMessage;
-    use crate::app_core::session::DisconnectedMessage;
-    use wrathplus_protocol::SessionEnd;
-
-    fn harness() -> App {
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .init_resource::<Player>()
-            .add_message::<LoggedOutMessage>()
-            .add_message::<DisconnectedMessage>()
-            .add_systems(Update, release_on_session_end);
-        app
-    }
-
-    /// A session that ran: in world, moving, every mode granted, the reins in other hands.
-    fn a_session_that_ran(app: &mut App) {
-        let mut p = app.world_mut().resource_mut::<Player>();
-        p.active = true;
-        p.modes = super::super::state::MoveModes {
-            rooted: true,
-            water_walking: true,
-            feather_fall: true,
-            hover: true,
-            levitating: true,
-            can_fly: true,
-        };
-        p.flying = true;
-        p.autorun = true;
-        p.control_lost = true;
-        p.foreign_mover = Some(0xBB);
-        p.server_riding = true;
-        p.swimming = true;
-        p.move_flags = crate::app_core::movement::move_flags::FORWARD;
-        p.pos = Vec3::new(10.0, 20.0, 30.0);
-        p.owes_worldport_ack = true;
-        p.airborne_since = Some(4.0);
-        p.wedged = true;
-    }
-
-    /// `/logout` roots us (`MiscHandler.cpp:329`) and the next login is never unrooted:
-    /// `SendInitialPacketsAfterAddToMap` re-roots only for a stun (`Player.cpp:19297-19311`).
-    /// Checked against `Player::default()` whole, so a new field is covered.
-    #[test]
-    fn a_logout_takes_every_grant_the_ended_session_made() {
-        let mut app = harness();
-        a_session_that_ran(&mut app);
-        app.world_mut().write_message(LoggedOutMessage);
-        app.update();
-
-        let p = app.world().resource::<Player>();
-        assert!(
-            p.modes == Default::default(),
-            "the granted modes belonged to the mover that just ended — a root that survives \
-             `/logout` means the character re-enters the world and WASD is dead"
-        );
-        assert!(
-            *p == Player::default(),
-            "and nothing else survives either: the session boundary returns the resource to the \
-             state `player::setup` inserts at boot"
-        );
-    }
-
-    /// A lost session is a different message on a different reader; the `|` draining both matters.
-    #[test]
-    fn a_lost_session_takes_them_too() {
-        let mut app = harness();
-        a_session_that_ran(&mut app);
-        app.world_mut().write_message(DisconnectedMessage {
-            reason: "world stream closed".into(),
-            end: SessionEnd::Lost,
-            session_over: true,
-        });
-        app.update();
-
-        assert!(*app.world().resource::<Player>() == Player::default());
-    }
-
-    /// `session_over: false` (the logout's own teardown, a seamless reconnect) keeps the body ours.
-    #[test]
-    fn a_teardown_that_is_not_the_end_keeps_the_avatar() {
-        let mut app = harness();
-        a_session_that_ran(&mut app);
-        app.world_mut().write_message(DisconnectedMessage {
-            reason: "logged out".into(),
-            end: SessionEnd::LoggedOut,
-            session_over: false,
-        });
-        app.update();
-
-        let p = app.world().resource::<Player>();
-        assert!(
-            p.active,
-            "the session is not over — the avatar is still ours"
-        );
-        assert!(p.modes.rooted, "and so is everything granted to its mover");
-    }
-}
+#[path = "wire_in/session_end_tests.rs"]
+mod session_end_tests;
 
 #[cfg(test)]
 mod self_move_tests {

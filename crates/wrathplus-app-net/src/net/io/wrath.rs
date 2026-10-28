@@ -963,13 +963,21 @@ impl MovementAuthorityHandle {
         if state.epoch != self.epoch || state.self_guid != self.self_guid {
             return Ok(());
         }
-        if state.transfer_waiting || state.transfer_transport {
+        if state.transfer_waiting {
             return Ok(());
         }
         if guid != self.self_guid {
             state.self_control = false;
             state.control_decided = true;
             bail!("Wrath self create named foreign mover {guid:#018x}");
+        }
+        // A transport NEW_WORLD is deck-local; only the post-ACK self create supplies
+        // AzerothCore's world pose and full transport tail (MovementHandler.cpp).
+        if state.transfer_transport
+            && !matches!(movement, MovementPosition::Living(info)
+                if info.flags & wrath_ground::MOVE_ON_TRANSPORT != 0 && info.transport.is_some())
+        {
+            return Ok(());
         }
         let reported = match movement {
             MovementPosition::Living(movement) => Ok(living_pose(movement)),

@@ -2,10 +2,10 @@
 //! GameObject templates and anims, and items. Each packet is one handler over [`Scene`] whose
 //! commands apply before the next packet's, so a create's store and speeds are live components by
 //! the time the next packet reads them. The movement packets' halves are `crate::motion`'s.
-use wrathplus_protocol::{guid, EntityKind, MoveSpeeds, ObjectFields, SpeedKind};
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use wrathplus_protocol::{guid, EntityKind, MoveSpeeds, ObjectFields, SpeedKind};
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 use crate::app_core::death::DeathNet;
 use crate::app_core::movement::{gameobject_rotation, pose_transform, wire_yaw};
@@ -15,6 +15,7 @@ use crate::names::NameCache;
 use wrathplus_world::model_fade::DespawnFade;
 use wrathplus_world::vis_chain::VisChainOnly;
 
+mod transport_seed;
 use super::{
     merge_store_fields, FieldChanged, Guid, GuidIndex, NetCommands, NetEntity, NetHandlerApp,
     ObjectStore, SelfGuid, SpeedChangeMessage, UnitSpeeds,
@@ -383,20 +384,13 @@ fn object_create(
             progress_ms,
             at: std::time::Instant::now(),
         });
-    // The placement, and on a type-11 lift the basis its keyframe offsets rotate through.
-    // 12340 carries it in the create block's `UPDATEFLAG_ROTATION`, not a descriptor field.
+    // UPDATEFLAG_ROTATION is model placement, not a type-11 path's descriptor quaternion.
     let go_quat = rotation;
-    // A type-11 lift's seed: keyframes keyed by the entry, rotated by the quat, based at the
-    // create position. One whose create carried no progress u32 has no clock and stays frozen.
+    // AC StaticTransport::RelocateToProgress uses parent rotation and stationary position.
+    // A create without a progress clock stays frozen.
     let elevator_seed = (matches!(go_type, Some(11)) && transport_anchor.is_some())
-        .then(|| fields.object_entry())
-        .flatten()
-        .map(|entry| crate::app_core::movement::ElevatorSeed {
-            entry,
-            base_pos: position,
-            yaw: orientation,
-            quat: go_quat,
-        });
+        .then(|| transport_seed::from_create(&fields, position, orientation))
+        .flatten();
     // A GameObject is placed by its quaternion. A mover's create block also seeds its flags
     // (`0x618c30`, merge mask `0x75a07dff`) and pitch (`0x7c6420`) before the model is built
     // (`0x613e10`), so a swimmer that streams in nose-down is drawn nose-down from the first frame.
@@ -407,8 +401,7 @@ fn object_create(
             |m| crate::app_core::movement::swim_body_rotation(orientation, m.flags, m.pitch),
         ),
     };
-    // A unit created on a transport: the living block's rider tail is its local pose, which
-    // `compose_riders` carries through the boat each frame; the world `position` is the fallback.
+    // A living rider's tail is deck-local; keep its world position for a removed-deck fallback.
     let rider = matches!(kind, EntityKind::Unit | EntityKind::Player)
         .then_some(transport)
         .flatten()
@@ -503,6 +496,11 @@ fn object_create(
         entity.insert(ObjectStore(fields));
         index.0.insert(guid, entity.id());
     }
+    if transport.is_some() && matches!(kind, EntityKind::Unit | EntityKind::Player) {
+        if let Some(&entity) = index.0.get(&guid) {
+            transport_seed::remember_world_pose(commands, entity, position, orientation);
+        }
+    }
 }
 
 /// A descriptor-only item or container create: an indexed entity with a store and no pose or
@@ -552,6 +550,7 @@ fn object_values(
 
 /// `SMSG_DESTROY_OBJECT`: corpse decay ahead of respawn, or a despawn.
 fn object_destroyed(guid: u64, commands: &mut Commands, index: &mut GuidIndex) {
+    transport_seed::detach_removed_riders(commands, guid);
     // The object is freed now and its model fades out, as the reference's OnDeactivate
     // (`0x6145e0`, called by `0x464920` on DESTROY and OUT_OF_RANGE alike) hands the model to the
     // `SWModelFadeout` scheduler (`0x672df0`). The guid leaves the index at once ([`tear_down`]).
@@ -585,6 +584,7 @@ fn objects_removed(guids: Vec<u64>, commands: &mut Commands, index: &mut GuidInd
     // Faded, not popped: OUT_OF_RANGE reaches `0x464920` like DESTROY, and the object ends now
     // while its model fades ([`tear_down`]).
     for g in guids {
+        transport_seed::detach_removed_riders(commands, g);
         if let Some(e) = index.0.remove(&g) {
             commands.entity(e).queue(tear_down);
         }
