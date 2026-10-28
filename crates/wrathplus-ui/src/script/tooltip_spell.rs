@@ -499,6 +499,12 @@ fn fill_spell(
     opts: SpellRenderOpts,
     remaining: Option<String>,
 ) -> mlua::Result<()> {
+    // The spell builder records a spell Spell.dbc holds (`0x623941`); the aura builder does not.
+    if !opts.aura {
+        let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+        let known = model.spell_catalog.contains_key(&spell_id);
+        tip_mut(&mut model, h)?.spell = known.then_some(spell_id);
+    }
     match spell_view_of(lua, spell_id, opts.alt_caster) {
         Some(v) => render_spell(lua, this, &v, opts, remaining, None)?,
         None => {

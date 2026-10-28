@@ -214,6 +214,9 @@ pub struct TooltipState {
     /// The item the content shows (`+0x360`) and its displayed name, for `GetItem` and
     /// `IsEquippedItem`; cleared with the content.
     pub item: Option<(u32, String)>,
+    /// The spell the spell builder `0x6238a0` shows (`+0x364`, stored at `0x623941`), for
+    /// `GetSpell`; cleared with the content (`0x61c620`).
+    pub spell: Option<u32>,
 }
 
 /// The plate's text inset: the stock template seats `TextLeft1` at TOPLEFT (10, −10).

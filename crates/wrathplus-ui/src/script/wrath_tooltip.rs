@@ -80,6 +80,24 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             ]))
         })?,
     )?;
+    // GetSpell() (`0x61f0f0`) → name, rank and id of the shown spell, read afresh from Spell.dbc;
+    // nothing without one. Labelled: the talent builder's pair (`0x626e20`) is not recorded.
+    m.set(
+        "GetSpell",
+        lua.create_function(|lua, this: Table| {
+            let h = frame_handle_of(lua, &this)?;
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            let id = tip_mut(&mut model, h).ok().and_then(|t| t.spell);
+            let Some(row) = id.and_then(|id| model.spell_catalog.get(&id)) else {
+                return Ok(MultiValue::new());
+            };
+            Ok(MultiValue::from_vec(vec![
+                Value::String(lua.create_string(&row.name)?),
+                Value::String(lua.create_string(row.rank.as_deref().unwrap_or(""))?),
+                Value::Integer(i64::from(row.spell_id)),
+            ]))
+        })?,
+    )?;
     // IsEquippedItem() (`0x61f1f0`) → 1 when the player wears the shown item.
     m.set(
         "IsEquippedItem",
