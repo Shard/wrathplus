@@ -123,7 +123,11 @@ pub(super) fn render_unit_guid(lua: &Lua, this: &Table, guid: u64) -> mlua::Resu
 
 fn render_unit_view(lua: &Lua, this: &Table, unit: Option<UnitState>) -> mlua::Result<bool> {
     let h = frame_handle_of(lua, this)?;
-    let player_level = lua.app_data_ref::<Model>().expect("model app_data").player_req.level;
+    let player_level = lua
+        .app_data_ref::<Model>()
+        .expect("model app_data")
+        .player_req
+        .level;
     {
         let mut model = lua.app_data_mut::<Model>().expect("model app_data");
         clear_content(&mut model, h);
@@ -168,6 +172,8 @@ fn render_unit_view(lua: &Lua, this: &Table, unit: Option<UnitState>) -> mlua::R
         append_line(lua, this, ("Leader".into(), WHITE), None, false)?;
     }
     super::tooltip_unit_quest::append(lua, this, u.guid)?;
+    // Quest lines belong before the looter tail (12340 `0x622209`).
+    super::tooltip_unit_looters::append(lua, this, u.guid)?;
     // An unresolved guid (0) is no subject: nothing can push for it.
     set_subject(lua, h, Some(u.guid).filter(|&g| g != 0));
     update_bar(lua, h, Some(&u));

@@ -183,6 +183,7 @@ mod tooltip_item;
 mod tooltip_links;
 mod tooltip_spell;
 mod tooltip_unit;
+pub mod tooltip_unit_looters;
 mod tooltip_unit_quest;
 mod ui_errors;
 #[cfg(test)]

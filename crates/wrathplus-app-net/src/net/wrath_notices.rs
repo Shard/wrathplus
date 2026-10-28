@@ -3,9 +3,9 @@
 
 use std::collections::HashMap;
 
+use bevy::prelude::*;
 use wrathplus_protocol::events::TalentGroup;
 use wrathplus_protocol::{ObjectFields, SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::{GuidIndex, NetHandlerApp, ObjectStore};
 
@@ -33,7 +33,8 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::TalentsInfo, on_progress)
         .net_handler(K::LootOwners, on_progress)
         .net_handler(K::CriteriaUpdate, on_progress)
-        .net_handler(K::Connected, on_progress);
+        .net_handler(K::Connected, on_progress)
+        .net_handler(K::Disconnected, on_progress);
 }
 
 fn on_power(
@@ -77,7 +78,8 @@ fn on_progress(In(event): In<SessionEvent>, mut state: ResMut<WrathProgress>) {
         SessionEvent::TalentsInfo { .. }
         | SessionEvent::LootOwners { .. }
         | SessionEvent::CriteriaUpdate { .. }
-        | SessionEvent::Connected { .. } => state.apply(event),
+        | SessionEvent::Connected { .. }
+        | SessionEvent::Disconnected { .. } => state.apply(event),
         _ => {}
     }
 }
@@ -85,7 +87,9 @@ fn on_progress(In(event): In<SessionEvent>, mut state: ResMut<WrathProgress>) {
 impl WrathProgress {
     fn apply(&mut self, event: SessionEvent) {
         match event {
-            SessionEvent::Connected { .. } => *self = Self::default(),
+            SessionEvent::Connected { .. } | SessionEvent::Disconnected { .. } => {
+                *self = Self::default()
+            }
             SessionEvent::TalentsInfo {
                 pet,
                 unspent,
@@ -182,6 +186,47 @@ mod tests {
         write_power(&mut store, 7, 1);
         assert_eq!(store.unit_power(6), Some(439));
         assert_eq!(store.unit_power(7), None);
+    }
+
+    #[test]
+    fn looter_dispatch_replaces_and_disconnect_clears_without_a_vm() {
+        let mut app = App::new();
+        register(&mut app);
+        for (master, looter) in [(6, 7), (8, 0)] {
+            let mut body = 5u64.to_le_bytes().to_vec();
+            // SMSG_LOOT_LIST is raw unit, then packed master and round-robin GUIDs.
+            for guid in [master, looter] {
+                if guid == 0 {
+                    body.push(0);
+                } else {
+                    body.extend([1, guid as u8]);
+                }
+            }
+            let wrathplus_protocol::wrath_events::WrathDispatch::Handled { session_events, .. } =
+                wrathplus_protocol::wrath_events::WrathEventAdapter::new()
+                    .dispatch(0x3f9, &body, 0)
+                    .unwrap()
+            else {
+                panic!("loot list not decoded")
+            };
+            super::super::handlers::dispatch(app.world_mut(), session_events);
+            assert_eq!(
+                app.world().resource::<WrathProgress>().loot_owners[&5],
+                (master, looter)
+            );
+        }
+        super::super::handlers::dispatch(
+            app.world_mut(),
+            vec![SessionEvent::Disconnected {
+                reason: "test".into(),
+                end: wrathplus_protocol::SessionEnd::Lost,
+            }],
+        );
+        assert!(app
+            .world()
+            .resource::<WrathProgress>()
+            .loot_owners
+            .is_empty());
     }
 
     #[test]

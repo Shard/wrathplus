@@ -5,19 +5,20 @@
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use wrathplus_ui::script::tooltip_unit_looters::UnitLooterNames;
 
 use wrathplus_ui::script::{TooltipTint, UiScript, UnitState};
 use wrathplus_ui::strings::Arg;
 
-use crate::names::NameCache;
-use crate::net::NetCommands;
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UnitFeed;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::names::NameCache;
+use crate::net::NetCommands;
 use crate::target::{go_is_nearest, Hovered, HoveredObject, GO_FLAG_LOCKED, GO_TYPE_GENERIC};
-use crate::app_core::schedule::UiFeed;
 use crate::ui_trainer::TrainerFeed;
 use crate::ui_unit::{enrich_unit, snapshot, unit_reaction, SnapshotTables};
-use crate::app_core::schedule::UnitFeed;
 
 /// The spell tooltip's range, cast and cooldown cells, 12340's.
 mod cast_cells;
@@ -35,6 +36,7 @@ impl Plugin for UiTooltipPlugin {
             Update,
             (
                 drive_mouseover_tooltip.in_set(UnitFeed),
+                feed_unit_looters.before(drive_mouseover_tooltip),
                 // After the trainer and quest feeds, so a list that lands this frame is hoverable
                 // in its tick; outside `UnitFeed`, which the trainer feed follows, so it takes that
                 // set's gate.
@@ -45,6 +47,35 @@ impl Plugin for UiTooltipPlugin {
                     .run_if(crate::app_core::ui_state::ingame_ui_up),
             ),
         );
+    }
+}
+
+/// `SMSG_LOOT_LIST`'s looters for the unit tooltip's looter lines (12340 `0x621070`), each name
+/// through the name cache, which asks once on a miss; pushed on a change.
+fn feed_unit_looters(
+    script: Option<NonSendMut<UiScript>>,
+    progress: Option<Res<crate::net::wrath_notices::WrathProgress>>,
+    names: Res<NameCache>,
+    commands: Res<NetCommands>,
+    mut last: Local<crate::app_core::vm_memo::VmMemo<UnitLooterNames>>,
+) {
+    let (Some(mut script), Some(progress)) = (script, progress) else {
+        return;
+    };
+    let name = |guid: u64| {
+        (guid != 0)
+            .then(|| names.resolve(guid, &commands).map(str::to_string))
+            .flatten()
+    };
+    let next: UnitLooterNames = progress
+        .loot_owners
+        .iter()
+        .map(|(&unit, &(master, looter))| (unit, (name(master), name(looter))))
+        .collect();
+    let last = last.get(&script);
+    if *last != next {
+        *last = next.clone();
+        script.set_unit_looters(next);
     }
 }
 
@@ -396,3 +427,104 @@ mod deps_tests;
 mod feed_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod looter_tests {
+    use super::*;
+
+    fn vm() -> UiScript {
+        let mut s = UiScript::new().unwrap();
+        s.set_unit(
+            "target",
+            Some(UnitState {
+                exists: true,
+                guid: 42,
+                name: Some("Corpse".into()),
+                ..Default::default()
+            }),
+        );
+        s.run(
+            r#"
+            MASTER_LOOTER = "[master]"; LOOT = "[loot]"
+            TT = CreateFrame("GameTooltip", "TT")
+            TT:SetOwner(CreateFrame("Frame"), "ANCHOR_RIGHT")
+            TT:SetUnit("target")
+        "#,
+        )
+        .unwrap();
+        s
+    }
+
+    fn lines(app: &mut App) -> i64 {
+        let mut s = app.world_mut().non_send_resource_mut::<UiScript>();
+        assert!(s.take_errors().is_empty());
+        s.eval("return TT:NumLines()").unwrap()
+    }
+
+    #[test]
+    fn looter_feed_resolves_once_republishes_on_name_arrival_and_vm_replacement_and_clears() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let mut app = App::new();
+        app.init_resource::<NameCache>()
+            .init_resource::<crate::net::wrath_notices::WrathProgress>()
+            .insert_resource(NetCommands(tx))
+            .add_systems(Update, feed_unit_looters)
+            .insert_non_send_resource(vm());
+        app.world_mut()
+            .resource_mut::<crate::net::wrath_notices::WrathProgress>()
+            .loot_owners
+            .insert(42, (7, 8));
+        app.update();
+        assert_eq!(lines(&mut app), 1);
+        assert_eq!(rx.try_iter().count(), 2, "one query per unknown player");
+        app.update();
+        assert!(rx.is_empty(), "pending names are not queried twice");
+        app.world_mut()
+            .resource_mut::<NameCache>()
+            .insert_player(7, "Alice".into(), None);
+        app.update();
+        assert_eq!(lines(&mut app), 2);
+        app.world_mut()
+            .resource_mut::<NameCache>()
+            .insert_player(8, "Bob".into(), None);
+        app.update();
+        assert_eq!(lines(&mut app), 3);
+        app.world_mut()
+            .non_send_resource_mut::<UiScript>()
+            .run(
+                r#"
+            assert(TTTextLeft2:GetText() == "[master]: Alice")
+            assert(TTTextLeft3:GetText() == "[loot]: Bob")
+        "#,
+            )
+            .unwrap();
+        app.insert_non_send_resource(vm());
+        app.update();
+        assert_eq!(
+            lines(&mut app),
+            3,
+            "the same source seeds the replacement VM"
+        );
+        app.world_mut()
+            .resource_mut::<crate::net::wrath_notices::WrathProgress>()
+            .loot_owners
+            .insert(42, (0, 0));
+        app.update();
+        assert_eq!(
+            lines(&mut app),
+            1,
+            "zero owners clear old lines without querying GUID zero"
+        );
+        assert!(rx.is_empty());
+        app.world_mut()
+            .resource_mut::<crate::net::wrath_notices::WrathProgress>()
+            .loot_owners
+            .insert(42, (7, 8));
+        app.update();
+        assert_eq!(lines(&mut app), 3);
+        *app.world_mut()
+            .resource_mut::<crate::net::wrath_notices::WrathProgress>() = Default::default();
+        app.update();
+        assert_eq!(lines(&mut app), 1, "session cleanup clears the VM");
+    }
+}
