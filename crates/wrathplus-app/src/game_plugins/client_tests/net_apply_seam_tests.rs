@@ -5,12 +5,12 @@
 //! drain over one frame two ways and compares, the rest pin the speed-change ordering laws over
 //! consecutive packets.
 
+use crate::app_core::session::ObjectStore;
 use crate::motion::UnitMoveModes;
 use crate::net::{GuidIndex, NetEvents, UnitSpeeds};
-use crate::app_core::session::ObjectStore;
+use bevy::prelude::*;
 use wrathplus_protocol::types::{ObjectType, SpeedKind, SplineMode};
 use wrathplus_protocol::{EntityKind, MoveSpeeds, ObjectFields, SessionEvent};
-use bevy::prelude::*;
 
 const FIELD_UNIT_HEALTH: u16 = wrathplus_protocol::types::Field::UnitHealth.index();
 

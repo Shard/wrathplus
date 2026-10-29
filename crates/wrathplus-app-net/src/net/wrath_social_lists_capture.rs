@@ -4,10 +4,12 @@
 //! `ui_chat`'s roster feed and `wrath_raid_browser_feed` drain them; both clear on Connected and
 //! Disconnected.
 use super::NetHandlerApp;
-use wrathplus_protocol::wrath_raid_browser::{Group, Player};
-use wrathplus_protocol::{wrath_channel_members, wrath_raid_browser, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
+use wrathplus_protocol::wrath_raid_browser::{Group, Player};
+use wrathplus_protocol::{
+    wrath_channel_members, wrath_raid_browser, SessionEvent, SessionEventKind,
+};
 
 #[derive(Resource, Default)]
 pub struct NativeChannelMembers(pub VecDeque<wrath_channel_members::Packet>);

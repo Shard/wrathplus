@@ -21,13 +21,13 @@
 
 use bevy::prelude::*;
 
-use crate::app_core::ui_flags::LoginIntent;
-use crate::names::NameCache;
 use crate::app_core::session::EnteredWorldMessage;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::session::ServerSaidMessage;
+use crate::app_core::ui_flags::LoginIntent;
+use crate::names::NameCache;
 
 /// `PLAYER_FLAGS_GM`: the body carries the faction-35 re-template.
 const PLAYER_FLAGS_GM: u32 = 0x0000_0008;

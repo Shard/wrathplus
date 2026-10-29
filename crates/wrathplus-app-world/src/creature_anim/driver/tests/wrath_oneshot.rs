@@ -1,10 +1,10 @@
 //! A Wrath resident sequence must not keep a completed sword swing on the torso.
 
 use super::*;
-use wrathplus_assets::{ModelJoint, ModelSkeleton, PoseBone, PoseClip, PoseSource, PoseTrack};
-use wrathplus_world::rig_anim::RigPose;
 use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle};
 use bevy::animation::RepeatAnimation;
+use wrathplus_assets::{ModelJoint, ModelSkeleton, PoseBone, PoseClip, PoseSource, PoseTrack};
+use wrathplus_world::rig_anim::RigPose;
 
 const SWORD: u16 = 18;
 const SPAN: f32 = 1.0;

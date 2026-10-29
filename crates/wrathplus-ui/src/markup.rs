@@ -626,7 +626,12 @@ mod tests {
     fn an_inline_texture_is_one_token_and_an_unterminated_one_is_text() {
         let text = "a|TInterface\\Icons\\Foo:16:16|tb";
         let t = token_at(text, 1).expect("a token");
-        assert_eq!(t.kind, TokenKind::Texture { spec: "Interface\\Icons\\Foo:16:16" });
+        assert_eq!(
+            t.kind,
+            TokenKind::Texture {
+                spec: "Interface\\Icons\\Foo:16:16"
+            }
+        );
         assert_eq!(t.byte_len, text.len() - 2);
         assert_eq!(token_at("|Tfoo", 0).unwrap().kind, TokenKind::Char('|'));
     }

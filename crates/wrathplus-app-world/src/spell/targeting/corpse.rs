@@ -17,8 +17,8 @@ use bevy::prelude::*;
 use wrathplus_protocol::types::CorpseTarget;
 
 use crate::app_core::session::ObjectStore;
-use crate::spell::cast_send::TargetedBind;
 use crate::app_core::state::Factions;
+use crate::spell::cast_send::TargetedBind;
 
 /// `TARGET_FLAG_CORPSE_ALLY` and `TARGET_FLAG_CORPSE_ENEMY`, as the flag word carries them.
 const WORD_ALLY: u16 = 0x8000;
@@ -92,10 +92,7 @@ fn bind_arm(word: u16, f: CorpseFacts) -> Option<CorpseTarget> {
 pub struct CorpsePick(pub(crate) Option<u16>);
 
 /// Publish [`CorpsePick`] before the input pass, beside [`super::PicksSelf`].
-pub fn publish_corpse_pick(
-    targeting: Res<super::SpellTargeting>,
-    mut pick: ResMut<CorpsePick>,
-) {
+pub fn publish_corpse_pick(targeting: Res<super::SpellTargeting>, mut pick: ResMut<CorpsePick>) {
     let now = targeting.0.as_ref().map(|t| t.word);
     if pick.0 != now {
         pick.0 = now;
@@ -155,11 +152,10 @@ pub mod fixture {
     use std::collections::HashMap;
 
     use wrathplus_formats::{FactionCatalog, FactionTemplate};
-    
+
     #[cfg(test)]
     use wrathplus_protocol::ObjectFields;
 
-    
     #[cfg(test)]
     use crate::app_core::session::ObjectStore;
     use crate::app_core::state::Factions;

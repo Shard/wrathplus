@@ -7,9 +7,9 @@
 
 use std::time::Instant;
 
+use bevy::prelude::*;
 use wrathplus_assets::{AnimClip, ModelAnimations};
 use wrathplus_formats::AnimDataCatalog;
-use bevy::prelude::*;
 
 use wrathplus_assets::AssetSet;
 use wrathplus_world::schedule::WorldStage;
@@ -491,9 +491,7 @@ pub struct SpellGoTargets {
 /// The sheath policy: requests, ceremony overlays, the `AnimationData.dbc` table.
 mod sheath;
 use sheath::{load_anim_data, SheathSwap};
-pub use sheath::{
-    toggle_sheath_next, AnimData, SheathRequest, SheathSwapMessage, VisualSheath,
-};
+pub use sheath::{toggle_sheath_next, AnimData, SheathRequest, SheathSwapMessage, VisualSheath};
 
 /// The `SMSG_EMOTE` to `EmoteAnim` consumer.
 mod emote_anim;

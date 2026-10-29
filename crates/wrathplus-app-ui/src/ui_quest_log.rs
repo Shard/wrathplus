@@ -20,17 +20,17 @@ use wrathplus_ui::script::{
 };
 use wrathplus_ui::strings::{fill, Arg};
 
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
+use crate::app_core::schedule::UnitFeed;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Spells;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, Guid, NetCommands};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::query_cache::QueryCache;
-use crate::app_core::state::Spells;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
-use crate::app_core::schedule::UnitFeed;
 
 /// Marks a GameObject objective's entry on the wire (vmangos `Quest.cpp:512-516`).
 const GO_OBJECTIVE_BIT: u32 = 0x8000_0000;
@@ -101,9 +101,9 @@ impl QuestLog {
 
 /// The quest log's packet handlers.
 mod net {
+    use bevy::prelude::*;
     use wrathplus_protocol::types::QuestTemplate;
     use wrathplus_protocol::{SessionEvent, SessionEventKind};
-    use bevy::prelude::*;
 
     use super::QuestLog;
     use crate::net::NetHandlerApp;
@@ -442,7 +442,10 @@ pub(crate) fn build_objectives(
             .flatten();
         if let Some(line) = creature_line(obj, log_slot.counters[i], creature_name.as_deref(), get)
         {
-            objectives.push(QuestLogObjectiveView { poi_bit: Some(i as u8), ..line });
+            objectives.push(QuestLogObjectiveView {
+                poi_bit: Some(i as u8),
+                ..line
+            });
         }
     }
     // Item.
@@ -461,7 +464,10 @@ pub(crate) fn build_objectives(
             bag_count,
             get,
         ) {
-            objectives.push(QuestLogObjectiveView { poi_bit: Some(4 + i as u8), ..line });
+            objectives.push(QuestLogObjectiveView {
+                poi_bit: Some(4 + i as u8),
+                ..line
+            });
         }
     }
     let players_slain = template.wrath.as_ref().map_or(0, |w| w.players_slain);
@@ -1093,7 +1099,10 @@ fn load_quest_header_names(
 pub(crate) struct QuestTagNamesRes(pub wrathplus_formats::QuestTagNames);
 
 /// Startup: reads the `QuestInfo.dbc` tag names off the patch chain.
-fn load_quest_tag_names(mut commands: Commands, assets: Option<Res<wrathplus_assets::WorldAssets>>) {
+fn load_quest_tag_names(
+    mut commands: Commands,
+    assets: Option<Res<wrathplus_assets::WorldAssets>>,
+) {
     use wrathplus_assets::LockRecover;
     let Some(assets) = assets else { return };
     let loaded = {
@@ -1581,7 +1590,11 @@ mod tests {
         let lines = build(&template, &log_slot);
         assert_eq!(lines.len(), 2);
         assert_eq!(
-            (lines[1].text.as_str(), lines[1].kind.as_str(), lines[1].finished),
+            (
+                lines[1].text.as_str(),
+                lines[1].kind.as_str(),
+                lines[1].finished
+            ),
             ("<PLAYERS 4 of 10>", "player", false)
         );
         log_slot.counters[0] = 12;
@@ -1850,8 +1863,11 @@ mod tests {
         // With the popup up, fold Z1: B moves to row 3 and C takes row 4.
         run(&mut app, "CollapseQuestHeader(1)");
         app.update();
-        assert_eq!(app.world().resource::<QuestLog>().tooltip_rows.len(), 3,
-            "folding a header must not hide its quest from the creature tooltip");
+        assert_eq!(
+            app.world().resource::<QuestLog>().tooltip_rows.len(),
+            3,
+            "folding a header must not hide its quest from the creature tooltip"
+        );
         run(&mut app, "AbandonQuest()");
         app.update();
 

@@ -5,9 +5,9 @@ use wrathplus_protocol::types::{ItemInfo, ItemSpellEntry};
 use wrathplus_protocol::ObjectFields;
 
 use super::{resolve_self_res, SelfRes, SPELL_EFFECT_SELF_RESURRECT};
+use crate::app_core::state::Spells;
 use crate::items::Items;
 use crate::net::{ClientCommand, NetCommands};
-use crate::app_core::state::Spells;
 
 /// Reincarnation's effect spell, what the server writes into the field.
 const REINCARNATION: u32 = 21169;

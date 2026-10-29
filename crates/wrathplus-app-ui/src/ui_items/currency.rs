@@ -2,16 +2,16 @@
 //! token bag supplies instance counts. Honor/arena are separate native descriptor balances.
 use std::collections::BTreeMap;
 
+use bevy::prelude::*;
 use wrathplus_protocol::{types::Field, ObjectFields};
 use wrathplus_ui::script::{UiScript, WrathCurrencyEntry, WrathCurrencySnapshot};
-use bevy::prelude::*;
 
-use crate::entities::ItemDisplays;
-use crate::items::Items;
-use crate::net::{NetCommands, Objects};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::vm_memo::VmMemo;
+use crate::entities::ItemDisplays;
+use crate::items::Items;
+use crate::net::{NetCommands, Objects};
 
 #[derive(Resource)]
 pub struct CurrencyData {
@@ -23,7 +23,10 @@ pub(super) fn load(mut commands: Commands, assets: Option<Res<wrathplus_assets::
     use wrathplus_assets::LockRecover;
     let Some(assets) = assets else { return };
     let mut chain = assets.chain.lock_recover();
-    if !matches!(chain.profile(), wrathplus_formats::DataProfile::Wrath { .. }) {
+    if !matches!(
+        chain.profile(),
+        wrathplus_formats::DataProfile::Wrath { .. }
+    ) {
         return;
     }
     match (

@@ -52,8 +52,8 @@
 //! with. A dev build keeps its `WoW` link, `benilla-config/` and `.probe-identity` in its own
 //! folder, beside that `Cargo.lock`, as benilla's does.
 
-use wrathplus_app::{AppExit, BuildId};
 use bevy::prelude::*;
+use wrathplus_app::{AppExit, BuildId};
 
 /// The crate's own plugin: one line at `Startup`, to show it runs inside the client.
 struct HelloPlugin;

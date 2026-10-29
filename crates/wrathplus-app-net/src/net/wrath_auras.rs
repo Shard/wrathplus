@@ -1,9 +1,9 @@
 //! Native packet aura snapshots and per-slot arrival clocks, independent of descriptors.
 use std::collections::HashMap;
 
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_auras::NativeAura;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::NetHandlerApp;
 

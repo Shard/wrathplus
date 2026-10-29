@@ -18,12 +18,12 @@ use bevy::prelude::*;
 use super::approach::Approach;
 use super::follow::FollowState;
 use super::state::Player;
-use crate::creature_anim::MovementState;
-use crate::motion::RemoteMotion;
-use crate::net::{ActiveMover, GuidIndex};
 use crate::app_core::session::Embodied;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
+use crate::creature_anim::MovementState;
+use crate::motion::RemoteMotion;
+use crate::net::{ActiveMover, GuidIndex};
 
 /// Keeps [`Embodied`] on the attached body (the possessed unit, else our own, else nobody) and
 /// [`ActiveMover`] on it while it is ours to move; runs before the controller.

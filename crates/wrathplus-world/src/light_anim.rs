@@ -5,8 +5,8 @@
 
 use std::sync::Arc;
 
-use wrathplus_formats::M2LightAnim;
 use bevy::prelude::*;
+use wrathplus_formats::M2LightAnim;
 
 use crate::lighting::WorldPointLight;
 use crate::ribbons::RibbonSeq;

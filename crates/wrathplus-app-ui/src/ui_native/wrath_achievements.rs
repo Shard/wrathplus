@@ -6,17 +6,17 @@
 //! `SMSG_RESPOND_INSPECT_ACHIEVEMENTS` becomes the comparison. A server first
 //! (`SMSG_SERVER_FIRST_ACHIEVEMENT`) becomes an achievement chat line ([`server_first_line`]).
 //! Other players' earns stay in the capture.
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfGuid;
+use crate::app_core::session::SelfPlayer;
 pub(crate) use crate::net::wrath_achievement_capture::Achievements;
 use crate::net::wrath_achievement_capture::NativeAchievementPackets;
 use crate::net::wrath_notices::WrathProgress;
 use crate::net::{ClientCommand, NetCommands};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfGuid;
-use crate::app_core::session::SelfPlayer;
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_achievement::{Packet, Snapshot};
 use wrathplus_protocol::wrath_chat::Message;
 use wrathplus_ui::script::{UiScript, WrathAchievementProgress, WrathAchievementRequest};
-use bevy::prelude::*;
 
 pub(crate) fn register(app: &mut App) {
     app.add_systems(
@@ -38,7 +38,10 @@ pub(crate) fn register(app: &mut App) {
 fn server_first_line(template: &str, name: &str, player: u64, achievement: u32) -> Message {
     let text = wrathplus_ui::strings::fill(
         template,
-        &[wrathplus_ui::strings::Arg::S(name), wrathplus_ui::strings::Arg::S(name)],
+        &[
+            wrathplus_ui::strings::Arg::S(name),
+            wrathplus_ui::strings::Arg::S(name),
+        ],
     );
     Message {
         gm: false,

@@ -10,11 +10,11 @@
 //! A card's mesh is centred at its bone pivot in model-local Bevy axes (WoW X→−Z, Y→−X, Z→+Y), so
 //! the entity sits at the pivot with the rebuilt basis as its rotation.
 
-use wrathplus_assets::BillboardInfo;
-use wrathplus_formats::{BillboardKind, BoneScaleAnim};
 use bevy::math::{Affine3A, Mat3A, Vec3A};
 use bevy::mesh::MeshTag;
 use bevy::prelude::*;
+use wrathplus_assets::BillboardInfo;
+use wrathplus_formats::{BillboardKind, BoneScaleAnim};
 
 use crate::view::WorldCamera;
 

@@ -1,11 +1,11 @@
 use super::*;
 
 use super::test_template as info;
+use crossbeam_channel::TryRecvError;
+use std::collections::HashMap;
 use wrathplus_protocol::types::{
     ITEM_DYNFLAG_UNLOCKED, ITEM_DYNFLAG_WRAPPED, ITEM_FLAG_LOOTABLE, ITEM_FLAG_WRAPPER,
 };
-use crossbeam_channel::TryRecvError;
-use std::collections::HashMap;
 
 fn commands() -> (NetCommands, crossbeam_channel::Receiver<ClientCommand>) {
     let (tx, rx) = crossbeam_channel::unbounded();

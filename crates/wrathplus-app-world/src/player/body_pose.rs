@@ -24,8 +24,11 @@ pub(super) fn drive(
         t.translation = player.pos;
         // The swim pitch law every observed mover shares. `swim_pitch` is the aim, leveled along
         // the surface when the rest-line cap bites, and the wire tail streams the same value.
-        t.rotation =
-            crate::app_core::movement::swim_body_rotation(player.model_yaw, move_flags_now, swim_pitch);
+        t.rotation = crate::app_core::movement::swim_body_rotation(
+            player.model_yaw,
+            move_flags_now,
+            swim_pitch,
+        );
         // The landing predictor (`0x602d00`) plays a hard landing's grunt and dust this frame;
         // the server's `SMSG_ENVIRONMENTALDAMAGELOG` dust follows a round trip later, as in the
         // reference. `fall_start_y` still holds this arc's launch height.

@@ -57,15 +57,31 @@ fn fixtures() -> Vec<(u16, Vec<u8>, SessionEvent)> {
     vec![
         (
             0x05b,
-            [7, 0, 0, 0].into_iter().chain(*b"Page\0").chain([8, 0, 0, 0]).collect(),
+            [7, 0, 0, 0]
+                .into_iter()
+                .chain(*b"Page\0")
+                .chain([8, 0, 0, 0])
+                .collect(),
             SessionEvent::PageText {
                 page_id: 7,
                 text: "Page".into(),
                 next_page_id: 8,
             },
         ),
-        (0x0ae, guid.to_vec(), capture(Packet::ReadItemOk { item_guid: u64::from_le_bytes(guid) })),
-        (0x0af, guid.to_vec(), capture(Packet::ReadItemFailed { item_guid: u64::from_le_bytes(guid) })),
+        (
+            0x0ae,
+            guid.to_vec(),
+            capture(Packet::ReadItemOk {
+                item_guid: u64::from_le_bytes(guid),
+            }),
+        ),
+        (
+            0x0af,
+            guid.to_vec(),
+            capture(Packet::ReadItemFailed {
+                item_guid: u64::from_le_bytes(guid),
+            }),
+        ),
         (
             0x0b0,
             with_guid(&[0xff, 0, 0, 0]),
@@ -82,8 +98,18 @@ fn fixtures() -> Vec<(u16, Vec<u8>, SessionEvent)> {
                 set_guid: 0x42,
             }),
         ),
-        (0x1b8, guid.to_vec(), SessionEvent::ShowBank { banker: u64::from_le_bytes(guid) }),
-        (0x1ba, vec![3, 0, 0, 0], SessionEvent::BuyBankSlotResult { result: 3 }),
+        (
+            0x1b8,
+            guid.to_vec(),
+            SessionEvent::ShowBank {
+                banker: u64::from_le_bytes(guid),
+            },
+        ),
+        (
+            0x1ba,
+            vec![3, 0, 0, 0],
+            SessionEvent::BuyBankSlotResult { result: 3 },
+        ),
         (
             0x1d7,
             vec![0x01, 0x05, 0x00, 1, 0, 0, 0, 0xff, 0xff, 0, 0],
@@ -129,7 +155,11 @@ fn fixtures() -> Vec<(u16, Vec<u8>, SessionEvent)> {
         ),
         (
             0x2c5,
-            [3, 0, 0, 0].into_iter().chain(*b"Set\0").chain([5, 0, 0, 0]).collect(),
+            [3, 0, 0, 0]
+                .into_iter()
+                .chain(*b"Set\0")
+                .chain([5, 0, 0, 0])
+                .collect(),
             capture(Packet::ItemSetName {
                 id: 3,
                 name: "Set".into(),
@@ -164,9 +194,23 @@ fn fixtures() -> Vec<(u16, Vec<u8>, SessionEvent)> {
                 cost: None,
             }),
         ),
-        (0x4bc, vec![0; 4], capture(Packet::EquipmentSetList { sets: vec![] })),
-        (0x4bc, set_list, capture(Packet::EquipmentSetList { sets: vec![set(0), set(9)] })),
-        (0x4d6, vec![4], capture(Packet::EquipmentSetUseResult { result: 4 })),
+        (
+            0x4bc,
+            vec![0; 4],
+            capture(Packet::EquipmentSetList { sets: vec![] }),
+        ),
+        (
+            0x4bc,
+            set_list,
+            capture(Packet::EquipmentSetList {
+                sets: vec![set(0), set(9)],
+            }),
+        ),
+        (
+            0x4d6,
+            vec![4],
+            capture(Packet::EquipmentSetUseResult { result: 4 }),
+        ),
         (
             0x50b,
             with_guid(&[1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0]),
@@ -185,9 +229,15 @@ fn every_fixture_decodes_and_rejects_truncation_and_trailing_bytes() {
     assert_eq!(covered, OPCODES.into_iter().collect());
     for (opcode, body, expected) in fixtures {
         // `SessionEvent` has no `PartialEq`; its `Debug` form is total over the fields.
-        assert_eq!(format!("{:?}", decode(opcode, &body).unwrap()), format!("{expected:?}"));
+        assert_eq!(
+            format!("{:?}", decode(opcode, &body).unwrap()),
+            format!("{expected:?}")
+        );
         for end in 0..body.len() {
-            assert!(decode(opcode, &body[..end]).is_err(), "{opcode:#x} truncated at {end}");
+            assert!(
+                decode(opcode, &body[..end]).is_err(),
+                "{opcode:#x} truncated at {end}"
+            );
         }
         let mut trailing = body.clone();
         trailing.push(0);
@@ -214,7 +264,10 @@ fn dispatch_routes_every_opcode_and_reports_malformed_as_unhandled() {
     for (opcode, body, expected) in fixtures() {
         match adapter.dispatch(opcode, &body, 0).unwrap() {
             crate::wrath_events::WrathDispatch::Handled { session_events, .. } => {
-                assert_eq!(format!("{session_events:?}"), format!("{:?}", vec![expected]))
+                assert_eq!(
+                    format!("{session_events:?}"),
+                    format!("{:?}", vec![expected])
+                )
             }
             other => panic!("{opcode:#x}: {other:?}"),
         }
@@ -246,18 +299,46 @@ fn commands_encode_ac_read_order() {
     }
     use_body.extend([0x01, 0x42, 19, 3]);
     let rows = vec![
-        (Command::ReadItem { bag: 255, slot: 23 }, 0x0ad, vec![255, 23]),
-        (Command::ItemSetNameQuery { id: 3, guid: g }, 0x2c4, cat(&[3, 0, 0, 0], &gb)),
+        (
+            Command::ReadItem { bag: 255, slot: 23 },
+            0x0ad,
+            vec![255, 23],
+        ),
+        (
+            Command::ItemSetNameQuery { id: 3, guid: g },
+            0x2c4,
+            cat(&[3, 0, 0, 0], &gb),
+        ),
         (Command::ItemTextQuery { item_guid: g }, 0x243, gb.clone()),
-        (Command::AutoEquipItemSlot { item_guid: g, dst_slot: 15 }, 0x10f, cat(&gb, &[15])),
+        (
+            Command::AutoEquipItemSlot {
+                item_guid: g,
+                dst_slot: 15,
+            },
+            0x10f,
+            cat(&gb, &[15]),
+        ),
         (Command::RefundInfo { item_guid: g }, 0x4b3, gb.clone()),
         (Command::Refund { item_guid: g }, 0x4b4, gb.clone()),
         (
-            Command::SocketGems { item_guid: g, gems: [1, 0, 2] },
+            Command::SocketGems {
+                item_guid: g,
+                gems: [1, 0, 2],
+            },
             0x347,
-            [gb.clone(), 1u64.to_le_bytes().to_vec(), vec![0; 8], 2u64.to_le_bytes().to_vec()].concat(),
+            [
+                gb.clone(),
+                1u64.to_le_bytes().to_vec(),
+                vec![0; 8],
+                2u64.to_le_bytes().to_vec(),
+            ]
+            .concat(),
         ),
-        (Command::CancelTempEnchantment { slot: 15 }, 0x379, vec![15, 0, 0, 0]),
+        (
+            Command::CancelTempEnchantment { slot: 15 },
+            0x379,
+            vec![15, 0, 0, 0],
+        ),
         (
             Command::EquipmentSetSave {
                 set_guid: 0,
@@ -269,34 +350,104 @@ fn commands_encode_ac_read_order() {
             0x4bd,
             save,
         ),
-        (Command::EquipmentSetDelete { set_guid: 0x42 }, 0x13e, vec![0x01, 0x42]),
-        (Command::EquipmentSetUse { items: uses }, 0x4d5, use_body),
-        (Command::OpenItem { bag: 255, slot: 23 }, 0x0ac, vec![255, 23]),
         (
-            Command::WrapItem { gift_bag: 1, gift_slot: 2, item_bag: 3, item_slot: 4 },
+            Command::EquipmentSetDelete { set_guid: 0x42 },
+            0x13e,
+            vec![0x01, 0x42],
+        ),
+        (Command::EquipmentSetUse { items: uses }, 0x4d5, use_body),
+        (
+            Command::OpenItem { bag: 255, slot: 23 },
+            0x0ac,
+            vec![255, 23],
+        ),
+        (
+            Command::WrapItem {
+                gift_bag: 1,
+                gift_slot: 2,
+                item_bag: 3,
+                item_slot: 4,
+            },
             0x1d3,
             vec![1, 2, 3, 4],
         ),
-        (Command::AutoEquipItem { bag: 19, slot: 2 }, 0x10a, vec![19, 2]),
-        (Command::SetAmmo { entry: 2512 }, 0x268, 2512u32.to_le_bytes().to_vec()),
-        (Command::SwapInvItem { src_slot: 23, dst_slot: 24 }, 0x10d, vec![24, 23]),
         (
-            Command::SwapItem { dst_bag: 1, dst_slot: 2, src_bag: 3, src_slot: 4 },
+            Command::AutoEquipItem { bag: 19, slot: 2 },
+            0x10a,
+            vec![19, 2],
+        ),
+        (
+            Command::SetAmmo { entry: 2512 },
+            0x268,
+            2512u32.to_le_bytes().to_vec(),
+        ),
+        (
+            Command::SwapInvItem {
+                src_slot: 23,
+                dst_slot: 24,
+            },
+            0x10d,
+            vec![24, 23],
+        ),
+        (
+            Command::SwapItem {
+                dst_bag: 1,
+                dst_slot: 2,
+                src_bag: 3,
+                src_slot: 4,
+            },
             0x10c,
             vec![1, 2, 3, 4],
         ),
-        (Command::AutoStoreBagItem { src_bag: 255, src_slot: 23, dst_bag: 19 }, 0x10b, vec![255, 23, 19]),
         (
-            Command::SplitItem { src_bag: 1, src_slot: 2, dst_bag: 3, dst_slot: 4, count: 300 },
+            Command::AutoStoreBagItem {
+                src_bag: 255,
+                src_slot: 23,
+                dst_bag: 19,
+            },
+            0x10b,
+            vec![255, 23, 19],
+        ),
+        (
+            Command::SplitItem {
+                src_bag: 1,
+                src_slot: 2,
+                dst_bag: 3,
+                dst_slot: 4,
+                count: 300,
+            },
             0x10e,
             vec![1, 2, 3, 4, 44, 1, 0, 0],
         ),
-        (Command::DestroyItem { bag: 255, slot: 23, count: 0 }, 0x111, vec![255, 23, 0, 0, 0, 0]),
+        (
+            Command::DestroyItem {
+                bag: 255,
+                slot: 23,
+                count: 0,
+            },
+            0x111,
+            vec![255, 23, 0, 0, 0, 0],
+        ),
         (Command::BankerActivate { banker: g }, 0x1b7, gb.clone()),
         (Command::BuyBankSlot { banker: g }, 0x1b9, gb.clone()),
-        (Command::AutoBankItem { bag: 255, slot: 23 }, 0x283, vec![255, 23]),
-        (Command::AutoStoreBankItem { bag: 255, slot: 40 }, 0x282, vec![255, 40]),
-        (Command::PageTextQuery { page_id: 7, guid: g }, 0x05a, cat(&[7, 0, 0, 0], &gb)),
+        (
+            Command::AutoBankItem { bag: 255, slot: 23 },
+            0x283,
+            vec![255, 23],
+        ),
+        (
+            Command::AutoStoreBankItem { bag: 255, slot: 40 },
+            0x282,
+            vec![255, 40],
+        ),
+        (
+            Command::PageTextQuery {
+                page_id: 7,
+                guid: g,
+            },
+            0x05a,
+            cat(&[7, 0, 0, 0], &gb),
+        ),
     ];
     for (command, opcode, body) in rows {
         assert_eq!(encode(&command), (opcode, body), "{command:?}");
@@ -317,12 +468,27 @@ fn use_item_carries_header_guid_glyph_and_each_target_block() {
     let rows = [
         (UseItemTarget::SelfImplicit, vec![0, 0, 0, 0]),
         (UseItemTarget::Unit(0x42), vec![0x02, 0, 0, 0, 0x01, 0x42]),
-        (UseItemTarget::Object(0x42), vec![0x00, 0x08, 0, 0, 0x01, 0x42]),
+        (
+            UseItemTarget::Object(0x42),
+            vec![0x00, 0x08, 0, 0, 0x01, 0x42],
+        ),
         (UseItemTarget::Item(0x42), vec![0x10, 0, 0, 0, 0x01, 0x42]),
-        (UseItemTarget::Corpse(CorpseTarget::Ally, 0x42), vec![0, 0x80, 0, 0, 0x01, 0x42]),
-        (UseItemTarget::Corpse(CorpseTarget::Enemy, 0x42), vec![0, 0x02, 0, 0, 0x01, 0x42]),
-        (UseItemTarget::Dest(at), [vec![0x40, 0, 0, 0, 0], coords.clone()].concat()),
-        (UseItemTarget::Source(at), [vec![0x20, 0, 0, 0, 0], coords.clone()].concat()),
+        (
+            UseItemTarget::Corpse(CorpseTarget::Ally, 0x42),
+            vec![0, 0x80, 0, 0, 0x01, 0x42],
+        ),
+        (
+            UseItemTarget::Corpse(CorpseTarget::Enemy, 0x42),
+            vec![0, 0x02, 0, 0, 0x01, 0x42],
+        ),
+        (
+            UseItemTarget::Dest(at),
+            [vec![0x40, 0, 0, 0, 0], coords.clone()].concat(),
+        ),
+        (
+            UseItemTarget::Source(at),
+            [vec![0x20, 0, 0, 0, 0], coords.clone()].concat(),
+        ),
     ];
     for (target, tail) in rows {
         let (opcode, body) = encode_use_item(9, 255, 23, 8690, 0x0400_0000_0000_0102, 0, &target);

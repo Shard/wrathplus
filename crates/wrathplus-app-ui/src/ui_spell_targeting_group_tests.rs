@@ -2,9 +2,9 @@
 //! the click and the hover verdict.
 
 use super::*;
-use crate::net::{ClientCommand, Guid};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::net::{ClientCommand, Guid};
 use crate::spell::targeting::test_support::*;
 use std::collections::HashMap;
 
@@ -22,9 +22,9 @@ fn the_press_the_click_and_the_hover_bind_the_same_group_members() {
     };
     use crate::spell::group_relation::{fixture as gf, publish_group_roster, GroupRoster};
     use crate::spell::targeting::corpse_fixture as fx;
+    use bevy::ecs::system::RunSystemOnce;
     use wrathplus_formats::SpellDisplay;
     use wrathplus_protocol::types::GroupMemberEntry;
-    use bevy::ecs::system::RunSystemOnce;
 
     const SPELL: u32 = 3001;
     /// The guid a pet answers to.
@@ -175,8 +175,12 @@ fn the_press_the_click_and_the_hover_bind_the_same_group_members() {
             world
                 .run_system_once(publish_group_roster)
                 .expect("the roster publishes");
-            world.resource_mut::<crate::app_core::state::Selection>().target = Some(entity);
-            world.resource_mut::<crate::app_core::state::Selection>().guid = Some(guid);
+            world
+                .resource_mut::<crate::app_core::state::Selection>()
+                .target = Some(entity);
+            world
+                .resource_mut::<crate::app_core::state::Selection>()
+                .guid = Some(guid);
 
             let def = || SpellDisplay {
                 range_index: 5,
@@ -184,7 +188,9 @@ fn the_press_the_click_and_the_hover_bind_the_same_group_members() {
                 ..Default::default()
             };
             let word = cast_target_mask(&def());
-            world.resource_mut::<crate::app_core::state::Spells>().catalog =
+            world
+                .resource_mut::<crate::app_core::state::Spells>()
+                .catalog =
                 wrathplus_formats::SpellCatalog::from_displays(HashMap::from([(SPELL, def())]));
             arm(&mut world, SPELL, word);
 

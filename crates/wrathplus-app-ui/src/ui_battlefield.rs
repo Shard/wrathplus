@@ -38,21 +38,21 @@ use wrathplus_ui::script::{
     BattlegroundTypeView, ScriptValue, UiScript, WorldPvpView,
 };
 
+use crate::app_core::group::GroupState;
+use crate::app_core::player::Player;
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
+use crate::app_core::session::EnteredWorldMessage;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::WorldStates;
 use crate::area::AreaTableRes;
 use crate::names::NameCache;
 use crate::net::wrath_battleground_capture::NativeBattlegroundPackets;
 use crate::net::{ClientCommand, NetCommands};
-use crate::app_core::session::EnteredWorldMessage;
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
 use crate::ui_battlefield_positions::BattlefieldPositions;
 use crate::ui_battlefield_score::BattlefieldScoreboard;
 use crate::ui_dialog_verbs::{BattlefieldQueue, QueueSlot};
-use crate::app_core::group::GroupState;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
-use crate::app_core::state::WorldStates;
 
 /// The leash radius, kept from the 1.12 battlemaster window.
 const LEASH_RADIUS_YD: f32 = 5.555_555_3;
@@ -807,8 +807,8 @@ fn request_battlefield_status(commands: &NetCommands) {
 
 /// The battlemaster window's shared packet handlers.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::{Battlefield, InspectArenaTeams, NativeBattlegroundRest, WorldPvp};
     use crate::net::NetHandlerApp;

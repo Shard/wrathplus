@@ -1,6 +1,6 @@
 //! Installed build-12340 packed beam rows and SpellVisualKit references.
-use wrathplus_formats::{load_spell_visual_catalog, Chain};
 use std::path::Path;
+use wrathplus_formats::{load_spell_visual_catalog, Chain};
 
 #[test]
 fn installed_wrath_beams_resolve() {

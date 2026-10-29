@@ -2,18 +2,18 @@
 //! replies, [`feed_taxi`] pushes the known nodes on the current node's continent with their
 //! routes (built in [`routing`]) and fires the map events, and [`drain_taxi`] sends the activate.
 
-use wrathplus_protocol::types::TaxiMask;
 use bevy::prelude::*;
+use wrathplus_protocol::types::TaxiMask;
 
 use wrathplus_ui::script::{TaxiUiState, UiScript};
 
-use crate::names::NameCache;
-use crate::net::{ClientCommand, GuidIndex, NetCommands};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::player::UNIT_FLAG_TAXI_FLIGHT;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, GuidIndex, NetCommands};
+use crate::player::UNIT_FLAG_TAXI_FLIGHT;
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
 mod routing;
@@ -378,9 +378,10 @@ mod tests {
             .world_mut()
             .spawn((
                 crate::net::Guid(MASTER),
-                ObjectStore(ObjectFields::from_pairs(&[
-                    (FIELD_UNIT_FACTIONTEMPLATE, template),
-                ])),
+                ObjectStore(ObjectFields::from_pairs(&[(
+                    FIELD_UNIT_FACTIONTEMPLATE,
+                    template,
+                )])),
             ))
             .id();
         app.world_mut()

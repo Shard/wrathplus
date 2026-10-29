@@ -437,8 +437,8 @@ fn an_unmodelled_proc_only_kit_arms_nothing() {
 /// each part to its blend twin, as a cutout batch ignores alpha; at opaque it releases.
 #[test]
 fn the_author_owns_the_tree_then_releases_at_opaque() {
-    use wrathplus_world::model_fade::FadeMaterials;
     use bevy::mesh::MeshTag;
+    use wrathplus_world::model_fade::FadeMaterials;
 
     let cutout: Handle<wrathplus_assets::materials::WowModelMaterial> =
         bevy::asset::uuid_handle!("c0000000-0000-4000-8000-00000000a114");
@@ -625,7 +625,10 @@ fn a_rigged_attachment_inherits_its_wearers_tint_through_the_model_chain() {
     let tints = app
         .world()
         .resource::<wrathplus_world::instance_tint::InstanceTints>();
-    assert_eq!(tints.get(body_slot), wrathplus_world::instance_tint::IDENTITY);
+    assert_eq!(
+        tints.get(body_slot),
+        wrathplus_world::instance_tint::IDENTITY
+    );
     assert_eq!(
         tints.get(shoulder_slot),
         wrathplus_world::instance_tint::IDENTITY

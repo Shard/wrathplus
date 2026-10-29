@@ -127,8 +127,6 @@ fn script() -> UiScript {
     s
 }
 
-
-
 /// A full weapon view exercising most line families.
 fn axe() -> ItemTemplateView {
     ItemTemplateView {

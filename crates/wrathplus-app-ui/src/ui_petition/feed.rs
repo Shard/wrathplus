@@ -5,19 +5,19 @@
 //! once (`0x4f4320` fires as the pending count reaches zero); the owner's name is not counted
 //! (`0x4f4186`/`0x4f42e8`). The getters answer at any time, nil where nothing has landed.
 
+use bevy::prelude::*;
 use wrathplus_ui::script::{
     PetitionRecordView, PetitionRequest, PetitionState as VmPetition, UiScript,
     PETITION_TYPE_CHARTER, PETITION_TYPE_PETITION,
 };
-use bevy::prelude::*;
 
-use crate::names::NameCache;
-use crate::net::{ClientCommand, NetCommands, Objects};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
 use crate::inventory::find_item;
 use crate::inventory::ItemSearch;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, NetCommands, Objects};
 use crate::ui_session::{npc_switched, NpcSession};
 
 use super::{lines, GuildRegistrarState, PetitionState};
@@ -218,7 +218,9 @@ pub(super) fn drain_petition(
                 });
                 match charter {
                     Some((_, _, item)) => {
-                        let _ = commands.0.send(ClientCommand::TurnInPetition { item, banner: None });
+                        let _ = commands
+                            .0
+                            .send(ClientCommand::TurnInPetition { item, banner: None });
                     }
                     // No charter, no packet: a red line (`0x5ef49a`).
                     None => petition.lines.push(lines::no_charter_line()),
@@ -323,13 +325,12 @@ mod tests {
     /// The player's display ids, `UNIT_FIELD_DISPLAYID` (131) and `UNIT_FIELD_NATIVEDISPLAYID`.
     fn player(display: u32, native: u32) -> ObjectStore {
         ObjectStore(ObjectFields::from_fields(&[
-                (wrathplus_protocol::types::Field::UnitDisplayId, display),
-                (
-                    wrathplus_protocol::types::Field::UnitNativeDisplayId,
-                    native,
-                ),
-            ],
-        ))
+            (wrathplus_protocol::types::Field::UnitDisplayId, display),
+            (
+                wrathplus_protocol::types::Field::UnitNativeDisplayId,
+                native,
+            ),
+        ]))
     }
 
     fn run(npc: u64, designer: u64, me: &ObjectStore) -> (Vec<ClientCommand>, Vec<&'static str>) {

@@ -24,12 +24,10 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::sprite_render::Material2dPlugin;
 use bevy::window::PrimaryWindow;
 
-
 /// Clear the append lane at the top of the [`UiQuadAppend`] window, before every appender.
 fn clear_ui_overlays(mut quads: ResMut<UiQuads>) {
     quads.overlays.clear();
 }
-
 
 /// Above the world camera (0), below the egui dev overlay (2, `debug_panel::spawn_egui_camera`).
 const UI_CAMERA_ORDER: isize = 1;
@@ -58,12 +56,12 @@ fn tint_tag(color: [f32; 4]) -> u32 {
     !(byte(color[0]) | byte(color[1]) << 8 | byte(color[2]) << 16 | byte(color[3]) << 24)
 }
 
-
 pub(crate) use crate::app_core::schedule::UiQuadAppend;
-pub(crate) use crate::overlay::{PlayerUiCamera, UiQuad, UiQuadMask, UiQuadMaterial, UiQuads, UvRect};
-use crate::overlay::UV_CLAMP_OFF;
 pub(crate) use crate::overlay::ui_render_layers;
-
+use crate::overlay::UV_CLAMP_OFF;
+pub(crate) use crate::overlay::{
+    PlayerUiCamera, UiQuad, UiQuadMask, UiQuadMaterial, UiQuads, UvRect,
+};
 
 /// `WOW_PROBE_UI_ONE_TEX=1`, for pricing only (it draws wrong): runs split on state flags alone,
 /// each drawn with its first quad's texture, the draw count a UI texture atlas would reach.
@@ -71,7 +69,6 @@ fn one_texture_probe() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| std::env::var_os("WOW_PROBE_UI_ONE_TEX").is_some())
 }
-
 
 /// Owns the player-UI camera and the per-frame quad-to-mesh rebuild.
 pub struct PlayerUiPlugin;

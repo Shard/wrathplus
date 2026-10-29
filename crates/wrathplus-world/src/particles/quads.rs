@@ -2,9 +2,9 @@
 //! reference's quad writer (`0x7b2a50` head, `0x7b3041` tail), shared by child emitters
 //! (`0x7b5dd0`).
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::wow_to_bevy;
 use wrathplus_formats::ParticleEmitterDef;
-use bevy::prelude::*;
 
 use super::buffer::EffectVertex;
 use super::{rand01, Particle};

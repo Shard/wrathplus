@@ -1,8 +1,6 @@
 //! `SMSG_UPDATE_OBJECT` body decode: the object list, each entry's [`MovementBlock`] and its
 //! sparse [`ObjectFields`].
 
-
-
 mod fields;
 mod movement;
 
@@ -40,9 +38,7 @@ pub enum Object {
     },
 }
 
-impl Object {
-}
-
+impl Object {}
 
 #[cfg(test)]
 mod tests {

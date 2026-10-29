@@ -45,12 +45,7 @@ fn trigger(app: &mut App, movie: u32) {
 
 fn completes(rx: &crossbeam_channel::Receiver<ClientCommand>) -> usize {
     rx.try_iter()
-        .filter(|c| {
-            matches!(
-                c,
-                ClientCommand::NativeWorldObjects(Command::CompleteMovie)
-            )
-        })
+        .filter(|c| matches!(c, ClientCommand::NativeWorldObjects(Command::CompleteMovie)))
         .count()
 }
 

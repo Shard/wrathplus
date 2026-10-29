@@ -7,8 +7,8 @@
 //! its outer radius with `flags & 1` clear. The 4 s crossfade is `crate::lighting`'s. A
 //! portal-less prop runs no flood and never engages; no shipped prop is an enterable room.
 
-use wrathplus_formats::WmoFog;
 use bevy::prelude::*;
+use wrathplus_formats::WmoFog;
 
 /// The MFOG fog target for the camera this frame: `None` when no containing group of the camera is
 /// a true interior, or the root has under two records. Written by the PVS pass

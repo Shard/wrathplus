@@ -2,10 +2,10 @@
 //! `SMSG_BARBER_SHOP_RESULT`) and the barber chair's lifetime, for the feed
 //! (`crate::ui_native::wrath_appearance`); both clear on Connected and Disconnected.
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::wrath_appearance::Packet;
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::wrath_appearance::Packet;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct AppearanceReceipts(pub VecDeque<Packet>);

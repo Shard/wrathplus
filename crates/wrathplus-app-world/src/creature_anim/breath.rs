@@ -20,11 +20,11 @@
 use bevy::ecs::entity::EntityHashMap;
 use bevy::prelude::*;
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::area::AreaTableRes;
 use crate::entities::Creatures;
 use crate::net::NetEntity;
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 
 use super::events::AnimSoundEvent;
 use super::spell_visual::{FxClass, FxSlot, FxStage, SpellKitFx, SpellVisuals};

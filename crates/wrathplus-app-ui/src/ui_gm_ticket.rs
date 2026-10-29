@@ -11,16 +11,16 @@
 //! survey (`GMSurveyCurrentSurvey` → `GMSurveySurveys` → questions and answers) and fires
 //! `GMSURVEY_DISPLAY`; the window's `GMSurveySubmit` sends `CMSG_GMSURVEY_SUBMIT`.
 
-use wrathplus_ui::script::{GmTicketIntent, GmTicketWrite, ScriptValue, UiScript};
 use bevy::prelude::*;
+use wrathplus_ui::script::{GmTicketIntent, GmTicketWrite, ScriptValue, UiScript};
 
 use wrathplus_assets::coords::bevy_to_wow;
 
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::player::Player;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
 use crate::app_core::vm_memo::VmMemo;
+use crate::net::{ClientCommand, NetCommands};
 
 /// Spell 7355 "Stuck", what `Stuck()` casts: the only spell with `SPELL_EFFECT_STUCK` (84), which
 /// moves the player to their last safe position (vmangos `SpellEffects.cpp:4697`).
@@ -341,8 +341,8 @@ fn load_gm_ticket_dbc(
 
 /// The GM ticket's packet handlers.
 pub(crate) mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use crate::net::NetHandlerApp;
 

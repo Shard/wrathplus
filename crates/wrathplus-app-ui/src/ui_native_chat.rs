@@ -3,9 +3,9 @@
 //! chat feed (`ui_chat::native_message`); the wire emits no shared `SessionEvent::Chat` beside it.
 //! This FIFO does not infer permissions, emit UI events, or initiate queries.
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{wrath_chat::Message, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_chat::Message, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeChatPackets(pub(crate) VecDeque<Message>);

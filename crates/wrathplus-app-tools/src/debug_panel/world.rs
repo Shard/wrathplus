@@ -2,11 +2,11 @@
 //! residency, plus a copy of the vmangos `.go xyz` line and, while free-flying, a land-here
 //! button. While free-flying the spot is the camera's, not the frozen avatar's.
 
-use wrathplus_assets::coords::bevy_to_wow;
-use wrathplus_formats::world_to_tile;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui;
+use wrathplus_assets::coords::bevy_to_wow;
+use wrathplus_formats::world_to_tile;
 
 use super::OVERLAY_TEXT_DIM;
 use crate::player::land::LandHere;

@@ -425,13 +425,7 @@ impl ChatTextFilter<'_> {
     /// Arm 1 (`0x49aac9`-`0x49ab33`): whether to drop the line. In the reference's order: not
     /// `CHAT_MSG_FILTERED`, no `"GM"` tag, a non-GM viewer, `spamFilter` on, then the predicate.
     /// Every exit, a GM viewer's included, still reaches the mask arm (`0x49abb7`).
-    pub fn should_drop(
-        &self,
-        chat_type: u8,
-        chat_tag: u8,
-        viewer_is_gm: bool,
-        text: &str,
-    ) -> bool {
+    pub fn should_drop(&self, chat_type: u8, chat_tag: u8, viewer_is_gm: bool, text: &str) -> bool {
         use wrathplus_protocol::types::{chat_tag as tag, CHAT_MSG_FILTERED};
         if chat_type == CHAT_MSG_FILTERED || chat_tag == tag::GM || viewer_is_gm {
             return false;

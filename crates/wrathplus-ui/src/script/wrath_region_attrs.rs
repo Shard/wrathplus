@@ -95,7 +95,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.named_registry_value::<Table>(super::editbox::REG_EDITBOX_METHODS)?,
     ))?;
     let tex: Table = lua.named_registry_value(REG_TEXTURE_METHODS)?;
-    for (set, get, vertical) in [("SetHorizTile", "GetHorizTile", false), ("SetVertTile", "GetVertTile", true)] {
+    for (set, get, vertical) in [
+        ("SetHorizTile", "GetHorizTile", false),
+        ("SetVertTile", "GetVertTile", true),
+    ] {
         tex.set(
             set,
             lua.create_function(move |lua, (this, v): (Table, Value)| {
@@ -111,8 +114,14 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         tex.set(
             get,
             lua.create_function(move |lua, this: Table| {
-                with(lua, &this, |d| if vertical { d.vert_tile } else { d.horiz_tile })
-                    .map(|on| on.then_some(1i64))
+                with(lua, &this, |d| {
+                    if vertical {
+                        d.vert_tile
+                    } else {
+                        d.horiz_tile
+                    }
+                })
+                .map(|on| on.then_some(1i64))
             })?,
         )?;
     }
@@ -126,10 +135,14 @@ mod tests {
     #[test]
     fn word_wrap_indent_and_tiling_flags() {
         let s = UiScript::new().unwrap();
-        s.run("F = CreateFrame('Frame') S = F:CreateFontString() T = F:CreateTexture()").unwrap();
+        s.run("F = CreateFrame('Frame') S = F:CreateFontString() T = F:CreateTexture()")
+            .unwrap();
         {
             let check = "S:CanWordWrap() == 1 and S:GetIndentedWordWrap() == nil and T:GetHorizTile() == nil";
-            assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
+            assert!(
+                s.eval::<bool>(&format!("return {check}")).unwrap(),
+                "{check}"
+            );
         }
         s.run("S:SetWordWrap(false) S:SetIndentedWordWrap(true) T:SetHorizTile(true) T:SetVertTile(1)").unwrap();
         assert!(s
@@ -154,7 +167,8 @@ mod tests {
         ] {
             assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
         }
-        s.run("FlagButton:SetMotionScriptsWhileDisabled(false) FlagBar:SetRotatesTexture(nil)").unwrap();
+        s.run("FlagButton:SetMotionScriptsWhileDisabled(false) FlagBar:SetRotatesTexture(nil)")
+            .unwrap();
         assert!(s.eval::<bool>("return FlagButton:GetMotionScriptsWhileDisabled() == nil and FlagBar:GetRotatesTexture() == nil").unwrap());
     }
 
@@ -166,8 +180,11 @@ mod tests {
         )
         .unwrap();
         crate::loader::load(&s, &doc, &|_: &str| None);
-        s.run("F = CreateFrame('Frame') S = F:CreateFontString(nil, 'ARTWORK', 'TestFsTemplate')").unwrap();
-        assert!(s.eval::<bool>("return S:GetJustifyH() == 'LEFT' and S:CanWordWrap() == nil").unwrap());
+        s.run("F = CreateFrame('Frame') S = F:CreateFontString(nil, 'ARTWORK', 'TestFsTemplate')")
+            .unwrap();
+        assert!(s
+            .eval::<bool>("return S:GetJustifyH() == 'LEFT' and S:CanWordWrap() == nil")
+            .unwrap());
         assert!(!s.take_warnings().iter().any(|w| w.contains("TEMPLATE")));
     }
 }

@@ -13,13 +13,13 @@
 //! the stock dialogs hang off (`UIParent.lua:304-315`). Quit is a logout that exits the process on
 //! completion; the QUIT dialog has an "Exit now" button and CAMP has none.
 
-use wrathplus_ui::script::{SessionRequest, UiScript};
 use bevy::prelude::*;
+use wrathplus_ui::script::{SessionRequest, UiScript};
 
-use crate::net::{ClientCommand, LoggedOutMessage, NetCommands};
-use crate::app_core::session::SelfGuid;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::app_core::session::SelfGuid;
+use crate::net::{ClientCommand, LoggedOutMessage, NetCommands};
 
 /// The refusal line for every non-zero reason, never `PLAYER_LOGOUT_FAILED_ERROR`: message `0x180`
 /// of the `DisplayError` at `0x5aaf26`, a key so the player's `GlobalStrings.lua` supplies it.
@@ -230,8 +230,8 @@ impl Plugin for UiLogoutPlugin {
 
 /// The logout response and cancel-ack handlers; the decision table is `LogoutState`'s.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::LogoutState;
     use crate::net::NetHandlerApp;

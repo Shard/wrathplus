@@ -1,9 +1,9 @@
 //! Transport-only ordered native battleground, arena and battlefield receipts. App owns any future reducer/UI feed.
 //! No queue, score, rating or battlefield state is inferred.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_battleground::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_battleground::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeBattlegroundPackets(pub VecDeque<Packet>);

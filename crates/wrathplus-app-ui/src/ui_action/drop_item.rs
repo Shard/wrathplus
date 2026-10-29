@@ -31,7 +31,10 @@ fn feedable_pet(
 /// in the world click's object leg `0x4925d0`, where the click still selects).
 pub(crate) fn drop_item_on_unit(
     script: Option<NonSendMut<UiScript>>,
-    self_q: Query<(&crate::net::Guid, &crate::app_core::session::ObjectStore), With<crate::app_core::session::SelfPlayer>>,
+    self_q: Query<
+        (&crate::net::Guid, &crate::app_core::session::ObjectStore),
+        With<crate::app_core::session::SelfPlayer>,
+    >,
     stores: Query<&crate::app_core::session::ObjectStore>,
     index: Res<crate::net::GuidIndex>,
     pet_bar: Res<crate::app_core::state::PetBar>,

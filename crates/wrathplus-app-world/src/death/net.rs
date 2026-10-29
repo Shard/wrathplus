@@ -2,12 +2,12 @@
 //! The corpse-guid latch's hooks on the object lifecycle live with their caller, the wire layer's
 //! object arms (`net::objects`).
 
-use wrathplus_protocol::{MoveMode, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{MoveMode, SessionEvent, SessionEventKind};
 
 use super::{CorpsePoint, DeathNet, ResurrectOffer};
-use crate::net::{MoveModeMessage, NetHandlerApp};
 use crate::app_core::session::SelfGuid;
+use crate::net::{MoveModeMessage, NetHandlerApp};
 
 /// Register the death handlers and the session-end listener.
 pub(super) fn register(app: &mut App) {

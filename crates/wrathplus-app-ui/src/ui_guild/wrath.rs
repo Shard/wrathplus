@@ -4,10 +4,10 @@
 //! from our guild's identity.
 use crate::names::NameCache;
 use crate::net::{NetCommands, NetHandlerApp};
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_guild::{EventLogEntry, Packet, Rank};
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use wrathplus_ui::script::{UiScript, WrathGuildEvent};
-use bevy::prelude::*;
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeGuild {

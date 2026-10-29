@@ -7,10 +7,10 @@
 
 use bevy::prelude::*;
 
-use crate::app_core::state::ClientState;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
 use crate::app_core::schedule::UnitFeed;
+use crate::app_core::state::ClientState;
 use wrathplus_world::schedule::WorldStage;
 
 mod bind_gates;
@@ -23,12 +23,12 @@ pub mod inflight;
 mod mods;
 mod native_control;
 pub mod native_failure;
-pub mod reagents;
-pub mod secure_toggle;
-pub(crate) mod unit_cast;
 pub(crate) mod net;
 mod range_units;
+pub mod reagents;
+pub mod secure_toggle;
 pub mod targeting;
+pub(crate) mod unit_cast;
 pub mod usable;
 pub(crate) mod validator;
 
@@ -37,16 +37,16 @@ pub(crate) mod validator;
 pub use cast_send::{CastCommit, CastLadder, HeldCast, HeldForPick, TargetedBind};
 pub use cast_target::AutoSelfCast;
 pub(crate) use cooldowns::Cooldowns;
+#[cfg(any(test, feature = "test-support"))]
+pub use inflight::cast_test_support;
 pub use inflight::{
     inflight, ActiveChannel, AutoRepeatActive, LocalMoveStart, PendingCast, QueuedMeleeSpell,
     SelfCancel, SPELL_INTERRUPT_MOVEMENT,
 };
 #[cfg(any(test, feature = "test-support"))]
-pub use inflight::cast_test_support;
+pub use mods::OP_CAST_TIME;
 pub use mods::{ModsDiff, SpellModifiers, SpellsCastTime, OP_COST, OP_GCD, OP_RADIUS};
 pub use mods::{OP_COOLDOWN, OP_RANGE};
-#[cfg(any(test, feature = "test-support"))]
-pub use mods::OP_CAST_TIME;
 pub use range_units::{RangeUnits, DEFAULT_REACH};
 // `TargetingWants` is exported for the ground reticle, which draws for the location word alone.
 pub use targeting::{
@@ -179,8 +179,7 @@ fn line_skill_value(
 
 /// Each skill slot's line and effective value, all [`spell_skill_value`] reads: a text built
 /// against one snapshot is rebuilt when the next differs.
-pub type SkillSnapshot =
-    [(u16, u32); wrathplus_protocol::types::PLAYER_SKILL_SLOTS as usize];
+pub type SkillSnapshot = [(u16, u32); wrathplus_protocol::types::PLAYER_SKILL_SLOTS as usize];
 
 /// The [`SkillSnapshot`] of the player; all zeros without one.
 pub fn skill_snapshot(me: Option<&crate::app_core::session::ObjectStore>) -> SkillSnapshot {

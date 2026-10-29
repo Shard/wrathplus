@@ -4,9 +4,9 @@
 
 use std::collections::HashMap;
 
+use bevy::prelude::*;
 use wrathplus_formats::heirlooms::HeirloomCatalog;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use crate::net::NetHandlerApp;
 

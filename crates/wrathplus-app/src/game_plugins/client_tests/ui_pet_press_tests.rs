@@ -5,28 +5,28 @@
 //! (`0x4bd367`-`0x4bd36e`), whole client headless, with the press applied as the script call it is.
 //! The rig is shared with `flush_tests`, whose packets reach the same list.
 
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
+use crate::app_core::cooldowns::Cooldowns;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::cooldowns::Cooldowns;
+use crate::app_core::state::PetBar;
 use crate::app_core::state::Spells;
+use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
 use crate::ui_pet::bar::{feed_pet_bar, fire_pet_cooldown_events};
 use crate::ui_pet::drain::PetPress;
 use crate::ui_pet::press_tests::*;
-use crate::app_core::state::PetBar;
-use wrathplus_formats::{SpellCatalog, SpellDisplay};
-use wrathplus_protocol::types::Field;
-use wrathplus_protocol::types::{
-    PetActionEntry, PET_ACT_COMMAND, PET_ACT_ENABLED, PET_ACT_REACTION, PET_COMMAND_ATTACK,
-    PET_COMMAND_FOLLOW, PET_COMMAND_STAY, PET_REACT_AGGRESSIVE,
-};
 use bevy::ecs::schedule::Schedule;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use crossbeam_channel::Receiver;
 use std::collections::HashMap;
 use std::time::Instant;
+use wrathplus_formats::{SpellCatalog, SpellDisplay};
+use wrathplus_protocol::types::Field;
+use wrathplus_protocol::types::{
+    PetActionEntry, PET_ACT_COMMAND, PET_ACT_ENABLED, PET_ACT_REACTION, PET_COMMAND_ATTACK,
+    PET_COMMAND_FOLLOW, PET_COMMAND_STAY, PET_REACT_AGGRESSIVE,
+};
 
 pub(super) struct Rig {
     pub(super) app: App,
@@ -376,12 +376,9 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
     let me = world.resource::<GuidIndex>().0[&ME];
     world
         .entity_mut(me)
-        .insert(ObjectStore(wrathplus_protocol::ObjectFields::from_pairs(&[
-            (2, 0x19),
-            (22, 100),
-            (28, 100),
-            (FLAGS, 0x8),
-        ])));
+        .insert(ObjectStore(wrathplus_protocol::ObjectFields::from_pairs(
+            &[(2, 0x19), (22, 100), (28, 100), (FLAGS, 0x8)],
+        )));
     let foe = world
         .spawn((
             Guid(FOE),
@@ -393,11 +390,12 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
         ))
         .id();
     world.resource_mut::<GuidIndex>().0.insert(FOE, foe);
-    *world.resource_mut::<crate::app_core::state::Selection>() = crate::app_core::state::Selection {
-        target: Some(foe),
-        guid: Some(FOE),
-        ..Default::default()
-    };
+    *world.resource_mut::<crate::app_core::state::Selection>() =
+        crate::app_core::state::Selection {
+            target: Some(foe),
+            guid: Some(FOE),
+            ..Default::default()
+        };
     let attack = PET_COMMAND_ATTACK | (u32::from(PET_ACT_COMMAND) << 24);
     world.resource_mut::<PetBar>().spells.bar[0] = PetActionEntry::from(attack);
     rig.frame();

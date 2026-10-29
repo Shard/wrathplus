@@ -16,14 +16,14 @@ use wrathplus_assets::MapCatalogRes;
 use wrathplus_protocol::types::{BattlefieldPosition, BattlefieldPositions as PositionsPacket};
 use wrathplus_ui::script::{BattlefieldFlagView, BattlefieldPositionView, UiScript};
 
-use crate::names::NameCache;
-use crate::net::{ClientCommand, GuidIndex, NetCommands, NetEntity};
-use crate::app_core::session::EnteredWorldMessage;
-use crate::app_core::session::SelfGuid;
-use crate::ui_dialog_verbs::BattlefieldQueue;
 use crate::app_core::group::GroupState;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::app_core::session::EnteredWorldMessage;
+use crate::app_core::session::SelfGuid;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, GuidIndex, NetCommands, NetEntity};
+use crate::ui_dialog_verbs::BattlefieldQueue;
 use crate::ui_world_map::{project_on_displayed, WorldMapUiData};
 
 /// `RequestBattlefieldPositions` (`0x4aa5c0`) sends at most once per 5000 ms (stamp
@@ -48,7 +48,11 @@ impl BattlefieldPositions {
     /// Build 12340's `MSG_BATTLEGROUND_PLAYER_POSITIONS` (`0x54b3f0`), from the native reducer.
     /// Unresolved, labelled: the reference keeps two flag carriers (`0xbea170`); the view keeps
     /// the first.
-    pub(crate) fn apply_wrath(&mut self, players: Vec<(u64, f32, f32)>, carriers: Vec<(u64, f32, f32)>) {
+    pub(crate) fn apply_wrath(
+        &mut self,
+        players: Vec<(u64, f32, f32)>,
+        carriers: Vec<(u64, f32, f32)>,
+    ) {
         let at = |(guid, x, y): (u64, f32, f32)| BattlefieldPosition { guid, x, y };
         self.apply(PositionsPacket {
             players: players.into_iter().map(at).collect(),
@@ -221,8 +225,8 @@ pub(crate) fn reset_on_world_enter(
 
 /// The battlefield map's packet handler.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::BattlefieldPositions;
     use crate::net::NetHandlerApp;

@@ -3,17 +3,17 @@
 //! client keeps its own copy: a save or delete updates it at once, and `SMSG_EQUIPMENT_SET_SAVED`
 //! brings a new set's GUID (`Player::SetEquipmentSet`). A set use's
 //! `SMSG_EQUIPMENT_SET_USE_RESULT` (0 done, 4 bags full) becomes `EQUIPMENT_SWAP_FINISHED`.
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 pub(crate) use crate::net::wrath_inventory_capture::EquipmentSets;
 use crate::net::wrath_inventory_capture::NativeInventoryPackets;
 use crate::net::{ClientCommand, NetCommands, Objects};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
+use bevy::prelude::*;
+use std::collections::HashMap;
 use wrathplus_protocol::wrath_inventory::{Command, EquipmentSet, Packet, EQUIPMENT_SLOTS};
 use wrathplus_ui::script::{
     EquipmentSetRequest, EquipmentSetView, UiScript, EQUIPMENT_SET_IGNORED_SLOT,
 };
-use bevy::prelude::*;
-use std::collections::HashMap;
 
 /// `MAX_EQUIPMENT_SET_INDEX` (AzerothCore Player.h).
 const MAX_SETS: u32 = 10;
@@ -49,9 +49,9 @@ pub(crate) fn feed_equipment_sets(
         script.equipment_swap_finished(completed, name);
     }
     for set_guid in deletes {
-        let _ = commands
-            .0
-            .send(ClientCommand::NativeInventory(Command::EquipmentSetDelete { set_guid }));
+        let _ = commands.0.send(ClientCommand::NativeInventory(
+            Command::EquipmentSetDelete { set_guid },
+        ));
     }
     // Where each carried item is now: equipped slots and bag slots, by GUID.
     let carried: HashMap<u64, (u8, u8)> = self_q

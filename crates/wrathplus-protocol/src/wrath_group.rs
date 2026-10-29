@@ -130,15 +130,16 @@ fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 pub const fn handles(opcode: u16) -> bool {
-    raid::handles(opcode) || matches!(
-        opcode,
-        SMSG_GROUP_INVITE
-            | SMSG_GROUP_DECLINE
-            | SMSG_GROUP_UNINVITE
-            | SMSG_GROUP_LIST
-            | SMSG_PARTY_MEMBER_STATS
-            | SMSG_PARTY_MEMBER_STATS_FULL
-    )
+    raid::handles(opcode)
+        || matches!(
+            opcode,
+            SMSG_GROUP_INVITE
+                | SMSG_GROUP_DECLINE
+                | SMSG_GROUP_UNINVITE
+                | SMSG_GROUP_LIST
+                | SMSG_PARTY_MEMBER_STATS
+                | SMSG_PARTY_MEMBER_STATS_FULL
+        )
 }
 pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Packet> {
     if raid::handles(opcode) {

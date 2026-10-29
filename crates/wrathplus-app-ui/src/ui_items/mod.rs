@@ -9,20 +9,20 @@
 //! [`PendingItemOps`], until the descriptor resolves them or the server answers a non-zero
 //! `SMSG_INVENTORY_CHANGE_FAILURE`.
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{BAG_PLAYER_INVENTORY, SLOT_BAG_FIRST, SLOT_PACK_FIRST};
 use wrathplus_ui::script::EQUIPMENT_BAG;
-use bevy::prelude::*;
 
-use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 use crate::app_core::schedule::UiInput;
 use crate::app_core::schedule::UnitFeed;
+use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 
+#[cfg(test)]
+pub(crate) use crate::inventory::{count_of, find_item, InventoryScope, ItemSearch};
 pub(crate) use crate::inventory::{
     has_key, slot_guid, slot_guid_count, StorageSlots, BAGS, BAG_SLOT_FIRST, BANK_BAG_ID_FIRST,
     BANK_CONTAINER, BANK_SLOT_FIRST, KEYRING_CONTAINER, PACK_SLOTS,
 };
-#[cfg(test)]
-pub(crate) use crate::inventory::{count_of, find_item, InventoryScope, ItemSearch};
 pub mod currency;
 mod drain;
 mod equip_error;
@@ -253,9 +253,9 @@ pub(crate) fn send_item_use(
         let Some(d) = ladder.spells.as_ref().and_then(|s| s.catalog.get(spell)) else {
             return false;
         };
-        ctx.rel
-            .self_store
-            .is_some_and(|s| toggle::active_action_toggle(spell, d, toggle::unit_auras(&ladder.objects, s)))
+        ctx.rel.self_store.is_some_and(|s| {
+            toggle::active_action_toggle(spell, d, toggle::unit_auras(&ladder.objects, s))
+        })
     };
     // The disarm ladder, asked of the caster's own inventory.
     let disarmed_hand = ctx.rel.self_store.and_then(|store| {
@@ -272,9 +272,9 @@ pub(crate) fn send_item_use(
                 "ui_items: item use refused — that hand is disarmed (slot {})",
                 it.slot
             );
-            ui_errors
-                .0
-                .push(crate::app_core::errors::UiError::key("ERR_CANT_USE_DISARMED"));
+            ui_errors.0.push(crate::app_core::errors::UiError::key(
+                "ERR_CANT_USE_DISARMED",
+            ));
             false
         }
         ItemUseRoute::ToggleCancel(spell) => {
@@ -462,7 +462,10 @@ pub struct ItemBagFamilies(pub(crate) wrathplus_formats::ItemBagFamilyCatalog);
 pub struct ItemClasses(pub wrathplus_formats::ItemClassCatalog);
 
 /// Startup: the item-tooltip DBCs; one that fails to load leaves its resource absent.
-fn load_item_dbcs(mut commands: Commands, world_assets: Option<Res<wrathplus_assets::WorldAssets>>) {
+fn load_item_dbcs(
+    mut commands: Commands,
+    world_assets: Option<Res<wrathplus_assets::WorldAssets>>,
+) {
     use wrathplus_assets::LockRecover;
     let Some(world_assets) = world_assets else {
         return;

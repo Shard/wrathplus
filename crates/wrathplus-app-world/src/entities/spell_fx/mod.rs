@@ -15,10 +15,10 @@ mod lifecycle;
 
 use std::collections::HashMap;
 
-use wrathplus_assets::bone_target_id;
 use bevy::animation::AnimatedBy;
 use bevy::ecs::entity::EntityHashMap;
 use bevy::prelude::*;
+use wrathplus_assets::bone_target_id;
 
 use crate::creature_anim::spell_visual::FxSlot;
 use crate::creature_anim::{scan_events, AnimSoundEvent, FxClass, FxStage, SpellKitFx};
@@ -248,9 +248,12 @@ pub fn attach_effect_visuals(
             }
             // The alpha loops on this instance's clock; the sampler is the tag's only writer.
             if let Some(anim) = &part.alpha_anim {
-                let mat_anim =
-                    wrathplus_world::doodad_anim::MatAnim::driving_tag(anim.clone(), now, played_seq)
-                        .following_host(seq_host);
+                let mat_anim = wrathplus_world::doodad_anim::MatAnim::driving_tag(
+                    anim.clone(),
+                    now,
+                    played_seq,
+                )
+                .following_host(seq_host);
                 let tag_slot = if rigged && part.skinned_mesh.is_some() {
                     rig_slot
                 } else {
@@ -412,7 +415,8 @@ pub(super) fn arm_effect_rig(
     }
     let joints = wrathplus_world::rig_palette::spawn_joints(commands, root, root, &dm.skeleton);
     // Billboard bones face the camera at the palette level, their children inheriting.
-    if let Some(bb) = wrathplus_world::billboard::BillboardJointRig::new(&dm.skeleton, &joints, root)
+    if let Some(bb) =
+        wrathplus_world::billboard::BillboardJointRig::new(&dm.skeleton, &joints, root)
     {
         commands.entity(root).insert(bb);
     }

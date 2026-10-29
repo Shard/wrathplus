@@ -74,8 +74,8 @@ fn production_rank(entry: &str) -> Option<usize> {
     let ranks = RANKS.get_or_init(|| {
         let key = |path: &str| path.replace('/', "\\").to_ascii_lowercase();
         let mut ranks = std::collections::HashMap::new();
-        let Some(chain) =
-            wrathplus_formats::wow_data().and_then(|data| wrathplus_formats::open_chain(&data).ok())
+        let Some(chain) = wrathplus_formats::wow_data()
+            .and_then(|data| wrathplus_formats::open_chain(&data).ok())
         else {
             return ranks;
         };

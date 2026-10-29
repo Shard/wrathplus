@@ -1,11 +1,11 @@
 //! Wrath character-sheet values from semantic player fields, not reconstructed stats.
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use bevy::prelude::*;
 use wrathplus_assets::{AssetSet, ClientDataProfile, LockRecover, WorldAssets};
 use wrathplus_formats::{GameTable, WrathGameTables};
 use wrathplus_protocol::types::{Field, ObjectFields};
 use wrathplus_ui::script::{UiScript, WrathPaperDollStats, WrathStatConversions};
-use bevy::prelude::*;
 
 pub struct UiPaperDollPlugin;
 

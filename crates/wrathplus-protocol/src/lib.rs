@@ -5,91 +5,90 @@ pub mod events;
 pub mod guid;
 pub mod types;
 pub mod wire;
-pub mod wrath_auth;
-pub mod wrath_bootstrap;
-pub mod wrath_vehicle;
-pub mod wrath_environment;
-pub mod wrath_bind;
+pub mod wrath_achievement;
+pub mod wrath_appearance;
+pub mod wrath_arena_team;
 pub mod wrath_auras;
+pub mod wrath_auth;
 pub mod wrath_authority;
+pub mod wrath_battleground;
+pub mod wrath_bind;
+pub mod wrath_bootstrap;
+pub mod wrath_calendar;
+pub mod wrath_capture;
+pub mod wrath_channel;
+pub mod wrath_channel_members;
+pub mod wrath_char_services;
+pub mod wrath_chat_notices;
 pub mod wrath_combat;
+pub mod wrath_contacts;
+pub mod wrath_death;
+pub mod wrath_duel;
+pub mod wrath_environment;
 pub mod wrath_events;
+pub mod wrath_exchange;
+pub mod wrath_faction;
 pub mod wrath_gameplay;
 pub mod wrath_ground;
-pub mod wrath_items;
 pub mod wrath_group;
+pub mod wrath_guild;
 pub mod wrath_guild_bank;
 pub mod wrath_guild_bank_commands;
 pub mod wrath_guild_bank_log;
 pub mod wrath_guild_bank_query;
-pub mod wrath_guild_bank_text;
 pub mod wrath_guild_bank_swap;
 pub mod wrath_guild_bank_tab;
+pub mod wrath_guild_bank_text;
+pub mod wrath_guild_commands;
 pub mod wrath_guild_rank;
-pub mod wrath_lfg;
+pub mod wrath_help;
+pub mod wrath_inspect;
 pub mod wrath_instance;
 pub mod wrath_instance_control;
 pub mod wrath_inventory;
-pub mod wrath_exchange;
-pub mod wrath_achievement;
-pub mod wrath_calendar;
-pub mod wrath_quest;
-pub mod wrath_raid_browser;
-pub mod wrath_party;
-pub mod wrath_petition;
-pub mod wrath_channel_members;
-pub mod wrath_chat_notices;
-pub mod wrath_battleground;
-pub mod wrath_contacts;
-pub mod wrath_death;
-pub mod wrath_session_meta;
-pub mod wrath_help;
-pub mod wrath_refer_friend;
-pub mod wrath_world_objects;
-pub mod wrath_session_misc;
-pub mod wrath_capture;
-pub mod wrath_inspect;
-pub mod wrath_char_services;
-pub mod wrath_faction;
-pub mod wrath_loot;
+pub mod wrath_items;
+pub mod wrath_lfg;
 pub mod wrath_logs;
-pub mod wrath_movement;
-pub mod wrath_npc;
-pub mod wrath_relay;
-pub mod wrath_session;
-pub mod wrath_social;
-pub mod wrath_who;
-pub mod wrath_duel;
-pub mod wrath_spline;
-pub mod wrath_appearance;
-pub mod wrath_arena_team;
-pub mod wrath_guild;
-pub mod wrath_guild_commands;
-pub mod wrath_stable;
-pub mod wrath_vendor;
-pub mod wrath_channel;
+pub mod wrath_loot;
 pub mod wrath_mail;
 pub mod wrath_mail_mutations;
+pub mod wrath_misc;
+pub mod wrath_movement;
+pub mod wrath_npc;
+pub mod wrath_opcode_names;
+pub mod wrath_party;
+pub mod wrath_petition;
+pub mod wrath_progress;
+pub mod wrath_quest;
+pub mod wrath_raid_browser;
+pub mod wrath_refer_friend;
+pub mod wrath_relay;
 pub mod wrath_roll;
+pub mod wrath_session;
+pub mod wrath_session_meta;
+pub mod wrath_session_misc;
+pub mod wrath_social;
+pub mod wrath_spline;
+pub mod wrath_stable;
 pub mod wrath_taxi;
 pub mod wrath_taxi_ack;
 pub mod wrath_trainer;
+pub mod wrath_vehicle;
+pub mod wrath_vendor;
+pub mod wrath_who;
 pub mod wrath_world;
-pub mod wrath_misc;
-pub mod wrath_opcode_names;
-pub mod wrath_progress;
+pub mod wrath_world_objects;
 pub use events::{
-    CharAction, EntityKind, LoginRefusal, LoginStage, MoveSpeeds, Poll, SessionEnd,
-    SessionEvent, SessionEventKind, SplineEffect, SplineInterpolation,
+    CharAction, EntityKind, LoginRefusal, LoginStage, MoveSpeeds, Poll, SessionEnd, SessionEvent,
+    SessionEventKind, SplineEffect, SplineInterpolation,
 };
 pub use types::field;
 pub use types::{
     AttackSwingError, CharCreateReq, CharEnumItem, Character, CorpseLook, CreateSpline, ItemInfo,
     JumpInfo, MonsterMoveFacing, MoveMode, MoverState, ObjectFields, OwnerFallback, RelayVerb,
-    SpeedKind, SplineMode, TransportPose, CHARACTER_FLAG_GHOST,
-    CHARACTER_FLAG_HIDE_CLOAK, CHARACTER_FLAG_HIDE_HELM, CHARACTER_FLAG_RENAME,
+    SpeedKind, SplineMode, TransportPose, CHARACTER_FLAG_GHOST, CHARACTER_FLAG_HIDE_CLOAK,
+    CHARACTER_FLAG_HIDE_HELM, CHARACTER_FLAG_RENAME,
 };
-
 
 /// The port a stock vmangos `realmd` listens on.
 pub const AUTH_PORT: u16 = 3724;
@@ -144,7 +143,6 @@ impl std::fmt::Display for DialFailure {
 
 impl std::error::Error for DialFailure {}
 
-
 /// A realm from realmd's realm list, with every field the wire carries.
 #[derive(Debug, Clone)]
 pub struct RealmInfo {
@@ -168,7 +166,6 @@ pub struct RealmInfo {
     /// The wire's realm id.
     pub id: u8,
 }
-
 
 #[cfg(test)]
 mod host_port_tests {
@@ -207,10 +204,10 @@ mod wrath_native_stream_tests;
 #[cfg(test)]
 mod wrath_native_codec_guard_tests;
 
-pub mod wrath_pet;
-pub mod wrath_spell_control;
-pub mod wrath_speed;
 pub mod wrath_movement_misc;
+pub mod wrath_pet;
+pub mod wrath_speed;
+pub mod wrath_spell_control;
 
 pub mod wrath_chat;
 
@@ -221,7 +218,7 @@ pub mod wrath_logout;
 
 pub mod wrath_pet_name;
 
-pub mod wrath_quests_completed;
-pub mod wrath_ui_timer;
 pub mod wrath_mirror_image;
+pub mod wrath_quests_completed;
 pub mod wrath_spell_failure;
+pub mod wrath_ui_timer;

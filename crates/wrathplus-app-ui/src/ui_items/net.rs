@@ -1,16 +1,16 @@
 //! The item packet handlers: `SMSG_INVENTORY_CHANGE_FAILURE` onto the error line, the pending
 //! item locks and the loot latch, and `SMSG_OPEN_CONTAINER` onto the `BAG_OPEN` queue.
 
-use wrathplus_protocol::{ObjectFields, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{ObjectFields, SessionEvent, SessionEventKind};
 
 use super::{EquipError, EquipErrors, BAG_SLOT_FIRST, BANK_BAG_ID_FIRST};
-use crate::net::NetHandlerApp;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
-use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 use crate::app_core::state::LootLatch;
+use crate::net::NetHandlerApp;
+use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 
 pub(super) fn register(app: &mut App) {
     app.net_handler(SessionEventKind::InventoryFailure, on_inventory_failure)

@@ -42,8 +42,8 @@ use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_ui::script::UiScript;
 
 use super::probes::ProbeClock;
-use crate::app_core::session::SelfPlayer;
 use crate::app_core::player::Player;
+use crate::app_core::session::SelfPlayer;
 
 /// `GMTicketCategory.dbc` id 4, "Item", which is vmangos's `GMTICKET_ITEM`
 /// (`SharedDefines.h:1779`): the id is the wire value, not a list index.

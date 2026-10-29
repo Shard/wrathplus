@@ -14,17 +14,17 @@ use wrathplus_ui::script::{
 };
 use wrathplus_ui::strings::Arg;
 
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::net::{ClientCommand, NetCommands, Objects};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::pending_item_ops::PendingItemOps;
 use crate::portrait::PaperDollBooth;
 use crate::ui_items::{find_equip_slot, item_link};
 use crate::ui_script::gate;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
 
 /// Equipment slots, 0-based (`EQUIPMENT_SLOT_*`): main hand, off hand, ranged.
 const SLOT_MAIN_HAND: u8 = 15;
@@ -100,7 +100,12 @@ type SkillBlock = Option<(u64, std::collections::HashMap<u16, u16>)>;
 /// flags carry `0x402` or that no row admits for this race and class (`0x5de352`), so a level-up
 /// prints none. Not `ui_action::show_messages`: that sink sends every chat row as
 /// `CHAT_MSG_SYSTEM`, and these two ask for `CHAT_MSG_SKILL` (23).
-fn skill_line(script: &UiScript, chat: &mut crate::app_core::chat::ChatLog, key: &str, args: &[Arg<'_>]) {
+fn skill_line(
+    script: &UiScript,
+    chat: &mut crate::app_core::chat::ChatLog,
+    key: &str,
+    args: &[Arg<'_>],
+) {
     let Some(template) = script
         .lua()
         .globals()
@@ -1062,9 +1067,9 @@ fn weapon_enchant(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
     use wrathplus_protocol::types::Field;
     use wrathplus_protocol::types::ObjectFields;
-    use bevy::ecs::system::RunSystemOnce;
 
     const BANK_BAG_LIVE_FIRST: u32 = 68;
 

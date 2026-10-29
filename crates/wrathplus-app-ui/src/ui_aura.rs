@@ -6,9 +6,9 @@
 //! pet with no live object, its roster record.
 
 mod native;
-mod units;
 #[path = "ui_aura_tracking_order.rs"]
 pub(crate) mod tracking_order;
+mod units;
 
 use bevy::prelude::*;
 
@@ -16,15 +16,15 @@ use wrathplus_formats::SpellCatalog;
 use wrathplus_protocol::types::{UnitAuraSlot, AURA_FLAG_CANCELABLE, UNIT_AURA_POSITIVE_SLOTS};
 use wrathplus_ui::script::{AuraState, ScriptValue, TrackingState, UiScript};
 
-use crate::app_core::state::aura_trace_period as trace_period;
-use crate::app_core::state::ClientState;
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::app_core::state::Selection;
-use crate::app_core::state::Spells;
 use crate::app_core::schedule::UiInput;
 use crate::app_core::schedule::UnitFeed;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::aura_trace_period as trace_period;
+use crate::app_core::state::ClientState;
+use crate::app_core::state::Selection;
+use crate::app_core::state::Spells;
+use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
 
 pub(crate) use crate::app_core::state::{AuraDurations, DurationStamp};
 

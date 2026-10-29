@@ -4,13 +4,13 @@
 
 use std::collections::HashMap;
 
+use bevy::prelude::*;
 use wrathplus_assets::{M2Model, WmoModel};
 use wrathplus_formats::{
     load_creature_catalog, load_gameobject_catalog, load_item_display_catalog, CharCreateCatalog,
     CharSections, CharacterGeosets, CreatureCatalog, GameObjectCatalog,
 };
 use wrathplus_protocol::EntityKind;
-use bevy::prelude::*;
 
 use crate::net::NetEntity;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
@@ -833,7 +833,8 @@ fn setup_entities(
                 families.len(),
                 foods.len()
             );
-            commands.insert_resource(crate::app_core::catalogs::PetFamilyTables { families, foods });
+            commands
+                .insert_resource(crate::app_core::catalogs::PetFamilyTables { families, foods });
         }
         // Without them `UnitCreatureFamily("pet")` is nil, which the stock page's guard turns into
         // a blank level line (`PetPaperDollFrame.lua:68-70`), and the diet tooltip is empty.
@@ -923,7 +924,9 @@ fn setup_entities(
         Err(e) => warn!("mail packages unavailable, GetNumPackages answers 0: {e:#}"),
     }
     match wrathplus_formats::load_page_text_material_catalog(&mut chain) {
-        Ok(catalog) => commands.insert_resource(crate::app_core::interaction::PageMaterials(catalog)),
+        Ok(catalog) => {
+            commands.insert_resource(crate::app_core::interaction::PageMaterials(catalog))
+        }
         Err(e) => warn!("page text materials unavailable, books read on parchment: {e:#}"),
     }
 }
@@ -1266,7 +1269,8 @@ mod world_unit_tests {
         assert!(mine.wades, "and so does a player");
         assert_eq!(mine.height, 2.5, "the collision cylinder travels with it");
         assert!(
-            w.get::<wrathplus_world::world_unit::ViewerUnit>(me).is_some(),
+            w.get::<wrathplus_world::world_unit::ViewerUnit>(me)
+                .is_some(),
             "and the eye's own body is marked, which is what first-person feathering filters on"
         );
         assert!(
@@ -1281,7 +1285,10 @@ mod world_unit_tests {
         let mut app = App::new();
         let me = app
             .world_mut()
-            .spawn((net(EntityKind::Player, 1.0), crate::app_core::session::Embodied))
+            .spawn((
+                net(EntityKind::Player, 1.0),
+                crate::app_core::session::Embodied,
+            ))
             .id();
         app.world_mut()
             .run_system_once(publish_world_units)

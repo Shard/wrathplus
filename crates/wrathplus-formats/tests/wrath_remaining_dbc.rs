@@ -1,6 +1,6 @@
 //! Read-only build-12340 known rows for the remaining mapped catalogs.
-use wrathplus_formats::Chain;
 use std::path::Path;
+use wrathplus_formats::Chain;
 
 #[test]
 fn installed_wrath_remaining_mapped_catalogs() {

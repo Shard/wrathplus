@@ -201,8 +201,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::script::{
-        PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, UiScript,
-        UnitState, WrathGroup, WrathGroupMember,
+        PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, UiScript, UnitState, WrathGroup,
+        WrathGroupMember,
     };
     fn fixture(raid: bool) -> UiScript {
         let mut s = UiScript::new().unwrap();

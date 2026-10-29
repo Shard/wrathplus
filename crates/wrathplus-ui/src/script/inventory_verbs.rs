@@ -242,10 +242,8 @@ mod tests {
         s.run("ShowInventorySellCursor(16)").unwrap();
         assert_eq!(s.ui_cursor(), Some(UiCursorMode::Buy));
         assert_eq!(
-            s.eval::<i64>(
-                "return select('#', ShowInventorySellCursor(16))"
-            )
-            .unwrap(),
+            s.eval::<i64>("return select('#', ShowInventorySellCursor(16))")
+                .unwrap(),
             0
         );
 

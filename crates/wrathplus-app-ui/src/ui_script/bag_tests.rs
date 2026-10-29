@@ -1327,7 +1327,10 @@ fn bag_slot_cooldown_sweeps_through_the_xml() {
     // 12 s left of the potion's 60 s: started at `GetTime` 52 (an absolute-start triple).
     s.set_container(0, Some(backpack(Some((52_000, 60_000, true)))));
     s.run("OpenAllBags()").unwrap();
-    s.fire_event("BAG_UPDATE", vec![wrathplus_ui::script::ScriptValue::Int(0)]);
+    s.fire_event(
+        "BAG_UPDATE",
+        vec![wrathplus_ui::script::ScriptValue::Int(0)],
+    );
     // The next paint's `OnUpdateModel` scrubs the pane's sequence 0 to the elapsed fraction.
     super::test_ui::cooldown_facts(&mut s);
     s.tick(0.0);
@@ -1519,7 +1522,10 @@ fn the_first_key_puts_the_keyring_on_the_bar() {
     // A key lands: `HasKey`, then `BAG_UPDATE` to `MainMenuBarArtFrame`'s `OnEvent`, as at runtime.
     s.set_has_key(true);
     s.set_container(-2, Some(keyring(8, true)));
-    s.fire_event("BAG_UPDATE", vec![wrathplus_ui::script::ScriptValue::Int(-2)]);
+    s.fire_event(
+        "BAG_UPDATE",
+        vec![wrathplus_ui::script::ScriptValue::Int(-2)],
+    );
     assert!(
         s.eval::<bool>("return KeyRingButton:IsShown()").unwrap(),
         "the first key reveals the keyring button"
@@ -1556,7 +1562,10 @@ fn the_first_key_puts_the_keyring_on_the_bar() {
     // The latch is one-way: `MainMenuBar_UpdateKeyRing` only ever shows the button, gated on the
     // `showKeyring` CVar (`MainMenuBar.lua:471-479`).
     s.set_has_key(false);
-    s.fire_event("BAG_UPDATE", vec![wrathplus_ui::script::ScriptValue::Int(-2)]);
+    s.fire_event(
+        "BAG_UPDATE",
+        vec![wrathplus_ui::script::ScriptValue::Int(-2)],
+    );
     assert!(
         s.eval::<bool>("return KeyRingButton:IsShown()").unwrap(),
         "losing the last key leaves the button on the bar — the reference's one-way latch"
@@ -1577,7 +1586,10 @@ fn the_keyring_button_opens_a_keyring_window() {
     // Level 44: 8 slots (the 40..49 rung). The level decides; the feed carries the same 8.
     seat_player_at_level(&mut s, 44);
     s.set_container(-2, Some(keyring(8, true)));
-    s.fire_event("BAG_UPDATE", vec![wrathplus_ui::script::ScriptValue::Int(-2)]);
+    s.fire_event(
+        "BAG_UPDATE",
+        vec![wrathplus_ui::script::ScriptValue::Int(-2)],
+    );
     let _ = s.take_sounds();
 
     assert!(!open(&s, -2));
@@ -1641,7 +1653,10 @@ fn a_hovered_key_shows_its_tooltip_through_its_inventory_slot() {
     s.set_has_key(true);
     seat_player_at_level(&mut s, 44);
     s.set_container(-2, Some(keyring(8, true)));
-    s.fire_event("BAG_UPDATE", vec![wrathplus_ui::script::ScriptValue::Int(-2)]);
+    s.fire_event(
+        "BAG_UPDATE",
+        vec![wrathplus_ui::script::ScriptValue::Int(-2)],
+    );
     s.run("KeyRingButton:Click()").unwrap();
     assert!(open(&s, -2), "fixture: the keyring is open");
     // Which slot the tooltip is asked for: the frame's own field shadows the method table.
@@ -1701,7 +1716,10 @@ fn a_key_dropped_on_the_button_files_itself() {
             )]),
         }),
     );
-    s.fire_event("BAG_UPDATE", vec![wrathplus_ui::script::ScriptValue::Int(-2)]);
+    s.fire_event(
+        "BAG_UPDATE",
+        vec![wrathplus_ui::script::ScriptValue::Int(-2)],
+    );
     s.run("PickupContainerItem(0, 3)").unwrap();
     assert!(s.eval::<bool>("return CursorHasItem()").unwrap());
 

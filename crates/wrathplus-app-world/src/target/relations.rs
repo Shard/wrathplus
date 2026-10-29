@@ -13,8 +13,8 @@
 
 use wrathplus_protocol::types::{ObjectType, OwnerFallback};
 
-use crate::net::Reputations;
 use crate::app_core::session::ObjectStore;
+use crate::net::Reputations;
 
 use super::wrath_relations::Context;
 use super::Factions;
@@ -196,9 +196,17 @@ mod tests {
         let store = |flags: u32, charmed_by: u32, created_by: u32| {
             ObjectStore(wrathplus_protocol::ObjectFields::from_field_slots(&[
                 (wrathplus_protocol::types::Field::UnitFlags, 0, flags),
-                (wrathplus_protocol::types::Field::UnitCharmedby, 0, charmed_by),
+                (
+                    wrathplus_protocol::types::Field::UnitCharmedby,
+                    0,
+                    charmed_by,
+                ),
                 (wrathplus_protocol::types::Field::UnitCharmedby, 1, 0),
-                (wrathplus_protocol::types::Field::UnitCreatedby, 0, created_by),
+                (
+                    wrathplus_protocol::types::Field::UnitCreatedby,
+                    0,
+                    created_by,
+                ),
                 (wrathplus_protocol::types::Field::UnitCreatedby, 1, 0),
             ]))
         };

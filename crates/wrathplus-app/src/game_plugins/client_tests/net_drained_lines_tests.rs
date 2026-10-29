@@ -3,13 +3,13 @@
 //! (`net::MemberDeactivated`, drained by `ui_party`). They build the client with
 //! `headless_client`, so they live in the root layer.
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{Field, GroupMemberEntry, ObjectFields};
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
-use crate::net::{GuidIndex, Reputations, StandingChanged};
-use crate::app_core::session::ObjectStore;
 use crate::app_core::group::GroupState;
+use crate::app_core::session::ObjectStore;
+use crate::net::{GuidIndex, Reputations, StandingChanged};
 
 /// Where in `kind`'s registration order the handler named `name` runs.
 fn position(app: &App, kind: SessionEventKind, name: &str) -> usize {

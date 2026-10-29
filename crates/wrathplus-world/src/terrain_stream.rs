@@ -5,12 +5,12 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use wrathplus_assets::coords::{bevy_to_wow, placement_rotation, wow_to_bevy};
-use wrathplus_assets::{AdtTile, M2Model, WdtIndex, WmoModel};
-use wrathplus_formats::{Doodad, WmoInstance};
 use bevy::pbr::ExtendedMaterial;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
+use wrathplus_assets::coords::{bevy_to_wow, placement_rotation, wow_to_bevy};
+use wrathplus_assets::{AdtTile, M2Model, WdtIndex, WmoModel};
+use wrathplus_formats::{Doodad, WmoInstance};
 
 use crate::clutter::{scatter_tile_clutter, ClutterConfig, GroundClutter};
 use crate::collision::{walk_layers, GroundDecalSurface, PickOccluder};

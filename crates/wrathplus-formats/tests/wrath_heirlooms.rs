@@ -1,8 +1,8 @@
 //! Read-only build-12340 rows for heirloom scaling: `ScalingStatDistribution` and
 //! `ScalingStatValues`, through the client's level and mask selection (`0x61e740`, `0x61f550`).
+use std::path::Path;
 use wrathplus_formats::heirlooms::{load_heirloom_catalog, HeirloomCatalog};
 use wrathplus_formats::Chain;
-use std::path::Path;
 
 #[test]
 fn installed_wrath_heirloom_scaling() {

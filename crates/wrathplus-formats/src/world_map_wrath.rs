@@ -206,11 +206,7 @@ fn transforms(bytes: &[u8]) -> Result<Vec<WorldMapTransform>> {
 
 /// `AreaPOI.dbc`'s icons (columns 2-10) and `WorldMapLink` (53) by row id.
 fn poi_links(bytes: &[u8]) -> Result<HashMap<u32, AreaPoiLinks>> {
-    let rs = parse(
-        bytes,
-        schema("AreaPOI 12340", &[U; 54]),
-        "AreaPOI 12340",
-    )?;
+    let rs = parse(bytes, schema("AreaPOI 12340", &[U; 54]), "AreaPOI 12340")?;
     let mut out = HashMap::new();
     for r in rs.records() {
         let id = u32_at(r, 0).context("AreaPOI id")?;

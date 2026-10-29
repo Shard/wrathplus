@@ -10,11 +10,13 @@
 //! one still in its trade window (`END_BOUND_TRADEABLE("gem")`); their Yes, `EndRefund(2)` /
 //! `EndBoundTradeable("gem")` (`0x523370`, `0x5233d0` → `0x5c4ff0`), sends `CMSG_SOCKET_GEMS`.
 //! Labelled: which prompt `AcceptSockets` checks first is not traced (refund first here).
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::net::wrath_inventory_capture::NativeInventoryPackets;
 pub(crate) use crate::net::wrath_inventory_capture::{SocketSession, SocketTemplates, SOCKETS};
 use crate::net::{ClientCommand, NetCommands, Objects};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
+use bevy::prelude::*;
+use std::collections::HashMap;
 use wrathplus_formats::gems::{
     GemCatalog, SOCKET_COLOR_BLUE, SOCKET_COLOR_META, SOCKET_COLOR_RED, SOCKET_COLOR_YELLOW,
 };
@@ -24,8 +26,6 @@ use wrathplus_ui::script::{
     ItemServiceRequest, ScriptValue, SocketGemView, SocketRequest, SocketSessionView,
     SocketSlotView, UiScript,
 };
-use bevy::prelude::*;
-use std::collections::HashMap;
 
 /// `SOCK_ENCHANTMENT_SLOT`, the first gem's enchant slot.
 const SOCKET_ENCHANT_SLOT: u8 = 2;
@@ -112,7 +112,10 @@ fn load(mut commands: Commands, assets: Option<Res<wrathplus_assets::WorldAssets
     use wrathplus_assets::LockRecover;
     let Some(assets) = assets else { return };
     let mut chain = assets.chain.lock_recover();
-    if !matches!(chain.profile(), wrathplus_formats::DataProfile::Wrath { .. }) {
+    if !matches!(
+        chain.profile(),
+        wrathplus_formats::DataProfile::Wrath { .. }
+    ) {
         return;
     }
     match wrathplus_formats::gems::load_gem_catalog(&mut chain) {

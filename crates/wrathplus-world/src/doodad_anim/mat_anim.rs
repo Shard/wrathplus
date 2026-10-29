@@ -638,7 +638,9 @@ pub(super) fn tick_anim_materials(
     twins: Res<crate::model_render::FarSideTwins>,
     hosts: SeqHosts,
     mut drawn: Local<
-        bevy::platform::collections::HashSet<AssetId<wrathplus_assets::materials::WowModelMaterial>>,
+        bevy::platform::collections::HashSet<
+            AssetId<wrathplus_assets::materials::WowModelMaterial>,
+        >,
     >,
 ) {
     if uv_reg.0.is_empty() && uv_reg.1.is_empty() && tint_reg.0.is_empty() {

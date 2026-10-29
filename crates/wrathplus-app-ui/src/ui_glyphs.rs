@@ -20,9 +20,9 @@ use wrathplus_ui::script::{GlyphSocketView, GlyphView, UiScript};
 
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Spells;
 use crate::spell::targeting::glyph::GlyphTables;
 use crate::spell::targeting::SpellTargeting;
-use crate::app_core::state::Spells;
 
 /// `SPELL_EFFECT_APPLY_GLYPH`.
 const APPLY_GLYPH: u32 = 74;
@@ -36,14 +36,20 @@ pub struct UiGlyphsPlugin;
 impl Plugin for UiGlyphsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, load_icons.after(AssetSet::Open))
-            .add_systems(Update, feed_glyphs.in_set(crate::app_core::schedule::UnitFeed));
+            .add_systems(
+                Update,
+                feed_glyphs.in_set(crate::app_core::schedule::UnitFeed),
+            );
     }
 }
 
 fn load_icons(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
     let Some(assets) = assets else { return };
     let mut chain = assets.chain.lock_recover();
-    if !matches!(chain.profile(), wrathplus_formats::DataProfile::Wrath { .. }) {
+    if !matches!(
+        chain.profile(),
+        wrathplus_formats::DataProfile::Wrath { .. }
+    ) {
         return;
     }
     // The shared `SpellIcon.dbc` reader.

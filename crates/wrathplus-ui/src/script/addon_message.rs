@@ -212,8 +212,12 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Unknown addon chat type"));
-        assert!(s.run("SendAddonMessage('P', 'x', 2)").is_err(), "a number looks up by name");
-        s.run("SendAddonMessage('P', string.rep('a', 4000))").unwrap();
+        assert!(
+            s.run("SendAddonMessage('P', 'x', 2)").is_err(),
+            "a number looks up by name"
+        );
+        s.run("SendAddonMessage('P', string.rep('a', 4000))")
+            .unwrap();
         let sends = s.take_addon_sends();
         assert_eq!(sends.len(), 1);
         assert_eq!(sends[0].text.len(), 2999);

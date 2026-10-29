@@ -14,9 +14,9 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::UiScript;
 
+use crate::app_core::group::GroupState;
 use crate::net::wrath_vehicle::VehicleWorld;
 use crate::net::GuidIndex;
-use crate::app_core::group::GroupState;
 use crate::wrath_vehicle_seats::VehicleSeats;
 
 /// `VEHICLE_SEAT_FLAG_B_TARGETS_IN_RAIDUI`.

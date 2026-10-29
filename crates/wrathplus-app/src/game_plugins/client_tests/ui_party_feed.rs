@@ -1,13 +1,13 @@
 //! Whole-client tests of `crate::ui_party::feed`, from `ui_party/feed.rs` (`native_ready_lifecycle_tests`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::ui_party::feed::*;
 use crate::app_core::group::GroupState;
+use crate::ui_party::feed::*;
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_group::{raid::Packet, Packet as GroupPacket};
 use wrathplus_protocol::SessionEvent;
 use wrathplus_ui::script::PartyState;
 use wrathplus_ui::script::UiScript;
-use bevy::prelude::*;
 
 #[test]
 fn registered_packets_forward_in_order_once_and_leave_rejoin_does_not_lose_edges() {

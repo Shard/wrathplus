@@ -82,7 +82,10 @@ pub const CMSG_LEARN_PREVIEW_TALENTS_PET: u32 = 0x04C2;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Packet {
     /// `SMSG_PLAY_SPELL_IMPACT`: a `SpellVisualKit` id played as an impact on `target`.
-    SpellImpact { target: u64, kit_id: u32 },
+    SpellImpact {
+        target: u64,
+        kit_id: u32,
+    },
     /// `SMSG_TOTEM_CREATED`: totem `slot` holds `totem` for `duration_ms`, from `spell_id`.
     TotemCreated {
         slot: u8,
@@ -92,19 +95,38 @@ pub enum Packet {
     },
     /// `SMSG_PET_LEARNED_SPELL` / `SMSG_PET_UNLEARNED_SPELL`: `u32 spell`; the pet book's whole list is
     /// `SMSG_PET_SPELLS`.
-    PetLearnedSpell { spell_id: u32 },
-    PetUnlearnedSpell { spell_id: u32 },
+    PetLearnedSpell {
+        spell_id: u32,
+    },
+    PetUnlearnedSpell {
+        spell_id: u32,
+    },
     /// `SMSG_PET_UPDATE_COMBO_POINTS` (`Unit::SendComboPoints` to the charmer or owner of a pet or
     /// vehicle that builds them): `packed unit, packed target, u8 points`.
-    PetComboPoints { unit: u64, target: u64, points: u8 },
+    PetComboPoints {
+        unit: u64,
+        target: u64,
+        points: u8,
+    },
     /// `SMSG_MODIFY_COOLDOWN` (`Player::ModifySpellCooldown`): `u32 spell, u64 player, i32 delta ms`.
-    ModifyCooldown { spell_id: u32, unit: u64, delta_ms: i32 },
+    ModifyCooldown {
+        spell_id: u32,
+        unit: u64,
+        delta_ms: i32,
+    },
     /// `SMSG_FEIGN_DEATH_RESISTED`: `u64 unit, u8` (AzerothCore writes 0).
-    FeignDeathResisted { unit: u64, flag: u8 },
+    FeignDeathResisted {
+        unit: u64,
+        flag: u8,
+    },
     /// `SMSG_BREAK_TARGET` (`Unit::SendClearTarget`-like, packed guid): stop targeting this unit.
-    BreakTarget { unit: u64 },
+    BreakTarget {
+        unit: u64,
+    },
     /// `SMSG_CLEAR_TARGET`: `u64 caster`.
-    ClearTarget { caster: u64 },
+    ClearTarget {
+        caster: u64,
+    },
     /// `SMSG_SET_PROJECTILE_POSITION`: `u64 caster, u8 cast count, f32 x, y, z`.
     ProjectilePosition {
         caster: u64,
@@ -112,7 +134,9 @@ pub enum Packet {
         position: [f32; 3],
     },
     /// `SMSG_SEND_UNLEARN_SPELLS` (`Player::SendUnlearnSpells`): `u32 count`, then spell ids.
-    UnlearnSpells { spell_ids: Vec<u32> },
+    UnlearnSpells {
+        spell_ids: Vec<u32>,
+    },
 }
 
 /// Death-knight runes (AzerothCore `Player::ConvertRune`, `ResyncRunes`, `AddRunePower`), kept as
@@ -129,7 +153,11 @@ pub enum RunePacket {
     /// Our own `SMSG_SPELL_GO`'s rune list (`CAST_FLAG_RUNE_LIST`, AzerothCore `Spell::SendSpellGo`):
     /// the runes ready before and after the cast, and for each rune that went down (set in
     /// `before`, clear in `after`, ascending) how far its new cooldown has run, 255 ready.
-    Spend { before: u8, after: u8, passed: Vec<u8> },
+    Spend {
+        before: u8,
+        after: u8,
+        passed: Vec<u8>,
+    },
 }
 
 /// Requests, each with the body AC's handler reads.
@@ -189,13 +217,23 @@ pub enum Command {
         rank: u32,
     },
     /// `HandleFarSightOpcode`: `u8 apply`.
-    FarSight { engage: bool },
+    FarSight {
+        engage: bool,
+    },
     /// `HandleDismissCritter`: the critter's raw guid.
-    DismissCritter { critter: u64 },
+    DismissCritter {
+        critter: u64,
+    },
     /// `HandleStableRevivePet`: `u64 stable master, u32 pet number`.
-    StableRevivePet { npc: u64, pet_number: u32 },
+    StableRevivePet {
+        npc: u64,
+        pet_number: u32,
+    },
     /// `HandleLearnPreviewTalentsPet`: `u64 pet, u32 count`, then `(u32 talent, u32 rank)` pairs.
-    LearnPreviewTalentsPet { pet: u64, talents: Vec<(u32, u32)> },
+    LearnPreviewTalentsPet {
+        pet: u64,
+        talents: Vec<(u32, u32)>,
+    },
 }
 
 pub const fn handles(opcode: u16) -> bool {
@@ -361,7 +399,9 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
             if count.saturating_mul(4) != body.len() - r.position() as usize {
                 return Err(invalid("unlearn list count disagrees with the body"));
             }
-            let spell_ids = (0..count).map(|_| u32_le(&mut r)).collect::<io::Result<_>>()?;
+            let spell_ids = (0..count)
+                .map(|_| u32_le(&mut r))
+                .collect::<io::Result<_>>()?;
             SessionEvent::WrathSpellControl {
                 packet: Packet::UnlearnSpells { spell_ids },
             }

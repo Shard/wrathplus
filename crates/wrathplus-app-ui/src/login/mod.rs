@@ -19,8 +19,8 @@ mod text;
 
 use std::sync::atomic::Ordering;
 
-use wrathplus_ui::widget::EditBoxState;
 use bevy::input::keyboard::KeyboardInput;
+use wrathplus_ui::widget::EditBoxState;
 
 use crate::textinput::{self, HostClipboard};
 use bevy::input::ButtonState;
@@ -29,11 +29,14 @@ use bevy::prelude::*;
 #[cfg(test)]
 use wrathplus_protocol::{DialFailure, LoginRefusal};
 
+use crate::app_core::session::DisconnectedMessage;
 use crate::app_core::state::ClientState;
 use crate::glue::dialog::{DialogKind, GlueDialog};
 use crate::glue_strings::GlueStrings;
-use crate::net::{CharListMessage, LoginAbandon, LoginFailedMessage, LoginQueuedMessage, LoginRequest, LoginStageMessage, LoginSubmit};
-use crate::app_core::session::DisconnectedMessage;
+use crate::net::{
+    CharListMessage, LoginAbandon, LoginFailedMessage, LoginQueuedMessage, LoginRequest,
+    LoginStageMessage, LoginSubmit,
+};
 use crate::portrait::{GluePreview, GlueScene};
 use crate::sound::GlueSound;
 

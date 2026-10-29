@@ -1,7 +1,7 @@
 //! Read-only inventory of native two-stage constructs not fully covered by a2.
+use std::{io::Cursor, path::Path};
 use wrathplus_formats::Chain;
 use wrathplus_m2::wrath::{parse_wrath_m2, parse_wrath_skin};
-use std::{io::Cursor, path::Path};
 
 #[test]
 #[ignore = "exhaustive installed-data census"]

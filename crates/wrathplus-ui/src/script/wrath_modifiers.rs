@@ -56,5 +56,4 @@ mod tests {
                 .unwrap();
         }
     }
-
 }

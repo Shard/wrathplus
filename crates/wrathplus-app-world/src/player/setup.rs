@@ -150,7 +150,8 @@ pub(super) fn gate_world_camera(
     cover: Res<crate::loading_screen::EntryCover>,
     mut cams: Query<&mut Camera, With<WorldCamera>>,
 ) {
-    let active = (*state.get() == crate::app_core::state::ClientState::InWorld || loading.covering())
+    let active = (*state.get() == crate::app_core::state::ClientState::InWorld
+        || loading.covering())
         && !cover.owes_a_present();
     for mut cam in &mut cams {
         if cam.is_active != active {

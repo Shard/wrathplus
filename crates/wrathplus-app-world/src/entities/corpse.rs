@@ -17,14 +17,14 @@
 
 use std::collections::HashMap;
 
+use bevy::prelude::*;
 use wrathplus_assets::{m2_url, AnimClip, ModelAnimations};
 use wrathplus_protocol::{CorpseLook, EntityKind};
-use bevy::prelude::*;
 
 use super::display::{empty_shell, DisplayModel, ModelHandle};
+use crate::app_core::session::ObjectStore;
 use crate::creature_anim::AnimData;
 use crate::net::NetEntity;
-use crate::app_core::session::ObjectStore;
 
 /// `AnimationData.dbc` 6 `Dead`, the settled corpse pose (`0x5d63fe push 0x6`).
 const DEAD: u16 = 6;

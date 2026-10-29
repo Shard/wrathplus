@@ -1,12 +1,12 @@
 //! A character body's appearance inputs: its look ([`CharLook`]), its worn display ids
 //! ([`WornEquip`]) and its per-appearance materials ([`build_char_skin_materials`]).
 
+use bevy::prelude::*;
 use wrathplus_formats::{CharSkinSlot, ModelBlend};
 use wrathplus_protocol::EntityKind;
-use bevy::prelude::*;
 
-use crate::net::NetEntity;
 use crate::app_core::session::ObjectStore;
+use crate::net::NetEntity;
 use wrathplus_assets::materials::WowModelMaterial;
 
 use super::super::skin_composite::BodyAtlas;
@@ -489,10 +489,12 @@ mod eye_tests {
         };
         let e = app
             .world_mut()
-            .spawn(ObjectStore(wrathplus_protocol::ObjectFields::from_fields(&[
-                (wrathplus_protocol::types::Field::UnitBytes0, 1 | 6 << 8),
-                (wrathplus_protocol::types::Field::PlayerBytes, 2 | 4 << 8),
-            ])))
+            .spawn(ObjectStore(wrathplus_protocol::ObjectFields::from_fields(
+                &[
+                    (wrathplus_protocol::types::Field::UnitBytes0, 1 | 6 << 8),
+                    (wrathplus_protocol::types::Field::PlayerBytes, 2 | 4 << 8),
+                ],
+            )))
             .id();
         app.world_mut()
             .run_system_once(move |stores: Query<&ObjectStore>| {

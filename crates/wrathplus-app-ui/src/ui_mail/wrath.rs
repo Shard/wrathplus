@@ -83,7 +83,8 @@ pub(super) fn snapshot(
                     is_gm: row.stationery == STATIONERY_GM,
                     body: Some(row.body.clone()),
                     has_body: !row.body.is_empty(),
-                    stationery_texture: wrathplus_formats::StationeryCatalog::DEFAULT_TEXTURE.into(),
+                    stationery_texture: wrathplus_formats::StationeryCatalog::DEFAULT_TEXTURE
+                        .into(),
                     can_delete: row.money == 0 && attachments.is_empty(),
                     is_invoice: auction.is_some_and(|a| is_invoice_result(a.result)),
                     invoice: auction_invoice(
@@ -572,7 +573,8 @@ mod action_tests {
                 attachments: Vec::new(),
             }],
         });
-        let text = |key: &str| (key == "AUCTION_INVOICE_MAIL_SUBJECT").then(|| "Sale Pending: %s".into());
+        let text =
+            |key: &str| (key == "AUCTION_INVOICE_MAIL_SUBJECT").then(|| "Sale Pending: %s".into());
         let view = snapshot(
             &mail,
             &items,
@@ -590,7 +592,11 @@ mod action_tests {
         let invoice = header.invoice.as_ref().expect("an invoice");
         assert!(invoice.seller && invoice.pending);
         assert_eq!(
-            (invoice.player_name.as_str(), invoice.bid, invoice.consignment),
+            (
+                invoice.player_name.as_str(),
+                invoice.bid,
+                invoice.consignment
+            ),
             ("Buyer", 9000, 450)
         );
         assert_eq!(

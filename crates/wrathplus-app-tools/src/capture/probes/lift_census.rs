@@ -12,19 +12,19 @@
 //! The repeat form tells a transient `state=seed` from a stuck one. How to run it:
 //! `docs/CONTRIBUTING.md`, "Running it unattended".
 
-use wrathplus_assets::coords::bevy_to_wow;
-use wrathplus_protocol::EntityKind;
 use bevy::camera::visibility::InheritedVisibility;
 use bevy::prelude::*;
+use wrathplus_assets::coords::bevy_to_wow;
+use wrathplus_protocol::EntityKind;
 
 use super::ProbeClock;
-use crate::entities::VisualAttached;
-use crate::net::{Guid, NetEntity};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::transport::Transport;
 use crate::app_core::movement::ElevatorSeed;
 use crate::app_core::movement::TransportAnchor;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::entities::VisualAttached;
+use crate::net::{Guid, NetEntity};
+use crate::transport::Transport;
 use wrathplus_world::world_map::CurrentMap;
 
 /// Depth of the render-descendant walk; a GO's submeshes sit two levels down (root, anim host).

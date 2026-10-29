@@ -18,10 +18,12 @@
 //! words. The roster's class name is the display name without the sex-specific form
 //! (`0x72aab0`). The sort, the filter and the selection reset with the VM, where the reference's
 //! survive a reload.
-use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
+use crate::app_core::schedule::UnitFeed;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::schedule::UnitFeed;
+use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
+use bevy::prelude::*;
+use std::collections::{HashMap, HashSet, VecDeque};
 use wrathplus_protocol::types::Field;
 use wrathplus_protocol::{
     wrath_arena_team::{Command, Member, Packet},
@@ -31,8 +33,6 @@ use wrathplus_ui::script::{
     ArenaMemberView, ArenaTeamInfoView, ArenaTeamStatsView, ArenaTeamView, InspectArenaTeamView,
     ScriptValue, UiScript,
 };
-use bevy::prelude::*;
-use std::collections::{HashMap, HashSet, VecDeque};
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeArenaTeamPackets(pub(crate) VecDeque<Packet>);
@@ -294,7 +294,9 @@ impl Inspected<'_> {
         self.target
             .token
             .as_deref()
-            .and_then(|t| crate::target::unit_tokens::player_token_guid(t, &self.selection, &self.group))
+            .and_then(|t| {
+                crate::target::unit_tokens::player_token_guid(t, &self.selection, &self.group)
+            })
             .and_then(|g| self.teams.0.get(&g))
             .copied()
             .unwrap_or_default()

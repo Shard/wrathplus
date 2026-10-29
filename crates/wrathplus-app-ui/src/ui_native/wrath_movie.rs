@@ -15,9 +15,9 @@
 pub(crate) use crate::net::wrath_movie::PendingMovie;
 use crate::net::wrath_world_objects_capture::NativeWorldObjectsPackets;
 use crate::net::{ClientCommand, NetCommands};
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_world_objects::{Command, Packet};
 use wrathplus_ui::script::{ScriptValue, UiScript};
-use bevy::prelude::*;
 
 #[derive(Resource)]
 struct Movies(wrathplus_formats::Movies);

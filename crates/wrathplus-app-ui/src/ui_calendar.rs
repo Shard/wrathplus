@@ -32,6 +32,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
+use bevy::prelude::*;
 use wrathplus_formats::holidays::HolidayCatalog;
 use wrathplus_protocol::wrath_calendar::{
     AddInvitee, Calendar, Command, Event, EventInvitee, EventRow, Lockout, Packet, RaidReset,
@@ -41,13 +42,12 @@ use wrathplus_ui::script::{
     WrathCalendarFields, WrathCalendarInvitee, WrathCalendarKind, WrathCalendarRaid,
     WrathCalendarRaidReset, WrathCalendarRequest as R, WrathCalendarTexture, WrathCalendarView,
 };
-use bevy::prelude::*;
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::names::NameCache;
 use crate::net::wrath_calendar_capture::NativeCalendarPackets;
 use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 /// Wire statuses and ranks.
@@ -201,7 +201,10 @@ fn load(mut catalog: ResMut<CalendarCatalog>, assets: Option<Res<wrathplus_asset
     use wrathplus_assets::LockRecover;
     let Some(assets) = assets else { return };
     let mut chain = assets.chain.lock_recover();
-    if !matches!(chain.profile(), wrathplus_formats::DataProfile::Wrath { .. }) {
+    if !matches!(
+        chain.profile(),
+        wrathplus_formats::DataProfile::Wrath { .. }
+    ) {
         return;
     }
     match wrathplus_formats::holidays::load_holidays(&mut chain) {

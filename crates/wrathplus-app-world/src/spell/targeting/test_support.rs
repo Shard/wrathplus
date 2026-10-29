@@ -2,13 +2,13 @@
 //! `ui_cast::spell_targeting`'s VM-feed tests share.
 
 use super::*;
-use crate::net::{ClientCommand, Guid, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use wrathplus_protocol::types::Field;
-use wrathplus_ui::script::UiScript;
+use crate::net::{ClientCommand, Guid, NetCommands};
 use crossbeam_channel::Receiver;
 use std::collections::HashMap;
+use wrathplus_protocol::types::Field;
+use wrathplus_ui::script::UiScript;
 
 pub const HEAL: u32 = 2050;
 /// A spell that excludes its caster (`AttributesEx & 0x80000`).
@@ -142,5 +142,9 @@ pub fn spell_target_unit(world: &mut World, token: &str) {
 }
 
 pub fn errors(world: &mut World) -> Vec<crate::app_core::errors::CastFail> {
-    std::mem::take(&mut world.resource_mut::<crate::app_core::errors::CastErrors>().0)
+    std::mem::take(
+        &mut world
+            .resource_mut::<crate::app_core::errors::CastErrors>()
+            .0,
+    )
 }

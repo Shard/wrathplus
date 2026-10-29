@@ -1,11 +1,11 @@
 //! The retained pass's bake: the flush turns each dirty, quiet cell or region into one recentred
 //! mesh and a per-item draw list ([`bake_cell`]).
 
-use wrathplus_assets::coords::wow_to_bevy;
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::primitives::Aabb;
 use bevy::mesh::{Indices, Mesh, PrimitiveTopology};
 use bevy::prelude::*;
+use wrathplus_assets::coords::wow_to_bevy;
 
 use super::{
     render, GxItem, StaticGx, ATTRIBUTE_GX_ANCHOR, ATTRIBUTE_GX_WORD, IDLE_FRAMES,
@@ -329,8 +329,8 @@ mod tests {
     use super::super::GxWmoBatch;
     use super::*;
     use crate::model_render::ShadeSel;
-    use wrathplus_formats::{ModelBlend, RenderSubmesh, WmoBatchClass};
     use std::sync::Arc;
+    use wrathplus_formats::{ModelBlend, RenderSubmesh, WmoBatchClass};
 
     #[test]
     fn the_decline_census_prints_once_a_burst_settles() {

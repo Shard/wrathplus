@@ -34,8 +34,8 @@ fn ordered_replies_keep_zero_duplicates_and_reject_malformed() {
 
 #[test]
 fn a_mirror_image_unit_asks_for_its_look_once_per_object() {
-    use crate::net::{ClientCommand, Guid, NetCommands};
     use crate::app_core::session::ObjectStore;
+    use crate::net::{ClientCommand, Guid, NetCommands};
     use wrathplus_protocol::types::Field;
     use wrathplus_protocol::ObjectFields;
     let (tx, rx) = crossbeam_channel::unbounded();

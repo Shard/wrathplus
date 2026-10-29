@@ -1,8 +1,8 @@
 //! The player's packet handlers: `SMSG_STANDSTATE_UPDATE` goes to [`super::posture`] as a
 //! [`ServerStandState`], applied in `control`, which holds the body query and sheath queue.
 
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 use super::ServerStandState;
 use crate::net::NetHandlerApp;

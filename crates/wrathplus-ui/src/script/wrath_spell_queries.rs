@@ -74,7 +74,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn known_spell_uses_full_separate_arrays_and_boolean_abi() {
         let mut script = UiScript::new().unwrap();

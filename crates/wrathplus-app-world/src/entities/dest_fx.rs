@@ -5,9 +5,9 @@
 
 use bevy::prelude::*;
 
+use crate::app_core::session::ObjectStore;
 use crate::creature_anim::{SpellKitSound, SpellVisuals};
 use crate::net::NetEntity;
-use crate::app_core::session::ObjectStore;
 use wrathplus_protocol::EntityKind;
 
 use super::spell_fx::{attach_effect_visuals, ensure_model, FxMaterials, SpellFx};

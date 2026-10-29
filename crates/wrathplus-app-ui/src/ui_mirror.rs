@@ -7,13 +7,13 @@
 //! liquid checks and ships a value and a signed rate, so there is no local underwater predicate to
 //! disagree with the drowning damage that follows.
 
-use wrathplus_ui::script::{ScriptValue, UiScript};
 use bevy::prelude::*;
+use wrathplus_ui::script::{ScriptValue, UiScript};
 
 use wrathplus_protocol::types::{MirrorTimerKind, MirrorTimerStart};
 
-use crate::app_core::state::Spells;
 use crate::app_core::schedule::UnitFeed;
+use crate::app_core::state::Spells;
 
 /// One mirror-timer edge off the wire, queued by the net bridge for the bars.
 #[derive(Debug, Clone, Copy)]
@@ -170,8 +170,8 @@ fn feed_mirror_timers(
 /// The mirror timers' packet handlers, which only queue. The drain runs before the VM ticks, so
 /// an edge and its first `OnUpdate` land on the same frame.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::{MirrorTimerEdge, MirrorTimerFeed};
     use crate::net::NetHandlerApp;

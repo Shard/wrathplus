@@ -2,7 +2,8 @@ use super::*;
 use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
 
 pub fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, opcode: u16, body: &[u8]) {
-    if let WrathDispatch::Handled { session_events, .. } = adapter.dispatch(opcode, body, 0).unwrap()
+    if let WrathDispatch::Handled { session_events, .. } =
+        adapter.dispatch(opcode, body, 0).unwrap()
     {
         crate::net::handlers::dispatch(app.world_mut(), session_events);
     }
@@ -50,7 +51,10 @@ fn a_response_becomes_the_logged_quests_blobs_in_log_order() {
         }]
     );
     assert!(pois.queries(&[8, 7]).is_empty(), "both are answered");
-    assert!(pois.view(&[]).is_empty(), "a quest that left the log is not shown");
+    assert!(
+        pois.view(&[]).is_empty(),
+        "a quest that left the log is not shown"
+    );
 }
 
 #[test]
@@ -60,6 +64,9 @@ fn missing_quests_are_asked_once_in_packets_of_twenty_five() {
     let asks = pois.queries(&logged);
     assert_eq!(asks.iter().map(Vec::len).collect::<Vec<_>>(), [25, 5]);
     assert_eq!(asks[0][0], 1);
-    assert!(pois.queries(&logged).is_empty(), "an unanswered quest is not asked again");
+    assert!(
+        pois.queries(&logged).is_empty(),
+        "an unanswered quest is not asked again"
+    );
     assert_eq!(pois.queries(&[31]), [vec![31]]);
 }

@@ -8,7 +8,6 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::ui_text::wow_font;
 use crate::glue::art::{GlueArt, BACKDROP, GOLD};
 use crate::glue::widgets::{
     abs, glue_button, glue_edit_box, outlined_text, overlay, paint_glue_field, ArtSwap,
@@ -16,6 +15,7 @@ use crate::glue::widgets::{
 };
 use crate::glue_strings::GlueStrings;
 use crate::portrait::{PortraitImages, PortraitSource, GLUE_SLOT};
+use crate::ui_text::wow_font;
 use wrathplus_assets::WorldAssets;
 
 use super::{ClientState, Field, LoginForm};

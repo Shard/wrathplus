@@ -2,8 +2,8 @@
 //! Visits waypoint tiles (not a continuous walking simulation), all their placed models, all WMO
 //! groups and doodad sets, required external animations, and resolved texture dependencies.
 use anyhow::{Context, Result};
-use wrathplus_formats::*;
 use std::{collections::BTreeSet, path::Path};
+use wrathplus_formats::*;
 
 #[derive(Default)]
 struct Route {

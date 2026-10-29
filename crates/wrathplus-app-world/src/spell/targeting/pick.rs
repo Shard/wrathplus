@@ -15,14 +15,14 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use super::SpellTargeting;
-use crate::net::{Guid, GuidIndex, Reputations};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Factions;
+use crate::net::{Guid, GuidIndex, Reputations};
 use crate::spell::bind_gates::unit_alive;
 use crate::spell::cast_target::{owner_store, TargetRelations};
 use crate::spell::group_relation::{GroupInputs, GroupRoster};
-use crate::app_core::state::Factions;
 
 /// Flags `0x8` and `0x10`, which `0x480780`'s unit and player arms test (`4807e1`, `4807cb`) and
 /// `0x481050` sets together (`481116 or esi,0x18`) for a word with unit bits.
@@ -205,10 +205,10 @@ mod tests {
     use crate::net::{GuidIndex, Reputations};
     use crate::spell::group_relation::publish_group_roster;
     use crate::spell::targeting::corpse_fixture as fx;
+    use bevy::ecs::system::RunSystemOnce;
     use wrathplus_protocol::types::Field;
     use wrathplus_protocol::types::GroupMemberEntry;
     use wrathplus_protocol::ObjectFields;
-    use bevy::ecs::system::RunSystemOnce;
 
     /// Absolute descriptor indices: `OBJECT_FIELD_TYPE`, `UNIT_FIELD_HEALTH`,
     /// `UNIT_FIELD_FLAGS`, `UNIT_FIELD_CHARMEDBY` and `UNIT_FIELD_CREATEDBY`.

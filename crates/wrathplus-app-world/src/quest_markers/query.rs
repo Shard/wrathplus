@@ -16,12 +16,12 @@ use bevy::prelude::*;
 
 use wrathplus_protocol::EntityKind;
 
-use crate::net::{ClientCommand, GuidIndex, NetCommands, NetEntity};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::target::cursor_mode::go_reaction;
 use crate::app_core::state::Factions;
 use crate::app_core::state::QuestGiver;
+use crate::net::{ClientCommand, GuidIndex, NetCommands, NetEntity};
+use crate::target::cursor_mode::go_reaction;
 
 /// `UNIT_NPC_FLAGS` questgiver service bit.
 #[cfg(test)]
@@ -321,8 +321,8 @@ mod tests {
 
     #[test]
     fn wrath_own_pvp_edges_refresh_unchanged_markers_with_native_taxi_gate() {
-        use crate::net::Guid;
         use crate::app_core::interaction::FlightMasterStatus;
+        use crate::net::Guid;
         use wrathplus_protocol::types::{Field, ObjectFields};
         // Separate worlds avoid coupling the fixture to wall-clock throttle timing.
         for own_bit in [0x100, 0x400, 0x200, 0x10000] {
@@ -817,8 +817,8 @@ mod tests {
     /// (`0x5eb220` is the callback of a seeder nothing calls). `0x6073f0` clears both markers.
     #[test]
     fn a_flight_master_is_asked_by_the_per_unit_path_only_and_loses_its_green_with_the_gold() {
-        use crate::net::{Guid, NetEntity};
         use crate::app_core::interaction::FlightMasterStatus;
+        use crate::net::{Guid, NetEntity};
         use wrathplus_protocol::{EntityKind, ObjectFields};
 
         const FM: u64 = 0x9001; // flightmaster only

@@ -135,11 +135,16 @@ impl WrathChannelRoster {
             return None;
         }
         match delta {
-            WrathChannelRosterDelta::Add { guid, flags } | WrathChannelRosterDelta::Update { guid, flags } => {
+            WrathChannelRosterDelta::Add { guid, flags }
+            | WrathChannelRosterDelta::Update { guid, flags } => {
                 match self.members.iter_mut().find(|r| r.guid == guid) {
                     Some(row) => row.flags = flags,
                     None if matches!(delta, WrathChannelRosterDelta::Add { .. }) => {
-                        self.members.push(WrathChannelRosterMember { guid, flags, name: None })
+                        self.members.push(WrathChannelRosterMember {
+                            guid,
+                            flags,
+                            name: None,
+                        })
                     }
                     None => return None,
                 }

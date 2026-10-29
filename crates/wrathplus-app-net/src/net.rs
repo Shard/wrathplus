@@ -9,12 +9,12 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use wrathplus_protocol::{
-    EntityKind, JumpInfo, MoveMode, MoveSpeeds, ObjectFields, SessionEvent, TransportPose,
-};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use crossbeam_channel::{Receiver, Sender};
+use wrathplus_protocol::{
+    EntityKind, JumpInfo, MoveMode, MoveSpeeds, ObjectFields, SessionEvent, TransportPose,
+};
 
 use wrathplus_world::schedule::WorldStage;
 
@@ -25,43 +25,43 @@ pub mod objects;
 pub mod wrath_melee;
 pub use objects::tear_down;
 mod session;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 mod world;
+pub mod wrath_achievement_capture;
+pub mod wrath_appearance;
 pub mod wrath_auras;
+pub mod wrath_battleground_capture;
+pub mod wrath_bootstrap_capture;
+pub mod wrath_calendar_capture;
+pub mod wrath_char_service_capture;
+pub mod wrath_combo_points;
+pub mod wrath_death_capture;
 pub mod wrath_exchange_capture;
+pub mod wrath_faction_capture;
+pub mod wrath_inspect_capture;
 pub mod wrath_instance_control_capture;
 pub mod wrath_inventory_capture;
 pub mod wrath_mail_capture;
 pub mod wrath_mirror_image_capture;
-pub mod wrath_notices;
-pub mod wrath_quests_completed_capture;
-pub mod wrath_achievement_capture;
-pub mod wrath_appearance;
-pub mod wrath_social_lists_capture;
-pub mod wrath_calendar_capture;
-pub mod wrath_quest_pois;
-pub mod wrath_battleground_capture;
-pub mod wrath_death_capture;
-pub mod wrath_session_meta_capture;
-pub mod wrath_refer_friend_capture;
-pub mod wrath_world_objects_capture;
-pub mod wrath_session_misc_capture;
-pub mod wrath_inspect_capture;
-pub mod wrath_char_service_capture;
-pub mod wrath_faction_capture;
-pub mod wrath_spell_log_capture;
-pub mod wrath_spell_control_capture;
 pub mod wrath_movement_capture;
-pub mod wrath_bootstrap_capture;
-pub mod wrath_vehicle;
-pub mod wrath_combo_points;
-pub mod wrath_runes;
 pub mod wrath_movie;
+pub mod wrath_notices;
 pub mod wrath_pet_name_capture;
+pub mod wrath_quest_pois;
+pub mod wrath_quests_completed_capture;
+pub mod wrath_refer_friend_capture;
+pub mod wrath_runes;
+pub mod wrath_session_meta_capture;
+pub mod wrath_session_misc_capture;
+pub mod wrath_social_lists_capture;
+pub mod wrath_spell_control_capture;
+pub mod wrath_spell_log_capture;
 pub mod wrath_threat;
 pub mod wrath_ui_timer_capture;
+pub mod wrath_vehicle;
 pub mod wrath_who_capture;
-#[cfg(any(test, feature = "test-support"))]
-pub mod test_support;
+pub mod wrath_world_objects_capture;
 
 pub use apply::apply_net_updates;
 use apply::tag_self_player;
@@ -85,7 +85,6 @@ pub struct NetPlugin {
     /// IO thread runs.
     pub connect: bool,
 }
-
 
 impl Plugin for NetPlugin {
     fn build(&self, app: &mut App) {
@@ -262,8 +261,8 @@ pub struct UnitSpeeds(pub MoveSpeeds);
 pub fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
     use crate::app_core::movement::move_flags as f;
     // A swimmer or flier on its ascend or descend key moves without a direction bit.
-    let vertical = flags & (f::SWIMMING | f::FLYING) != 0
-        && flags & (f::ASCENDING | f::DESCENDING) != 0;
+    let vertical =
+        flags & (f::SWIMMING | f::FLYING) != 0 && flags & (f::ASCENDING | f::DESCENDING) != 0;
     if flags & f::ANY_MOVE == 0 && !vertical {
         return 0.0;
     }
@@ -397,8 +396,6 @@ pub fn apply_fields_for_test(world: &mut World, entity: Entity, delta: ObjectFie
         .resource_mut::<Messages<FieldChanged>>()
         .write_batch(edges);
 }
-
-
 
 /// The unit this client authors motion for: the reference's active-mover global
 /// (`0xc4da98`/`0xc4da9c`, written only by `SetActiveMover 0x6006e0`). A control update that
@@ -855,7 +852,11 @@ impl GameTime {
     /// [`Self::base_day`]'s `year·372 + month·31 + day`. No day rollover is applied.
     pub fn date(&self) -> (u32, u32, u32) {
         let rem = self.base_day % 372;
-        (self.base_day / 372, (rem.max(1) - 1) / 31, (rem.max(1) - 1) % 31 + 1)
+        (
+            self.base_day / 372,
+            (rem.max(1) - 1) / 31,
+            (rem.max(1) - 1) % 31 + 1,
+        )
     }
 
     /// Current minute of the game day (`0..1440`).
@@ -1949,7 +1950,9 @@ pub enum ClientCommand {
     /// Native movement requests with no Vanilla twin (`/timetest`); transport does not claim acceptance.
     NativeMovementMisc(wrathplus_protocol::wrath_movement_misc::Command),
     /// `CMSG_QUERY_INSPECT_ACHIEVEMENTS`; no UI producer yet, the reply is capture-only.
-    NativeInspectAchievements { player: u64 },
+    NativeInspectAchievements {
+        player: u64,
+    },
     /// Native calendar commands; no UI producer yet, replies are capture-only.
     NativeCalendar(wrathplus_protocol::wrath_calendar::Command),
     /// Native quest commands with no Vanilla twin; transport does not claim acceptance.
@@ -1988,11 +1991,16 @@ pub enum ClientCommand {
     ClearChannelWatch,
     /// `CMSG_DECLINE_CHANNEL_INVITE`: `DeclineInvite("channel")` (`0x4ffcc0`); AC reads nothing
     /// from it.
-    DeclineChannelInvite { name: String },
+    DeclineChannelInvite {
+        name: String,
+    },
     /// The raid browser's search join and leave.
     NativeRaidBrowser(wrathplus_protocol::wrath_raid_browser::Command),
     /// `CMSG_SET_CONTACT_NOTES`: a friend's note.
-    SetContactNotes { guid: u64, note: String },
+    SetContactNotes {
+        guid: u64,
+        note: String,
+    },
     NativeMailMutation(wrathplus_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(wrathplus_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
@@ -2213,7 +2221,6 @@ pub struct CharacterLoginFailedMessage {
     pub result: u8,
 }
 
-
 /// `SMSG_ADDON_INFO`: the addons the server hid from the Lua index space, or `None` if it did
 /// not answer. A resource, since it must exist before the world-entry UI load runs any addon;
 /// rewritten on every login.
@@ -2242,7 +2249,6 @@ pub struct LoginQueuedMessage {
     pub position: Option<u32>,
     pub realm: Option<String>,
 }
-
 
 /// A login attempt failed before the roster; the IO thread is back at its pre-logon park.
 /// `terminal` is a failure retrying cannot fix (the server requires Warden, say): never resubmit.
@@ -2560,7 +2566,8 @@ mod tests {
         use wrathplus_protocol::types::{Field, ObjectType};
         // Corpse flags overlap a unit word: semantic keys must not alias them.
         let index = Field::CorpseDynamicFlags.span().unwrap().index;
-        let (unit_field, _) = wrathplus_protocol::types::Field::at(ObjectType::Unit, index).unwrap();
+        let (unit_field, _) =
+            wrathplus_protocol::types::Field::at(ObjectType::Unit, index).unwrap();
         assert_ne!(unit_field, Field::CorpseDynamicFlags);
         let edges = FieldEdges::semantic_of(&[
             (42, Field::CorpseDynamicFlags, 0),

@@ -199,16 +199,35 @@ mod tests {
     #[test]
     fn acs_subject_tail_sale_pending_and_seven_field_body_parse() {
         let pending = parse_subject("4428:0:6:917:20").expect("sale pending");
-        assert_eq!((pending.entry, pending.result), (4428, auction_mail::SALE_PENDING));
-        assert_eq!(subject_key(pending.result), Some("AUCTION_INVOICE_MAIL_SUBJECT"));
-        assert!(parse_subject("4428:0:1:917").is_none(), "an id without a count");
-        assert!(parse_subject("4428:0:7:917:20").is_none(), "no result past 6");
+        assert_eq!(
+            (pending.entry, pending.result),
+            (4428, auction_mail::SALE_PENDING)
+        );
+        assert_eq!(
+            subject_key(pending.result),
+            Some("AUCTION_INVOICE_MAIL_SUBJECT")
+        );
+        assert!(
+            parse_subject("4428:0:1:917").is_none(),
+            "an id without a count"
+        );
+        assert!(
+            parse_subject("4428:0:7:917:20").is_none(),
+            "no result past 6"
+        );
         // `%16X` right-aligned guid, then bid, buyout, deposit, cut, delay, packed ETA.
         let eta = (14 << 6) | 35;
         let body = format!("             2a:9000:10000:25:450:3600:{eta}");
         let n = parse_body(&body, true).expect("seller body");
         assert_eq!(
-            (n.player_guid, n.bid, n.buyout, n.deposit, n.consignment, n.money_delay),
+            (
+                n.player_guid,
+                n.bid,
+                n.buyout,
+                n.deposit,
+                n.consignment,
+                n.money_delay
+            ),
             (0x2a, 9000, 10000, 25, 450, 3600)
         );
         assert_eq!(n.eta_hour_min(), (14, 35));

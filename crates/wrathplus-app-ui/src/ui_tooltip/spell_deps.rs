@@ -10,9 +10,9 @@ use std::collections::BTreeMap;
 use wrathplus_formats::RangeUnit;
 use wrathplus_protocol::ObjectFields;
 
+use crate::app_core::session::ObjectStore;
 use crate::items::Items;
 use crate::net::Objects;
-use crate::app_core::session::ObjectStore;
 use crate::spell::usable::{slot_item_cached, SlotItem, EQUIPMENT_MASK, EQUIPMENT_SLOTS};
 use crate::spell::{ModsDiff, SkillSnapshot};
 

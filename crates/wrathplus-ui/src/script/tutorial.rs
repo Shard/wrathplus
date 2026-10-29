@@ -115,5 +115,4 @@ mod tests {
         s.set_tutorial_bank(Some(vec![0; 32]));
         assert_eq!(s.eval::<i64>("return TutorialsEnabled()").unwrap(), 1);
     }
-
 }

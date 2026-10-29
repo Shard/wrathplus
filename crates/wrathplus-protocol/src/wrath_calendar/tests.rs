@@ -171,7 +171,15 @@ fn fixtures() -> Vec<(u16, Vec<u8>, Packet)> {
         (0x439, w(&[0]), Packet::ArenaTeam { members: vec![] }),
         (
             0x43a,
-            [P9.to_vec(), q(10), q(11), vec![80, 1, 1], w(&[0x0a1b_2c3d]), vec![1]].concat(),
+            [
+                P9.to_vec(),
+                q(10),
+                q(11),
+                vec![80, 1, 1],
+                w(&[0x0a1b_2c3d]),
+                vec![1],
+            ]
+            .concat(),
             Packet::Invite {
                 invitee: 9,
                 event_id: 10,
@@ -351,7 +359,10 @@ fn every_fixture_decodes_and_rejects_truncation_and_trailing_bytes() {
     for (opcode, body, expected) in fixtures {
         assert_eq!(decode(opcode, &body).unwrap(), expected, "{opcode:#x}");
         for end in 0..body.len() {
-            assert!(decode(opcode, &body[..end]).is_err(), "{opcode:#x} truncated at {end}");
+            assert!(
+                decode(opcode, &body[..end]).is_err(),
+                "{opcode:#x} truncated at {end}"
+            );
         }
         let mut trailing = body.clone();
         trailing.push(0);
@@ -376,7 +387,10 @@ fn dispatch_routes_every_opcode_and_reports_malformed_as_unhandled() {
         match adapter.dispatch(opcode, &body, 0).unwrap() {
             crate::wrath_events::WrathDispatch::Handled { session_events, .. } => assert_eq!(
                 format!("{session_events:?}"),
-                format!("{:?}", vec![crate::SessionEvent::WrathCalendar { packet: expected }])
+                format!(
+                    "{:?}",
+                    vec![crate::SessionEvent::WrathCalendar { packet: expected }]
+                )
             ),
             other => panic!("{opcode:#x}: {other:?}"),
         }
@@ -392,7 +406,15 @@ fn commands_encode_ac_read_order() {
     let rows = vec![
         (Command::GetCalendar, 0x429, vec![]),
         (Command::GetEvent { event_id: 10 }, 0x42a, q(10)),
-        (Command::GuildFilter { min_level: 1, max_level: 80, min_rank: 9 }, 0x42b, w(&[1, 80, 9])),
+        (
+            Command::GuildFilter {
+                min_level: 1,
+                max_level: 80,
+                min_rank: 9,
+            },
+            0x42b,
+            w(&[1, 80, 9]),
+        ),
         (Command::ArenaTeam { team_id: 4 }, 0x42c, w(&[4])),
         (
             Command::AddEvent {
@@ -405,10 +427,21 @@ fn commands_encode_ac_read_order() {
                 packed_time: 1,
                 raw_packed_time: 2,
                 flags: 0,
-                invites: Some(vec![AddInvitee { guid: 9, status: 1, rank: 2 }]),
+                invites: Some(vec![AddInvitee {
+                    guid: 9,
+                    status: 1,
+                    rank: 2,
+                }]),
             },
             0x42d,
-            [b"Raid\0D\0".to_vec(), vec![3, 0], w(&[100, u32::MAX, 1, 2, 0, 1]), P9.to_vec(), vec![1, 2]].concat(),
+            [
+                b"Raid\0D\0".to_vec(),
+                vec![3, 0],
+                w(&[100, u32::MAX, 1, 2, 0, 1]),
+                P9.to_vec(),
+                vec![1, 2],
+            ]
+            .concat(),
         ),
         (
             Command::AddEvent {
@@ -441,34 +474,102 @@ fn commands_encode_ac_read_order() {
                 flags: 0x40,
             },
             0x42e,
-            [q(10), q(11), b"T\0D\0".to_vec(), vec![3, 0], w(&[100, u32::MAX, 1, 2, 0x40])].concat(),
+            [
+                q(10),
+                q(11),
+                b"T\0D\0".to_vec(),
+                vec![3, 0],
+                w(&[100, u32::MAX, 1, 2, 0x40]),
+            ]
+            .concat(),
         ),
-        (Command::RemoveEvent { event_id: 10, invite_id: 11, flags: 0 }, 0x42f, [q(10), q(11), w(&[0])].concat()),
-        (Command::CopyEvent { event_id: 10, invite_id: 11, packed_time: 1 }, 0x430, [q(10), q(11), w(&[1])].concat()),
         (
-            Command::Invite { event_id: 10, invite_id: 11, name: "Bob".into(), pre_invite: 0, guild_event: 1 },
+            Command::RemoveEvent {
+                event_id: 10,
+                invite_id: 11,
+                flags: 0,
+            },
+            0x42f,
+            [q(10), q(11), w(&[0])].concat(),
+        ),
+        (
+            Command::CopyEvent {
+                event_id: 10,
+                invite_id: 11,
+                packed_time: 1,
+            },
+            0x430,
+            [q(10), q(11), w(&[1])].concat(),
+        ),
+        (
+            Command::Invite {
+                event_id: 10,
+                invite_id: 11,
+                name: "Bob".into(),
+                pre_invite: 0,
+                guild_event: 1,
+            },
             0x431,
             [q(10), q(11), b"Bob\0".to_vec(), vec![0, 1]].concat(),
         ),
-        (Command::Rsvp { event_id: 10, invite_id: 11, status: 1 }, 0x432, [q(10), q(11), w(&[1])].concat()),
         (
-            Command::RemoveInvite { invitee: 9, invite_id: 11, owner_invite_id: 12, event_id: 10 },
+            Command::Rsvp {
+                event_id: 10,
+                invite_id: 11,
+                status: 1,
+            },
+            0x432,
+            [q(10), q(11), w(&[1])].concat(),
+        ),
+        (
+            Command::RemoveInvite {
+                invitee: 9,
+                invite_id: 11,
+                owner_invite_id: 12,
+                event_id: 10,
+            },
             0x433,
             [P9.to_vec(), q(11), q(12), q(10)].concat(),
         ),
         (
-            Command::Status { invitee: 9, event_id: 10, invite_id: 11, owner_invite_id: 12, status: 2 },
+            Command::Status {
+                invitee: 9,
+                event_id: 10,
+                invite_id: 11,
+                owner_invite_id: 12,
+                status: 2,
+            },
             0x434,
             [P9.to_vec(), q(10), q(11), q(12), vec![2]].concat(),
         ),
         (
-            Command::ModeratorStatus { invitee: 9, event_id: 10, invite_id: 11, owner_invite_id: 12, rank: 1 },
+            Command::ModeratorStatus {
+                invitee: 9,
+                event_id: 10,
+                invite_id: 11,
+                owner_invite_id: 12,
+                rank: 1,
+            },
             0x435,
             [P9.to_vec(), q(10), q(11), q(12), vec![1]].concat(),
         ),
-        (Command::Complain { event_id: 10, guid: 9 }, 0x446, [q(10), q(9)].concat()),
+        (
+            Command::Complain {
+                event_id: 10,
+                guid: 9,
+            },
+            0x446,
+            [q(10), q(9)].concat(),
+        ),
         (Command::GetNumPending, 0x447, vec![]),
-        (Command::Signup { event_id: 10, tentative: 1 }, 0x4ba, [q(10), vec![1]].concat()),
+        (
+            Command::Signup {
+                event_id: 10,
+                tentative: 1,
+            },
+            0x4ba,
+            [q(10), vec![1]].concat(),
+        ),
     ];
     for (command, opcode, body) in rows {
         assert_eq!(encode(&command), (opcode, body), "{command:?}");

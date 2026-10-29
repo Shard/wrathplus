@@ -727,7 +727,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     fn vm() -> UiScript {
         UiScript::new().unwrap()
     }

@@ -4,11 +4,11 @@ use crate::{
     items::Items,
     net::{NetCommands, Objects, SelfGuid},
 };
+use bevy::prelude::*;
 use wrathplus_ui::script::{
     wrath_loot_roll_reasons as native_reasons, ScriptValue, UiScript, WrathLootRollEntry as Entry,
     WrathLootRollsState as State,
 };
-use bevy::prelude::*;
 
 #[derive(Resource, Default)]
 pub(crate) struct Presentation {
@@ -29,7 +29,10 @@ pub(super) fn load_limits(
         return;
     };
     let mut chain = assets.chain.lock_recover();
-    if !matches!(chain.profile(), wrathplus_formats::DataProfile::Wrath { .. }) {
+    if !matches!(
+        chain.profile(),
+        wrathplus_formats::DataProfile::Wrath { .. }
+    ) {
         return;
     }
     match wrathplus_formats::item_limit_category::load_item_limit_categories(&mut chain) {

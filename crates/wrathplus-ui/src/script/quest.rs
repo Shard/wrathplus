@@ -206,7 +206,9 @@ pub(super) fn reward_spell_returns(
         Value::Nil
     };
     let learned = super::binding_abi::flag(sp.learned);
-    Ok(MultiValue::from_vec(vec![texture, name, tradeskill, learned]))
+    Ok(MultiValue::from_vec(vec![
+        texture, name, tradeskill, learned,
+    ]))
 }
 
 /// The icon an empty offer row answers: display 0 has no `ItemDisplayInfo` row, so the icon
@@ -589,7 +591,14 @@ mod tests {
         assert!(s
             .eval::<bool>("return not QuestGetAutoAccept() and GetRewardTitle() == nil")
             .unwrap());
-        s.set_unit("player", Some(crate::script::UnitState { level: 60, ..Default::default() })); s.set_quest(Some(QuestState {
+        s.set_unit(
+            "player",
+            Some(crate::script::UnitState {
+                level: 60,
+                ..Default::default()
+            }),
+        );
+        s.set_quest(Some(QuestState {
             auto_accept: true,
             reward_xp: 1200,
             reward_honor: 50,

@@ -14,8 +14,8 @@ use bevy::prelude::*;
 
 use wrathplus_protocol::guid;
 
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::session::ObjectStore;
+use crate::net::{ClientCommand, NetCommands};
 use crate::query_cache::QueryCache;
 
 /// The creature template's `type_flags` dword from `SMSG_CREATURE_QUERY_RESPONSE`, cached by the
@@ -200,12 +200,7 @@ impl NameCache {
 
     /// The name for a creature template `entry`; `guid` is 0 when no spawn is known, since the
     /// server answers by entry alone.
-    pub fn resolve_creature(
-        &self,
-        entry: u32,
-        guid: u64,
-        commands: &NetCommands,
-    ) -> Option<&str> {
+    pub fn resolve_creature(&self, entry: u32, guid: u64, commands: &NetCommands) -> Option<&str> {
         if self.creatures.answered(entry) {
             return self.creatures.get(entry).map(|r| r.name.as_str());
         }
@@ -473,8 +468,8 @@ impl NameCache {
 
 /// The three name-query answers and `SMSG_INVALIDATE_PLAYER`.
 pub mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::{CreatureRecord, NameCache};
     use crate::net::NetHandlerApp;

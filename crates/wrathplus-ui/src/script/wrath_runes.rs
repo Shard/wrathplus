@@ -94,7 +94,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn bindings_read_the_timed_snapshot() {
         let mut s = UiScript::new().unwrap();

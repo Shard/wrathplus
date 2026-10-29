@@ -137,7 +137,9 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<SessionEvent> {
             trainer: u64_(r)?,
             cost: u32_(r)?,
         },
-        0x03f4 => SessionEvent::WrathInspect { packet: inspect(r)? },
+        0x03f4 => SessionEvent::WrathInspect {
+            packet: inspect(r)?,
+        },
         _ => return Err(invalid("inspect opcode")),
     };
     if r.position() as usize != body.len() {

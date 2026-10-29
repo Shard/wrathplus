@@ -1,17 +1,17 @@
 //! Remote-player dead-reckoning from relayed `MSG_MOVE_*`: flag-driven locomotion between the
 //! 500 ms heartbeats, and a jump played locally as a ballistic arc.
 
-use wrathplus_assets::coords::{bevy_to_wow, wow_to_bevy};
-use wrathplus_protocol::{JumpInfo, MoveSpeeds};
 use bevy::prelude::*;
 use bevy::time::Real;
+use wrathplus_assets::coords::{bevy_to_wow, wow_to_bevy};
+use wrathplus_protocol::{JumpInfo, MoveSpeeds};
 
 use crate::app_core::movement::move_flags;
 use crate::app_core::movement::{GRAVITY, TERMINAL_VELOCITY};
 
-use crate::net::{ActiveMover, UnitSpeeds};
 use super::relay::{PendingMove, RelayChain, RelayMove};
 use super::{yaw_of, Spline};
+use crate::net::{ActiveMover, UnitSpeeds};
 
 /// Another player's movement state, set by each relayed move and dead-reckoned from `flags` in
 /// between; the WoW-space pose the `Transform` is derived from. While `FALLING` the horizontal is

@@ -206,8 +206,8 @@ pub(super) fn route_swing_impacts(
 
 #[cfg(test)]
 mod tests {
-    use wrathplus_protocol::types::Field;
     use bevy::ecs::message::MessageCursor;
+    use wrathplus_protocol::types::Field;
 
     use super::*;
 
@@ -296,7 +296,10 @@ mod tests {
         app.world_mut()
             .entity_mut(entity)
             .insert(crate::app_core::session::ObjectStore(
-                wrathplus_protocol::types::ObjectFields::from_pairs(&[(FIELD_DYNAMIC_FLAGS, flags)]),
+                wrathplus_protocol::types::ObjectFields::from_pairs(&[(
+                    FIELD_DYNAMIC_FLAGS,
+                    flags,
+                )]),
             ));
     }
 

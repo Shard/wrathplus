@@ -456,12 +456,12 @@ mod tests {
 
     #[test]
     fn wrath_abbey_dry_indoor_room_does_not_trip_the_swimming_gate() {
+        use bevy::ecs::system::RunSystemOnce;
+        use bevy::prelude::*;
         use wrathplus_assets::coords::wow_to_bevy;
         use wrathplus_world::liquid::LiquidClaim;
         use wrathplus_world::wmo_portal::{PlayerWmoRoom, WmoPortalInstance, WmoRoom};
         use wrathplus_world::world_point::{init_world_point_resources, Subject, WorldPoint};
-        use bevy::ecs::system::RunSystemOnce;
-        use bevy::prelude::*;
 
         const ANCHOR: [f32; 3] = [-8910.12, -144.18, 81.97];
         let mut world = World::new();

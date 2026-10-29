@@ -5,12 +5,12 @@ use wrathplus_protocol::ObjectFields;
 use wrathplus_ui::script::UiScript;
 
 use super::spell_feed::feed_spell_tooltips;
-use crate::items::Items;
-use crate::net::NetCommands;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::PlayerActions;
 use crate::app_core::state::Spells;
+use crate::items::Items;
+use crate::net::NetCommands;
 use bevy::prelude::*;
 
 /// `field`'s native descriptor index.
@@ -289,9 +289,9 @@ fn a_modifier_change_rebuilds_only_the_matching_familys_views() {
 /// walking rebuild nothing.
 #[test]
 fn a_units_run_rebuilds_no_view_without_a_range_modifier() {
-    use crate::creature_anim::Engaged;
     use crate::app_core::movement::move_flags;
     use crate::app_core::session::Embodied;
+    use crate::creature_anim::Engaged;
 
     const MOB: u64 = 0xF130_0000_0000_0009;
     let spell = |range_index: u32, generation: u32| wrathplus_formats::SpellDisplay {

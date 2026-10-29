@@ -52,8 +52,8 @@ pub(crate) fn plugin(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_assets::materials::WowModelMaterial;
     use bevy::pbr::check_entities_needing_specialization;
+    use wrathplus_assets::materials::WowModelMaterial;
 
     #[derive(Resource, Default)]
     struct Published(Option<Entity>);

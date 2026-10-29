@@ -8,8 +8,8 @@
 //! projection.
 pub use crate::net::wrath_ui_timer_capture::{NativeUiTimerPackets, ServerClock};
 use crate::net::{ClientCommand, NetCommands};
-use wrathplus_ui::script::UiScript;
 use bevy::prelude::*;
+use wrathplus_ui::script::UiScript;
 
 /// `0x5488f0`'s query period (`iVar1 + 20000` ms).
 const QUERY_PERIOD_SECS: f64 = 20.0;

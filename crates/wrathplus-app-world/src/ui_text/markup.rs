@@ -139,11 +139,9 @@ pub(super) fn visible_map(input: &str) -> (String, Vec<usize>) {
             T::EscapedPipe => '|',
             T::LineBreak => '\n',
             // Zero-width: no drawn byte, so no boundary of its own.
-            T::Color(_)
-            | T::ColorReset
-            | T::LinkOpen { .. }
-            | T::LinkClose
-            | T::Texture { .. } => continue,
+            T::Color(_) | T::ColorReset | T::LinkOpen { .. } | T::LinkClose | T::Texture { .. } => {
+                continue
+            }
         };
         // The boundary before this char is where the previous drawn token ended, before any escape
         // in between; a multi-byte char's interior boundaries are its own raw bytes.

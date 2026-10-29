@@ -2,8 +2,8 @@
 //! [`SessionEvent`] channel through the handler table, and [`tag_self_player`] marks our own
 //! streamed entity. Nothing is applied here: every packet's handler lives with its subsystem.
 
-use wrathplus_protocol::SessionEvent;
 use bevy::prelude::*;
+use wrathplus_protocol::SessionEvent;
 
 use super::{Guid, NetEvents, SelfGuid, SelfPlayer};
 

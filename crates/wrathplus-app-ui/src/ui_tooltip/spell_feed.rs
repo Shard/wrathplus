@@ -13,15 +13,15 @@ use wrathplus_ui::strings::Arg;
 
 use super::keyed;
 use super::spell_deps::{Chance, Changes, Deps, RangeSeen, Reagents, Seen, UnitField};
-use crate::items::Items;
-use crate::net::{NetCommands, Objects};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::spell::usable::{self, CostBasis};
 use crate::app_core::state::PlayerActions;
 use crate::app_core::state::Spells;
 use crate::inventory::count_of;
 use crate::inventory::InventoryScope;
+use crate::items::Items;
+use crate::net::{NetCommands, Objects};
+use crate::spell::usable::{self, CostBasis};
 use crate::ui_trainer::TrainerTooltipSubjects;
 
 /// The unit a view's caster cells are computed against, the spell builder `0x52e610`'s fourth
@@ -645,12 +645,9 @@ pub fn feed_spell_tooltips(
     let pet_guid = self_store.and_then(|s| s.0.unit_pet_guid());
     let pet = pet_guid.and_then(|g| objects.object(g));
     let pet_entity = pet_guid.and_then(|g| objects.entity(g));
-    let pet_unit =
-        pet_entity
-            .and_then(|e| range_units.unit(e))
-            .unwrap_or(wrathplus_formats::RangeUnit::still(
-                crate::spell::DEFAULT_REACH,
-            ));
+    let pet_unit = pet_entity.and_then(|e| range_units.unit(e)).unwrap_or(
+        wrathplus_formats::RangeUnit::still(crate::spell::DEFAULT_REACH),
+    );
     let pet_target = pet_entity.and_then(|e| range_units.attack_target(e));
     let pet_inputs = PetInputs::of(pet_guid, pet, RangeSeen::of(&pet_unit, pet_target.as_ref()));
     if memory.pet != Some(pet_inputs) {

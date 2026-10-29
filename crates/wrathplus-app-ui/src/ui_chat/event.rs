@@ -4,9 +4,9 @@
 
 use wrathplus_ui::script::ScriptValue;
 
-pub(crate) use crate::app_core::chat::{ChatEvent, ChatEventKind};
 #[cfg(test)]
 pub(crate) use crate::app_core::chat::default_color;
+pub(crate) use crate::app_core::chat::{ChatEvent, ChatEventKind};
 
 /// The reference's event name for a kind, `CHAT_MSG_` and its `ChatTypeInfo` key, which
 /// `ChatFrame_OnEvent` recovers with `strsub(event, 10)`.

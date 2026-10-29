@@ -5,8 +5,8 @@ use super::*;
 use wrathplus_assets::{ModelJoint, ModelSkeleton};
 use wrathplus_protocol::ObjectFields;
 
-use crate::entities::{BoneAttach, VisualAttached};
 use crate::app_core::session::ObjectStore;
+use crate::entities::{BoneAttach, VisualAttached};
 use wrathplus_protocol::types::Field;
 
 /// `UNIT_FIELD_MOUNTDISPLAYID` (index 133), the wire's one mounted signal.

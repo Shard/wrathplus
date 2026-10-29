@@ -14,10 +14,10 @@ use bevy::prelude::*;
 
 use wrathplus_protocol::EntityKind;
 
-use crate::net::{Guid, GuidIndex, NetEntity, UnitSpeeds};
 use crate::app_core::session::Embodied;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::net::{Guid, GuidIndex, NetEntity, UnitSpeeds};
 
 use super::follow::{self, FollowInput, FollowState};
 use super::state::Player;
@@ -533,8 +533,8 @@ pub const CVARS: &[crate::cvars::Registered] = {
 mod tests {
     use super::super::state::{MoveSpeed, PlayerRide};
     use super::*;
-    use wrathplus_protocol::types::ObjectFields;
     use bevy::ecs::system::RunSystemOnce;
+    use wrathplus_protocol::types::ObjectFields;
 
     const fn object(verb: ApproachVerb) -> Toward {
         Toward::Object { verb, guid: 0 }

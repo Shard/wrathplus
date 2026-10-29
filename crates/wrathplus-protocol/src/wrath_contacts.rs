@@ -11,7 +11,9 @@ use crate::types::{FriendEntry, FriendOnline, FriendStatusUpdate};
 use crate::SessionEvent;
 use std::io;
 
-pub const OPCODES: [u16; 8] = [0x0067, 0x0068, 0x0167, 0x0168, 0x0169, 0x016a, 0x016b, 0x02b7];
+pub const OPCODES: [u16; 8] = [
+    0x0067, 0x0068, 0x0167, 0x0168, 0x0169, 0x016a, 0x016b, 0x02b7,
+];
 
 const CONTACT_FRIEND: u32 = 0x01;
 const CONTACT_IGNORED: u32 = 0x02;
@@ -29,7 +31,10 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
                 let friends = contacts
                     .iter()
                     .filter_map(|c| {
-                        let friend = c.friend.as_ref().filter(|_| c.flags & CONTACT_FRIEND != 0)?;
+                        let friend = c
+                            .friend
+                            .as_ref()
+                            .filter(|_| c.flags & CONTACT_FRIEND != 0)?;
                         let presence = friend.presence.as_ref();
                         Some(FriendEntry {
                             guid: c.guid,

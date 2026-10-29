@@ -27,8 +27,8 @@
 use bevy::ecs::system::NonSendMut;
 use bevy::prelude::*;
 
-use wrathplus_assets::coords::bevy_to_wow;
 use std::collections::HashMap;
+use wrathplus_assets::coords::bevy_to_wow;
 
 use wrathplus_formats::world_map_wrath::{
     AreaPoiLinks, DungeonMapChunk, WorldMapTransform, WrathMapTables,
@@ -42,10 +42,10 @@ use wrathplus_ui::script::{
     WorldMapLandmarkView, WorldMapOverlayView, WorldMapZoneView,
 };
 
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::app_core::player::Player;
 use crate::app_core::schedule::UiInput;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use wrathplus_assets::MapCatalogRes;
 use wrathplus_assets::{LockRecover, WorldAssets};
 use wrathplus_world::map_proj::{self, WorldProj, ZoneRect};
@@ -203,7 +203,10 @@ pub(crate) fn build_catalog(
             return None;
         }
     };
-    let wrath = if matches!(chain.profile(), wrathplus_formats::DataProfile::Wrath { .. }) {
+    let wrath = if matches!(
+        chain.profile(),
+        wrathplus_formats::DataProfile::Wrath { .. }
+    ) {
         wrathplus_formats::world_map_wrath::load_wrath_map_tables(&mut *chain).unwrap_or_else(|e| {
             warn!("world map: dungeon-map tables failed to load, no floors: {e:#}");
             WrathMapTables::default()
@@ -997,13 +1000,14 @@ fn feed_world_map(
 
     // The `raid1..40` blips in the raid roster's order, ourselves first so `raidN` matches; the
     // stock map skips our own slot by `UnitIsUnit` (`WorldMapFrame.lua:381`).
-    let raid_uv: Vec<Option<(f32, f32)>> = if group.group_type == crate::app_core::state::GROUPTYPE_RAID {
-        std::iter::once(uv)
-            .chain(group.members.iter().map(member_uv))
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let raid_uv: Vec<Option<(f32, f32)>> =
+        if group.group_type == crate::app_core::state::GROUPTYPE_RAID {
+            std::iter::once(uv)
+                .chain(group.members.iter().map(member_uv))
+                .collect()
+        } else {
+            Vec::new()
+        };
 
     script.set_world_map_feed(
         player_sel.zone,

@@ -127,8 +127,7 @@ pub(super) fn lights(wrath: &WrathM2) -> Vec<M2Light> {
                         |v| v,
                     ),
                     visibility: {
-                        let mut v =
-                            seq_track(globals, &light.visibility, 1.0, 1.0, f32::from);
+                        let mut v = seq_track(globals, &light.visibility, 1.0, 1.0, f32::from);
                         // A byte track: `0x82b270` copies `values[k0]`, never lerps.
                         for lane in &mut v.slots {
                             lane.interp = 0;

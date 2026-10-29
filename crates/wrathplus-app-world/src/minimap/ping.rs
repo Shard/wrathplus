@@ -29,9 +29,9 @@ use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_ui::script::{ScriptValue, UiScript};
 
 use super::blips::BlipCtx;
-use crate::net::{ClientCommand, Guid, NetCommands};
-use crate::app_core::session::SelfPlayer;
 use crate::app_core::player::Player;
+use crate::app_core::session::SelfPlayer;
+use crate::net::{ClientCommand, Guid, NetCommands};
 
 /// The stored ping, the reference's two statics: one, never cleared, with no map tag (after a
 /// worldport the old point re-projects and the stock Lua's disc test hides it).

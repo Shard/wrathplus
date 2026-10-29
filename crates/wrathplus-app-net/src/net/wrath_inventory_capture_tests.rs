@@ -42,6 +42,11 @@ fn letter_texts_go_to_the_reader() {
     dispatch(&mut app, &mut adapter, 0x244, &body);
     dispatch(&mut app, &mut adapter, 0x244, &[1]);
     assert!(captured(&app).is_empty());
-    let mut letters = app.world_mut().resource_mut::<crate::app_core::interaction::LetterTexts>();
-    assert_eq!(letters.text(0x4000_0000_0000_0042).as_deref(), Some("Dear friend"));
+    let mut letters = app
+        .world_mut()
+        .resource_mut::<crate::app_core::interaction::LetterTexts>();
+    assert_eq!(
+        letters.text(0x4000_0000_0000_0042).as_deref(),
+        Some("Dear friend")
+    );
 }

@@ -89,7 +89,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             else {
                 return Ok(MultiValue::new());
             };
-            let (first, other) = if female { (&row.female, &row.male) } else { (&row.male, &row.female) };
+            let (first, other) = if female {
+                (&row.female, &row.male)
+            } else {
+                (&row.male, &row.female)
+            };
             let name = if first.is_empty() { other } else { first };
             Ok(MultiValue::from_vec(vec![Value::String(
                 lua.create_string(strip_placeholder(name))?,
@@ -118,7 +122,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetCurrentTitle",
         lua.create_function(|lua, ()| {
             let m = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(if has_player(&m) { i64::from(m.wrath_titles.chosen) } else { 0 })
+            Ok(if has_player(&m) {
+                i64::from(m.wrath_titles.chosen)
+            } else {
+                0
+            })
         })?,
     )
 }
@@ -133,11 +141,34 @@ mod tests {
         let mut s = UiScript::new().unwrap();
         assert!(s.eval::<bool>("return GetNumTitles() == 1 and GetCurrentTitle() == 0 and IsTitleKnown(1) == 0 and select('#', GetTitleName(1)) == 0").unwrap());
         s.set_wrath_char_titles(Arc::new(vec![
-            WrathCharTitle { id: 1, male: "Private %s".into(), female: "".into(), mask_id: 1 },
-            WrathCharTitle { id: 2, male: "%s the Patient".into(), female: "%s the Patient".into(), mask_id: 65 },
-            WrathCharTitle { id: 3, male: "Lord %s".into(), female: "Lady %s".into(), mask_id: 7 },
+            WrathCharTitle {
+                id: 1,
+                male: "Private %s".into(),
+                female: "".into(),
+                mask_id: 1,
+            },
+            WrathCharTitle {
+                id: 2,
+                male: "%s the Patient".into(),
+                female: "%s the Patient".into(),
+                mask_id: 65,
+            },
+            WrathCharTitle {
+                id: 3,
+                male: "Lord %s".into(),
+                female: "Lady %s".into(),
+                mask_id: 7,
+            },
         ]));
-        s.set_unit("player", Some(UnitState { guid: 1, exists: true, sex: 3, ..Default::default() }));
+        s.set_unit(
+            "player",
+            Some(UnitState {
+                guid: 1,
+                exists: true,
+                sex: 3,
+                ..Default::default()
+            }),
+        );
         s.set_wrath_player_titles(vec![1 << 1, 1 << 1], 65);
         for check in [
             "GetNumTitles() == 4",

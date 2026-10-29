@@ -1,9 +1,9 @@
 //! Installed build-12340 currency metadata, read through the effective archive chain.
+use std::path::Path;
 use wrathplus_formats::{
     currencies::{load_currency_categories, load_currency_types},
     Chain,
 };
-use std::path::Path;
 
 #[test]
 fn installed_wrath_currency_metadata() {

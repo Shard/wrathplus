@@ -5,8 +5,8 @@ pub use crate::net::wrath_quests_completed_capture::{
     NativeQuestsCompletedPackets, QuestsCompleted,
 };
 use crate::net::{ClientCommand, NetCommands};
-use wrathplus_ui::script::UiScript;
 use bevy::prelude::*;
+use wrathplus_ui::script::UiScript;
 
 pub fn register(app: &mut App) {
     // In the feed phase, and not before the in-game UI exists: a reply that lands earlier

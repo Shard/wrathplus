@@ -11,8 +11,8 @@
 
 use std::collections::HashMap;
 
-use wrathplus_formats::{EnchantCatalog, ItemVisualCatalog, ITEM_VISUAL_SLOTS};
 use bevy::prelude::*;
+use wrathplus_formats::{EnchantCatalog, ItemVisualCatalog, ITEM_VISUAL_SLOTS};
 
 use wrathplus_assets::m2_url;
 use wrathplus_assets::materials::WowModelMaterial;

@@ -16,15 +16,15 @@ use wrathplus_ui::script::SpellTooltipView;
 use super::spell_deps::{Changes, Deps, RangeSeen, Reagents, Seen, UnitField};
 use super::spell_feed::{build_view, reagent_state, PetInputs, ViewCaster, ViewCtx};
 use super::tests::{real_spells, TestCtx};
-use crate::items::Items;
-use crate::net::{NetCommands, Objects};
 use crate::app_core::session::ObjectStore;
+use crate::app_core::state::Spells;
+use crate::items::Items;
+use crate::items::TestObjects;
+use crate::net::{NetCommands, Objects};
 use crate::spell::usable::{
     slot_item_cached, worn_slots_read, SlotItem, EQUIPMENT_MASK, EQUIPMENT_SLOTS,
 };
 use crate::spell::{ModsDiff, SpellModifiers};
-use crate::app_core::state::Spells;
-use crate::items::TestObjects;
 use wrathplus_formats::{RangeUnit, UnitMotion};
 
 /// One side of each input group, so that moving an input is an xor: `false` is the empty side (no

@@ -317,7 +317,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 mod tests {
     use super::*;
     use crate::script::quest_log::{QuestLogEntryView, QuestLogState};
-    use crate::script::{UnitState};
+    use crate::script::UnitState;
 
     fn vm() -> UiScript {
         let mut s = UiScript::new().unwrap();

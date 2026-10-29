@@ -111,8 +111,11 @@ mod tests {
         s.run("f=CreateFrame('Frame');t=f:CreateTexture();g=t:CreateAnimationGroup();a=g:CreateAnimation('Alpha');a:SetDuration(1);a:SetSmoothing('IN');stops=0;g:SetScript('OnStop',function() stops=stops+1 end);g:Play()").unwrap();
         s.tick(0.5);
         assert!(s.eval::<bool>("return math.abs(a:GetProgress()-0.5)<1e-6 and math.abs(a:GetSmoothProgress()-0.25)<1e-6").unwrap());
-        s.run("t:StopAnimating(); t:StopAnimating(); f:StopAnimating()").unwrap();
-        assert!(s.eval::<bool>("return stops==1 and not g:IsPlaying()").unwrap());
+        s.run("t:StopAnimating(); t:StopAnimating(); f:StopAnimating()")
+            .unwrap();
+        assert!(s
+            .eval::<bool>("return stops==1 and not g:IsPlaying()")
+            .unwrap());
     }
 
     #[test]

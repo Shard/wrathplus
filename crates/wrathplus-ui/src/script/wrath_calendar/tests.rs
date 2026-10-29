@@ -78,10 +78,8 @@ fn the_shown_month_starts_at_today_and_moves() {
     );
     // `0x5b7a80`: the first of the month thirteen months on; `0x5b82a0`: 1 January 2031.
     assert_eq!(
-        s.eval::<(i64, i64, i64)>(
-            "local _, m, d, y = CalendarGetMaxCreateDate() return m, d, y"
-        )
-        .unwrap(),
+        s.eval::<(i64, i64, i64)>("local _, m, d, y = CalendarGetMaxCreateDate() return m, d, y")
+            .unwrap(),
         (4, 1, 2011)
     );
     assert_eq!(

@@ -10,18 +10,18 @@
 //! [`commit`] through `SetSelection` (`0x493540`), the attack acquire (`0x612df0` at `0x6130b5`),
 //! the ATTACKERSTATEUPDATE acquire (`0x6259c9`–`0x6259fe`) and the 41 yd range.
 
-use wrathplus_formats::CreatureTypeFlags;
-use wrathplus_protocol::{guid, EntityKind};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use wrathplus_formats::CreatureTypeFlags;
+use wrathplus_protocol::{guid, EntityKind};
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::creature_anim::{Engaged, SwingMessage};
 use crate::names::NameCache;
 #[cfg(test)]
 use crate::net::ClientCommand;
 use crate::net::{Guid, GuidIndex, NetEntity, Reputations};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use wrathplus_assets::{LockRecover, WorldAssets};
 
 use super::relations::{can_assist, can_attack};
@@ -220,7 +220,10 @@ pub(crate) struct TargetScan<'w, 's> {
         'w,
         's,
         (&'static Camera, &'static Transform),
-        (With<wrathplus_world::view::WorldCamera>, Without<SelfPlayer>),
+        (
+            With<wrathplus_world::view::WorldCamera>,
+            Without<SelfPlayer>,
+        ),
     >,
     factions: Option<Res<'w, Factions>>,
     reputations: Res<'w, Reputations>,
@@ -672,9 +675,9 @@ impl AttackPick<'_, '_> {
         }
         let Some(guid) = selection.guid else {
             debug!("attack: nothing to attack (ERR_NO_ATTACK_TARGET)");
-            errors
-                .0
-                .push(crate::app_core::errors::UiError::key("ERR_NO_ATTACK_TARGET"));
+            errors.0.push(crate::app_core::errors::UiError::key(
+                "ERR_NO_ATTACK_TARGET",
+            ));
             return None;
         };
         // `0x613118`, the second resolve: a miss refuses with no message (`0x613123`).
@@ -692,9 +695,9 @@ impl AttackPick<'_, '_> {
             self.scan.relations(),
         ) {
             debug!("attack: {guid:#x} fails the final gate (ERR_INVALID_ATTACK_TARGET)");
-            errors
-                .0
-                .push(crate::app_core::errors::UiError::key("ERR_INVALID_ATTACK_TARGET"));
+            errors.0.push(crate::app_core::errors::UiError::key(
+                "ERR_INVALID_ATTACK_TARGET",
+            ));
             return None;
         }
         Some(guid)
@@ -1032,7 +1035,11 @@ mod tests {
                 .open(guid, 1, 0, Vec::new());
             world.resource_mut::<crate::app_core::state::LootLatch>().0 = Some(guid);
         };
-        let source = |world: &World| world.resource::<crate::app_core::loot::LootState>().source();
+        let source = |world: &World| {
+            world
+                .resource::<crate::app_core::loot::LootState>()
+                .source()
+        };
 
         // Tab from the looted corpse to the next mob: release, then select.
         assert!(go(&mut world, CORPSE, false, Some(1), false).changed);
@@ -1044,7 +1051,10 @@ mod tests {
             ["release 0xf130000000000042", "select 0xf130000000000043"]
         );
         assert_eq!(source(&world), None);
-        assert_eq!(world.resource::<crate::app_core::state::LootLatch>().0, None);
+        assert_eq!(
+            world.resource::<crate::app_core::state::LootLatch>().0,
+            None
+        );
 
         // A chest's window is not the selection's: a change leaves it open.
         open(&mut world, CHEST);
@@ -1459,8 +1469,8 @@ mod tests {
     /// health or reaction leg, so a dead party member counts and a stranger never does.
     #[test]
     fn the_party_and_raid_modes_take_only_the_roster() {
-        use wrathplus_protocol::types::GroupMemberEntry;
         use bevy::ecs::system::RunSystemOnce;
+        use wrathplus_protocol::types::GroupMemberEntry;
 
         const PARTY: u64 = 0x11;
         const PARTY_DEAD: u64 = 0x12;

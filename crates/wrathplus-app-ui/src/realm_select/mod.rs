@@ -32,8 +32,8 @@ pub(crate) use load::pvp_rp;
 use bevy::prelude::*;
 
 use crate::net::{RealmChoice, RealmListMessage, RealmRequest};
-use wrathplus_protocol::RealmInfo;
 pub(crate) use category::RealmsCategory;
+use wrathplus_protocol::RealmInfo;
 
 /// The persisted 1.12 CVar naming the last realm connected to (`0x83f2d0`); the SavedVariables
 /// path (`0x8539a8`) is built from it.

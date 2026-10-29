@@ -4,11 +4,11 @@
 
 use wrathplus_formats::SpellDisplay;
 
+use crate::app_core::session::ObjectStore;
 use crate::app_core::state::UNIT_FLAG_DISARMED;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::net::{NetCommands, Objects};
-use crate::app_core::session::ObjectStore;
 
 const EQUIPMENT_SLOT_MAINHAND: u8 = 15;
 
@@ -124,8 +124,8 @@ pub(super) fn auto_attack_icon(
 
 #[cfg(test)]
 mod tests {
-    use wrathplus_protocol::types::Field;
     use std::collections::HashMap;
+    use wrathplus_protocol::types::Field;
 
     use wrathplus_formats::{ItemDisplay, ItemDisplayCatalog, ShapeshiftForm};
     use wrathplus_protocol::types::{ItemInfo, ObjectFields};

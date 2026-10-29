@@ -826,10 +826,7 @@ mod loader_tests {
         let report = load(&s, &doc, &no_files);
         assert_eq!(report.frames, 1);
         assert!(report.errors.is_empty(), "{:?}", report.errors);
-        assert!(report
-            .warnings
-            .iter()
-            .any(|w| w.contains("OnNoSuchScript")));
+        assert!(report.warnings.iter().any(|w| w.contains("OnNoSuchScript")));
     }
 
     /// `Instantiate 0x6ee280` logs `"Unknown frame type: %s"` (`0x871124`) and builds nothing for
@@ -1159,9 +1156,11 @@ mod loader_tests {
             "{:?}",
             report.errors
         );
-        s.run("FormalsProbe:GetScript('OnSizeChanged')(FormalsProbe, 3, 4) \
-               FormalsSlider:GetScript('OnMinMaxChanged')(FormalsSlider, 0, 9)")
-            .unwrap();
+        s.run(
+            "FormalsProbe:GetScript('OnSizeChanged')(FormalsProbe, 3, 4) \
+               FormalsSlider:GetScript('OnMinMaxChanged')(FormalsSlider, 0, 9)",
+        )
+        .unwrap();
         assert_eq!(s.eval::<String>("return SizeSeen").unwrap(), "3x4");
         assert_eq!(s.eval::<String>("return MinMaxSeen").unwrap(), "0-9");
         // A script the type lacks is logged as `0x48fef0` does and skipped, its body never run.
@@ -2665,8 +2664,8 @@ fn wrath_animations_exist_before_owner_onload_and_timer_finishes() {
 fn wrath_scale_rotation_xml_loaded_before_onload() {
     let s = crate::script::UiScript::new().unwrap();
     let doc = crate::framexml::parse(r#"<Ui><Frame name="TransformXml"><Animations><AnimationGroup parentKey="group"><Scale parentKey="scale" scaleX="2" scaleY="3" duration="1"><Origin point="TOPLEFT" x="4" y="5"/></Scale><Rotation parentKey="rotation" degrees="90" duration="1"/></AnimationGroup></Animations><Scripts><OnLoad>local x,y=self.group.scale:GetScale(); XMLTRANSFORM=x==2 and y==3 and self.group.rotation:GetDegrees()==90; local p,x,y=self.group.scale:GetOrigin(); XMLORIGIN=p=='TOPLEFT' and x==4 and y==5</OnLoad></Scripts></Frame></Ui>"#).unwrap();
-    let report=super::load(&s,&doc,&|_: &str| None);
-    assert!(report.errors.is_empty(),"{report:?}");
+    let report = super::load(&s, &doc, &|_: &str| None);
+    assert!(report.errors.is_empty(), "{report:?}");
     assert!(s.eval::<bool>("return XMLTRANSFORM and XMLORIGIN").unwrap());
 }
 

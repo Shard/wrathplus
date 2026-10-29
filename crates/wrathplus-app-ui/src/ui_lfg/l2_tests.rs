@@ -394,13 +394,21 @@ fn the_snapshot_maps_the_stores() {
     );
     let s = q.snapshot(&name);
     let queue = s.queue.unwrap();
-    assert_eq!((queue.queued_at_ms, queue.my_wait, queue.dps_needs), (60_000, 30, 1));
+    assert_eq!(
+        (queue.queued_at_ms, queue.my_wait, queue.dps_needs),
+        (60_000, 30, 1)
+    );
     let role = s.role_check.unwrap();
     assert!(role.is_beginning);
     assert_eq!(role.members[0].name.as_deref(), Some("Mate"));
     let party = s.party.unwrap();
     assert_eq!(
-        (party.update_type, party.no_partial_clear, party.achievements, party.unknown),
+        (
+            party.update_type,
+            party.no_partial_clear,
+            party.achievements,
+            party.unknown
+        ),
         (5, true, false, [7, 8, 9])
     );
     assert!(s.player.is_none() && !s.disabled);

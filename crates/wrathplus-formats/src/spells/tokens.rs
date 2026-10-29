@@ -7,9 +7,9 @@
 use super::soft_float;
 #[path = "tokens_wrath.rs"]
 mod wrath;
+use super::{SpellDisplay, SpellDurationCatalog, SpellRadiusCatalog, SpellRangeCatalog};
 use wrath::scale_prefix;
 pub use wrath::PlayerTokens;
-use super::{SpellDisplay, SpellDurationCatalog, SpellRadiusCatalog, SpellRangeCatalog};
 
 /// The caster's spell-modifier appliers over its tables (`GetSpellModifiers 0x6e6b30`): the
 /// integer `0x6e6af0`, the FPU float `0x6e6bf0` and the software float `0x6e6c30`
@@ -1234,7 +1234,11 @@ mod tests {
         );
         assert_eq!(substitute("stacks $u times", &d, &c), "stacks 0 times");
         assert_eq!(substitute("unknown $j", &d, &c), "unknown $j");
-        assert_eq!(substitute("as $9999s1 is", &d, &c), "as $s1 is", "a missing row");
+        assert_eq!(
+            substitute("as $9999s1 is", &d, &c),
+            "as $s1 is",
+            "a missing row"
+        );
         assert_eq!(
             substitute("Returns you to $z.", &d, &c),
             "Returns you to Goldshire."

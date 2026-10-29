@@ -192,12 +192,16 @@ fn quest<'a>(
 pub(crate) fn coin_text(copper: u32, get: &dyn Fn(&str) -> String) -> String {
     use wrathplus_ui::strings::{fill, Arg};
     let (g, s, c) = (copper / 10000, copper / 100 % 100, copper % 100);
-    [(g, "GOLD_AMOUNT"), (s, "SILVER_AMOUNT"), (c, "COPPER_AMOUNT")]
-        .into_iter()
-        .filter(|&(n, _)| n != 0)
-        .map(|(n, key)| fill(&get(key), &[Arg::D(n.into())]))
-        .collect::<Vec<_>>()
-        .join(", ")
+    [
+        (g, "GOLD_AMOUNT"),
+        (s, "SILVER_AMOUNT"),
+        (c, "COPPER_AMOUNT"),
+    ]
+    .into_iter()
+    .filter(|&(n, _)| n != 0)
+    .map(|(n, key)| fill(&get(key), &[Arg::D(n.into())]))
+    .collect::<Vec<_>>()
+    .join(", ")
 }
 
 #[cfg(test)]

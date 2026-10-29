@@ -1,9 +1,9 @@
 //! Transport-only ordered native account-data receipts. App owns any future reducer/UI feed.
 //! No account data is decompressed or applied.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_session_meta::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_session_meta::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeSessionMetaPackets(pub VecDeque<Packet>);

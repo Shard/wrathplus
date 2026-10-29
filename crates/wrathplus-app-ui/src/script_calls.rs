@@ -134,16 +134,22 @@ pub fn apply_script_calls(
             // `DismissCompanion("CRITTER")`: CMSG_DISMISS_CRITTER with the critter's raw guid
             // (AC `HandleDismissCritter`), Wire A's native spell-control writer.
             ScriptCall::DismissCritter { critter } => {
-                let _ = appliers.p3().ladder.commands.0.send(crate::net::ClientCommand::NativeSpellControl(
-                    wrathplus_protocol::wrath_spell_control::Command::DismissCritter { critter },
-                ));
+                let _ = appliers.p3().ladder.commands.0.send(
+                    crate::net::ClientCommand::NativeSpellControl(
+                        wrathplus_protocol::wrath_spell_control::Command::DismissCritter {
+                            critter,
+                        },
+                    ),
+                );
             }
             // `DestroyTotem(slot)`: CMSG_TOTEM_DESTROYED with the 0-based slot (AC
             // `HandleTotemDestroyed`).
             ScriptCall::DestroyTotem { slot } => {
-                let _ = appliers.p3().ladder.commands.0.send(crate::net::ClientCommand::NativeSpellControl(
-                    wrathplus_protocol::wrath_spell_control::Command::TotemDestroyed { slot },
-                ));
+                let _ = appliers.p3().ladder.commands.0.send(
+                    crate::net::ClientCommand::NativeSpellControl(
+                        wrathplus_protocol::wrath_spell_control::Command::TotemDestroyed { slot },
+                    ),
+                );
             }
             // `RunMacro`/`RunMacroText`: the lines run as a macro slot's do, in call order.
             ScriptCall::RunMacro { index } => {
@@ -180,10 +186,7 @@ pub fn apply_script_calls(
 /// Apply every queued call front to back. Applying one may queue more: a macro's lines run
 /// inside `UseAction` (`0x4e6098 call 0x4f1460`), so the calls they make go before the next one
 /// queued.
-pub fn in_call_order(
-    script: &mut UiScript,
-    mut apply: impl FnMut(&mut UiScript, ScriptCall),
-) {
+pub fn in_call_order(script: &mut UiScript, mut apply: impl FnMut(&mut UiScript, ScriptCall)) {
     let mut queue: VecDeque<(ScriptCall, u8)> = script
         .take_script_calls()
         .into_iter()

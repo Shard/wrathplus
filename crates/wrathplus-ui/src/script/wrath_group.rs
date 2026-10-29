@@ -126,8 +126,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::script::{
-        PartyState, RaidMemberInfo, UiScript, UnitState, WrathGroup,
-        WrathGroupMember,
+        PartyState, RaidMemberInfo, UiScript, UnitState, WrathGroup, WrathGroupMember,
     };
     #[test]
     fn wrath_group_tuple_roles_and_difficulty_use_pushed_native_data() {

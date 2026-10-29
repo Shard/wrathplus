@@ -254,7 +254,11 @@ mod tests {
             s.eval::<Vec<String>>("return { GetBuildInfo() }").unwrap(),
             vec!["3.3.5", "12340", "Jun 24 2010", "30300"]
         );
-        assert_eq!(s.arity("GetBuildInfo()").unwrap(), 4, "the TOC number is fourth");
+        assert_eq!(
+            s.arity("GetBuildInfo()").unwrap(),
+            4,
+            "the TOC number is fourth"
+        );
     }
 
     /// Never nil: addons index with it at file scope, and a nil index errors far from the cause.

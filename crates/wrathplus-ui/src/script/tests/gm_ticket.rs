@@ -105,8 +105,10 @@ fn the_queue_preserves_call_order_across_different_verbs() {
 #[test]
 fn new_and_update_are_distinguishable_and_keep_their_order() {
     let mut s = script();
-    s.run("NewGMTicket(\"My sword vanished.\", 1) UpdateGMTicket(\"Still gone.\") NewGMTicket(\"x\")")
-        .unwrap();
+    s.run(
+        "NewGMTicket(\"My sword vanished.\", 1) UpdateGMTicket(\"Still gone.\") NewGMTicket(\"x\")",
+    )
+    .unwrap();
     assert_eq!(
         s.take_gm_ticket_intents(),
         vec![
@@ -128,7 +130,10 @@ fn new_and_update_are_distinguishable_and_keep_their_order() {
         ]
     );
     let err = s.run("UpdateGMTicket()").unwrap_err().to_string();
-    assert!(err.contains("Usage: UpdateGMTicket(ticketDescription)"), "{err}");
+    assert!(
+        err.contains("Usage: UpdateGMTicket(ticketDescription)"),
+        "{err}"
+    );
 }
 
 /// The binding queues any text; the reference refuses an empty one before the send (`ERR_TICKET_NO_TEXT`, `0x5ef808`,

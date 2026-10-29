@@ -1,7 +1,7 @@
 //! The mount and dismount result packets, onto the red error line.
 
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 use super::MountErrors;
 use crate::net::NetHandlerApp;

@@ -1,7 +1,7 @@
 //! Bounded effective-enUS sample, not stock completeness or rendering parity.
+use std::{collections::BTreeMap, io::Cursor};
 use wrathplus_adt::{parse_adt, Mh2oVertexFormat, ParsedAdt};
 use wrathplus_formats::Chain;
-use std::{collections::BTreeMap, io::Cursor};
 
 fn word(b: &[u8], at: usize) -> usize {
     u32::from_le_bytes(b[at..at + 4].try_into().unwrap()) as usize

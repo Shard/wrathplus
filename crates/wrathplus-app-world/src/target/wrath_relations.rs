@@ -12,10 +12,10 @@ use bevy::prelude::{Entity, Query, Res};
 
 #[path = "wrath_reaction.rs"]
 pub(super) mod reaction;
-use crate::net::GuidIndex;
 use crate::app_core::session::ObjectStore;
-use wrathplus_protocol::types::{ObjectType, OwnerFallback};
+use crate::net::GuidIndex;
 use reaction::{ReactionState, WorldInputs};
+use wrathplus_protocol::types::{ObjectType, OwnerFallback};
 
 /// A live descriptor by guid: the object manager's lookup (`0x468460`), asked afresh at every
 /// controller hop. Never a second object cache.
@@ -144,10 +144,7 @@ impl<'a> Context<'a> {
         Self::new(None, &NoStores)
     }
 
-    pub fn new(
-        names: Option<&'a crate::names::NameCache>,
-        stores: &'a dyn StoreLookup,
-    ) -> Self {
+    pub fn new(names: Option<&'a crate::names::NameCache>, stores: &'a dyn StoreLookup) -> Self {
         Self {
             names,
             stores,
@@ -315,8 +312,8 @@ pub(super) fn assist(actor: &ObjectStore, target: &ObjectStore, toward: u8, ctx:
 mod tests {
     use super::*;
     use crate::names::{CreatureRecord, NameCache};
-    use wrathplus_protocol::types::{Field, ObjectFields};
     use std::collections::HashMap;
+    use wrathplus_protocol::types::{Field, ObjectFields};
 
     const ENTRY: u32 = 1423;
 

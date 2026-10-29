@@ -116,8 +116,8 @@ fn visit_item(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::GuidIndex;
     use crate::app_core::session::ObjectStore;
+    use crate::net::GuidIndex;
     use bevy::{ecs::system::SystemState, prelude::*};
     use std::collections::HashMap;
 

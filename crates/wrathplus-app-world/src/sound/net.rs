@@ -1,8 +1,8 @@
 //! The sound layer's packet handlers: the three server audio triggers, each a
 //! [`ServerSoundMessage`] the zone mixer ([`super::zone`]) plays.
 
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 use crate::net::{GuidIndex, NetHandlerApp, ServerSoundKind, ServerSoundMessage};
 

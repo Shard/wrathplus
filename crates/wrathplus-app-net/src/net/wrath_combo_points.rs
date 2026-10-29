@@ -2,8 +2,8 @@
 //! (AC `Unit::SendComboPoints`, sent on every change) is the only source. [`banked`] is the one
 //! read for `GetComboPoints`, the finisher gate and the cast ladder.
 use super::NetHandlerApp;
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 /// The last `SMSG_UPDATE_COMBO_POINTS`: the count and the unit it is banked on (0 for none).
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]

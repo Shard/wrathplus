@@ -3,10 +3,10 @@
 //! [`RigPose`](wrathplus_world::rig_anim::RigPose) buffer on the booth root; riders, cards and
 //! effect hosts seat on demand-spawned anchors ([`BoothRig::anchor`]).
 
-use wrathplus_formats::BillboardKind;
 use bevy::animation::RepeatAnimation;
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
+use wrathplus_formats::BillboardKind;
 
 use wrathplus_assets::materials::WowModelMaterial;
 use wrathplus_world::model_fade::FadeMaterials;

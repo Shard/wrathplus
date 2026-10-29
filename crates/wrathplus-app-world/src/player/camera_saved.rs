@@ -16,8 +16,8 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 
-use crate::app_core::state::ClientState;
 use crate::app_core::schedule::InWorldGated;
+use crate::app_core::state::ClientState;
 
 use super::camera::{CameraControl, FlyCam, CAM_PITCH_LIMIT};
 use super::camera_zoom::{CAM_DIST_DEFAULT, CAM_DIST_MAX, CAM_DIST_MIN};

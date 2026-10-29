@@ -144,7 +144,11 @@ fn localized(lua: &Lua, key: &str) -> mlua::Result<Value> {
 }
 
 /// The n-th (0-based) preview item of the valid self block's node for `entry` (`0x5574c0`).
-pub(super) fn preview_item(state: &State, entry: u32, index: i32) -> Option<super::WrathLfgRewardItem> {
+pub(super) fn preview_item(
+    state: &State,
+    entry: u32,
+    index: i32,
+) -> Option<super::WrathLfgRewardItem> {
     let index = usize::try_from(index).ok()?;
     let nodes = state.player_nodes()?;
     let node = nodes.into_iter().find(|n| n.entry == entry)?;
@@ -167,7 +171,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             };
             let player = state.player_nodes().unwrap_or_default();
             let party = state.party_nodes();
-            let ok = joinable(state.locks.player.is_some(), &player, &party, full_entry(row));
+            let ok = joinable(
+                state.locks.player.is_some(),
+                &player,
+                &party,
+                full_entry(row),
+            );
             Ok(MultiValue::from_vec(vec![Value::Boolean(ok)]))
         })?,
     )?;
@@ -733,9 +742,14 @@ mod tests {
             Some(2),
         );
         let joinable = |s: &UiScript, id: u32| {
-            s.eval::<Option<bool>>(&format!("return IsLFGDungeonJoinable({id})")).unwrap()
+            s.eval::<Option<bool>>(&format!("return IsLFGDungeonJoinable({id})"))
+                .unwrap()
         };
-        assert_eq!(s.eval::<i64>("return select('#', IsLFGDungeonJoinable(99))").unwrap(), 0);
+        assert_eq!(
+            s.eval::<i64>("return select('#', IsLFGDungeonJoinable(99))")
+                .unwrap(),
+            0
+        );
         assert!(s.run("IsLFGDungeonJoinable()").is_err());
         assert_eq!(joinable(&s, 7), Some(true), "no lock block: joinable");
         publish(
@@ -751,8 +765,16 @@ mod tests {
             }]),
         );
         assert_eq!(joinable(&s, 7), Some(false), "the player's own lock");
-        assert_eq!(joinable(&s, 13), Some(false), "a party member's dungeon lock");
-        assert_eq!(joinable(&s, 14), Some(true), "party locks are not read for raids");
+        assert_eq!(
+            joinable(&s, 13),
+            Some(false),
+            "a party member's dungeon lock"
+        );
+        assert_eq!(
+            joinable(&s, 14),
+            Some(true),
+            "party locks are not read for raids"
+        );
         publish(&mut s, Some(WrathLfgPlayerLocks::default()), None);
         assert_eq!(joinable(&s, 7), Some(true));
         assert_eq!(joinable(&s, 13), Some(true), "no valid party block");

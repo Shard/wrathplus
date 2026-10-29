@@ -21,10 +21,10 @@
 //! fixed world axis, and a MOLR lobe's gain is a relative distance. No 1.12 transport WMO authors a
 //! MOLT light, so no lobe direction freezes at spawn.
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::{wmo_doodad_local, wow_to_bevy};
 use wrathplus_assets::{DoodadBase, M2Model, WmoModel};
 use wrathplus_protocol::EntityKind;
-use bevy::prelude::*;
 
 use crate::net::NetEntity;
 use wrathplus_assets::m2_url;

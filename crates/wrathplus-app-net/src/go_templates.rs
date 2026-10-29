@@ -2,9 +2,9 @@
 //! streams in. The template's lockId decides a right-click: a locked object is opened by an
 //! `OPEN_LOCK` cast, an unlocked one by `CMSG_GAMEOBJ_USE`.
 
+use bevy::prelude::*;
 use wrathplus_formats::{LockCatalog, LockTypeCatalog};
 use wrathplus_protocol::guid;
-use bevy::prelude::*;
 
 use crate::net::{ClientCommand, NetCommands};
 use crate::query_cache::QueryCache;

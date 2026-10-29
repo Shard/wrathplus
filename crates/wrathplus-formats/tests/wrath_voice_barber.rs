@@ -1,6 +1,6 @@
 //! Read-only build-12340 rows for the native `CreatureSoundData` columns and `BarberShopStyle`.
-use wrathplus_formats::{barber_kind, Chain};
 use std::path::Path;
+use wrathplus_formats::{barber_kind, Chain};
 
 fn chain() -> Option<Chain> {
     if std::env::var("WOW_CLIENT_PROFILE").as_deref() != Ok("wrath") {

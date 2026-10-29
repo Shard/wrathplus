@@ -139,8 +139,8 @@ mod tests {
     #[test]
     fn interior_flood_fill_gates_on_xy_and_blocks_recursion_through_a_missed_group() {
         use super::interior_group_selection;
-        use wrathplus_assets::{WmoGroupNav, WmoModel, WmoPortalInfo, WmoPortalRef};
         use bevy::math::{Affine3A, Vec3};
+        use wrathplus_assets::{WmoGroupNav, WmoModel, WmoPortalInfo, WmoPortalRef};
 
         let nav = |zmin: f32, zmax: f32, x: f32, ref_start: u16, ref_count: u16| WmoGroupNav {
             flags: 0,
@@ -243,8 +243,8 @@ mod tests {
     #[test]
     fn interior_flood_fill_rejects_a_portal_outside_the_query_box_z_extent() {
         use super::interior_group_selection;
-        use wrathplus_assets::{WmoGroupNav, WmoModel, WmoPortalInfo, WmoPortalRef};
         use bevy::math::{Affine3A, Vec3};
+        use wrathplus_assets::{WmoGroupNav, WmoModel, WmoPortalInfo, WmoPortalRef};
 
         let nav = |zmin: f32, zmax: f32, ref_start: u16, ref_count: u16| WmoGroupNav {
             flags: 0,

@@ -896,7 +896,10 @@ mod tests {
 
         assert!(apply_walk(&steps, &mut channels, &net));
         assert_eq!(channels.number_of("General - Elwynn Forest"), Some(1));
-        let general = channels.channels.row_for_name("General - Elwynn Forest").map(|row| row.id);
+        let general = channels
+            .channels
+            .row_for_name("General - Elwynn Forest")
+            .map(|row| row.id);
         let sent: Vec<_> = rx.try_iter().collect();
         assert!(
             matches!(

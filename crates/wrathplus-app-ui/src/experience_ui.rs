@@ -1,6 +1,6 @@
 //! Plus UI policy publication, after feeds and before this frame's Lua tick/layout.
-use wrathplus_ui::script::UiScript;
 use bevy::prelude::*;
+use wrathplus_ui::script::UiScript;
 
 use crate::experience::{Experience, Feature};
 

@@ -10,10 +10,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
-use wrathplus_assets::{repeat_texture_authored, LockRecover, SpatialCache};
-use wrathplus_formats::{blp_bytes_to_mip_chain, BlpMipChain, Chain, CharSections, CompositePlan};
 use bevy::prelude::*;
 use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
+use wrathplus_assets::{repeat_texture_authored, LockRecover, SpatialCache};
+use wrathplus_formats::{blp_bytes_to_mip_chain, BlpMipChain, Chain, CharSections, CompositePlan};
 
 /// The `CharSections` skin lookup and the chain its textures read from; without it a player's body
 /// skin stays untextured.

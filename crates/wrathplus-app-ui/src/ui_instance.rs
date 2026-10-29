@@ -17,16 +17,16 @@
 //! holding a bind ([`InstanceState::saw_own_dungeon`]), because the server reports only permanent
 //! binds, so it alone would never offer the reset after a 5-man.
 
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_instance_control::Packet;
 use wrathplus_ui::script::{ScriptValue as V, UiScript};
-use bevy::prelude::*;
 
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::chat::ChatEvent;
 use crate::app_core::chat::ChatEventKind;
 use crate::app_core::chat::ChatLog;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::net::{ClientCommand, NetCommands};
 
 /// `CanShowResetInstances()`'s window, 25 hours: `cmp eax, 0x15f90` at `0x495ce6` against
 /// `time(0)` minus when we left, unsigned, so the boundary is inclusive.

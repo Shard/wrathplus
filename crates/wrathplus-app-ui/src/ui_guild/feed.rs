@@ -3,6 +3,7 @@
 //! engine-side as in the reference: `GetGuildRosterInfo 0x4d1200` returns the localized class and
 //! zone names, not ids (`0x4d1355`, `0x4d1391`), and the rank name from the cached guild record.
 
+use bevy::prelude::*;
 use wrathplus_formats::AreaTableCatalog;
 use wrathplus_protocol::types::{
     guild_presence, GuildInfo, GuildRosterMember, GUILD_RANKS_MAX_COUNT, GUILD_RANKS_MIN_COUNT,
@@ -12,13 +13,12 @@ use wrathplus_ui::script::{
     GuildMemberInfo, GuildRankInfo, GuildRequest, GuildState as VmGuild, ScriptValue, UiScript,
     WrathGuildBankRankRights,
 };
-use bevy::prelude::*;
 
-use crate::area::AreaTableRes;
-use crate::net::{ClientCommand, NetCommands};
+use crate::app_core::catalogs::class_names;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::catalogs::class_names;
+use crate::area::AreaTableRes;
+use crate::net::{ClientCommand, NetCommands};
 use wrathplus_protocol::wrath_guild_rank::{SaveRank, TabPermission};
 
 use super::{last_online, GuildState, Identity, RosterRow, ROSTER_REQUEST_THROTTLE_SECS};

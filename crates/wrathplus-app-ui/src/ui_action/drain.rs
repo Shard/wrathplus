@@ -282,7 +282,9 @@ pub(crate) fn use_action(
             if let Some(d) = ladder.spells.as_ref().and_then(|s| s.catalog.get(b.action)) {
                 if let Some(store) = targeting.self_store.iter().next() {
                     let (commands, objects) = (&ladder.commands, &ladder.objects);
-                    if super::toggle::send_press_again(commands, recent, b.action, d, objects, store) {
+                    if super::toggle::send_press_again(
+                        commands, recent, b.action, d, objects, store,
+                    ) {
                         return UseOutcome::Done;
                     }
                 }

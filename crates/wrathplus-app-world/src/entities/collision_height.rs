@@ -3,8 +3,8 @@
 
 use bevy::prelude::*;
 
-use crate::net::NetEntity;
 use crate::app_core::session::ObjectStore;
+use crate::net::NetEntity;
 
 use super::Creatures;
 

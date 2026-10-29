@@ -152,8 +152,12 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<SessionEvent> {
             text: read_cstring(r)?,
             next_page_id: u32_(r)?,
         },
-        0x00ae => capture(Packet::ReadItemOk { item_guid: u64_(r)? }),
-        0x00af => capture(Packet::ReadItemFailed { item_guid: u64_(r)? }),
+        0x00ae => capture(Packet::ReadItemOk {
+            item_guid: u64_(r)?,
+        }),
+        0x00af => capture(Packet::ReadItemFailed {
+            item_guid: u64_(r)?,
+        }),
         0x00b0 => SessionEvent::ItemCooldown {
             item_guid: u64_(r)?,
             spell_id: u32_(r)?,
@@ -307,7 +311,11 @@ pub enum Command {
         src_slot: u8,
     },
     /// `CMSG_AUTOSTORE_BAG_ITEM`.
-    AutoStoreBagItem { src_bag: u8, src_slot: u8, dst_bag: u8 },
+    AutoStoreBagItem {
+        src_bag: u8,
+        src_slot: u8,
+        dst_bag: u8,
+    },
     /// `CMSG_SPLIT_ITEM`: the count is a u32 in this build.
     SplitItem {
         src_bag: u8,

@@ -16,13 +16,13 @@ use wrathplus_formats::RangeTargets;
 use wrathplus_protocol::types::{ACTION_KIND_ITEM, ACTION_KIND_SPELL};
 use wrathplus_ui::script::{ActionState, UiScript};
 
+use crate::app_core::cooldowns::Cooldowns;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Selection;
 use crate::creature_anim::{Casting, Engaged};
 use crate::items::Items;
 use crate::net::NetCommands;
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::app_core::cooldowns::Cooldowns;
-use crate::app_core::state::Selection;
 
 use super::{PlayerActions, Spells};
 use crate::spell::usable;
@@ -714,11 +714,13 @@ mod tests {
                 .init_resource::<crate::net::GuidIndex>()
                 .init_resource::<crate::net::Reputations>()
                 .init_resource::<Items>()
-                .insert_resource(crate::app_core::player::Player::with_move_flags(if caster_runs {
-                    crate::app_core::movement::move_flags::FORWARD
-                } else {
-                    0
-                }))
+                .insert_resource(crate::app_core::player::Player::with_move_flags(
+                    if caster_runs {
+                        crate::app_core::movement::move_flags::FORWARD
+                    } else {
+                        0
+                    },
+                ))
                 .insert_resource(NetCommands(tx));
             let speeds = crate::net::UnitSpeeds(wrathplus_protocol::MoveSpeeds {
                 walk: 2.5,

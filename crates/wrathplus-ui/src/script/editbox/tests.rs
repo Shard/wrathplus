@@ -6,7 +6,6 @@ fn script() -> UiScript {
     UiScript::new().expect("construct UiScript")
 }
 
-
 /// UP and DOWN, which recall history in a single-line box.
 const UP: EditAction = EditAction::Move {
     unit: EditUnit::Row,

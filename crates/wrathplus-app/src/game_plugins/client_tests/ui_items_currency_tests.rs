@@ -5,9 +5,9 @@ use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::ui_items::currency::tests::fields;
 use crate::ui_items::currency::*;
+use bevy::prelude::*;
 use wrathplus_protocol::types::Field;
 use wrathplus_ui::script::UiScript;
-use bevy::prelude::*;
 
 #[test]
 fn real_feed_preserves_optional_native_balances_and_clears_logout() {

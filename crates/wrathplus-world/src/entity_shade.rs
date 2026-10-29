@@ -13,9 +13,9 @@
 //! M2 part below it, so a held weapon dims with its wielder: the reference lights attachments from
 //! the owner's node.
 
-use wrathplus_assets::AdtTile;
 use bevy::mesh::MeshTag;
 use bevy::prelude::*;
+use wrathplus_assets::AdtTile;
 
 use crate::interior::{classify_entity_interior, InteriorLit};
 use crate::mesh_tag::{exterior_payload, shade_of, with_shade, InteriorProbePayload};

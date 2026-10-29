@@ -2,8 +2,8 @@
 //! (`docs/WRATH-COMBAT-LOG.md`, `/tmp/azb-app-mig/ghidra/combatlog-unitflags.log`).
 use wrathplus_protocol::types::{ObjectType, OwnerFallback};
 
-use crate::app_core::session::ObjectStore;
 use crate::app_core::group::GroupState;
+use crate::app_core::session::ObjectStore;
 
 pub(crate) const AFFILIATION_MINE: u32 = 0x1;
 pub(crate) const AFFILIATION_PARTY: u32 = 0x2;

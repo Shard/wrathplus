@@ -3,8 +3,8 @@
 //! index: the server buys the slot after the count in `PLAYER_BYTES_2` byte 2.
 
 use anyhow::{Context, Result};
-use wrathplus_dbc::{FieldType, Schema, SchemaField};
 use std::collections::HashMap;
+use wrathplus_dbc::{FieldType, Schema, SchemaField};
 
 use crate::dbc::{parse, u32_at};
 use crate::Chain;

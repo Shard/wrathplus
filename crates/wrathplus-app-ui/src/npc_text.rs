@@ -75,7 +75,10 @@ pub(crate) fn event_objective(
     slot_state: u8,
 ) -> Vec<wrathplus_ui::script::QuestLogObjectiveView> {
     let mut lines = Vec::with_capacity(template.objectives.len() + 1);
-    let area = template.wrath.as_ref().map_or("", |w| w.area_description.as_str());
+    let area = template
+        .wrath
+        .as_ref()
+        .map_or("", |w| w.area_description.as_str());
     if !area.is_empty() {
         lines.push(wrathplus_ui::script::QuestLogObjectiveView {
             text: area.to_string(),

@@ -454,10 +454,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                         false,
                     )
                 }),
-                Row::Entry { ei, child } => {
-                    (i64::from(model.reputation.entries[ei].faction_id) == i64::from(id))
-                        .then_some((Some(ei), None, child))
-                }
+                Row::Entry { ei, child } => (i64::from(model.reputation.entries[ei].faction_id)
+                    == i64::from(id))
+                .then_some((Some(ei), None, child)),
             });
             let entry = |ei: Option<usize>| {
                 ei.map(|i| &model.reputation.entries[i]).or_else(|| {
@@ -474,9 +473,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     None => Ok(unknown_faction()),
                 },
                 None => match entry(None) {
-                    Some(e) => {
-                        faction_tuple(lua, &model, e, e.is_header.then_some(false), false)
-                    }
+                    Some(e) => faction_tuple(lua, &model, e, e.is_header.then_some(false), false),
                     None => Ok(unknown_faction()),
                 },
             }

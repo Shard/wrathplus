@@ -209,7 +209,7 @@ fn set_enabled(lua: &Lua, this: &Table, on: bool) -> mlua::Result<()> {
             let changed = bs.enabled() != on;
             bs.set_enabled(on);
             changed
-        },
+        }
         _ => return Err(mlua::Error::runtime("not a Button")),
     };
     let bit = 1u8 << DrawLayer::Highlight.index();
@@ -220,8 +220,12 @@ fn set_enabled(lua: &Lua, this: &Table, on: bool) -> mlua::Result<()> {
     }
     drop(model);
     if changed {
-        event::fire_widget_handler(lua, super::object::decode_id(this)?,
-            if on { "OnEnable" } else { "OnDisable" }, vec![])?;
+        event::fire_widget_handler(
+            lua,
+            super::object::decode_id(this)?,
+            if on { "OnEnable" } else { "OnDisable" },
+            vec![],
+        )?;
     }
     Ok(())
 }

@@ -29,14 +29,14 @@ use bevy::prelude::*;
 use wrathplus_protocol::{field, EntityKind};
 use wrathplus_ui::script::{unit_is_grey, PlateGeometry, PlateState};
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Factions;
+use crate::app_core::state::Selection;
 use crate::entities::{overhead_anchor, BoneAttach, OverheadFallback};
 use crate::names::NameCache;
 use crate::net::{Guid, NetCommands, NetEntity, Reputations};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::target::{Hovered, TargetUpdate};
-use crate::app_core::state::Factions;
-use crate::app_core::state::Selection;
 use wrathplus_world::view::WorldCamera;
 
 /// The plate border, sharp-resampled so its 128x32 art stays crisp when magnified.

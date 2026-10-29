@@ -3,12 +3,12 @@
 //! effects not yet identified. Do not replay the shared SpellFailedOther cleanup
 //! here: AzerothCore SendInterrupted sends both packets for the same interruption.
 use crate::net::NetHandlerApp;
+use bevy::prelude::*;
+use std::collections::VecDeque;
 use wrathplus_protocol::{
     wrath_spell_failure::{PetCastFailed, SpellFailure},
     SessionEvent, SessionEventKind,
 };
-use bevy::prelude::*;
-use std::collections::VecDeque;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Receipt {
@@ -200,7 +200,10 @@ mod tests {
                 app.world_mut(),
                 vec![SessionEvent::WrathPetCastFailed(value.clone())],
             );
-            let errors = &app.world().resource::<crate::app_core::errors::UiErrorKeys>().0;
+            let errors = &app
+                .world()
+                .resource::<crate::app_core::errors::UiErrorKeys>()
+                .0;
             let expected = [
                 (0x01, "ERR_PET_SPELL_AFFECTING_COMBAT"),
                 (0x17, "ERR_PET_SPELL_DEAD"),

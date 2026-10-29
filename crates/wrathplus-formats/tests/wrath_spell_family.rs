@@ -1,8 +1,8 @@
 //! Installed build-12340 `Spell.dbc`: the 96-bit `SpellFamilyFlags` and the per-effect
 //! `EffectSpellClassMask` (AzerothCore `flag96 SpellFamilyFlags` 209-211,
 //! `std::array<flag96, 3> EffectSpellClassMask` 122-130).
-use wrathplus_formats::{load_spell_catalog, Chain};
 use std::path::Path;
+use wrathplus_formats::{load_spell_catalog, Chain};
 
 #[test]
 fn installed_wrath_spell_family_mask_is_96_bits() {

@@ -13,10 +13,10 @@
 use std::collections::HashMap;
 
 use avian3d::prelude::*;
-use wrathplus_assets::coords::{placement_rotation, wmo_doodad_local, wow_to_bevy};
-use wrathplus_formats::{CollisionMesh, DataProfile};
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
+use wrathplus_assets::coords::{placement_rotation, wmo_doodad_local, wow_to_bevy};
+use wrathplus_formats::{CollisionMesh, DataProfile};
 
 use super::{mover, Player, AIR_NUDGE_SPEED, CAPSULE_HEIGHT, CAPSULE_RADIUS};
 

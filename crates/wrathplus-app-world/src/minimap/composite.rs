@@ -15,8 +15,8 @@ use bevy::camera::{ClearColorConfig, RenderTarget, ScalingMode};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
 
-use crate::portrait::MINIMAP_COMPOSITE_LAYER;
 use crate::overlay::UiQuadMaterial;
+use crate::portrait::MINIMAP_COMPOSITE_LAYER;
 
 /// The target's edge in texels (`0x4eda42`). A fidelity constant, not a quality knob: a larger
 /// target samples the bake's one-texel gaps and draws them as hairlines.
@@ -66,7 +66,7 @@ pub(super) struct CompositeRig {
 ///
 /// The target is float and un-encoded, like the portrait booths': the UI pass does its one sRGB
 /// encode at the end, and un-encoded 8-bit values band. The tile draw writes the texel un-encoded
-/// (the [`UiQuad::alpha_test`](crate::ui_pass::UiQuad::alpha_test) arm in `ui_quad.wgsl`) and the
+/// (the [`UiQuad::alpha_test`](crate::overlay::UiQuad::alpha_test) arm in `ui_quad.wgsl`) and the
 /// blit quad encodes it like any other UI texture.
 pub(super) fn setup_composite(
     mut commands: Commands,

@@ -605,7 +605,11 @@ fn is_engine(rel: &str) -> bool {
 /// It follows `crate::root::` (or `wrathplus_world::` with the crate), expands a `use` brace group
 /// into its items, and stops a path at its first capitalised segment (`WorldAssets::get` is one).
 fn paths_in(text: &str, split: bool, want_engine: bool) -> Vec<(String, usize)> {
-    let prefix = if split { "wrathplus_world::" } else { "crate::" };
+    let prefix = if split {
+        "wrathplus_world::"
+    } else {
+        "crate::"
+    };
     let mut found = Vec::new();
     let mut depth: i32 = 0;
     // A `#[cfg(test)]` guards the item after it. `test_at` arms at the attribute's depth `d`: a

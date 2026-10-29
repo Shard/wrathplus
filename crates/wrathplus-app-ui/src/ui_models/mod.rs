@@ -36,15 +36,15 @@ use wrathplus_world::particles::{
 use wrathplus_world::rig_anim::{AnimParked, GlobalSeqDrive, RigPose};
 use wrathplus_world::rig_palette::{RigPaletteMirrors, RigPalettes, RigPart, RigSkin};
 
+use crate::app_core::schedule::UiQuadAppend;
+use crate::overlay::UiQuad;
+use crate::overlay::UiQuads;
+use crate::overlay::UvRect;
 use crate::portrait::{
     booth_view_shape, material_variant, new_target_image_sized, pane_projection, StageRig,
     VariantLane, WowPortraitProjection, UI_MODELS_LAYER, UI_MODEL_CAM_LAYERS,
     UI_MODEL_CAM_LAYER_BASE,
 };
-use crate::overlay::UiQuad;
-use crate::app_core::schedule::UiQuadAppend;
-use crate::overlay::UiQuads;
-use crate::overlay::UvRect;
 
 /// `WOW_TILE_TRACE=1`: a `tile-trace:` line per pane per frame from the renderer and the
 /// extract's arm, naming the gate a listed pane that draws nothing stopped at.
@@ -273,8 +273,11 @@ fn stage2_uv_part(
     handle: &Handle<WowModelMaterial>,
     render: &mut TileRender,
 ) -> Option<UvPart> {
-    let loops =
-        wrathplus_world::model_render::second_stage_loops(sub, render.mats.materials(), handle.id());
+    let loops = wrathplus_world::model_render::second_stage_loops(
+        sub,
+        render.mats.materials(),
+        handle.id(),
+    );
     if !loops.animates() {
         return None;
     }

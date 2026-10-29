@@ -3,11 +3,11 @@
 
 mod wrath;
 
-use wrathplus_ui::script::UiScript;
 use bevy::prelude::*;
+use wrathplus_ui::script::UiScript;
 
-use crate::net::NetCommands;
 use crate::app_core::schedule::UiInput;
+use crate::net::NetCommands;
 
 pub struct UiLootRollPlugin;
 

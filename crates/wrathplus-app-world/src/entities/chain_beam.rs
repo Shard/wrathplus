@@ -19,8 +19,8 @@
 //! copies of one polyline; the reference builds them from identical arguments and they diverge only
 //! through their interleaved draws on one shared PRNG.
 
-use wrathplus_formats::{ChainEffect, MISSILE_ATTACH_TABLE};
 use bevy::prelude::*;
+use wrathplus_formats::{ChainEffect, MISSILE_ATTACH_TABLE};
 
 use crate::creature_anim::{ChainProcPlay, FxClass, SpellKitFx, SpellVisuals};
 use crate::net::GuidIndex;
@@ -544,9 +544,9 @@ mod tests {
     /// A streamed unit: an empty descriptor store is all the spawner reads off a target.
     fn unit(app: &mut App) -> Entity {
         app.world_mut()
-            .spawn(ObjectStore(
-                wrathplus_protocol::ObjectFields::from_fields(&[]),
-            ))
+            .spawn(ObjectStore(wrathplus_protocol::ObjectFields::from_fields(
+                &[],
+            )))
             .id()
     }
 

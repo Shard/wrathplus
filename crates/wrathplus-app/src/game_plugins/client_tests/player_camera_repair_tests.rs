@@ -10,10 +10,10 @@ use bevy::window::PrimaryWindow;
 #[test]
 fn a_right_press_in_the_world_ends_repair_mode_and_one_on_the_ui_does_not() {
     use crate::player::camera::{latch_world_mouse, send_world_right_press, CameraControl, FlyCam};
-    use wrathplus_ui::script::{MerchantState, UiScript};
-    use wrathplus_world::interact::WorldRightPress;
     use bevy::ecs::system::RunSystemOnce;
     use bevy::math::DVec2;
+    use wrathplus_ui::script::{MerchantState, UiScript};
+    use wrathplus_world::interact::WorldRightPress;
 
     // One right press with repair mode armed; returns whether repair mode survived it.
     let press = |over_ui: bool, payload_held: bool| {

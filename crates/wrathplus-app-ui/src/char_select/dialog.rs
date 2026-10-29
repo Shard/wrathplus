@@ -10,8 +10,8 @@
 //! Cancel or Escape close either (`gsTitleOptionExit`). The target is snapshotted at open, so a
 //! roster refresh cannot retarget.
 
-use wrathplus_ui::widget::EditBoxState;
 use bevy::input::keyboard::KeyboardInput;
+use wrathplus_ui::widget::EditBoxState;
 
 use crate::textinput::{self, HostClipboard};
 use bevy::prelude::*;

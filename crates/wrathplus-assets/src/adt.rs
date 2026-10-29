@@ -8,16 +8,16 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use wrathplus_formats::wrath_liquid_surface::WrathLiquidSurface;
-use wrathplus_formats::{
-    adt_to_tile_mesh_with_options, blp_bytes_to_native_chain, ChunkMesh, Doodad, Mh2oChunk,
-    TerrainDecodeOptions, TileMesh, WmoInstance, ALPHA_MAP_SIZE, SHADOW_MAP_SIZE,
-};
 use bevy::asset::io::Reader;
 use bevy::asset::{Asset, AssetLoader, LoadContext, RenderAssetUsages};
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
+use wrathplus_formats::wrath_liquid_surface::WrathLiquidSurface;
+use wrathplus_formats::{
+    adt_to_tile_mesh_with_options, blp_bytes_to_native_chain, ChunkMesh, Doodad, Mh2oChunk,
+    TerrainDecodeOptions, TileMesh, WmoInstance, ALPHA_MAP_SIZE, SHADOW_MAP_SIZE,
+};
 
 use crate::coords::wow_to_bevy;
 use crate::terrain::{

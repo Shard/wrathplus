@@ -3,10 +3,10 @@
 
 use crate::net::test_support::vehicle::CAR;
 use crate::net::wrath_vehicle::*;
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_vehicle::VehicleEvent;
 use wrathplus_protocol::SessionEvent;
 use wrathplus_protocol::SessionEventKind;
-use bevy::prelude::*;
 
 #[test]
 fn one_owner_and_both_boundaries_clear() {

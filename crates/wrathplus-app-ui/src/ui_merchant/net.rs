@@ -1,8 +1,8 @@
 //! The vendor window's packet handlers: they fill [`MerchantOpen`] and [`MerchantErrors`].
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::VendorItem;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::{MerchantErrors, MerchantOpen, MerchantRefusal};
 use crate::net::NetHandlerApp;

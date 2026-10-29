@@ -1,9 +1,9 @@
 //! Serverless Wrath model-render gate. User-supplied archives stay read-only.
-use wrathplus_assets::{ClientDataProfile, M2Model};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use std::path::Path;
 use std::time::{Duration, Instant};
+use wrathplus_assets::{ClientDataProfile, M2Model};
 
 #[derive(Resource)]
 struct Gate {

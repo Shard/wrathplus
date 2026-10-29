@@ -5,8 +5,8 @@
 //! `WOW_CHAR`, which would enter the world; the switches are `docs/CONTRIBUTING.md`, "Running it
 //! unattended".
 
-use wrathplus_protocol::{types, CharAction, CharCreateReq};
 use bevy::prelude::*;
+use wrathplus_protocol::{types, CharAction, CharCreateReq};
 
 use crate::net::{CharListMessage, CharPick, CharRequest, WrathCharActionResultMessage};
 

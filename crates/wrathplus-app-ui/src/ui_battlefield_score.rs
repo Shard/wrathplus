@@ -16,12 +16,12 @@ use wrathplus_ui::script::{
     BattlefieldScoreRow, BattlefieldScores, BattlefieldStatColumn, BattlefieldTeamView, UiScript,
 };
 
-use crate::names::NameCache;
-use crate::net::{ClientCommand, NetCommands};
-use crate::app_core::session::EnteredWorldMessage;
-use crate::ui_dialog_verbs::BattlefieldQueue;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::app_core::session::EnteredWorldMessage;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, NetCommands};
+use crate::ui_dialog_verbs::BattlefieldQueue;
 use crate::world_state_ui::WorldStateUiRes;
 
 /// `RequestBattlefieldScoreData`'s throttle (`0x54ce30`).
@@ -243,8 +243,8 @@ pub(crate) fn clear_on_world_enter(
 
 /// The scoreboard's session handler.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::BattlefieldScoreboard;
     use crate::net::NetHandlerApp;

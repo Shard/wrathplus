@@ -2,16 +2,16 @@
 //! the group roster and the object stores), so world systems resolve `"target"`, `"party1"` or
 //! `"mouseover"` without the UI layer; `ui_unit` re-exports it from its old path.
 
-use wrathplus_ui::script::{parse_unit_token, UnitBase, UnitTokenParse};
 use bevy::prelude::*;
+use wrathplus_ui::script::{parse_unit_token, UnitBase, UnitTokenParse};
 
-use crate::app_core::{group::GroupState, raid_rows::raid_row_guid};
-use crate::app_core::state::PetBar;
-use crate::net::{Guid, GuidIndex};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::target::{Hovered, HoveredObject};
+use crate::app_core::state::PetBar;
 use crate::app_core::state::Selection;
+use crate::app_core::{group::GroupState, raid_rows::raid_row_guid};
+use crate::net::{Guid, GuidIndex};
+use crate::target::{Hovered, HoveredObject};
 
 /// The one unit-token resolver, the reference's `0x515970`: case-insensitive compares, then the
 /// object manager; a caller wanting a type tests the resolved unit. [`Selection`] is a parameter
@@ -134,11 +134,7 @@ impl UnitTokens<'_, '_> {
 
 /// Resolve a UnitPopup token to the other player's guid it names: `"target"` when it is a player,
 /// `"partyN"` through the roster; `"player"` and anything unresolved answer `None`.
-pub fn player_token_guid(
-    token: &str,
-    selection: &Selection,
-    group: &GroupState,
-) -> Option<u64> {
+pub fn player_token_guid(token: &str, selection: &Selection, group: &GroupState) -> Option<u64> {
     match token {
         "target" => selection
             .guid

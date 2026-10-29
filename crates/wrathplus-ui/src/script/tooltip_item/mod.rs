@@ -271,7 +271,10 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
             // Quest and achievement links have their own cores (`0x62dae0` → `0x622960`,
             // `0x627220`); a spell link is the spell core with the id alone.
             if let Some(payload) = super::tooltip_links::link_payload(&link, "quest:") {
-                let id = payload.split(':').next().and_then(|f| f.trim().parse().ok());
+                let id = payload
+                    .split(':')
+                    .next()
+                    .and_then(|f| f.trim().parse().ok());
                 return match id {
                     Some(id) if id != 0 => super::tooltip_links::set_quest(lua, &this, id),
                     _ => Ok(()),
@@ -281,7 +284,11 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                 return super::tooltip_links::set_achievement(lua, &this, payload);
             }
             if let Some(payload) = super::tooltip_links::link_payload(&link, "spell:") {
-                if let Some(id) = payload.split(':').next().and_then(|f| f.trim().parse().ok()) {
+                if let Some(id) = payload
+                    .split(':')
+                    .next()
+                    .and_then(|f| f.trim().parse().ok())
+                {
                     return super::tooltip_spell::set_spell_by_id(
                         lua,
                         &this,

@@ -25,8 +25,8 @@ use wrathplus_ui::script::UiScript;
 
 use super::probes::ProbeClock;
 use crate::app_core::session::SelfPlayer;
-use crate::ui_models::{TilePerspectiveCamera, TileRoot};
 use crate::overlay::UiModelTiles;
+use crate::ui_models::{TilePerspectiveCamera, TileRoot};
 
 /// The file framed. `Creature\Wolf\Wolf.m2` carries two cameras (`wrathplus-extract m2cam`: index
 /// 0 type 0, eye `(1.6927, 0.7238, 0.8837)`, fov `0.95002`; index 1 type 1, eye

@@ -263,20 +263,28 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     let model = lua.app_data_ref::<Model>().expect("model");
                     let snapshot = &model.wrath_currency;
                     let row = if backpack {
-                        usize::try_from(index - 1).ok().filter(|i| *i < 3).and_then(|i| {
-                            snapshot
-                                .entries
-                                .iter()
-                                .filter(|r| !r.is_header && r.is_watched)
-                                .nth(i)
-                        })
+                        usize::try_from(index - 1)
+                            .ok()
+                            .filter(|i| *i < 3)
+                            .and_then(|i| {
+                                snapshot
+                                    .entries
+                                    .iter()
+                                    .filter(|r| !r.is_header && r.is_watched)
+                                    .nth(i)
+                            })
                     } else {
                         snapshot.list_index(index).map(|i| &snapshot.entries[i])
                     };
-                    row.filter(|r| !r.is_header && r.item_id != 0).map(|r| r.item_id)
+                    row.filter(|r| !r.is_header && r.item_id != 0)
+                        .map(|r| r.item_id)
                 };
                 if let Some(item) = item {
-                    mlua::ObjectLike::call_method::<()>(&this, "SetHyperlink", format!("item:{item}"))?;
+                    mlua::ObjectLike::call_method::<()>(
+                        &this,
+                        "SetHyperlink",
+                        format!("item:{item}"),
+                    )?;
                 }
                 Ok(())
             })?,

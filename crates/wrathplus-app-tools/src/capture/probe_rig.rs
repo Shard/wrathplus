@@ -30,16 +30,16 @@
 //! (`ObjectMgr.cpp:12079-12117`), so re-dressing a body leaves the old set in its bags or mailed;
 //! a fresh rig-named character starts with empty bags.
 
-use wrathplus_protocol::{CharAction, CharCreateReq};
 use bevy::prelude::*;
+use wrathplus_protocol::{CharAction, CharCreateReq};
 
 use super::probes::ProbeClock;
-use crate::char_select::send_pick;
-use crate::app_core::state::Roster;
-use crate::net::{CharListMessage, CharPick, CharRequest};
 use crate::app_core::session::EnteredWorldMessage;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Roster;
+use crate::char_select::send_pick;
+use crate::net::{CharListMessage, CharPick, CharRequest};
 
 /// Grace after world entry before the first GM line, while the descriptor and the UI VM come up;
 /// a command sent into a half-built session is dropped.

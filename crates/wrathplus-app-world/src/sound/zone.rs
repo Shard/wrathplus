@@ -282,7 +282,10 @@ fn zone_audio(
     world: wrathplus_world::world_point::WorldPoint,
     interior: Res<super::interior::CurrentInterior>,
     weather: Res<super::weather::WeatherAmbience>,
-    self_store: Query<&crate::app_core::session::ObjectStore, With<crate::app_core::session::SelfPlayer>>,
+    self_store: Query<
+        &crate::app_core::session::ObjectStore,
+        With<crate::app_core::session::SelfPlayer>,
+    >,
 ) {
     let (Some(areas), Some(mut kits), Some(assets)) = (areas, kits, assets) else {
         return;
@@ -1139,11 +1142,11 @@ mod tests {
     };
     use crate::sound::kit::SoundKits;
     use crate::sound::mixer;
-    use wrathplus_formats::SoundKitCatalog;
     use kira::sound::streaming::StreamingSoundData;
     use kira::sound::{FromFileError, PlaybackState};
     use std::sync::{mpsc, Arc, Mutex};
     use std::time::{Duration, Instant};
+    use wrathplus_formats::SoundKitCatalog;
 
     /// A kit of `files`, of which only the `present` ones open, picked uniformly per attempt as
     /// the reference's weighted pick does: every attempt is logged in `tried`.

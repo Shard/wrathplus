@@ -835,7 +835,10 @@ pub(crate) struct FeedInputs<'w, 's> {
     changed: bevy::prelude::Query<
         'w,
         's,
-        (&'static crate::net::Guid, &'static crate::app_core::session::ObjectStore),
+        (
+            &'static crate::net::Guid,
+            &'static crate::app_core::session::ObjectStore,
+        ),
         bevy::prelude::Changed<crate::app_core::session::ObjectStore>,
     >,
     /// Each unit's last health; past [`AURA_UNITS`] it starts over.

@@ -1,9 +1,9 @@
 //! Transport-only ordered native calendar receipts. App owns any future reducer/UI feed.
 //! No calendar, invite, lockout, holiday or pending state is inferred.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_calendar::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_calendar::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeCalendarPackets(pub VecDeque<Packet>);

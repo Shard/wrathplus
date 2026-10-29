@@ -567,9 +567,9 @@ pub(super) fn run(
     mut chat: Option<&mut crate::app_core::chat::ChatLog>,
     effects: &[Effect],
 ) {
-    use crate::ui_action::ui_error_text_for_script;
     use crate::app_core::errors::FillArg;
     use crate::app_core::errors::UiError;
+    use crate::ui_action::ui_error_text_for_script;
     for effect in effects {
         match effect {
             Effect::Line(key, args) => {

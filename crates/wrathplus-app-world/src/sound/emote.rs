@@ -7,12 +7,12 @@ use bevy::prelude::*;
 
 use wrathplus_protocol::types::ObjectType;
 
-use crate::entities::{AttachPoints, Creatures};
-use crate::net::{EmoteKind, EmoteMessage};
+use crate::app_core::interaction::SocialState;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
+use crate::entities::{AttachPoints, Creatures};
+use crate::net::{EmoteKind, EmoteMessage};
 use crate::spell::group_relation::GroupRoster;
-use crate::app_core::interaction::SocialState;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 use wrathplus_world::schedule::WorldStage;
 

@@ -2,11 +2,11 @@
 //! `CharacterCreate.xml`) and their marker components. Builders are generic over the screen's
 //! action component; each falls back to a plain face with text without client art.
 
-use wrathplus_ui::markup::{tokens, TokenKind};
-use wrathplus_ui::widget::EditBoxState;
 use bevy::prelude::*;
 use bevy::text::LineHeight;
 use bevy::ui_render::ui_material::MaterialNode;
+use wrathplus_ui::markup::{tokens, TokenKind};
+use wrathplus_ui::widget::EditBoxState;
 
 use super::art::{tc_rect, ArrowArt, GlueArt, BTN_BG, BUTTON_TC, FALLBACK_ALPHA, GOLD, NAME_EDGE};
 use super::backdrop::{backdrop_border, tiled_bg_node};

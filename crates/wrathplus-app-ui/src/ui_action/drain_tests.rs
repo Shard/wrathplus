@@ -1,8 +1,8 @@
 //! The item action's equip-or-use decision, with the inventory walk stubbed.
 
 use super::drain::{item_action_route, ItemRoute};
-use crate::items::test_template;
 use crate::inventory::ItemSearch;
+use crate::items::test_template;
 
 // `(bag_index, slot, instance guid)`, as the walk returns it.
 const WORN_AT: (u8, u8, u64) = (255, 13, 0xE1); // the trinket-1 doll slot

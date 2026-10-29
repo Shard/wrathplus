@@ -10,10 +10,11 @@
 //! slot, a bag slot or a worn slot. Labelled: the frame does not close by distance.
 use std::collections::BTreeMap;
 
-use crate::names::NameCache;
-use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_guild_bank::{Contents, Item, Packet, Permissions, TabInfo};
 use wrathplus_protocol::wrath_guild_bank_log::{Log, Payload};
 use wrathplus_protocol::wrath_guild_bank_swap::{BankSlot, Swap, Transfer};
@@ -22,7 +23,6 @@ use wrathplus_ui::script::{
     UiScript, WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankRankRights,
     WrathGuildBankRequest, WrathGuildBankSlot, WrathGuildBankTab, WrathGuildBankView,
 };
-use bevy::prelude::*;
 
 /// `GUILD_BANK_MAX_TABS`; a log for tab 6 is the money log (AC `GuildBankLog`).
 const TABS: usize = 6;

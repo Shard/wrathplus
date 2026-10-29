@@ -5,17 +5,12 @@
 // Under `test-support` outside a test build nothing in this crate calls them yet: their callers are
 // other crates' tests once the split makes them `pub`.
 #![cfg_attr(not(test), allow(dead_code))]
-use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
 use bevy::prelude::*;
+use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
 
 /// Decodes one build-12340 body through `adapter` and runs the session events through the
 /// handler table, as the drain does.
-pub fn dispatch_opcode(
-    app: &mut App,
-    adapter: &mut WrathEventAdapter,
-    opcode: u16,
-    body: &[u8],
-) {
+pub fn dispatch_opcode(app: &mut App, adapter: &mut WrathEventAdapter, opcode: u16, body: &[u8]) {
     if let WrathDispatch::Handled { session_events, .. } =
         adapter.dispatch(opcode, body, 0).unwrap()
     {
@@ -37,12 +32,7 @@ pub mod inventory {
     use super::*;
     use wrathplus_protocol::wrath_inventory::Packet;
 
-    pub fn dispatch(
-        app: &mut App,
-        adapter: &mut WrathEventAdapter,
-        opcode: u16,
-        body: &[u8],
-    ) {
+    pub fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, opcode: u16, body: &[u8]) {
         dispatch_opcode(app, adapter, opcode, body);
     }
 
@@ -71,12 +61,7 @@ pub mod death {
     use super::*;
     use wrathplus_protocol::wrath_death::Packet;
 
-    pub fn dispatch(
-        app: &mut App,
-        adapter: &mut WrathEventAdapter,
-        opcode: u16,
-        body: &[u8],
-    ) {
+    pub fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, opcode: u16, body: &[u8]) {
         dispatch_opcode(app, adapter, opcode, body);
     }
 

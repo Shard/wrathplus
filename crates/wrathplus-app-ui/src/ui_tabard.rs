@@ -8,16 +8,18 @@
 use bevy::prelude::*;
 
 use wrathplus_protocol::types::GUILD_EMBLEM_RESULT_MESSAGES;
-use wrathplus_ui::script::{TabardHost, TabardIntent, UiScript, TABARD_COUNTS, TABARD_CREATION_COST};
+use wrathplus_ui::script::{
+    TabardHost, TabardIntent, UiScript, TABARD_COUNTS, TABARD_CREATION_COST,
+};
 
-use crate::net::{ClientCommand, NetCommands};
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
 use crate::app_core::session::EnteredWorldMessage;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::portrait::PaperDollBooth;
 use crate::guild::GuildState;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
+use crate::net::{ClientCommand, NetCommands};
+use crate::portrait::PaperDollBooth;
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
 /// The open designer: its vendor (`[0xbdcee8]`), the save-in-flight latch (`[0xc4d780]`), and
@@ -249,12 +251,12 @@ fn reset_on_world_enter(
 
 /// The tabard vendor's packet handlers.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::TabardOpen;
-    use crate::net::NetHandlerApp;
     use crate::guild::GuildState;
+    use crate::net::NetHandlerApp;
 
     pub(super) fn register(app: &mut App) {
         use SessionEventKind as K;

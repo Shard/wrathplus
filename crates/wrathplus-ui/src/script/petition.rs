@@ -337,7 +337,11 @@ mod tests {
     #[test]
     fn a_wrath_petition_answers_seven_values_with_the_native_types() {
         let mut s = UiScript::new().unwrap();
-        assert_eq!(s.eval::<i64>("return select('#', GetPetitionInfo())").unwrap(), 7);
+        assert_eq!(
+            s.eval::<i64>("return select('#', GetPetitionInfo())")
+                .unwrap(),
+            7
+        );
         s.set_petition(PetitionState {
             record: Some(PetitionRecordView {
                 petition_type: PETITION_TYPE_ARENA.into(),
@@ -357,7 +361,10 @@ mod tests {
             record: Some(record()),
             ..Default::default()
         });
-        assert_eq!(s.eval::<String>("return (GetPetitionInfo())").unwrap(), "guild");
+        assert_eq!(
+            s.eval::<String>("return (GetPetitionInfo())").unwrap(),
+            "guild"
+        );
     }
 
     fn open(script: &mut UiScript, r: PetitionRecordView, signers: Vec<Option<String>>) {

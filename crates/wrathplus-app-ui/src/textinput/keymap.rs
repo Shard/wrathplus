@@ -5,8 +5,8 @@
 //! Deviation: macOS takes the Cocoa text-field chords and Ctrl+Backspace/Delete delete a word,
 //! because editing follows each OS's own text fields.
 
-use wrathplus_ui::script::{EditAction, EditUnit};
 use bevy::input::keyboard::KeyCode;
+use wrathplus_ui::script::{EditAction, EditUnit};
 
 use crate::bindings::chord::KeyName;
 

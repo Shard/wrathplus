@@ -17,15 +17,17 @@ use bevy::prelude::*;
 
 use wrathplus_formats::{SpellDisplay, SummonProperties, SUMMON_SLOT_MINIPET};
 use wrathplus_protocol::types::Field;
-use wrathplus_ui::script::{CompanionView, ScriptValue, UiScript, WrathCompanions, COMPANION_TYPES};
+use wrathplus_ui::script::{
+    CompanionView, ScriptValue, UiScript, WrathCompanions, COMPANION_TYPES,
+};
 
-use crate::names::NameCache;
-use crate::net::NetCommands;
+use crate::app_core::schedule::UnitFeed;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::PlayerActions;
 use crate::app_core::state::Spells;
-use crate::app_core::schedule::UnitFeed;
+use crate::names::NameCache;
+use crate::net::NetCommands;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 
 /// The pane `PetPaperDollFrame_UpdateCompanionPreview` points at the selected companion.
@@ -293,7 +295,8 @@ mod tests {
         }
         let mut chain = wrathplus_formats::Chain::open_profile(&data, &profile).expect("chain");
         let catalog = wrathplus_formats::load_spell_catalog(&mut chain).expect("Spell.dbc");
-        let slots = wrathplus_formats::load_summon_properties(&mut chain).expect("SummonProperties");
+        let slots =
+            wrathplus_formats::load_summon_properties(&mut chain).expect("SummonProperties");
         let mut counts = [0usize; 2];
         for (_, spell) in catalog.iter() {
             if let Some(ty) = companion_type(spell, &slots) {

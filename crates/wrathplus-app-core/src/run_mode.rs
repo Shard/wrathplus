@@ -159,7 +159,10 @@ pub fn free_fly_hint() -> String {
 pub fn dev_source_dir() -> Option<&'static std::path::Path> {
     #[cfg(feature = "dev")]
     {
-        Some(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../wrathplus-app-ui")))
+        Some(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../wrathplus-app-ui"
+        )))
     }
     #[cfg(not(feature = "dev"))]
     {

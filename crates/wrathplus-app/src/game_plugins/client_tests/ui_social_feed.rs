@@ -1,15 +1,15 @@
 //! Whole-client tests of `crate::ui_social::feed`, from `ui_social/feed.rs` (`native_tests`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
+use crate::app_core::interaction::SocialState;
 use crate::names::NameCache;
 use crate::net::NetCommands;
 use crate::ui_native_who::NativeWhoPackets;
 use crate::ui_social::feed::native_tests::entries;
 use crate::ui_social::feed::*;
-use crate::app_core::interaction::SocialState;
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_who::Packet;
 use wrathplus_ui::script::UiScript;
-use bevy::prelude::*;
 
 fn connected() -> wrathplus_protocol::SessionEvent {
     wrathplus_protocol::SessionEvent::Connected {

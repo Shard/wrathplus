@@ -2,10 +2,10 @@
 //! requesting an `.adt` (open ocean authors none), and its global WMO, the whole world on a map
 //! with no terrain.
 
-use wrathplus_formats::{GlobalWmo, WdtFile, WdtReader, WowVersion};
 use bevy::asset::io::Reader;
 use bevy::asset::{Asset, AssetLoader, LoadContext};
 use bevy::reflect::TypePath;
+use wrathplus_formats::{GlobalWmo, WdtFile, WdtReader, WowVersion};
 
 /// A map's parsed WDT: which of the 64×64 ADT tiles exist.
 #[derive(Asset, TypePath)]

@@ -5,11 +5,11 @@
 //! new materials, despawns the batches the gear hides, spawns the ones it reveals, and leaves the
 //! rig and everything hanging off it alone.
 
-use wrathplus_protocol::EntityKind;
 use bevy::prelude::*;
+use wrathplus_protocol::EntityKind;
 
-use crate::net::NetEntity;
 use crate::app_core::session::ObjectStore;
+use crate::net::NetEntity;
 use crate::portrait::PortraitPart;
 use wrathplus_assets::materials::WowModelMaterial;
 use wrathplus_world::interior::InteriorLit;
@@ -502,7 +502,10 @@ mod tests {
         /// `false` without the install.
         fn with_skin_data(&mut self) -> bool {
             let Some(data) = wrathplus_formats::wow_data() else {
-                wrathplus_formats::skipped("no WoW install found", &wrathplus_formats::candidates());
+                wrathplus_formats::skipped(
+                    "no WoW install found",
+                    &wrathplus_formats::candidates(),
+                );
                 return false;
             };
             let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");

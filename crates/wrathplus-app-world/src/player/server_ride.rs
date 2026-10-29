@@ -4,16 +4,16 @@
 //! speed × 4, capped at 24 yd/s (`PointMovementGenerator.cpp:278-281`). `sample_splines` advances
 //! the [`Spline`] into the entity `Transform`, and [`drive_self_ride`] owns the rest of the pose.
 
-use wrathplus_assets::coords::bevy_to_wow;
 use bevy::prelude::*;
+use wrathplus_assets::coords::bevy_to_wow;
 
-use crate::creature_anim::MovementState;
-use crate::app_core::movement::move_flags;
 use crate::app_core::anim::BodyTwist;
+use crate::app_core::movement::move_flags;
+use crate::app_core::session::Embodied;
+use crate::creature_anim::MovementState;
 use crate::motion::Spline;
 use crate::motion::SplineStopped;
 use crate::net::{ClientCommand, NetCommands};
-use crate::app_core::session::Embodied;
 
 use super::Player;
 

@@ -5,10 +5,10 @@
 //! is the 30 s the `READY_CHECK` event announces; the stored timeout (`0xbeb61c`) is not read.
 
 use crate::app_core::group::GroupState;
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::session::SelfGuid;
-use wrathplus_protocol::wrath_group::raid::Packet;
+use crate::net::{ClientCommand, NetCommands};
 use bevy::prelude::*;
+use wrathplus_protocol::wrath_group::raid::Packet;
 
 /// Seconds from our own check's start to its close.
 const READY_CHECK_SECONDS: f64 = 30.0;

@@ -2,20 +2,20 @@
 //! into the VM, fire the party events on their edges, and turn the Lua [`PartyRequest`] intents
 //! into `CMSG_*` sends. The state and its lines live in the parent module.
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{
     member_status, GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo, GROUP_MEMBER_ASSISTANT,
 };
 use wrathplus_ui::script::{
     PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, ScriptValue, UiScript, UnitState,
 };
-use bevy::prelude::*;
 
-use crate::creature_type::CreatureTypeSources;
-use crate::names::NameCache;
-use crate::net::{ClientCommand, FieldChanged, FieldEdges, Guid, GuidIndex, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::Selection;
+use crate::creature_type::CreatureTypeSources;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, FieldChanged, FieldEdges, Guid, GuidIndex, NetCommands};
 use crate::ui_script::gate;
 
 use super::pets::{self, Roster};
@@ -309,7 +309,12 @@ pub(super) fn feed_party(
                 })
                 .flatten();
             let master_guid = if loot.method == 2 { loot.master } else { 0 };
-            (method.to_string(), master, master_guid, u32::from(loot.threshold))
+            (
+                method.to_string(),
+                master,
+                master_guid,
+                u32::from(loot.threshold),
+            )
         }
         None => ("group".to_string(), None, 0, 0),
     };

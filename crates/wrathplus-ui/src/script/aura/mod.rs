@@ -271,7 +271,6 @@ mod tests {
         s
     }
 
-
     fn aura(spell_id: u32, name: &str, helpful: bool, cancelable: bool) -> AuraState {
         AuraState {
             spell_id,
@@ -369,13 +368,15 @@ mod tests {
             .unwrap());
     }
 
-
     #[test]
     fn tracking_bindings_read_the_pushed_state_and_cancel_by_spell_id() {
         let mut s = script();
         // Nothing tracked: the folder's `None` icon, never nil (`0x57f4f0`).
         let none = "Interface\\Minimap\\Tracking\\None";
-        assert_eq!(s.eval::<String>("return GetTrackingTexture()").unwrap(), none);
+        assert_eq!(
+            s.eval::<String>("return GetTrackingTexture()").unwrap(),
+            none
+        );
         s.eval::<()>("CancelTrackingBuff()").unwrap();
         assert!(s.take_cancel_aura_requests().is_empty());
 
@@ -401,7 +402,10 @@ mod tests {
         assert!(s.take_cancel_aura_requests().is_empty());
 
         s.set_tracking(None);
-        assert_eq!(s.eval::<String>("return GetTrackingTexture()").unwrap(), none);
+        assert_eq!(
+            s.eval::<String>("return GetTrackingTexture()").unwrap(),
+            none
+        );
     }
 
     #[test]

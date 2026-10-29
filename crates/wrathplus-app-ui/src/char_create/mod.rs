@@ -8,9 +8,9 @@ mod parts;
 mod refresh;
 mod screen;
 
+use bevy::input::keyboard::KeyboardInput;
 use wrathplus_protocol::{CharAction, CharCreateReq};
 use wrathplus_ui::widget::EditBoxState;
-use bevy::input::keyboard::KeyboardInput;
 
 use crate::textinput::{self, HostClipboard};
 use bevy::input::mouse::AccumulatedMouseMotion;

@@ -7,11 +7,11 @@ use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 
-use crate::creature_anim::{CastEvent, CastEventKind, Casting};
 use crate::app_core::anim::PlaySeq;
-use crate::net::{ClientCommand, GuidIndex, NetCommands};
 use crate::app_core::session::SelfGuid;
 use crate::app_core::state::Spells;
+use crate::creature_anim::{CastEvent, CastEventKind, Casting};
+use crate::net::{ClientCommand, GuidIndex, NetCommands};
 
 /// The in-flight window from send until `SMSG_SPELL_START` names the cast time; the server
 /// answers every `CMSG_CAST_SPELL`, so a packet always clears it first.
@@ -383,11 +383,11 @@ impl SelfCancel<'_, '_> {
 pub mod cast_test_support {
     use super::*;
     use crate::app_core::anim::PlaySeq;
-    use crate::net::{Guid, GuidIndex, NetCommands};
     use crate::app_core::session::SelfGuid;
     use crate::app_core::session::SelfPlayer;
-    use wrathplus_formats::{SpellCatalog, SpellDisplay};
+    use crate::net::{Guid, GuidIndex, NetCommands};
     use std::collections::HashMap;
+    use wrathplus_formats::{SpellCatalog, SpellDisplay};
 
     pub const ARCANE_MISSILES: u32 = 5143;
     pub const HEROIC_STRIKE: u32 = 78;
@@ -551,9 +551,9 @@ mod tests {
     mod local_cancel {
         use super::*;
         use crate::net::GuidIndex;
-        use wrathplus_formats::SpellDisplay;
         use bevy::ecs::system::RunSystemOnce;
         use std::collections::HashMap;
+        use wrathplus_formats::SpellDisplay;
 
         use super::super::cast_test_support::*;
 

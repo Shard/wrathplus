@@ -4,7 +4,7 @@
 //! EquipmentManager.lua:302), queued for the host ([`UiScript::take_equipment_set_requests`]).
 //! Missing sets return no values, not fabricated records, tables or mutation success.
 
-use super::{Model, ScriptValue, UiScript, binding_abi};
+use super::{binding_abi, Model, ScriptValue, UiScript};
 use mlua::{Lua, MultiValue, ObjectLike, Table, Value};
 
 /// Equipment slots a set covers, `INVSLOT_HEAD` (1) to `INVSLOT_TABARD` (19).
@@ -558,5 +558,4 @@ mod tests {
             assert(GetNumEquipmentSets()==0)
         "#).unwrap();
     }
-
 }

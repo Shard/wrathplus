@@ -9,14 +9,14 @@
 //! Deviation: the reference places collision and culling by the raw facing, ours follow the
 //! display facing, because a capsule and a sphere barely change under rotation.
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_protocol::{EntityKind, MonsterMoveFacing};
-use bevy::prelude::*;
 
-use crate::net::{ActiveMover, GuidIndex, NetEntity};
+use super::{yaw_of, RemoteMotion, Spline};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use super::{yaw_of, RemoteMotion, Spline};
+use crate::net::{ActiveMover, GuidIndex, NetEntity};
 
 /// The turn-shuffle latch's sign band, `[0x80c5c8]` = +1e-5 and `[0x80c5c4]` = -1e-5
 /// (`0x60843b`-`0x608473`), tested on the yaw the pump applied: above it latches bit `0x800`
@@ -291,8 +291,8 @@ fn trace_face(e: Entity, source: GoalSource, goal: f32, cur: f32, new: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_assets::coords::wow_to_bevy;
     use std::f32::consts::{FRAC_PI_2, PI, TAU};
+    use wrathplus_assets::coords::wow_to_bevy;
 
     /// The dead-band is inclusive.
     #[test]

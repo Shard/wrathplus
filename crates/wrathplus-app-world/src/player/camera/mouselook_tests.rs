@@ -1,9 +1,9 @@
 //! `MouselookStart`/`MouselookStop` against the look session: the latch and the session run as the
 //! frame runs them, with the VM's calls in between.
 
-use wrathplus_ui::script::UiScript;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::math::DVec2;
+use wrathplus_ui::script::UiScript;
 
 use super::super::camera_dynamics::{CameraOptions, SubjectState};
 use super::*;

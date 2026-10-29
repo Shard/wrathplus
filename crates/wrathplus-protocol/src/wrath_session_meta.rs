@@ -14,7 +14,9 @@ use crate::types::LevelUpInfo;
 use crate::SessionEvent;
 use std::io::{self, Cursor, Read};
 
-pub const OPCODES: [u16; 8] = [0x00fa, 0x00fd, 0x01cd, 0x01d4, 0x0209, 0x020c, 0x02f4, 0x0463];
+pub const OPCODES: [u16; 8] = [
+    0x00fa, 0x00fd, 0x01cd, 0x01d4, 0x0209, 0x020c, 0x02f4, 0x0463,
+];
 
 /// `NUM_ACCOUNT_DATA_TYPES`.
 pub const ACCOUNT_DATA_TYPES: u32 = 8;
@@ -112,7 +114,9 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<SessionEvent> {
             if mask >> ACCOUNT_DATA_TYPES != 0 {
                 return Err(invalid("account data mask"));
             }
-            let times = (0..mask.count_ones()).map(|_| u32_(r)).collect::<io::Result<_>>()?;
+            let times = (0..mask.count_ones())
+                .map(|_| u32_(r))
+                .collect::<io::Result<_>>()?;
             capture(Packet::AccountDataTimes {
                 server_time,
                 raw_byte,
@@ -147,21 +151,33 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<SessionEvent> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     /// `CMSG_TUTORIAL_FLAG`: a flag index.
-    TutorialFlag { id: u32 },
+    TutorialFlag {
+        id: u32,
+    },
     TutorialClear,
     TutorialReset,
     /// `CMSG_PLAYED_TIME`: 1 asks for the chat line.
-    PlayedTime { trigger: u8 },
+    PlayedTime {
+        trigger: u8,
+    },
     NextCinematicCamera,
     CompleteCinematic,
     /// `CMSG_AREATRIGGER`.
-    AreaTrigger { trigger_id: u32 },
+    AreaTrigger {
+        trigger_id: u32,
+    },
     /// `CMSG_ZONEUPDATE`: AC uses its own position, not this zone.
-    ZoneUpdate { zone: u32 },
+    ZoneUpdate {
+        zone: u32,
+    },
     /// `CMSG_SET_ACTIONBAR_TOGGLES`.
-    ActionBarToggles { toggles: u8 },
+    ActionBarToggles {
+        toggles: u8,
+    },
     /// `CMSG_REQUEST_ACCOUNT_DATA`: one type, 0..8.
-    RequestAccountData { kind: u32 },
+    RequestAccountData {
+        kind: u32,
+    },
     /// `CMSG_UPDATE_ACCOUNT_DATA`: a blob already zlib-compressed by the caller; size 0 erases.
     UpdateAccountData {
         kind: u32,
@@ -172,7 +188,9 @@ pub enum Command {
     /// `CMSG_READY_FOR_ACCOUNT_DATA_TIMES`: empty.
     ReadyForAccountDataTimes,
     /// `CMSG_SET_TITLE`: a `CharTitles` bit index, -1 clears (AC `HandleSetTitleOpcode`).
-    SetTitle { title: i32 },
+    SetTitle {
+        title: i32,
+    },
 }
 
 pub fn encode(command: &Command) -> (u32, Vec<u8>) {

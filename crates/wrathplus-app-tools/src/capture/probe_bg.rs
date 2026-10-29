@@ -31,13 +31,13 @@ use wrathplus_world::terrain_stream::{CurrentArea, WorldLoadProgress};
 use wrathplus_world::world_map::CurrentMap;
 
 use super::probes::ProbeClock;
-use crate::net::{ChatKind, ClientCommand, DroppedOpcodes, Guid, NetCommands, NetEntity};
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
+use crate::app_core::state::WorldStates;
+use crate::net::{ChatKind, ClientCommand, DroppedOpcodes, Guid, NetCommands, NetEntity};
 use crate::ui_battlefield::Battlefield;
 use crate::ui_dialog_verbs::BattlefieldQueue;
-use crate::app_core::state::WorldStates;
 
 /// One battleground's fixtures. The three battlemasters stand within ~35 yd of each other in
 /// Stormwind, so the probe finds its NPC by creature entry, not by nearness.

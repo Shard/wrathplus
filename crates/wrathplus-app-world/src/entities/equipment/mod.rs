@@ -6,8 +6,8 @@
 
 use std::collections::HashMap;
 
-use wrathplus_formats::ItemDisplayCatalog;
 use bevy::prelude::*;
+use wrathplus_formats::ItemDisplayCatalog;
 
 use super::{DisplayModel, ModelHandle};
 use wrathplus_assets::m2_url;

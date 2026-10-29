@@ -11,9 +11,9 @@
 //! Deviation: `Hold` is one repeating play where the reference re-arms it each pass with variation
 //! -1, a weighted random pick, because at most one `Spells\` model authors several variations.
 
-use wrathplus_assets::ModelAnimations;
 use bevy::animation::{graph::AnimationNodeIndex, RepeatAnimation};
 use bevy::prelude::*;
+use wrathplus_assets::ModelAnimations;
 
 use crate::creature_anim::FxStage;
 
@@ -145,8 +145,8 @@ pub(crate) fn decay_span(anims: Option<&ModelAnimations>) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_assets::AnimClip;
     use bevy::animation::RepeatAnimation;
+    use wrathplus_assets::AnimClip;
 
     /// One clip of `anim_id` with the M2 loop flag `looping`, on graph node `node`.
     fn clip(anim_id: u16, node: usize, looping: bool) -> AnimClip {

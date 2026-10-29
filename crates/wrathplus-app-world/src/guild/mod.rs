@@ -3,6 +3,7 @@
 //! handlers. The guild windows' feed is `crate::ui_guild`; nameplates and the body composite read
 //! [`unit_guild_name`] and the crest lookups.
 
+use bevy::prelude::*;
 use wrathplus_formats::GuildEmblem;
 use wrathplus_protocol::types::{
     guild_event, GuildCommandResult, GuildEventNotice, GuildInfo, GuildQueryResponse, GuildRoster,
@@ -10,7 +11,6 @@ use wrathplus_protocol::types::{
 };
 use wrathplus_protocol::ObjectFields;
 use wrathplus_ui::script::{LastOnline, UnitGuild};
-use bevy::prelude::*;
 
 use crate::net::{ClientCommand, NetCommands};
 use crate::query_cache::QueryCache;
@@ -200,11 +200,7 @@ impl GuildState {
 
     /// The read that also asks: `None` on a miss, which sends the query, as the reference's
     /// `GetGuildRosterInfo` answers nil and queries inline (`0x4d1291`).
-    pub fn resolve_identity(
-        &self,
-        guild_id: u32,
-        commands: &NetCommands,
-    ) -> Option<&Identity> {
+    pub fn resolve_identity(&self, guild_id: u32, commands: &NetCommands) -> Option<&Identity> {
         self.request_identity(guild_id, commands);
         self.identity(guild_id)
     }
@@ -216,11 +212,7 @@ impl GuildState {
 
     /// Our guild's five tabard fields for the tabard designer, `-1`s when undesigned as the wire
     /// carries them; a miss sends the query.
-    pub fn own_emblem_record(
-        &self,
-        guild_id: u32,
-        commands: &NetCommands,
-    ) -> Option<[i32; 5]> {
+    pub fn own_emblem_record(&self, guild_id: u32, commands: &NetCommands) -> Option<[i32; 5]> {
         let e = self.resolve_identity(guild_id, commands)?.emblem;
         Some([
             e.emblem_style,

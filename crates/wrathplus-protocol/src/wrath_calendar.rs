@@ -156,10 +156,7 @@ pub enum Packet {
         error: u32,
     },
     /// 043E.
-    RaidLockoutAdded {
-        packed_time: u32,
-        lockout: Lockout,
-    },
+    RaidLockoutAdded { packed_time: u32, lockout: Lockout },
     /// 043F.
     RaidLockoutRemoved { lockout: Lockout },
     /// 0471: the old and new seconds to reset after an extend toggle.
@@ -320,19 +317,23 @@ fn calendar(r: &mut Cursor<&[u8]>) -> io::Result<Calendar> {
             offset: u32_(r)? as i32,
         })
     })?;
-    let holidays = rows(r, 4 * (5 + HOLIDAY_DATES + HOLIDAY_DURATIONS + HOLIDAY_FLAGS) + 1, |r| {
-        Ok(Holiday {
-            id: u32_(r)?,
-            region: u32_(r)?,
-            looping: u32_(r)?,
-            priority: u32_(r)?,
-            filter_type: u32_(r)?,
-            dates: words(r)?,
-            durations: words(r)?,
-            flags: words(r)?,
-            texture: read_cstring(r)?,
-        })
-    })?;
+    let holidays = rows(
+        r,
+        4 * (5 + HOLIDAY_DATES + HOLIDAY_DURATIONS + HOLIDAY_FLAGS) + 1,
+        |r| {
+            Ok(Holiday {
+                id: u32_(r)?,
+                region: u32_(r)?,
+                looping: u32_(r)?,
+                priority: u32_(r)?,
+                filter_type: u32_(r)?,
+                dates: words(r)?,
+                durations: words(r)?,
+                flags: words(r)?,
+                texture: read_cstring(r)?,
+            })
+        },
+    )?;
     Ok(Calendar {
         invites,
         events,

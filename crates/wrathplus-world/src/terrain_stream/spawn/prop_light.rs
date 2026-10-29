@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use wrathplus_assets::M2Model;
 use bevy::prelude::*;
+use wrathplus_assets::M2Model;
 
 /// One WMO doodad prop at its world transform, spawned once its M2 loads.
 pub(crate) struct WmoDoodadInst {

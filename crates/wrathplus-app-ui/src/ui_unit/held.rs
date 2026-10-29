@@ -15,14 +15,14 @@ use wrathplus_formats::ChrClasses;
 use wrathplus_ui::script::{UiScript, UnitState};
 
 use super::{enrich_unit, faction_group, faction_group_localized, snapshot, unit_reaction};
-use crate::creature_type::CreatureTypeSources;
-use crate::names::NameCache;
-use crate::net::{Guid, NetCommands, Reputations};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::Factions;
-use crate::ui_script::gate;
 use crate::app_core::vm_memo::VmMemo;
+use crate::creature_type::CreatureTypeSources;
+use crate::names::NameCache;
+use crate::net::{Guid, NetCommands, Reputations};
+use crate::ui_script::gate;
 
 /// What a held unit's snapshot reads beside its descriptor.
 pub(crate) struct HeldUnits<'a> {
@@ -191,11 +191,11 @@ pub(super) fn feed_chain_units(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::app_core::group::GroupState;
+    use crate::app_core::state::Selection;
+    use crate::app_core::state::GROUPTYPE_RAID;
     use crate::names::CreatureRecord;
     use crate::net::GuidIndex;
-    use crate::app_core::state::Selection;
-    use crate::app_core::group::GroupState;
-    use crate::app_core::state::GROUPTYPE_RAID;
     use wrathplus_protocol::types::Field;
     use wrathplus_protocol::types::{member_status, GroupMemberEntry};
     use wrathplus_protocol::ObjectFields;
@@ -282,7 +282,10 @@ pub(crate) mod tests {
             .init_resource::<GroupState>()
             .insert_resource(NetCommands(tx))
             .add_plugins(crate::ui_aura::UiAuraPlugin)
-            .add_systems(Update, feed_chain_units.after(crate::app_core::schedule::AuraEvents));
+            .add_systems(
+                Update,
+                feed_chain_units.after(crate::app_core::schedule::AuraEvents),
+            );
         app.insert_non_send_resource(UiScript::new().unwrap());
         {
             let mut names = app.world_mut().resource_mut::<NameCache>();

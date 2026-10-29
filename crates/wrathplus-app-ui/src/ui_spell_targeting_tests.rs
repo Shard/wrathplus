@@ -1,12 +1,12 @@
 //! [`super::feed_targeting_to_vm`]'s VM tests, on the cast ladder harness `spell::targeting` shares.
 
 use super::*;
-use crate::net::{ClientCommand, Guid};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::net::{ClientCommand, Guid};
 use crate::spell::targeting::test_support::*;
-use wrathplus_protocol::types::Field;
 use std::collections::HashMap;
+use wrathplus_protocol::types::Field;
 
 /// `SpellCanTargetUnit` resolves a chain as `SpellTargetUnit` does and answers the verdict of
 /// the unit it ends on (`0x6e6d3a` into `0x515970`, then `0x6e6460`): the ally we and our pet
@@ -44,15 +44,15 @@ fn spell_can_target_unit_follows_a_target_chain() {
         // The index of us and the ally, then the aura feed's inputs with the chain's units:
         // each held unit and the target it names.
         publish_guids(&mut world);
-        world
-            .non_send_resource_mut::<UiScript>()
-            .set_unit_guids(&wrathplus_ui::script::UnitGuids {
+        world.non_send_resource_mut::<UiScript>().set_unit_guids(
+            &wrathplus_ui::script::UnitGuids {
                 player: ME,
                 pet: PET,
                 target: ALLY,
                 held: HashMap::from([(ME, ALLY), (PET, ALLY), (ALLY, 0)]),
                 ..Default::default()
-            });
+            },
+        );
         world
             .run_system_cached(feed_targeting_to_vm)
             .expect("the feed runs");

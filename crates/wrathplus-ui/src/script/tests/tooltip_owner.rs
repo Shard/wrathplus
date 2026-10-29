@@ -14,10 +14,22 @@ fn set_owner_refuses_as_12340_does() {
     )
     .unwrap();
     for (call, want) in [
-        ("TIP:SetOwner(nil, 'ANCHOR_NONE')", "Usage: OwnerTip:SetOwner(frame)"),
-        ("TIP:SetOwner({}, 'ANCHOR_NONE')", "OwnerTip:SetOwner(): Couldn't find 'this' in frame object"),
-        ("TIP:SetOwner(ART, 'ANCHOR_NONE')", "OwnerTip:SetOwner(): Wrong object type, expected frame"),
-        ("TIP:SetOwner(TIP, 'ANCHOR_NONE')", "OwnerTip:SetOwner(): Can't set owner to self"),
+        (
+            "TIP:SetOwner(nil, 'ANCHOR_NONE')",
+            "Usage: OwnerTip:SetOwner(frame)",
+        ),
+        (
+            "TIP:SetOwner({}, 'ANCHOR_NONE')",
+            "OwnerTip:SetOwner(): Couldn't find 'this' in frame object",
+        ),
+        (
+            "TIP:SetOwner(ART, 'ANCHOR_NONE')",
+            "OwnerTip:SetOwner(): Wrong object type, expected frame",
+        ),
+        (
+            "TIP:SetOwner(TIP, 'ANCHOR_NONE')",
+            "OwnerTip:SetOwner(): Can't set owner to self",
+        ),
     ] {
         let err = s.run(call).unwrap_err().to_string();
         assert!(err.contains(want), "{call}: {err}");

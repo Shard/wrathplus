@@ -183,16 +183,23 @@ impl RaidBrowser {
             Ordering::Equal
         };
         self.players.sort_by(|a, b| by(a, b, false));
-        self.groups.sort_by(|a, b| match (a.members.first(), b.members.first()) {
-            (None, None) => Ordering::Equal,
-            (None, Some(_)) => Ordering::Less,
-            (Some(_), None) => Ordering::Greater,
-            (Some(x), Some(y)) => by(x, y, true),
-        });
+        self.groups
+            .sort_by(|a, b| match (a.members.first(), b.members.first()) {
+                (None, None) => Ordering::Equal,
+                (None, Some(_)) => Ordering::Less,
+                (Some(_), None) => Ordering::Greater,
+                (Some(x), Some(y)) => by(x, y, true),
+            });
     }
 
     /// `0x553530`: the 0-based result index as (group, member record).
-    fn entry(&self, index: usize) -> Option<(Option<&WrathRaidBrowserGroup>, Option<&WrathRaidBrowserMember>)> {
+    fn entry(
+        &self,
+        index: usize,
+    ) -> Option<(
+        Option<&WrathRaidBrowserGroup>,
+        Option<&WrathRaidBrowserMember>,
+    )> {
         let group = |i: usize| self.groups.get(i).map(|g| (Some(g), g.members.first()));
         let player = |i: usize| self.players.get(i).map(|p| (None, Some(p)));
         if self.players_first {
@@ -262,7 +269,17 @@ fn tail(out: &mut Vec<Value>, m: Option<&WrathRaidBrowserMember>) {
     out.push(int(s.unknown_64));
     out.extend(s.talents.map(int));
     out.push(Value::Boolean(s.flag_8c));
-    out.extend([s.armor, s.spell_damage, s.spell_heal, s.crit_melee, s.crit_ranged, s.crit_spell].map(int));
+    out.extend(
+        [
+            s.armor,
+            s.spell_damage,
+            s.spell_heal,
+            s.crit_melee,
+            s.crit_ranged,
+            s.crit_spell,
+        ]
+        .map(int),
+    );
     out.extend([trunc(s.mp5), trunc(s.mp5_combat)]);
     out.extend([s.attack_power, s.agility, s.health, s.mana].map(int));
     out.push(trunc(s.avg_item_level));
@@ -343,7 +360,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     set(lua, "SearchLFGGetJoinedID", |lua, _| {
         let m = lua.app_data_ref::<Model>().expect("model app_data");
         let id = m.wrath_lfg.raid_browser.joined & 0xff_ffff;
-        Ok(MultiValue::from_vec(if id == 0 { Vec::new() } else { vec![int(id)] }))
+        Ok(MultiValue::from_vec(if id == 0 {
+            Vec::new()
+        } else {
+            vec![int(id)]
+        }))
     })?;
     // SearchLFGGetResults(index) (`0x555fd0`) → name, level, area, class name, comment, other
     // members, status, class file, encounters total and killed, then the 28-value tail.
@@ -354,13 +375,20 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         if m.wrath_lfg.row(rb.view.dungeon & 0xff_ffff).is_none() {
             return Ok(MultiValue::new());
         }
-        let Some((group, Some(rec))) = usize::try_from(i.wrapping_sub(1)).ok().and_then(|i| rb.entry(i)) else {
+        let Some((group, Some(rec))) = usize::try_from(i.wrapping_sub(1))
+            .ok()
+            .and_then(|i| rb.entry(i))
+        else {
             return Ok(MultiValue::new());
         };
         let name = or_unknown(lua, &rec.name)?;
         // The class name is looked up by the cached name (`0x72aab0`), so an unresolved name
         // reads UNKNOWN too.
-        let class_name = if rec.name.is_some() { or_unknown(lua, &rec.class_name)? } else { localized(lua, "UNKNOWN")? };
+        let class_name = if rec.name.is_some() {
+            or_unknown(lua, &rec.class_name)?
+        } else {
+            localized(lua, "UNKNOWN")?
+        };
         let comment = group.map_or(&rec.comment, |g| &g.comment);
         let others = group.map_or(0, |g| g.members.len().saturating_sub(1));
         let mask = group.map_or(rec.encounter_mask, |g| g.encounter_mask);
@@ -392,11 +420,17 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         let p = number_arg(lua, arg(&args, 1), USAGE)?;
         let m = lua.app_data_ref::<Model>().expect("model app_data");
         let rb = &m.wrath_lfg.raid_browser;
-        let Some((group, _)) = usize::try_from(i.wrapping_sub(1)).ok().and_then(|i| rb.entry(i)) else {
+        let Some((group, _)) = usize::try_from(i.wrapping_sub(1))
+            .ok()
+            .and_then(|i| rb.entry(i))
+        else {
             return Ok(MultiValue::new());
         };
         let member = group.and_then(|g| {
-            usize::try_from(p).ok().and_then(|p| g.members.get(p)).filter(|_| p >= 1)
+            usize::try_from(p)
+                .ok()
+                .and_then(|p| g.members.get(p))
+                .filter(|_| p >= 1)
         });
         let mut out = Vec::new();
         match member.filter(|r| r.name.is_some()) {
@@ -416,7 +450,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 tail(&mut out, Some(r));
             }
             None => {
-                out.extend([Value::Nil, text(lua, "")?, Value::Nil, Value::Nil, Value::Nil]);
+                out.extend([
+                    Value::Nil,
+                    text(lua, "")?,
+                    Value::Nil,
+                    Value::Nil,
+                    Value::Nil,
+                ]);
                 tail(&mut out, None);
             }
         }
@@ -433,7 +473,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         let Some(row) = lfg.row(rb.view.dungeon & 0xff_ffff) else {
             return Ok(MultiValue::new());
         };
-        let Some((group, rec)) = usize::try_from(i.wrapping_sub(1)).ok().and_then(|i| rb.entry(i)) else {
+        let Some((group, rec)) = usize::try_from(i.wrapping_sub(1))
+            .ok()
+            .and_then(|i| rb.entry(i))
+        else {
             return Ok(MultiValue::new());
         };
         let Some(rec) = rec else {
@@ -467,7 +510,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             if changed {
                 rb.clear();
                 rb.joined = entry;
-                rb.requests.push(WrathRaidBrowserRequest::Join { dungeon: entry });
+                rb.requests
+                    .push(WrathRaidBrowserRequest::Join { dungeon: entry });
             }
             changed
         };
@@ -484,7 +528,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let rb = &mut m.wrath_lfg.raid_browser;
             let joined = rb.joined;
             if joined != 0 {
-                rb.requests.push(WrathRaidBrowserRequest::Leave { dungeon: joined });
+                rb.requests
+                    .push(WrathRaidBrowserRequest::Leave { dungeon: joined });
                 rb.clear();
                 rb.joined = 0;
             }
@@ -635,12 +680,18 @@ mod tests {
         let mut s = vm();
         s.set_wrath_raid_browser(Arc::new(WrathRaidBrowserView {
             dungeon: 2 << 24 | 50,
-            players: vec![member("Zed", 79, 8), member("Amy", 75, 2), member("Bob", 80, 4)],
+            players: vec![
+                member("Zed", 79, 8),
+                member("Amy", 75, 2),
+                member("Bob", 80, 4),
+            ],
             ..Default::default()
         }));
         let order = |s: &UiScript| {
-            s.eval::<String>("return SearchLFGGetResults(1)..SearchLFGGetResults(2)..SearchLFGGetResults(3)")
-                .unwrap()
+            s.eval::<String>(
+                "return SearchLFGGetResults(1)..SearchLFGGetResults(2)..SearchLFGGetResults(3)",
+            )
+            .unwrap()
         };
         assert_eq!(order(&s), "AmyBobZed");
         s.run("SearchLFGSort('name')").unwrap();
@@ -656,11 +707,19 @@ mod tests {
         assert_eq!(
             s.take_wrath_raid_browser_requests(),
             vec![
-                WrathRaidBrowserRequest::Join { dungeon: 2 << 24 | 50 },
-                WrathRaidBrowserRequest::Leave { dungeon: 2 << 24 | 50 },
+                WrathRaidBrowserRequest::Join {
+                    dungeon: 2 << 24 | 50
+                },
+                WrathRaidBrowserRequest::Leave {
+                    dungeon: 2 << 24 | 50
+                },
             ]
         );
-        assert!(s.eval::<bool>("return select('#', SearchLFGGetJoinedID()) == 0 and SearchLFGGetNumResults() == 0").unwrap());
+        assert!(s
+            .eval::<bool>(
+                "return select('#', SearchLFGGetJoinedID()) == 0 and SearchLFGGetNumResults() == 0"
+            )
+            .unwrap());
         assert!(s.run("SearchLFGSort()").is_err() && s.run("SearchLFGJoin(2)").is_err());
     }
 
@@ -672,13 +731,22 @@ mod tests {
             players: vec![member("Amy", 75, 2)],
             ..Default::default()
         }));
-        s.run("n = 0 local f = CreateFrame('Frame') f:RegisterEvent('UPDATE_LFG_LIST') \
-               f:SetScript('OnEvent', function() n = n + 1 end)")
-            .unwrap();
-        assert_eq!(s.eval::<i64>("return select('#', RefreshLFGList())").unwrap(), 0);
+        s.run(
+            "n = 0 local f = CreateFrame('Frame') f:RegisterEvent('UPDATE_LFG_LIST') \
+               f:SetScript('OnEvent', function() n = n + 1 end)",
+        )
+        .unwrap();
+        assert_eq!(
+            s.eval::<i64>("return select('#', RefreshLFGList())")
+                .unwrap(),
+            0
+        );
         s.tick(0.0);
         assert_eq!(s.eval::<i64>("return n").unwrap(), 1);
-        assert_eq!(s.eval::<String>("return SearchLFGGetResults(1)").unwrap(), "Amy");
+        assert_eq!(
+            s.eval::<String>("return SearchLFGGetResults(1)").unwrap(),
+            "Amy"
+        );
         assert!(s.take_wrath_raid_browser_requests().is_empty());
     }
 }

@@ -6,12 +6,12 @@
 
 use std::collections::VecDeque;
 
-use wrathplus_assets::coords::wow_to_bevy;
-use wrathplus_assets::ModelRibbon;
-use wrathplus_formats::ParticleBlend;
 use bevy::camera::primitives::{Frustum, Sphere as CullSphere};
 use bevy::camera::Projection;
 use bevy::prelude::*;
+use wrathplus_assets::coords::wow_to_bevy;
+use wrathplus_assets::ModelRibbon;
+use wrathplus_formats::ParticleBlend;
 
 use crate::particles::buffer::{EffectDrawSpec, EffectFog, EffectQuads, EffectVertex};
 use crate::view::WorldCamera;

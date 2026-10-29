@@ -29,18 +29,18 @@ use wrathplus_protocol::types::{NpcFlags, NpcService};
 use wrathplus_protocol::EntityKind;
 
 use super::probes::ProbeClock;
-use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
+use crate::app_core::interaction::GossipState;
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
+use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
 use crate::target::click::{service_action, service_arm_native, ServiceAction, ServiceArm};
-use crate::app_core::interaction::GossipState;
 use wrathplus_ui::script::UiScript;
 
 use crate::app_core::interaction::MerchantOpen;
-use crate::app_core::state::QuestGiver;
-use crate::app_core::state::InteractNpc;
 use crate::app_core::interaction::TrainerOpen;
+use crate::app_core::state::InteractNpc;
+use crate::app_core::state::QuestGiver;
 
 /// How wide to look around a `.go` landing: the reference's service reach,
 /// [`crate::target::SERVICE_RANGE_SQ`] (5.5556 yd, `0xc4c28c`/`0xb4b32c`). Past it the cursor goes

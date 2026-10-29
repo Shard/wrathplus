@@ -12,8 +12,8 @@ use wrathplus_protocol::ObjectFields;
 use wrathplus_ui::strings::Arg;
 
 use super::keyed;
-use crate::spell::{SpellModifiers, SpellsCastTime, OP_COOLDOWN, OP_RANGE};
 use crate::app_core::state::Spells;
+use crate::spell::{SpellModifiers, SpellsCastTime, OP_COOLDOWN, OP_RANGE};
 
 /// `[0x00a258d8]`: a max at or past it reads `SPELL_RANGE_UNLIMITED`.
 const UNLIMITED_YARDS: f32 = 50_000.0;

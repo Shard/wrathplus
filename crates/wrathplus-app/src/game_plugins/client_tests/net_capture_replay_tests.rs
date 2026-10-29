@@ -13,9 +13,9 @@
 //! (dropped silently in the live client). The headless client runs no schedule, so per-frame
 //! feeds are not exercised; this proves the drain accepts every event the capture produces.
 
+use std::collections::BTreeMap;
 use wrathplus_protocol::wrath_capture::{self, Record};
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use std::collections::BTreeMap;
 
 /// Each event through the drain alone, with its panic caught: `(event kind, panic)` per failure,
 /// and the produced kinds no handler owns.

@@ -207,8 +207,6 @@ mod tests {
         s
     }
 
-
-
     #[test]
     fn every_pair_has_the_reference_shape() {
         let s = script();

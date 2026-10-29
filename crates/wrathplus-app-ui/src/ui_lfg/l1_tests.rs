@@ -1,9 +1,9 @@
 use super::*;
+use crossbeam_channel::Receiver;
 use wrathplus_protocol::types::ItemInfo;
 use wrathplus_protocol::wrath_lfg::{RandomDungeonReward, RewardItem};
 use wrathplus_protocol::SessionEvent;
 use wrathplus_ui::script::{WrathLfgCatalog, WrathLfgDungeon};
-use crossbeam_channel::Receiver;
 
 const DUNGEON: u32 = 258;
 const ENTRY: u32 = 6 << 24 | DUNGEON;

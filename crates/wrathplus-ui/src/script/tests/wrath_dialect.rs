@@ -228,15 +228,23 @@ fn wrath_this_style_addon_handlers_read_the_legacy_globals() {
              and EV[4] == 42"
         )
         .unwrap());
-    assert!(s.eval::<bool>("return UP[1] == OldAddonFrame and UP[2] == 0.5").unwrap());
-    assert!(s.eval::<bool>("return CL[1] == OldAddonFrame and CL[2] == 'LeftButton'").unwrap());
     assert!(s
-        .eval::<bool>(
+        .eval::<bool>("return UP[1] == OldAddonFrame and UP[2] == 0.5")
+        .unwrap());
+    assert!(s
+        .eval::<bool>("return CL[1] == OldAddonFrame and CL[2] == 'LeftButton'")
+        .unwrap());
+    assert!(
+        s.eval::<bool>(
             "return INNER_THIS == OldInner and AFTER[1] == OldOuter and AFTER[2] == 'OUTER' \
              and AFTER[3] == 9"
         )
-        .unwrap(), "the inner dispatch restores the outer handler's globals");
-    assert!(s.eval::<bool>("return this == nil and event == nil and arg1 == nil").unwrap());
+        .unwrap(),
+        "the inner dispatch restores the outer handler's globals"
+    );
+    assert!(s
+        .eval::<bool>("return this == nil and event == nil and arg1 == nil")
+        .unwrap());
 }
 
 #[test]

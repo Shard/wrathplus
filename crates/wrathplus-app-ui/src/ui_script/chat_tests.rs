@@ -526,8 +526,8 @@ fn chat_type_info_has_the_references_shape() {
 #[test]
 fn fired_event_names_are_all_chat_type_info_keys() {
     wrathplus_formats::wow_data_or_skip!();
-    use crate::ui_chat::event_name;
     use crate::app_core::chat::ChatEventKind as K;
+    use crate::ui_chat::event_name;
 
     let s = chat_frame();
     for &kind in K::ALL {

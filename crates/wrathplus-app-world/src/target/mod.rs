@@ -7,11 +7,11 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::UiScript;
 
-use crate::creature_anim::Engaged;
-use crate::net::{ClientCommand, Guid, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::ui_flags::InspectMode;
+use crate::creature_anim::Engaged;
+use crate::net::{ClientCommand, Guid, NetCommands};
 use wrathplus_assets::AssetSet;
 use wrathplus_world::interact::{WorldClick, WorldRightClick};
 use wrathplus_world::schedule::WorldStage;
@@ -75,9 +75,9 @@ pub use wrath_relations::{
 };
 // The attack validator's target half, run in the call that asks, for the player's Attack and the
 // pet bar's; the melee probe's press with nothing selected.
-pub use scan::{AttackNearestRequest, AttackPick};
 #[cfg(any(test, feature = "test-support"))]
 pub use scan::LastFriend;
+pub use scan::{AttackNearestRequest, AttackPick};
 // The chat layer's by-name asks (`/target`, `/assist`).
 pub use by_name::{AssistRequest, PlayerLookup, TargetByNameRequest};
 // The one SetSelection path, for the loot response's select (`0x48f3a0`).

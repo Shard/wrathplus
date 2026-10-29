@@ -5,16 +5,16 @@
 
 use std::time::Instant;
 
-use wrathplus_ui::script::{ScriptValue, UiScript};
 use bevy::ecs::system::NonSendMut;
 use bevy::prelude::*;
+use wrathplus_ui::script::{ScriptValue, UiScript};
 
-use crate::net::{ClientCommand, NetCommands};
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
+use crate::net::{ClientCommand, NetCommands};
 
 /// The instance-boot clock (`[0xb4e34c]`), and what the last packet owes the UI.
 #[derive(Resource, Default)]
@@ -162,7 +162,8 @@ impl BattlefieldQueue {
                 average_wait_ms,
                 waited_ms,
             } => {
-                self.tutorials.push(crate::app_core::tutorial::id::BATTLEGROUND_QUEUE);
+                self.tutorials
+                    .push(crate::app_core::tutorial::id::BATTLEGROUND_QUEUE);
                 view.queued = Some((average_wait_ms, ms(waited_ms)));
             }
             StatusTail::Other => {}
@@ -446,8 +447,8 @@ fn poll_area_spirit_healer(
 
 /// The dialog verbs' packet handlers: each parks a question or a countdown for the feed.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::{AreaSpiritHealer, BattlefieldQueue, InstanceBoot};
     use crate::net::NetHandlerApp;

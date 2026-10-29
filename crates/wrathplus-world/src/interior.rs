@@ -9,13 +9,13 @@
 
 use std::collections::HashSet;
 
-use wrathplus_assets::{cap96, floor168, AdtTile, WmoModel};
 use bevy::asset::AssetId;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::relationship::RelationshipTarget as _;
 use bevy::ecs::world::DeferredWorld;
 use bevy::mesh::MeshTag;
 use bevy::prelude::*;
+use wrathplus_assets::{cap96, floor168, AdtTile, WmoModel};
 
 use crate::lighting::{PropProbeSlot, PropProbes};
 use crate::model_fade::{PendingAppearFade, RenderFade};

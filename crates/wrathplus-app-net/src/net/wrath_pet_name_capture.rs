@@ -1,9 +1,9 @@
 //! Sole lossless native pet-name capture owner. App Migration owns future state/feeds/drains;
 //! this FIFO does not infer permissions, emit UI events, or initiate queries.
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{wrath_pet_name::Response, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_pet_name::Response, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativePetNamePackets(pub VecDeque<Response>);

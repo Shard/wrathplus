@@ -3,14 +3,14 @@
 //!
 //! Instance data remains available while the item-template query is pending.
 
-use crate::inventory::BANK_CONTAINER;
-use crate::inventory::KEYRING_CONTAINER;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::inventory::BANK_CONTAINER;
+use crate::inventory::KEYRING_CONTAINER;
 use crate::ui_items::feed::*;
+use bevy::prelude::*;
 use wrathplus_protocol::types::Field;
 use wrathplus_ui::script::UiScript;
-use bevy::prelude::*;
 
 fn native_fields(values: &[(Field, u16, u32)]) -> wrathplus_protocol::ObjectFields {
     let pairs: Vec<_> = values

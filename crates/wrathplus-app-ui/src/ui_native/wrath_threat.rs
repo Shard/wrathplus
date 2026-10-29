@@ -1,8 +1,8 @@
 //! The threat table's engine-free Lua snapshot: the server-authoritative state the wire layer
 //! keeps (`crate::net::wrath_threat`), with each member's melee or ranged pull threshold.
 
-use wrathplus_ui::script::UiScript;
 use bevy::prelude::*;
+use wrathplus_ui::script::UiScript;
 
 pub(crate) use crate::net::wrath_threat::ThreatStore;
 
@@ -15,7 +15,10 @@ fn feed(
     state: Res<ThreatStore>,
     index: Res<crate::net::GuidIndex>,
     // Threat distances belong to streamed units, never off-screen portrait cameras.
-    units: Query<(&Transform, &crate::app_core::session::ObjectStore), Without<crate::portrait::BoothCam>>,
+    units: Query<
+        (&Transform, &crate::app_core::session::ObjectStore),
+        Without<crate::portrait::BoothCam>,
+    >,
     script: Option<NonSendMut<UiScript>>,
 ) {
     let Some(mut script) = script else { return };

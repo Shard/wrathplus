@@ -146,15 +146,26 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
             let spell_id = u32_le(&mut r)?;
             let reason = Some(u8_le(&mut r)?);
             if r.position() as usize != body.len() {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "SPELL_FAILED_OTHER trailing bytes"));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "SPELL_FAILED_OTHER trailing bytes",
+                ));
             }
-            vec![SessionEvent::SpellFailedOther { caster, spell_id, cast_count, reason }]
+            vec![SessionEvent::SpellFailedOther {
+                caster,
+                spell_id,
+                cast_count,
+                reason,
+            }]
         }
         // Only our own drives the shared (self-only) cancel; another unit's is consumed silently.
         SMSG_CANCEL_AUTO_REPEAT => {
             let unit = read_packed_guid(&mut r)?;
             if r.position() as usize != body.len() {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "CANCEL_AUTO_REPEAT trailing bytes"));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CANCEL_AUTO_REPEAT trailing bytes",
+                ));
             }
             if self_guid == Some(unit) {
                 vec![SessionEvent::CancelAutoRepeat]
@@ -166,13 +177,22 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
         SMSG_CREATURE_QUERY_RESPONSE => creature_query(&mut r)?,
         SMSG_ACTION_BUTTONS => action_buttons(&mut r)?,
         SMSG_INITIAL_SPELLS => initial_spells(&mut r)?,
-        SMSG_LEARNED_SPELL => vec![SessionEvent::SpellLearned { spell_id: u32_le(&mut r)? }],
-        SMSG_REMOVED_SPELL => vec![SessionEvent::SpellRemoved { spell_id: u32_le(&mut r)? }],
+        SMSG_LEARNED_SPELL => vec![SessionEvent::SpellLearned {
+            spell_id: u32_le(&mut r)?,
+        }],
+        SMSG_REMOVED_SPELL => vec![SessionEvent::SpellRemoved {
+            spell_id: u32_le(&mut r)?,
+        }],
         SMSG_SUPERCEDED_SPELL => vec![SessionEvent::SpellSuperceded {
             old_spell_id: u32_le(&mut r)?,
             new_spell_id: u32_le(&mut r)?,
         }],
-        _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "not a Wrath session opcode")),
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "not a Wrath session opcode",
+            ))
+        }
     })
 }
 
@@ -262,7 +282,9 @@ fn creature_query(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
 /// A state byte (2: clear the bars, nothing follows), then 144 packed `action | type << 24`.
 fn action_buttons(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
     if u8_le(r)? == 2 {
-        return Ok(vec![SessionEvent::ActionButtons { buttons: Vec::new() }]);
+        return Ok(vec![SessionEvent::ActionButtons {
+            buttons: Vec::new(),
+        }]);
     }
     let mut buttons = Vec::new();
     for slot in 0..ACTION_BUTTONS {
@@ -386,12 +408,18 @@ fn spell_start(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
 fn spell_go(r: &mut Cursor<&[u8]>, self_guid: Option<u64>) -> io::Result<Vec<SessionEvent>> {
     let item_or_caster = read_packed_guid(r)?;
     let caster_slot = read_packed_guid(r)?;
-    let caster = if caster_slot == 0 { item_or_caster } else { caster_slot };
+    let caster = if caster_slot == 0 {
+        item_or_caster
+    } else {
+        caster_slot
+    };
     let count = u8_le(r)?;
     let spell_id = u32_le(r)?;
     let cast_flags = u32_le(r)?;
     let _timestamp = u32_le(r)?;
-    let hits = (0..u8_le(r)?).map(|_| u64_le(r)).collect::<io::Result<Vec<_>>>()?;
+    let hits = (0..u8_le(r)?)
+        .map(|_| u64_le(r))
+        .collect::<io::Result<Vec<_>>>()?;
     let mut misses = Vec::new();
     for _ in 0..u8_le(r)? {
         let guid = u64_le(r)?;
@@ -651,7 +679,10 @@ mod tests {
         assert_eq!(body, [2, 0xCB, 0x19, 0, 0, 0, 0, 0, 0, 0]);
         // Resurrection (2006) on a friendly corpse, then a hostile one: mask, then the packed guid.
         let body = encode_cast_spell(3, 2006, &CastTarget::CorpseAlly(0xF100_0000_0000_0007));
-        assert_eq!(body, [3, 0xD6, 0x07, 0, 0, 0, 0x00, 0x80, 0, 0, 0x81, 0x07, 0xF1]);
+        assert_eq!(
+            body,
+            [3, 0xD6, 0x07, 0, 0, 0, 0x00, 0x80, 0, 0, 0x81, 0x07, 0xF1]
+        );
         let body = encode_cast_spell(3, 2006, &CastTarget::CorpseEnemy(0x07));
         assert_eq!(body, [3, 0xD6, 0x07, 0, 0, 0, 0x00, 0x02, 0, 0, 0x01, 0x07]);
     }
@@ -691,8 +722,12 @@ mod tests {
         // A truncated tail keeps the spell-go and drops the runes.
         body.truncate(body.len() - 1);
         let events = decode(SMSG_SPELL_GO, &body, Some(0x10)).unwrap();
-        assert!(events.iter().any(|e| matches!(e, SessionEvent::SpellGo { .. })));
-        assert!(!events.iter().any(|e| matches!(e, SessionEvent::WrathRunes { .. })));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::SpellGo { .. })));
+        assert!(!events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::WrathRunes { .. })));
     }
 
     #[test]
@@ -712,8 +747,16 @@ mod tests {
         assert!(matches!(
             &events[..],
             [
-                SessionEvent::CastResult { spell_id: 78, success: true, .. },
-                SessionEvent::SpellGo { caster: 0x10, target: Some(5), .. }
+                SessionEvent::CastResult {
+                    spell_id: 78,
+                    success: true,
+                    ..
+                },
+                SessionEvent::SpellGo {
+                    caster: 0x10,
+                    target: Some(5),
+                    ..
+                }
             ]
         ));
         let others = decode(SMSG_SPELL_GO, &body, Some(0x99)).unwrap();
@@ -738,8 +781,13 @@ mod tests {
             body.extend(if slot == 143 { 78u32 } else { 0 }.to_le_bytes());
         }
         let events = decode(SMSG_ACTION_BUTTONS, &body, None).unwrap();
-        let [SessionEvent::ActionButtons { buttons }] = &events[..] else { panic!() };
-        assert_eq!((buttons[0].slot, buttons[0].action, buttons[0].kind), (143, 78, 0));
+        let [SessionEvent::ActionButtons { buttons }] = &events[..] else {
+            panic!()
+        };
+        assert_eq!(
+            (buttons[0].slot, buttons[0].action, buttons[0].kind),
+            (143, 78, 0)
+        );
     }
 
     #[test]
@@ -751,7 +799,9 @@ mod tests {
         }
         body.extend(0u16.to_le_bytes());
         let events = decode(SMSG_INITIAL_SPELLS, &body, None).unwrap();
-        let [SessionEvent::SpellBook { spell_ids, .. }] = &events[..] else { panic!() };
+        let [SessionEvent::SpellBook { spell_ids, .. }] = &events[..] else {
+            panic!()
+        };
         assert_eq!(spell_ids, &[6603, 70_000]);
     }
 
@@ -768,9 +818,14 @@ mod tests {
         body.extend(95_000u32.to_le_bytes());
         body.extend(0u32.to_le_bytes());
         let events = decode(SMSG_INITIAL_SPELLS, &body, None).unwrap();
-        let [SessionEvent::SpellBook { cooldowns, .. }] = &events[..] else { panic!() };
+        let [SessionEvent::SpellBook { cooldowns, .. }] = &events[..] else {
+            panic!()
+        };
         assert_eq!(cooldowns.len(), 1);
-        assert_eq!((cooldowns[0].spell_id, cooldowns[0].spell_cd_ms), (59752, 95_000));
+        assert_eq!(
+            (cooldowns[0].spell_id, cooldowns[0].spell_cd_ms),
+            (59752, 95_000)
+        );
     }
 
     #[test]
@@ -778,7 +833,10 @@ mod tests {
         let at = [1.0f32, 2.0, 3.0];
         let body = encode_pet_cast_spell(0xF140_0000_0000_0050, 7, 31707, &CastTarget::Dest(at));
         assert_eq!(&body[..8], &0xF140_0000_0000_0050u64.to_le_bytes());
-        assert_eq!(&body[8..], encode_cast_spell(7, 31707, &CastTarget::Dest(at)).as_slice());
+        assert_eq!(
+            &body[8..],
+            encode_cast_spell(7, 31707, &CastTarget::Dest(at)).as_slice()
+        );
         // count, spell, flags 0, DEST mask, a packed zero transport guid, xyz.
         assert_eq!(body[8], 7);
         assert_eq!(&body[13..18], &[0, 0x40, 0, 0, 0]);
@@ -805,9 +863,17 @@ mod tests {
             (0x42, 133, Some(3), Some(0x28))
         );
         for end in 0..body.len() {
-            assert!(decode(SMSG_SPELL_FAILED_OTHER, &body[..end], None).is_err(), "prefix {end}");
+            assert!(
+                decode(SMSG_SPELL_FAILED_OTHER, &body[..end], None).is_err(),
+                "prefix {end}"
+            );
         }
-        assert!(decode(SMSG_SPELL_FAILED_OTHER, &[body.as_slice(), &[0]].concat(), None).is_err());
+        assert!(decode(
+            SMSG_SPELL_FAILED_OTHER,
+            &[body.as_slice(), &[0]].concat(),
+            None
+        )
+        .is_err());
     }
 
     #[test]

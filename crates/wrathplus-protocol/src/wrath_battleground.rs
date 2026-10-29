@@ -25,7 +25,10 @@ pub const OPCODES: [u16; 20] = [
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatusTail {
     /// `STATUS_WAIT_QUEUE`: average wait and time queued, ms.
-    Queued { average_wait_ms: u32, waited_ms: u32 },
+    Queued {
+        average_wait_ms: u32,
+        waited_ms: u32,
+    },
     /// `STATUS_WAIT_JOIN`: the invite's map and its expiry, ms.
     Invited {
         map: u32,
@@ -157,7 +160,10 @@ pub enum Packet {
         guid: Option<u64>,
     },
     /// 0376: the team type follows when the leading word is 0.
-    ArenaError { raw_word: u32, team_type: Option<u8> },
+    ArenaError {
+        raw_word: u32,
+        team_type: Option<u8>,
+    },
     /// 0377.
     InspectArenaTeam {
         guid: u64,
@@ -338,7 +344,9 @@ fn pvp_log(r: &mut Cursor<&[u8]>) -> io::Result<PvpLog> {
                 kind,
                 damage: u32_(r)?,
                 healing: u32_(r)?,
-                objectives: (0..count(r, 4)?).map(|_| u32_(r)).collect::<io::Result<_>>()?,
+                objectives: (0..count(r, 4)?)
+                    .map(|_| u32_(r))
+                    .collect::<io::Result<_>>()?,
             })
         })
         .collect::<io::Result<_>>()?;
@@ -377,7 +385,9 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<SessionEvent> {
                 1 => Some(rewards(r)?),
                 _ => return Err(invalid("random flag")),
             };
-            let instances = (0..count(r, 4)?).map(|_| u32_(r)).collect::<io::Result<_>>()?;
+            let instances = (0..count(r, 4)?)
+                .map(|_| u32_(r))
+                .collect::<io::Result<_>>()?;
             capture(Packet::List(BattlefieldList {
                 battlemaster,
                 from_where,
@@ -417,7 +427,9 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<SessionEvent> {
             if count > 3 {
                 return Err(invalid("arena event string count"));
             }
-            let strings = (0..count).map(|_| read_cstring(r)).collect::<io::Result<_>>()?;
+            let strings = (0..count)
+                .map(|_| read_cstring(r))
+                .collect::<io::Result<_>>()?;
             let guid = match left(r) {
                 0 => None,
                 8 => Some(u64_(r)?),

@@ -2,8 +2,8 @@
 //! through [`wrathplus_app::Objects`] and interact with one through [`wrathplus_app::Interact`], from
 //! outside the crate. It fails to build if either goes private, with no feature needed.
 
-use wrathplus_app::{Interact, Objects};
 use bevy::prelude::*;
+use wrathplus_app::{Interact, Objects};
 
 /// What such a crate writes: an object it found, interacted with.
 fn interact_with_the_nearest(objects: Objects, mut interact: MessageWriter<Interact>) {

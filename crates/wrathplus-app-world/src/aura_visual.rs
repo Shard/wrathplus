@@ -17,9 +17,9 @@
 //! Proc types 2, 7 and 13 also appear on state kits; their mechanism is untraced, so [`node_for`]
 //! ignores them.
 
-use wrathplus_protocol::EntityKind;
 use bevy::mesh::MeshTag;
 use bevy::prelude::*;
+use wrathplus_protocol::EntityKind;
 
 use wrathplus_assets::materials::WowModelMaterial;
 use wrathplus_world::interior::InteriorLit;

@@ -1,8 +1,8 @@
 //! The stable master's packet handlers: they fill [`StableOpen`] and [`StableErrors`].
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::StabledPet;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::{StableErrors, StableOpen};
 use crate::names::NameCache;

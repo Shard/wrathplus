@@ -98,12 +98,11 @@ fn a_worn_items_gems_are_listed_by_its_inventory_slot() {
     // The chest (player slot 4) and an item with nothing in its sockets in slot 5.
     let plain = 0x4000_0000_0000_0012u64;
     let store = ObjectStore(ObjectFields::from_field_slots(&[
-            (Field::PlayerInvSlotHead, 8, chest as u32),
-            (Field::PlayerInvSlotHead, 9, (chest >> 32) as u32),
-            (Field::PlayerInvSlotHead, 10, plain as u32),
-            (Field::PlayerInvSlotHead, 11, (plain >> 32) as u32),
-        ],
-    ));
+        (Field::PlayerInvSlotHead, 8, chest as u32),
+        (Field::PlayerInvSlotHead, 9, (chest >> 32) as u32),
+        (Field::PlayerInvSlotHead, 10, plain as u32),
+        (Field::PlayerInvSlotHead, 11, (plain >> 32) as u32),
+    ]));
     let mut objs = crate::items::TestObjects::new();
     // Socket 1 (enchant slot 2) holds enchant 3312, socket 3 (slot 4) an enchant with no gem.
     objs.spawn(
@@ -121,6 +120,10 @@ fn a_worn_items_gems_are_listed_by_its_inventory_slot() {
     let objects = objs.get();
     assert_eq!(
         item_gems(&store, &objects, &gems),
-        [(wrathplus_ui::script::EQUIPMENT_BAG, 5, [Some(40112), None, None])]
+        [(
+            wrathplus_ui::script::EQUIPMENT_BAG,
+            5,
+            [Some(40112), None, None]
+        )]
     );
 }

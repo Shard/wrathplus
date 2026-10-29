@@ -11,11 +11,11 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{UiScript, UnitCombatStats};
 
+use crate::app_core::schedule::UnitFeed;
+use crate::app_core::state::PetBar;
 use crate::portrait::PetDollBooth;
 use crate::ui_char::{fire_stat_transitions, unit_combat_stats};
 use crate::ui_pet::PetUnit;
-use crate::app_core::state::PetBar;
-use crate::app_core::schedule::UnitFeed;
 
 pub struct UiPetDollPlugin;
 

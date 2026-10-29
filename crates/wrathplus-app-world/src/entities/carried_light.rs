@@ -6,9 +6,9 @@
 //! (`0x835690` → `0x834c70`), so a held torch lights the ground. The gate, instance flag `+0x10`
 //! bit 0, is untraced. Each light here rides its host bone's joint.
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::wow_to_bevy;
 use wrathplus_assets::ModelLight;
-use bevy::prelude::*;
 
 use wrathplus_world::terrain_stream::point_light;
 
@@ -147,7 +147,8 @@ mod tests {
     #[test]
     fn installed_creature_point_lights_ride_their_bones() {
         let data = wrathplus_formats::wow_data_or_skip!();
-        let mut chain = wrathplus_formats::Chain::open_wrath(&data, "enUS").expect("read-only chain");
+        let mut chain =
+            wrathplus_formats::Chain::open_wrath(&data, "enUS").expect("read-only chain");
         let names = chain
             .list_filtered(|p| {
                 let p = p.to_ascii_lowercase();

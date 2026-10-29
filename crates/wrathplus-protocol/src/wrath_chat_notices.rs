@@ -6,7 +6,7 @@
 //! ChatPackets.cpp, Chat.cpp (`SendNotification`), WorldSession.cpp (`SendAreaTriggerMessage`),
 //! Creature.cpp (`SendZoneUnderAttackMessage`), MotdMgr.cpp, MiscPackets.cpp (`Playsound`),
 //! Channel.cpp (`Make*`), ChannelHandler.cpp. Strict framing.
-use crate::types::{ChatMessage, ChannelNoticeTail, CHAT_MSG_SYSTEM};
+use crate::types::{ChannelNoticeTail, ChatMessage, CHAT_MSG_SYSTEM};
 use crate::wire::read_cstring;
 use crate::SessionEvent;
 use std::io::{self, Cursor, Read};
@@ -241,7 +241,11 @@ pub fn encode(command: &Command) -> (u32, Vec<u8>) {
             cstring(name, &mut body);
             *opcode
         }
-        Command::NamedPair { opcode, name, other } => {
+        Command::NamedPair {
+            opcode,
+            name,
+            other,
+        } => {
             cstring(name, &mut body);
             cstring(other, &mut body);
             *opcode

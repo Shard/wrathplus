@@ -394,7 +394,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     set(lua, "CalendarGetMaxCreateDate", |lua, _| {
         let t = read(lua, State::today);
         let (y, m) = super::date::add_months(t.year, t.month, 13);
-        many(date4(&WrathCalendarDate::new(y.min(MAX_YEAR), m, 1, 23, 59)))
+        many(date4(&WrathCalendarDate::new(
+            y.min(MAX_YEAR),
+            m,
+            1,
+            23,
+            59,
+        )))
     })?;
     // CalendarGetMaxDate (`0x5b82a0`): 1 January 2031, a constant.
     set(lua, "CalendarGetMaxDate", |_, _| {

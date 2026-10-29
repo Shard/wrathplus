@@ -2,11 +2,11 @@
 //! They build the client with `headless_client`, so they live in the root layer.
 
 use crate::ui_chat::feed::*;
+use bevy::prelude::*;
 use wrathplus_protocol::{
     wrath_events::{WrathDispatch, WrathEventAdapter},
     SessionEventKind as K,
 };
-use bevy::prelude::*;
 
 /// One native SAY prints exactly once through the real feed: 3de4d931 also emitted a shared
 /// `Chat`, whose 1.12 wire line fired a second `CHAT_MSG_SAY` beside `native_message`'s.
@@ -86,7 +86,9 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
     );
     assert_eq!(census[&K::DurabilityDamageDeath].len(), 1);
     assert!(census[&K::DurabilityDamageDeath][0].contains("combat_log::on_durability_damage_death"));
-    app.world_mut().resource_mut::<crate::app_core::session::SelfGuid>().0 = Some(42);
+    app.world_mut()
+        .resource_mut::<crate::app_core::session::SelfGuid>()
+        .0 = Some(42);
     let entity = app.world_mut().spawn(Transform::default()).id();
     app.world_mut()
         .resource_mut::<crate::net::GuidIndex>()
@@ -123,7 +125,8 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
             wrathplus_formats::load_environmental_damage(&mut chain).unwrap(),
         ));
     std::fs::remove_dir_all(dir).unwrap();
-    let mut cursor = bevy::ecs::message::MessageCursor::<crate::app_core::movement::KitPush>::default();
+    let mut cursor =
+        bevy::ecs::message::MessageCursor::<crate::app_core::movement::KitPush>::default();
     let mut adapter = WrathEventAdapter::new();
     let mut body = 42u64.to_le_bytes().to_vec();
     body.push(2);
@@ -172,8 +175,15 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
     let Pending::Combat(line) = &log.pending[0] else {
         panic!()
     };
-    assert_eq!(line.kind, crate::app_core::chat::ChatEventKind::CombatMiscInfo);
-    let fields = &app.world().get::<crate::app_core::session::ObjectStore>(item).unwrap().0;
+    assert_eq!(
+        line.kind,
+        crate::app_core::chat::ChatEventKind::CombatMiscInfo
+    );
+    let fields = &app
+        .world()
+        .get::<crate::app_core::session::ObjectStore>(item)
+        .unwrap()
+        .0;
     assert_eq!(
         (fields.item_durability(), fields.item_max_durability()),
         (Some(17), Some(80))

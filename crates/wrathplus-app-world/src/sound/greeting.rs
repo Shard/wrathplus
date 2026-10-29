@@ -25,12 +25,12 @@ use bevy::prelude::*;
 use wrathplus_formats::NpcGreetingCatalog;
 use wrathplus_protocol::EntityKind;
 
-use crate::net::{GuidIndex, NetEntity};
-use crate::app_core::session::ObjectStore;
 use crate::app_core::interaction::GossipState;
 use crate::app_core::interaction::MerchantOpen;
-use crate::app_core::state::QuestGiver;
 use crate::app_core::interaction::TrainerOpen;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::state::QuestGiver;
+use crate::net::{GuidIndex, NetEntity};
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 use wrathplus_world::schedule::WorldStage;
 use wrathplus_world::view::WorldCamera;

@@ -13,11 +13,11 @@ use wrathplus_protocol::types::{
 };
 use wrathplus_ui::script::UiScript;
 
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::session::ObjectStore;
-use crate::target::is_possessed_by;
 use crate::app_core::state::Selection;
 use crate::app_core::state::Spells;
+use crate::net::{ClientCommand, NetCommands};
+use crate::target::is_possessed_by;
 
 use super::bar::active_aura_press;
 use super::{PetBar, PetUnit};
@@ -95,7 +95,9 @@ impl PetPress<'_, '_> {
         }
         let pet_guid = self.bar.guid();
         if is_spell
-            && display.is_some_and(|d| crate::ui_action::toggle::active_action_toggle(id, d, self.pet.auras_of(pet_guid)))
+            && display.is_some_and(|d| {
+                crate::ui_action::toggle::active_action_toggle(id, d, self.pet.auras_of(pet_guid))
+            })
         {
             let _ = self.commands.0.send(ClientCommand::PetCancelAura {
                 pet_guid,
@@ -458,7 +460,8 @@ pub(super) fn possessing(store: Option<&ObjectStore>, self_guid: Option<u64>) ->
 /// The Attack order, the one press validated before it sends: the type-7 arm branches only on
 /// `action <= 1` and `action == 2`, so every other command sends as it is.
 pub(super) fn is_attack_order(entry: PetActionEntry) -> bool {
-    entry.kind() == wrathplus_protocol::types::PET_ACT_COMMAND && entry.action() == PET_COMMAND_ATTACK
+    entry.kind() == wrathplus_protocol::types::PET_ACT_COMMAND
+        && entry.action() == PET_COMMAND_ATTACK
 }
 
 /// Apply a press and answer whether it is sent. A veto from the validator (`0x4bd40d`, the pet as
@@ -491,7 +494,9 @@ pub(super) fn latch_press(bar: &mut PetBar, entry: PetActionEntry, possessing: b
             bar.spells.state = (bar.spells.state & 0x0800_00FF) | (action << 8);
             bar.bar_signals = bar.bar_signals.wrapping_add(1);
         }
-        wrathplus_protocol::types::PET_ACT_COMMAND if action == PET_COMMAND_ATTACK && possessing => {
+        wrathplus_protocol::types::PET_ACT_COMMAND
+            if action == PET_COMMAND_ATTACK && possessing =>
+        {
             // `0x4bd42e` signals too; an ordinary pet never gets here.
             bar.attacking = true;
             bar.bar_signals = bar.bar_signals.wrapping_add(1);

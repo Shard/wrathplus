@@ -1,8 +1,8 @@
 //! Immutable build-12340 metadata and current authenticated context; not queue policy.
 use std::sync::Arc;
 
-use wrathplus_ui::script::{UiScript, WrathLfgCatalog, WrathLfgDungeon, WrathLfgEncounter};
 use bevy::prelude::*;
+use wrathplus_ui::script::{UiScript, WrathLfgCatalog, WrathLfgDungeon, WrathLfgEncounter};
 
 use super::auth::NativeAccountExpansion;
 use crate::app_core::vm_memo::VmMemo;
@@ -18,7 +18,10 @@ pub(super) fn load(mut commands: Commands, assets: Option<Res<wrathplus_assets::
     use wrathplus_assets::LockRecover;
     let Some(assets) = assets else { return };
     let mut chain = assets.chain.lock_recover();
-    if !matches!(chain.profile(), wrathplus_formats::DataProfile::Wrath { .. }) {
+    if !matches!(
+        chain.profile(),
+        wrathplus_formats::DataProfile::Wrath { .. }
+    ) {
         return;
     }
     match wrathplus_formats::lfg::load_lfg_catalogs(&mut chain) {

@@ -5,9 +5,9 @@
 
 use std::time::Instant;
 
-use wrathplus_assets::{chunks_to_mesh, AdtTile};
 use bevy::camera::primitives::MeshAabb;
 use bevy::prelude::*;
+use wrathplus_assets::{chunks_to_mesh, AdtTile};
 
 use super::TerrainStreamer;
 

@@ -171,7 +171,8 @@ fn main() -> anyhow::Result<()> {
                 continue;
             };
             let mut cur = std::io::Cursor::new(bytes.as_slice());
-            let Ok(wrathplus_adt::ParsedAdt::Root(root)) = wrathplus_adt::parse_adt(&mut cur) else {
+            let Ok(wrathplus_adt::ParsedAdt::Root(root)) = wrathplus_adt::parse_adt(&mut cur)
+            else {
                 continue;
             };
             for mcnk in &root.mcnk_chunks {

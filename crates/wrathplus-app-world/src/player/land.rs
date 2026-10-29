@@ -4,8 +4,8 @@
 //! the ordinary teleport or worldport. Control re-attaches only then, so the destination's tiles
 //! are resident before the landing.
 
-use wrathplus_assets::coords::bevy_to_wow;
 use bevy::prelude::*;
+use wrathplus_assets::coords::bevy_to_wow;
 
 use crate::net::{ChatKind, ClientCommand, NetCommands, TeleportMessage, WorldportMessage};
 use wrathplus_world::world_map::CurrentMap;

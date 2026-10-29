@@ -1,7 +1,7 @@
 //! Instance data remains available while the item-template query is pending.
 use super::*;
-use wrathplus_protocol::types::Field;
 use bevy::ecs::system::SystemState;
+use wrathplus_protocol::types::Field;
 
 fn pending_slot(current: Option<u32>, max: Option<u32>) -> ContainerSlot {
     let mut pairs = vec![(Field::ObjectEntry, 117), (Field::ItemStackCount, 3)];

@@ -478,7 +478,9 @@ fn drive_loading_screen(
     // --- The edges. ---
     // A glue entry (not the seamless in-world reconnect), raised on the frame the glue tears down
     // and held across the server's character load; the art comes from the roster's map.
-    if entered.read().next().is_some() && *state.get() != crate::app_core::state::ClientState::InWorld {
+    if entered.read().next().is_some()
+        && *state.get() != crate::app_core::state::ClientState::InWorld
+    {
         let map = roster.as_ref().and_then(|r| r.pending_map());
         screen.raise("world entry", true, map, now);
         // The tip rides this edge alone: the reference's setter `0x406630` has one caller, in

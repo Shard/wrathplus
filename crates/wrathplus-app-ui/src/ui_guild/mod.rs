@@ -13,8 +13,8 @@ pub(crate) mod wrath;
 pub(crate) use wrath::NativeGuild;
 
 pub(crate) use crate::guild::{
-    last_online, net,
-    GuildMemberNotify, GuildState, Identity, RosterRow, RosterUpdate, ROSTER_REQUEST_THROTTLE_SECS,
+    last_online, net, GuildMemberNotify, GuildState, Identity, RosterRow, RosterUpdate,
+    ROSTER_REQUEST_THROTTLE_SECS,
 };
 #[cfg(test)]
 pub(crate) use crate::guild::{unit_guild, unit_guild_name};
@@ -70,8 +70,8 @@ impl Plugin for UiGuildPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::{ClientCommand, NetCommands};
     use crate::app_core::interaction::SocialState;
+    use crate::net::{ClientCommand, NetCommands};
     use wrathplus_formats::GuildEmblem;
     use wrathplus_protocol::types::{guild_command, guild_command_error, guild_presence};
     use wrathplus_protocol::types::{

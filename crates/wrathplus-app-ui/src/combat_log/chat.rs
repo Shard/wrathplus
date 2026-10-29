@@ -6,13 +6,13 @@
 
 use wrathplus_protocol::types::SpellLogExecute;
 
-use crate::net::StandingChanged;
-use crate::app_core::session::SelfGuid;
-use crate::ui_chat::combat::self;
-use crate::app_core::chat::Fills;
-use crate::ui_chat::feed::ChatLogFeed;
 use crate::app_core::chat::ChatEventKind;
 use crate::app_core::chat::ChatLog;
+use crate::app_core::chat::Fills;
+use crate::app_core::session::SelfGuid;
+use crate::net::StandingChanged;
+use crate::ui_chat::combat;
+use crate::ui_chat::feed::ChatLogFeed;
 
 /// `SMSG_SET_FACTION_STANDING`: "Your %s reputation has increased by %d.". The wire carries the
 /// new total and the sentence the delta, so `net` reads the old one before the overwrite and an

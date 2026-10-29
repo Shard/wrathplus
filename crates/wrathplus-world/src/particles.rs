@@ -4,9 +4,9 @@
 //! `0x10` picks a particle's storage frame, and so whether a moving host leaves a trail; colour,
 //! alpha, size and texture cell follow the [`wrathplus_formats::OverLife`] ramp by normalized age.
 
+use bevy::prelude::*;
 use wrathplus_assets::ModelEmitter;
 use wrathplus_formats::ParticleEmitterDef;
-use bevy::prelude::*;
 
 pub mod buffer;
 mod depthdump;

@@ -199,12 +199,7 @@ pub(crate) fn melee_text(hit_info: u32, victim_state: u32, damage: u32) -> Optio
 /// The spell and periodic emitter split (`0x5e85e0`/`0x626dd0`): damage floats a number, category
 /// 2 on `SPELL_HIT_TYPE_CRIT 0x2` (periodic ticks never crit); zero damage floats ABSORB or
 /// RESIST, a choice inferred from the packet's fields, as `0x5e88d1` is untraced.
-pub fn spell_text(
-    damage: u32,
-    absorb: u32,
-    resist: i32,
-    crit: bool,
-) -> Option<(u8, String)> {
+pub fn spell_text(damage: u32, absorb: u32, resist: i32, crit: bool) -> Option<(u8, String)> {
     if damage > 0 {
         return Some((if crit { 2 } else { 0 }, damage.to_string()));
     }

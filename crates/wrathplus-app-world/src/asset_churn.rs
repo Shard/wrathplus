@@ -5,10 +5,10 @@
 
 use std::collections::HashMap;
 
-use wrathplus_assets::image_gpu_bytes;
 use bevy::asset::AssetEvent;
 use bevy::prelude::*;
 use bevy::time::Real;
+use wrathplus_assets::image_gpu_bytes;
 
 pub struct AssetChurnPlugin;
 

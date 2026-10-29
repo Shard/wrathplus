@@ -117,12 +117,7 @@ pub(super) fn pickup_pet_action(model: &mut Model, slot: u32) -> bool {
     // A spell slot keeps its type and autocast bits with id 0, and the server is told. `false` is
     // right: the passive gate reads the source's spell record, and id 0 has none.
     if kind(packed) == 1 {
-        write_slot(
-            model,
-            index,
-            packed & 0xff00_0000,
-            false,
-        );
+        write_slot(model, index, packed & 0xff00_0000, false);
     }
     queue_cursor_update(model);
     true

@@ -663,11 +663,11 @@ mod tests {
 #[cfg(test)]
 mod real_data {
     use super::LiquidKind;
+    use std::collections::HashMap;
     use wrathplus_formats::wrath_liquid::{load_liquid_catalogs, LiquidCatalogs};
     use wrathplus_formats::{
         parse_wmo_root, wmo_group_liquid_mesh_of_kind, wmo_group_wrath_liquid, LiquidMesh, WmoRoot,
     };
-    use std::collections::HashMap;
 
     /// A group's surface as the Wrath loader builds it: the native resolver's category, the
     /// native speed bits.

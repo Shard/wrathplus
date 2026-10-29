@@ -6,10 +6,10 @@
 
 use std::ops::Range;
 
-use wrathplus_formats::{ModelBlend, ParticleBlend};
 use bevy::asset::AssetId;
 use bevy::prelude::*;
 use bevy::render::render_resource::Buffer;
+use wrathplus_formats::{ModelBlend, ParticleBlend};
 
 /// One vertex of the lane: world-space in the stream, so instruments read world coordinates,
 /// except on a [`EffectDrawSpec::cam_relative`] draw.

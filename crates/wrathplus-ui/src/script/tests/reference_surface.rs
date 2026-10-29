@@ -1309,7 +1309,9 @@ fn every_installed_region_method_lands_in_a_leaf() {
     for pair in full.pairs::<String, mlua::Value>() {
         let (name, _) = pair.expect("region method entry");
         let reached: bool = s
-            .eval(&format!("return LeafProbeT[{name:?}] ~= nil or LeafProbeF[{name:?}] ~= nil"))
+            .eval(&format!(
+                "return LeafProbeT[{name:?}] ~= nil or LeafProbeF[{name:?}] ~= nil"
+            ))
             .unwrap();
         if !reached {
             orphans.push(name);

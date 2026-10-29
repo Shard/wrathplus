@@ -1,8 +1,8 @@
 //! The emission shape kernel and its RNG: one birth's position and direction, as the reference's
 //! three spawn generators make them (`0x7b8890` plane, `0x7b8d70` sphere, `0x7b9500` spline).
 
-use wrathplus_formats::ParticleEmitterDef;
 use bevy::prelude::*;
+use wrathplus_formats::ParticleEmitterDef;
 
 /// xorshift32 for particle jitter: visual only, determinism not required.
 pub(super) fn next_u32(state: &mut u32) -> u32 {

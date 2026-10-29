@@ -10,11 +10,11 @@
 //! [`super::spell_fx::FxAttached`] list outlives it, as the reference's per-unit `+0xb4` effect
 //! list does, so persistent effects re-spawn on the new body.
 
-use wrathplus_protocol::EntityKind;
 use bevy::prelude::*;
+use wrathplus_protocol::EntityKind;
 
-use crate::net::{Guid, NetEntity};
 use crate::app_core::session::ObjectStore;
+use crate::net::{Guid, NetEntity};
 
 use super::collision_height::{collision_height_for, CollisionHeight};
 use super::{Creatures, VisualAttached};

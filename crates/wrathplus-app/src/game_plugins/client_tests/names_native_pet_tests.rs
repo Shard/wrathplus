@@ -4,8 +4,8 @@
 use crate::names::native_pet_tests::{drain, packet};
 use crate::names::*;
 use crate::ui_native_pet_name::NativePetNamePackets;
-use wrathplus_protocol::SessionEvent;
 use bevy::prelude::*;
+use wrathplus_protocol::SessionEvent;
 
 #[test]
 fn queued_response_world_entry_cannot_repopulate_previous_session() {

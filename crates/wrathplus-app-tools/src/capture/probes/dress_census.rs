@@ -9,16 +9,16 @@
 //!
 //! How to run it: `docs/CONTRIBUTING.md`, "Running it unattended".
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_protocol::EntityKind;
-use bevy::prelude::*;
 
 use super::ProbeClock;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::entities::{Equipment, HeldAttached, ATTACH_SLOT_NAMES};
 use crate::names::NameCache;
 use crate::net::{Guid, NetEntity};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 
 /// Census radius in yards, past what the server streams; `WOW_DRESS_CENSUS_RADIUS` overrides.
 const DEFAULT_RADIUS: f32 = 120.0;

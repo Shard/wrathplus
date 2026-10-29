@@ -1,5 +1,5 @@
 use super::*;
-use crate::wrath_events::{WrathEventAdapter, WrathDispatch};
+use crate::wrath_events::{WrathDispatch, WrathEventAdapter};
 
 fn preview() -> Vec<u8> {
     [
@@ -81,13 +81,34 @@ fn next_mail_keeps_sender_previews_in_wire_order() {
     let mut body = query(0.0, 0);
     body[4..8].copy_from_slice(&2u32.to_le_bytes());
     body.extend(preview());
-    body.extend([0u64.to_le_bytes().as_slice(), &7u32.to_le_bytes(), &3u32.to_le_bytes(), &62u32.to_le_bytes(), &5.0f32.to_le_bytes()].concat());
+    body.extend(
+        [
+            0u64.to_le_bytes().as_slice(),
+            &7u32.to_le_bytes(),
+            &3u32.to_le_bytes(),
+            &62u32.to_le_bytes(),
+            &5.0f32.to_le_bytes(),
+        ]
+        .concat(),
+    );
     match &decode(MSG_QUERY_NEXT_MAIL_TIME, &body).unwrap()[0] {
         SessionEvent::NextMailTime { previews, .. } => assert_eq!(
             previews,
             &vec![
-                MailPreview { sender: 42, entry: 0, kind: 0, stationery: 41, delay: -1.0 },
-                MailPreview { sender: 0, entry: 7, kind: 3, stationery: 62, delay: 5.0 },
+                MailPreview {
+                    sender: 42,
+                    entry: 0,
+                    kind: 0,
+                    stationery: 41,
+                    delay: -1.0
+                },
+                MailPreview {
+                    sender: 0,
+                    entry: 7,
+                    kind: 3,
+                    stationery: 62,
+                    delay: 5.0
+                },
             ]
         ),
         other => panic!("{other:?}"),

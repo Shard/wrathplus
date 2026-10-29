@@ -85,12 +85,14 @@ fn stale_epoch_and_retirement_refuse_pending_taxi_ack() {
     let next = ready(&shared, 3);
     next.observe_taxi_spline(&spline(7, 91));
     // A server near teleport (`MSG_MOVE_TELEPORT_ACK` order) ends the flight path.
-    next.raise_mover_barrier(wrathplus_protocol::wrath_authority::MoverOrder::TeleportNear {
-        mover_guid: 7,
-        counter: 1,
-        position: [5.0; 3],
-        orientation: 0.0,
-    })
+    next.raise_mover_barrier(
+        wrathplus_protocol::wrath_authority::MoverOrder::TeleportNear {
+            mover_guid: 7,
+            counter: 1,
+            position: [5.0; 3],
+            orientation: 0.0,
+        },
+    )
     .unwrap();
     assert_eq!(ack(&next, 91), 0);
 }

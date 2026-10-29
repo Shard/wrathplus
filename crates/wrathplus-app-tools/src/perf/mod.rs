@@ -93,7 +93,10 @@ impl Plugin for PerfPlugin {
                     stats::sample_frame_time,
                 ),
             )
-            .add_systems(Update, hud::pill_quads.in_set(crate::app_core::schedule::UiQuadAppend))
+            .add_systems(
+                Update,
+                hud::pill_quads.in_set(crate::app_core::schedule::UiQuadAppend),
+            )
             // `Last`, so a row carries all of this frame's Stream chain; it runs untraced too, to
             // reset the per-frame counters.
             .add_systems(Last, trace::trace_stream);

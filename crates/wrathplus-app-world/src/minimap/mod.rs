@@ -124,7 +124,7 @@ fn minimap_day_tint(ambient: [f32; 3], diffuse: [f32; 3]) -> [f32; 3] {
 /// Stream a `md5translate.trs` hit off-thread as a minimap tile (`BlpVariant::MapTile`: gamma
 /// bytes, no sRGB decode, as the reference's `GL_SKIP_DECODE_EXT` sampler; clamp, mip 0, linear).
 /// Every consumer must decode after the filter or draw ~2× too bright: the outdoor quads set
-/// [`UiQuad::gamma_texel`](crate::ui_pass::UiQuad::gamma_texel), and the interior composite's
+/// [`UiQuad::gamma_texel`](crate::overlay::UiQuad::gamma_texel), and the interior composite's
 /// alpha-test arm decodes itself.
 fn load_tile(asset_server: &AssetServer) -> impl Fn(&str) -> Handle<Image> + '_ {
     move |hash: &str| {

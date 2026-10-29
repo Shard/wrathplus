@@ -17,8 +17,8 @@ use bevy::prelude::*;
 use wrathplus_protocol::wrath_arena_team::Command as ArenaTeam;
 use wrathplus_ui::script::{UiScript, WrathChatVerbRequest};
 
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::session::ObjectStore;
+use crate::net::{ClientCommand, NetCommands};
 
 /// `0x76ee30`'s character count must stay under `0x31`.
 const MAX_NAME_CHARS: usize = 48;

@@ -55,7 +55,9 @@ fn vm() -> UiScript {
         backgrounds: HashMap::from([((2, 1), "Orc".to_string())]),
         names: HashMap::from([(
             (1, 0),
-            ["Agamand", "Andromath", "Antonidas", "Nielas"].map(String::from).to_vec(),
+            ["Agamand", "Andromath", "Antonidas", "Nielas"]
+                .map(String::from)
+                .to_vec(),
         )]),
     });
     s.run("ResetCharCustomize()").unwrap();
@@ -98,12 +100,14 @@ fn the_lists_answer_triples_and_the_selection_reads_back_at_once() {
         "HORN"
     );
     assert_eq!(
-        s.eval::<String>("return GetCreateBackgroundModel()").unwrap(),
+        s.eval::<String>("return GetCreateBackgroundModel()")
+            .unwrap(),
         "Orc"
     );
     s.run("SetSelectedRace(1)").unwrap();
     assert_eq!(
-        s.eval::<String>("return GetCreateBackgroundModel()").unwrap(),
+        s.eval::<String>("return GetCreateBackgroundModel()")
+            .unwrap(),
         "Human",
         "no seeded stage: the race file"
     );

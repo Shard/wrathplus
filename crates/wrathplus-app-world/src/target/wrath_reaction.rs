@@ -22,10 +22,10 @@ use wrathplus_formats::{faction_flags, reputation_rank, template_flags, FactionC
 use wrathplus_protocol::types::Field;
 
 use super::{controller, Context};
+use crate::app_core::session::ObjectStore;
 use crate::net::wrath_faction_capture::ForcedReactions;
 use crate::net::wrath_vehicle::VehicleWorld;
 use crate::net::Reputations;
-use crate::app_core::session::ObjectStore;
 use crate::spell::group_relation::GroupRoster;
 use crate::wrath_vehicle_seats::VehicleSeats;
 

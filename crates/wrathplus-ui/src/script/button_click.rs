@@ -98,7 +98,9 @@ pub(crate) fn click_button(lua: &Lua, id: u32, button: &str, down: bool, scripte
     for script in ["PreClick", "OnClick", "PostClick"] {
         let args = vec![btn.clone(), Value::Boolean(down)];
         if let Err(e) = event::fire_widget_handler(lua, id, script, args) {
-            lua.app_data_mut::<Model>().expect("model app_data").record_script_error(e.to_string());
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .record_script_error(e.to_string());
         }
     }
     // A nameplate click selects its unit, from the pointer or `Click()` alike (the plate's

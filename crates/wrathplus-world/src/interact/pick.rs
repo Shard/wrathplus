@@ -4,12 +4,12 @@
 
 use std::sync::Arc;
 
-use wrathplus_assets::coords::wow_to_bevy;
-use wrathplus_formats::RenderSubmesh;
 use bevy::camera::primitives::Aabb;
 use bevy::mesh::{Indices, VertexAttributeValues};
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
+use wrathplus_assets::coords::wow_to_bevy;
+use wrathplus_formats::RenderSubmesh;
 
 use super::WorldObject;
 

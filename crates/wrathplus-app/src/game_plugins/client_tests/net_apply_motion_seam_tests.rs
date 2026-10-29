@@ -8,11 +8,11 @@
 
 use std::time::Duration;
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{MonsterMoveFacing, ObjectType, RelayVerb};
 use wrathplus_protocol::{
     EntityKind, ObjectFields, SessionEvent, SessionEventKind, SplineInterpolation,
 };
-use bevy::prelude::*;
 
 use crate::motion::RemoteMotion;
 use crate::motion::Spline;

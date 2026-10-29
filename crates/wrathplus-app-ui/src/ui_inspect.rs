@@ -19,12 +19,12 @@ use wrathplus_ui::script::{
     InspectView, InvSlotView, InventorySlots, ScriptValue, UiScript, WrathInspectTalents,
 };
 
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::session::ObjectStore;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::net::{ClientCommand, GuidIndex, NetCommands};
-use crate::app_core::session::ObjectStore;
 use crate::portrait::InspectBooth;
-use crate::app_core::schedule::UiFeed;
 
 /// The reference's `InspectFrame.unit`. The token, not the guid, is the identity: the reference
 /// re-reads it on every retarget, so `"target"` follows the selection.

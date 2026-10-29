@@ -38,14 +38,14 @@ use bevy::prelude::*;
 use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_formats::FootstepCatalog;
 
-use crate::creature_anim::{is_footstep_sound, AnimSoundEvent, MovementState};
 use crate::app_core::movement::move_flags;
-use crate::entities::Creatures;
+use crate::app_core::movement::swim_enter_depth;
+use crate::app_core::session::ObjectStore;
 use crate::app_core::state::CollisionHeight;
+use crate::creature_anim::{is_footstep_sound, AnimSoundEvent, MovementState};
+use crate::entities::Creatures;
 use crate::items::Items;
 use crate::net::{NetCommands, NetEntity};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::movement::swim_enter_depth;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 use wrathplus_protocol::EntityKind;
 use wrathplus_world::schedule::WorldStage;

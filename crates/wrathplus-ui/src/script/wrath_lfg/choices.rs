@@ -95,7 +95,7 @@ pub(super) fn install(lua: &mlua::Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{WrathLfgCatalog};
+    use crate::script::WrathLfgCatalog;
 
     #[test]
     fn choice_union_reuses_table_and_preserves_tuple_holes() {

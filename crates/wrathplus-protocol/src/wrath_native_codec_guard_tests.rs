@@ -8,7 +8,10 @@ use std::path::Path;
 fn wrath_sources(dir: &Path, inside: bool, out: &mut Vec<std::path::PathBuf>) {
     for entry in std::fs::read_dir(dir).expect("read src") {
         let path = entry.expect("entry").path();
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
         let wrath = inside || name.starts_with("wrath_");
         if path.is_dir() {
             wrath_sources(&path, wrath, out);

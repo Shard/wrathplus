@@ -24,10 +24,6 @@ fn raid_rows(group: &GroupState, self_guid: Option<u64>) -> impl Iterator<Item =
 }
 
 /// The guid at a 1-based raid row, [`raid_row_guids`]`[index - 1]` without the allocation.
-pub fn raid_row_guid(
-    group: &GroupState,
-    self_guid: Option<u64>,
-    index: usize,
-) -> Option<u64> {
+pub fn raid_row_guid(group: &GroupState, self_guid: Option<u64>, index: usize) -> Option<u64> {
     raid_rows(group, self_guid).nth(index.checked_sub(1)?)
 }

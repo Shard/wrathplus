@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 
-use crate::app_core::session::SelfPlayer;
 use crate::app_core::group::GroupState;
+use crate::app_core::session::SelfPlayer;
 
 pub(crate) struct ProbePartnerPlugin;
 

@@ -80,13 +80,20 @@ impl super::UiScript {
 
 /// The quest's incomplete-objective mask (`0x5e2950`): -1 when complete.
 fn incomplete_mask(m: &Model, quest_id: u32) -> Option<u32> {
-    let e = m.quest_log.entries.iter().find(|e| !e.is_header && e.quest_id == quest_id)?;
+    let e = m
+        .quest_log
+        .entries
+        .iter()
+        .find(|e| !e.is_header && e.quest_id == quest_id)?;
     if e.complete == 1 {
         return Some(u32::MAX);
     }
     // Bits are template slots (`0x5e2950`): an empty or source-item slot shifts rows, not bits.
     let open = e.objectives.iter().filter(|o| !o.finished);
-    Some(open.filter_map(|o| o.poi_bit).fold(0, |mask, b| mask | 1 << b))
+    Some(
+        open.filter_map(|o| o.poi_bit)
+            .fold(0, |mask, b| mask | 1 << b),
+    )
 }
 
 /// The blob a quest's icon marks on the displayed map, projected: the turn-in when complete,
@@ -94,17 +101,21 @@ fn incomplete_mask(m: &Model, quest_id: u32) -> Option<u32> {
 fn icon(m: &Model, quest_id: u32) -> Option<(bool, f32, f32, i32)> {
     let mask = incomplete_mask(m, quest_id)?;
     let complete = mask == u32::MAX;
-    let poi = m.wrath_quest_poi.pois.iter().find(|p| p.quest_id == quest_id)?;
+    let poi = m
+        .wrath_quest_poi
+        .pois
+        .iter()
+        .find(|p| p.quest_id == quest_id)?;
     let project = m.world_loc_projector.as_ref()?;
     let selection = m.map_selection();
-    poi.blobs
-        .iter()
-        .filter(|b| marks(mask, b))
-        .find_map(|b| {
-            let (x, y) = centroid(b);
-            let (u, v) = project(selection, b.map_id, x, y)?;
-            (u * v).abs().gt(&f32::EPSILON).then_some((complete, u, v, b.objective_index))
-        })
+    poi.blobs.iter().filter(|b| marks(mask, b)).find_map(|b| {
+        let (x, y) = centroid(b);
+        let (u, v) = project(selection, b.map_id, x, y)?;
+        (u * v)
+            .abs()
+            .gt(&f32::EPSILON)
+            .then_some((complete, u, v, b.objective_index))
+    })
 }
 
 /// Whether the icon would mark this blob: the turn-in when complete, else an incomplete objective.
@@ -118,7 +129,10 @@ fn marks(mask: u32, b: &WrathQuestPoiBlob) -> bool {
 
 fn centroid(b: &WrathQuestPoiBlob) -> (f32, f32) {
     let n = b.points.len().max(1) as f32;
-    let (sx, sy) = b.points.iter().fold((0.0, 0.0), |(x, y), p| (x + p.0 as f32, y + p.1 as f32));
+    let (sx, sy) = b
+        .points
+        .iter()
+        .fold((0.0, 0.0), |(x, y), p| (x + p.0 as f32, y + p.1 as f32));
     (sx / n, sy / n)
 }
 
@@ -128,7 +142,11 @@ fn poi_area(m: &Model, quest_id: u32) -> Option<(u32, u32)> {
     let shown = displayed_wma(wm).and_then(|id| wm.areas.get(&id))?;
     let floor = floor_row(wm).map_or(0, |f| f.floor_index);
     let mask = incomplete_mask(m, quest_id)?;
-    let poi = m.wrath_quest_poi.pois.iter().find(|p| p.quest_id == quest_id)?;
+    let poi = m
+        .wrath_quest_poi
+        .pois
+        .iter()
+        .find(|p| p.quest_id == quest_id)?;
     let (px, py) = m.wrath_quest_poi.player.unwrap_or_default();
     let mut best = None;
     let mut nearest: Option<(u32, f32)> = None;
@@ -141,7 +159,10 @@ fn poi_area(m: &Model, quest_id: u32) -> Option<(u32, u32)> {
         };
         if row.map_id == shown.map_id {
             let (cx, cy) = centroid(b);
-            let key = (floor.abs_diff(b.floor), (px - cx).powi(2) + (py - cy).powi(2));
+            let key = (
+                floor.abs_diff(b.floor),
+                (px - cx).powi(2) + (py - cy).powi(2),
+            );
             if nearest.is_none_or(|n| key.0 < n.0 || (key.0 == n.0 && key.1 < n.1)) {
                 nearest = Some(key);
                 best = Some((b.area_id, b.floor));
@@ -155,8 +176,17 @@ fn poi_area(m: &Model, quest_id: u32) -> Option<(u32, u32)> {
 
 /// `0x5e2b60`'s fallback: the quest-log header's top zone's `WorldMapArea` row, floor 0.
 fn zone_area(m: &Model, quest_id: u32) -> Option<u32> {
-    let (_, zone) = m.wrath_quest_poi.zones.iter().find(|(q, _)| *q == quest_id)?;
-    m.worldmap.areas.values().filter(|a| a.area_id == *zone).map(|a| a.id).min()
+    let (_, zone) = m
+        .wrath_quest_poi
+        .zones
+        .iter()
+        .find(|(q, _)| *q == quest_id)?;
+    m.worldmap
+        .areas
+        .values()
+        .filter(|a| a.area_id == *zone)
+        .map(|a| a.id)
+        .min()
 }
 
 fn log_index(m: &Model, quest_id: u32) -> Option<usize> {
@@ -169,7 +199,9 @@ fn log_index(m: &Model, quest_id: u32) -> Option<usize> {
 
 /// A quest-log row's special item slot, by 1-based log index (`0x5e0da0`).
 fn special_slot(m: &Model, index: i64) -> Option<(i64, u32)> {
-    let entry = usize::try_from(index - 1).ok().and_then(|i| m.quest_log.entries.get(i))?;
+    let entry = usize::try_from(index - 1)
+        .ok()
+        .and_then(|i| m.quest_log.entries.get(i))?;
     m.wrath_quest_poi
         .special_items
         .iter()
@@ -202,10 +234,10 @@ fn arg(args: &MultiValue, i: usize) -> Value {
     args.get(i).cloned().unwrap_or(Value::Nil)
 }
 
-#[path = "wrath_quest_poi_order.rs"]
-pub(crate) mod order;
 #[path = "wrath_quest_poi_blob.rs"]
 pub(crate) mod blob;
+#[path = "wrath_quest_poi_order.rs"]
+pub(crate) mod order;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // QuestMapUpdateAllQuests() (`0x5e63d0` → `0x5e5a50`) → how many log quests have a POI on the
@@ -226,24 +258,39 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             .filter(|&q| q > 0)
             .and_then(|q| poi_area(&m, q).or_else(|| zone_area(&m, q).map(|a| (a, 0))))
             .unwrap_or((0, 0));
-        Ok(MultiValue::from_vec(vec![Value::Integer(area.into()), Value::Integer(floor.into())]))
+        Ok(MultiValue::from_vec(vec![
+            Value::Integer(area.into()),
+            Value::Integer(floor.into()),
+        ]))
     })?;
     // QuestPOIGetQuestIDByVisibleIndex(index) (`0x5e5750`) → questID, quest-log index.
     set(lua, "QuestPOIGetQuestIDByVisibleIndex", |lua, args| {
-        let i = number(lua, arg(&args, 0), "Usage: QuestPOIGetQuestIDByVisibleIndex(index)")?;
+        let i = number(
+            lua,
+            arg(&args, 0),
+            "Usage: QuestPOIGetQuestIDByVisibleIndex(index)",
+        )?;
         let m = lua.app_data_ref::<Model>().expect("model app_data");
-        let Some(&quest) = usize::try_from(i - 1).ok().filter(|&i| i < 25).and_then(|i| m.wrath_quest_poi.visible.get(i)) else {
+        let Some(&quest) = usize::try_from(i - 1)
+            .ok()
+            .filter(|&i| i < 25)
+            .and_then(|i| m.wrath_quest_poi.visible.get(i))
+        else {
             return Ok(MultiValue::new());
         };
         let index = log_index(&m, quest).map_or(0, |i| i as i64);
-        Ok(MultiValue::from_vec(vec![Value::Integer(quest.into()), Value::Integer(index)]))
+        Ok(MultiValue::from_vec(vec![
+            Value::Integer(quest.into()),
+            Value::Integer(index),
+        ]))
     })?;
     // QuestPOIGetIconInfo(questID) (`0x5e0590`) → completed, x, y, objective on the displayed
     // map; nothing off it.
     set(lua, "QuestPOIGetIconInfo", |lua, args| {
         let q = number(lua, arg(&args, 0), "Usage: QuestPOIGetIconInfo(questID)")?;
         let m = lua.app_data_ref::<Model>().expect("model app_data");
-        let Some((complete, x, y, objective)) = u32::try_from(q).ok().and_then(|q| icon(&m, q)) else {
+        let Some((complete, x, y, objective)) = u32::try_from(q).ok().and_then(|q| icon(&m, q))
+        else {
             return Ok(MultiValue::new());
         };
         Ok(MultiValue::from_vec(vec![
@@ -260,13 +307,19 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // three nils for a header or a miss.
     set(lua, "GetQuestPOILeaderBoard", |lua, args| {
         let objective = number(lua, arg(&args, 0), "Usage: GetQuestLogLeaderBoard(index)")?;
-        let quest = lua.coerce_number(arg(&args, 1))?.map_or(0, |n| n.round_ties_even() as i64);
+        let quest = lua
+            .coerce_number(arg(&args, 1))?
+            .map_or(0, |n| n.round_ties_even() as i64);
         let m = lua.app_data_ref::<Model>().expect("model app_data");
         let line = usize::try_from(quest - 1)
             .ok()
             .and_then(|i| m.quest_log.entries.get(i))
             .filter(|e| !e.is_header)
-            .and_then(|e| usize::try_from(objective - 1).ok().and_then(|o| e.objectives.get(o)));
+            .and_then(|e| {
+                usize::try_from(objective - 1)
+                    .ok()
+                    .and_then(|o| e.objectives.get(o))
+            });
         Ok(MultiValue::from_vec(match line {
             Some(l) => vec![
                 Value::String(lua.create_string(&l.text)?),
@@ -278,14 +331,22 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     })?;
     // SortQuestWatches() (`0x5e64b0`) → whether the watch order changed. Labelled: the sort
     // `0x5e5c10` is unread; the order stands.
-    set(lua, "SortQuestWatches", |_, _| Ok(MultiValue::from_vec(vec![Value::Boolean(false)])))?;
+    set(lua, "SortQuestWatches", |_, _| {
+        Ok(MultiValue::from_vec(vec![Value::Boolean(false)]))
+    })?;
 
     // ── the quest log's special item: the bag slot the host names ──
     // GetQuestLogSpecialItemInfo(index) (`0x5e52d0`) → link, icon, charges.
     set(lua, "GetQuestLogSpecialItemInfo", |lua, args| {
-        let i = number(lua, arg(&args, 0), "Usage: GetQuestLogSpecialItemInfo(index)")?;
+        let i = number(
+            lua,
+            arg(&args, 0),
+            "Usage: GetQuestLogSpecialItemInfo(index)",
+        )?;
         let m = lua.app_data_ref::<Model>().expect("model app_data");
-        let Some(slot) = special_slot(&m, i).and_then(|(b, s)| m.containers.get(&b)?.slots.get(&s).cloned()) else {
+        let Some(slot) =
+            special_slot(&m, i).and_then(|(b, s)| m.containers.get(&b)?.slots.get(&s).cloned())
+        else {
             return Ok(MultiValue::new());
         };
         let text = |s: &Option<String>| -> mlua::Result<Value> {
@@ -303,7 +364,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // GetQuestLogSpecialItemCooldown(index) (`0x5e53d0`) → start, duration, enable: the slot's
     // cooldown as GetContainerItemCooldown reads it.
     set(lua, "GetQuestLogSpecialItemCooldown", |lua, args| {
-        let i = number(lua, arg(&args, 0), "Usage: GetQuestLogSpecialItemCooldown(index)")?;
+        let i = number(
+            lua,
+            arg(&args, 0),
+            "Usage: GetQuestLogSpecialItemCooldown(index)",
+        )?;
         let at = {
             let m = lua.app_data_ref::<Model>().expect("model app_data");
             special_slot(&m, i)
@@ -319,7 +384,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // IsQuestLogSpecialItemInRange(index, unit) (`0x5e54c0`) → 1, 0 or nil. Labelled: the item
     // spell's range check `0x809610` needs host range data; this answers nil, "no range".
     set(lua, "IsQuestLogSpecialItemInRange", |lua, args| {
-        number(lua, arg(&args, 0), "Usage: IsQuestLogSpecialItemInRange(index, unit)")?;
+        number(
+            lua,
+            arg(&args, 0),
+            "Usage: IsQuestLogSpecialItemInRange(index, unit)",
+        )?;
         Ok(MultiValue::from_vec(vec![Value::Nil]))
     })?;
     // UseQuestLogSpecialItem(index) (`0x5e5640`): the item used, as from its bag slot.
@@ -345,7 +414,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let i = number(
                 lua,
                 index,
-                &format!("Usage: {}:SetQuestLogSpecialItem(index)", name.unwrap_or_else(|| "<unnamed>".into())),
+                &format!(
+                    "Usage: {}:SetQuestLogSpecialItem(index)",
+                    name.unwrap_or_else(|| "<unnamed>".into())
+                ),
             )?;
             let at = {
                 let m = lua.app_data_ref::<Model>().expect("model app_data");
@@ -372,24 +444,51 @@ mod tests {
         let mut s = UiScript::new().unwrap();
         s.set_quest_log(QuestLogState {
             entries: vec![
-                QuestLogEntryView { title: "Zone".into(), is_header: true, ..Default::default() },
+                QuestLogEntryView {
+                    title: "Zone".into(),
+                    is_header: true,
+                    ..Default::default()
+                },
                 QuestLogEntryView {
                     quest_id: 10,
                     title: "Kill".into(),
                     objectives: vec![
-                        QuestLogObjectiveView { text: "Wolves: 2/5".into(), kind: "monster".into(), finished: false, poi_bit: Some(0), ..Default::default() },
-                        QuestLogObjectiveView { text: "Bears: 5/5".into(), kind: "monster".into(), finished: true, poi_bit: Some(1), ..Default::default() },
+                        QuestLogObjectiveView {
+                            text: "Wolves: 2/5".into(),
+                            kind: "monster".into(),
+                            finished: false,
+                            poi_bit: Some(0),
+                            ..Default::default()
+                        },
+                        QuestLogObjectiveView {
+                            text: "Bears: 5/5".into(),
+                            kind: "monster".into(),
+                            finished: true,
+                            poi_bit: Some(1),
+                            ..Default::default()
+                        },
                     ],
                     ..Default::default()
                 },
-                QuestLogEntryView { quest_id: 11, title: "Done".into(), complete: 1, ..Default::default() },
-                QuestLogEntryView { quest_id: 12, title: "Elsewhere".into(), ..Default::default() },
+                QuestLogEntryView {
+                    quest_id: 11,
+                    title: "Done".into(),
+                    complete: 1,
+                    ..Default::default()
+                },
+                QuestLogEntryView {
+                    quest_id: 12,
+                    title: "Elsewhere".into(),
+                    ..Default::default()
+                },
             ],
             num_quests: 3,
             ..Default::default()
         });
         // Map 0 projects to the displayed map; anything else is off it.
-        s.set_world_loc_projector(Box::new(|_, map, x, y| (map == 0).then_some((x / 100.0, y / 100.0))));
+        s.set_world_loc_projector(Box::new(|_, map, x, y| {
+            (map == 0).then_some((x / 100.0, y / 100.0))
+        }));
         let blob = |objective_index, map_id, points: Vec<(i32, i32)>| WrathQuestPoiBlob {
             objective_index,
             map_id,
@@ -397,9 +496,21 @@ mod tests {
             ..Default::default()
         };
         s.set_wrath_quest_pois(vec![
-            WrathQuestPoi { quest_id: 10, blobs: vec![blob(1, 0, vec![(10, 10)]), blob(0, 0, vec![(20, 40), (40, 60)])] },
-            WrathQuestPoi { quest_id: 11, blobs: vec![blob(-1, 0, vec![(50, 50)])] },
-            WrathQuestPoi { quest_id: 12, blobs: vec![blob(0, 1, vec![(50, 50)])] },
+            WrathQuestPoi {
+                quest_id: 10,
+                blobs: vec![
+                    blob(1, 0, vec![(10, 10)]),
+                    blob(0, 0, vec![(20, 40), (40, 60)]),
+                ],
+            },
+            WrathQuestPoi {
+                quest_id: 11,
+                blobs: vec![blob(-1, 0, vec![(50, 50)])],
+            },
+            WrathQuestPoi {
+                quest_id: 12,
+                blobs: vec![blob(0, 1, vec![(50, 50)])],
+            },
         ]);
         s
     }
@@ -420,22 +531,37 @@ mod tests {
         ] {
             assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
         }
-        assert!(s.run("QuestPOIGetIconInfo()").is_err() && s.run("GetQuestPOILeaderBoard()").is_err());
+        assert!(
+            s.run("QuestPOIGetIconInfo()").is_err() && s.run("GetQuestPOILeaderBoard()").is_err()
+        );
     }
 
     #[test]
     fn blob_objectives_are_template_slots_not_leaderboard_rows() {
         let s = vm();
-        s.model_mut().quest_log.entries[1].objectives.iter_mut().zip([1, 0]).for_each(|(o, b)| o.poi_bit = Some(b));
-        let (x, objective) = s.eval::<(f64, i64)>("QuestMapUpdateAllQuests() local _, x, _, o = QuestPOIGetIconInfo(10) return x, o").unwrap();
+        s.model_mut().quest_log.entries[1]
+            .objectives
+            .iter_mut()
+            .zip([1, 0])
+            .for_each(|(o, b)| o.poi_bit = Some(b));
+        let (x, objective) = s
+            .eval::<(f64, i64)>(
+                "QuestMapUpdateAllQuests() local _, x, _, o = QuestPOIGetIconInfo(10) return x, o",
+            )
+            .unwrap();
         assert!((x - 0.1).abs() < 1e-6 && objective == 1, "{x} {objective}");
     }
 
     #[test]
     fn special_items_read_their_bag_slot() {
         let mut s = vm();
-        assert!(s.eval::<bool>("return select('#', GetQuestLogSpecialItemInfo(2)) == 0").unwrap());
-        let mut bag = ContainerState { num_slots: 4, ..Default::default() };
+        assert!(s
+            .eval::<bool>("return select('#', GetQuestLogSpecialItemInfo(2)) == 0")
+            .unwrap());
+        let mut bag = ContainerState {
+            num_slots: 4,
+            ..Default::default()
+        };
         bag.slots.insert(
             2,
             ContainerSlot {
@@ -451,7 +577,10 @@ mod tests {
         assert!(s
             .eval::<bool>("local l, t, c = GetQuestLogSpecialItemInfo(2) return l == '|Hitem:33|h[Rune]|h' and t:find('Rune') ~= nil and c == 1 and select('#', GetQuestLogSpecialItemInfo(3)) == 0 and IsQuestLogSpecialItemInRange(2, 'target') == nil")
             .unwrap());
-        s.run("GetQuestLogSpecialItemCooldown(2) UseQuestLogSpecialItem(2) UseQuestLogSpecialItem(4)").unwrap();
+        s.run(
+            "GetQuestLogSpecialItemCooldown(2) UseQuestLogSpecialItem(2) UseQuestLogSpecialItem(4)",
+        )
+        .unwrap();
         assert!(s.run("UseQuestLogSpecialItem()").is_err());
     }
 
@@ -459,12 +588,22 @@ mod tests {
     fn quest_world_map_area_prefers_the_shown_map_then_the_nearest_then_the_header_zone() {
         use crate::script::worldmap::WorldMapAreaView;
         let mut s = vm();
-        let area = |id, map_id, area_id| WorldMapAreaView { id, map_id, area_id, ..Default::default() };
+        let area = |id, map_id, area_id| WorldMapAreaView {
+            id,
+            map_id,
+            area_id,
+            ..Default::default()
+        };
         s.set_world_map_areas(
-            [area(14, 1, 0), area(141, 1, 141), area(23, 0, 139), area(30, 1, 331)]
-                .into_iter()
-                .map(|a| (a.id, a))
-                .collect(),
+            [
+                area(14, 1, 0),
+                area(141, 1, 141),
+                area(23, 0, 139),
+                area(30, 1, 331),
+            ]
+            .into_iter()
+            .map(|a| (a.id, a))
+            .collect(),
             Vec::new(),
         );
         let blob = |objective_index, area_id, x| WrathQuestPoiBlob {
@@ -477,14 +616,23 @@ mod tests {
             // Quest 10's objective 1 is finished, so its blob never counts.
             WrathQuestPoi {
                 quest_id: 10,
-                blobs: vec![blob(1, 141, 0), blob(0, 23, 0), blob(0, 141, 900), blob(0, 30, 100)],
+                blobs: vec![
+                    blob(1, 141, 0),
+                    blob(0, 23, 0),
+                    blob(0, 141, 900),
+                    blob(0, 30, 100),
+                ],
             },
-            WrathQuestPoi { quest_id: 11, blobs: vec![blob(-1, 23, 0)] },
+            WrathQuestPoi {
+                quest_id: 11,
+                blobs: vec![blob(-1, 23, 0)],
+            },
         ]);
         s.set_wrath_quest_player_position(Some((120.0, 0.0)));
         s.set_wrath_quest_zones(vec![(12, 331), (11, 139)]);
         let at = |s: &UiScript, q: u32| {
-            s.eval::<(i64, i64)>(&format!("return GetQuestWorldMapAreaID({q})")).unwrap()
+            s.eval::<(i64, i64)>(&format!("return GetQuestWorldMapAreaID({q})"))
+                .unwrap()
         };
         // Nothing displayed: no POI leg, so the header zone answers.
         assert_eq!(at(&s, 10), (0, 0));
@@ -495,7 +643,11 @@ mod tests {
         // A blob on the shown map and floor wins at once.
         s.model_mut().worldmap.direct_area = Some(141);
         assert_eq!(at(&s, 10), (141, 0));
-        assert_eq!(at(&s, 11), (23, 0), "only another continent's blob: the first");
+        assert_eq!(
+            at(&s, 11),
+            (23, 0),
+            "only another continent's blob: the first"
+        );
         assert_eq!(at(&s, 12), (30, 0), "no POIs: the header zone's row");
         assert_eq!(at(&s, 99), (0, 0), "not in the log");
         assert!(s.run("GetQuestWorldMapAreaID()").is_err());

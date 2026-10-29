@@ -3,9 +3,9 @@
 //! `SPELL_STOLEN` from its own handler on this kind (`crate::combat_log`); no stolen-aura chat line
 //! is invented.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_logs::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_logs::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeSpellLogPackets(pub VecDeque<Packet>);

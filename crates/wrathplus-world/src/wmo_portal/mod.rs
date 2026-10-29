@@ -44,12 +44,12 @@ pub use seed::{down_ray_seeds, floor_z_at, DownRaySeeds};
 
 use crate::terrain_stream::{terrain_height_under, TerrainStreamer};
 use crate::view::WorldCamera;
-use wrathplus_assets::coords::{bevy_to_wow, wow_to_bevy};
-use wrathplus_assets::{AdtTile, WmoGroupNav, WmoModel, WmoPortalInfo};
 use bevy::camera::primitives::{Aabb, Frustum};
 use bevy::camera::Projection;
 use bevy::math::{Affine3A, Vec4};
 use bevy::prelude::*;
+use wrathplus_assets::coords::{bevy_to_wow, wow_to_bevy};
+use wrathplus_assets::{AdtTile, WmoGroupNav, WmoModel, WmoPortalInfo};
 
 /// MOGP EXTERIOR, an outdoor group: it seeds the outside leg, and a portal onto one opens a window.
 const EXTERIOR: u32 = 0x8;

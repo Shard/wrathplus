@@ -235,8 +235,9 @@ pub fn placescan(
     tile_radius: u32,
     filter: &str,
 ) -> Result<()> {
-    let tiles = wrathplus_formats::load_tiles_around(chain, map, center_x, center_y, tile_radius)
-        .with_context(|| format!("loading tiles around ({center_x}, {center_y}) on {map}"))?;
+    let tiles =
+        wrathplus_formats::load_tiles_around(chain, map, center_x, center_y, tile_radius)
+            .with_context(|| format!("loading tiles around ({center_x}, {center_y}) on {map}"))?;
     eprintln!("{} tile(s) loaded", tiles.len());
     let needle = filter.to_ascii_lowercase();
     let mut seen: HashSet<u32> = HashSet::new();

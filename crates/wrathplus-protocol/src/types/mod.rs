@@ -52,25 +52,23 @@ mod update_object;
 mod vendor;
 mod world_state;
 pub use action_bar::{
-    set_action_button, ActionButton, ACTION_KIND_ITEM, ACTION_KIND_MACRO,
-    ACTION_KIND_SPELL,
+    set_action_button, ActionButton, ACTION_KIND_ITEM, ACTION_KIND_MACRO, ACTION_KIND_SPELL,
 };
 pub use addons::{SecureAddon, STANDARD_MODULUS_CRC, STOCK_SECURE_ADDONS};
 pub use area_trigger::area_trigger;
 pub use attack::{AttackSwingError, AttackerState};
 pub use auction::{
     auction_action, auction_duration, auction_error, auction_filter, auction_hello,
-    auction_list_items, auction_place_bid,
-    auction_remove_item, auction_sell_item, AuctionBidderNotification, AuctionCommandTail,
-    AuctionListEntry, AuctionOwnerNotification, AUCTION_PAGE_SIZE, AUCTION_RECORD_BYTES,
+    auction_list_items, auction_place_bid, auction_remove_item, auction_sell_item,
+    AuctionBidderNotification, AuctionCommandTail, AuctionListEntry, AuctionOwnerNotification,
+    AUCTION_PAGE_SIZE, AUCTION_RECORD_BYTES,
 };
-pub use bank::{
-    bank_slot_result, };
+pub use bank::bank_slot_result;
 pub use battlefield::{
     BattlefieldList, BattlefieldPosition, BattlefieldPositions, BattlefieldStatus, PvpLogData,
     PvpLogRow, BATTLEFIELD_POSITIONS_MAX,
 };
-pub use binder::{PlayerBound};
+pub use binder::PlayerBound;
 pub use channel::{channel_notice, ChannelNoticeTail, ChannelNotify};
 pub use chat::{
     chat_tag, ChatMessage, CHAT_MSG_AFK, CHAT_MSG_BATTLEGROUND, CHAT_MSG_BATTLEGROUND_LEADER,
@@ -83,34 +81,28 @@ pub use chat::{
     CHAT_MSG_WHISPER_INFORM, CHAT_MSG_YELL, MACRO_EXPANDED_TYPES,
 };
 pub use client::{
-    channel_list,
-    char_create,
-    creature_query, movement, ping, played_time, text_emote,
+    channel_list, char_create, creature_query, movement, ping, played_time, text_emote,
 };
 pub use combat_log::{
     DamageShield, DispelFailed, DispelledAura, EnchantmentLog, EnvironmentalDamageLog, ExecuteLog,
     PartyKillLog, PeriodicAuraLog, PeriodicTick, SpellDamageLog, SpellDispelLog, SpellEnergizeLog,
     SpellHealLog, SpellInstaKillLog, SpellLogExecute, SpellLogMiss, SpellOutcomeLog,
 };
-pub use death::{
-    AreaSpiritHealerTime, CorpseLocation, ResurrectRequestBody,
-};
-pub use duel::{
-    DuelRequested, DuelWinner,
-};
-pub use gameobject::{GameObjectQueryInfo};
+pub use death::{AreaSpiritHealerTime, CorpseLocation, ResurrectRequestBody};
+pub use duel::{DuelRequested, DuelWinner};
+pub use gameobject::GameObjectQueryInfo;
 pub use gm_ticket::{
-    GmTicket, GMTICKET_QUEUE_ENABLED,
-    GMTICKET_STATUS_DEFAULT, GMTICKET_STATUS_HASTEXT, RESERVED_FOR_FUTURE_USE,
+    GmTicket, GMTICKET_QUEUE_ENABLED, GMTICKET_STATUS_DEFAULT, GMTICKET_STATUS_HASTEXT,
+    RESERVED_FOR_FUTURE_USE,
 };
 pub use gossip::{
-    npc_text_query, select_greeting, GossipOption, GossipPoi,
-    NpcTextBlock, QuestOption, NPC_TEXT_BLOCKS,
+    npc_text_query, select_greeting, GossipOption, GossipPoi, NpcTextBlock, QuestOption,
+    NPC_TEXT_BLOCKS,
 };
 pub use group::{
-    loot_method, member_status, minimap_ping, party_member_mask,
-    party_operation, party_result, patch_auras, GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo, RaidInstanceEntry, RaidTargetUpdate,
-    ReadyCheck, GROUP_MEMBER_ASSISTANT,
+    loot_method, member_status, minimap_ping, party_member_mask, party_operation, party_result,
+    patch_auras, GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo, RaidInstanceEntry,
+    RaidTargetUpdate, ReadyCheck, GROUP_MEMBER_ASSISTANT,
 };
 pub use guild::{
     guild_command, guild_command_error, guild_default_rank, guild_event, guild_presence,
@@ -121,59 +113,51 @@ pub use guild::{
 };
 pub use instance::RaidGroupOnly;
 pub use items::{
-    item_query, open_item, use_item, wrap_item, ItemDamage, ItemInfo,
-    ItemSpellEntry, ItemUseSpell, UseItemTarget, BAG_PLAYER_INVENTORY, ITEM_DYNFLAG_UNLOCKED,
-    ITEM_DYNFLAG_WRAPPED, ITEM_FLAG_LOOTABLE, ITEM_FLAG_WRAPPER, SLOT_BAG_FIRST, SLOT_PACK_FIRST,
+    item_query, open_item, use_item, wrap_item, ItemDamage, ItemInfo, ItemSpellEntry, ItemUseSpell,
+    UseItemTarget, BAG_PLAYER_INVENTORY, ITEM_DYNFLAG_UNLOCKED, ITEM_DYNFLAG_WRAPPED,
+    ITEM_FLAG_LOOTABLE, ITEM_FLAG_WRAPPER, SLOT_BAG_FIRST, SLOT_PACK_FIRST,
 };
 pub use loot::{
-    autostore_loot_item, loot, loot_error, loot_master_give, loot_roll,
-    loot_type, roll_vote, slot_type, ItemPushResult, LootAllPassed, LootItem, LootResponseBody,
-    LootRoll, LootRollWon, LootStartRoll,
+    autostore_loot_item, loot, loot_error, loot_master_give, loot_roll, loot_type, roll_vote,
+    slot_type, ItemPushResult, LootAllPassed, LootItem, LootResponseBody, LootRoll, LootRollWon,
+    LootStartRoll,
 };
 pub use mail::{
-    item_text_query, mail_action, mail_error,
-    mail_message_type, mail_take_money,
-    MailAttachment, MailListEntry,
+    item_text_query, mail_action, mail_error, mail_message_type, mail_take_money, MailAttachment,
+    MailListEntry,
 };
-pub use mirror_timer::{
-    MirrorTimerKind,
-    MirrorTimerStart,
-};
+pub use mirror_timer::{MirrorTimerKind, MirrorTimerStart};
 pub use movement::{
     JumpInfo, MoveMode, MovementInfo, RelayVerb, SpeedKind, SplineMode, TransportPose,
 };
 pub use packet::{CreatureQueryInfo, MonsterMoveFacing};
 pub use pet::{
-    pet_action, pet_tame_failure_key, PetActionEntry, PetMode, PetSpellCooldown,
-    PetSpells, PET_ACTION_SLOTS, PET_ACT_COMMAND, PET_ACT_DISABLED,
-    PET_ACT_ENABLED, PET_ACT_PASSIVE, PET_ACT_REACTION, PET_AUTOCAST_ALLOWED, PET_AUTOCAST_ON,
-    PET_COMMAND_ATTACK, PET_COMMAND_DISMISS, PET_COMMAND_FOLLOW, PET_COMMAND_STAY,
-    PET_COOLDOWN_PERMANENT, PET_REACT_AGGRESSIVE, PET_REACT_DEFENSIVE, PET_REACT_PASSIVE,
-    PET_STATE_BAR_DISABLED, PET_TALK_ATTACK, PET_TALK_ORDER, PET_TYPE_SPELL_FIRST,
-    PET_TYPE_SPELL_LAST, PET_UNUSABLE_UNIT_FLAGS,
+    pet_action, pet_tame_failure_key, PetActionEntry, PetMode, PetSpellCooldown, PetSpells,
+    PET_ACTION_SLOTS, PET_ACT_COMMAND, PET_ACT_DISABLED, PET_ACT_ENABLED, PET_ACT_PASSIVE,
+    PET_ACT_REACTION, PET_AUTOCAST_ALLOWED, PET_AUTOCAST_ON, PET_COMMAND_ATTACK,
+    PET_COMMAND_DISMISS, PET_COMMAND_FOLLOW, PET_COMMAND_STAY, PET_COOLDOWN_PERMANENT,
+    PET_REACT_AGGRESSIVE, PET_REACT_DEFENSIVE, PET_REACT_PASSIVE, PET_STATE_BAR_DISABLED,
+    PET_TALK_ATTACK, PET_TALK_ORDER, PET_TYPE_SPELL_FIRST, PET_TYPE_SPELL_LAST,
+    PET_UNUSABLE_UNIT_FLAGS,
 };
 pub use petition::{
-    petition_result, PetitionQueryResponse, PetitionRename, PetitionShowList, PetitionShowListEntry,
-    PetitionShowSignatures, PetitionSignResults, PetitionSignature, CHARTER_DISPLAY_ID,
-    CHARTER_ITEM_ENTRY, CHARTER_NAME_MAX_LENGTH, ITEM_FLAG_CHARTER, MAX_PETITION_SIGNATURES,
+    petition_result, PetitionQueryResponse, PetitionRename, PetitionShowList,
+    PetitionShowListEntry, PetitionShowSignatures, PetitionSignResults, PetitionSignature,
+    CHARTER_DISPLAY_ID, CHARTER_ITEM_ENTRY, CHARTER_NAME_MAX_LENGTH, ITEM_FLAG_CHARTER,
+    MAX_PETITION_SIGNATURES,
 };
-pub use pose::{set_sheathed, };
-pub use progression::{
-    ExplorationXp, LevelUpInfo, TalentWipeConfirm, XpGain,
-};
+pub use pose::set_sheathed;
+pub use progression::{ExplorationXp, LevelUpInfo, TalentWipeConfirm, XpGain};
 pub use pvp::{InspectHonorStats, PvpCredit};
 pub use quest::{
-    dialog_status, quest_confirm_accept, quest_flags, quest_push_result,
-    CreatureQuestLinks, QuestComplete, QuestConfirmAccept, QuestDetails,
-    QuestGiverList, QuestListEntry, QuestObjective, QuestOfferReward, QuestPushResult,
-    QuestRequestItems, QuestRequiredItem, QuestRewardItem, QuestShareMsg, QuestTemplate,
-    WrathQuestInfo, QUEST_EMOTE_COUNT, QUEST_OBJECTIVES_COUNT, QUEST_PVP_KILL_COUNTER,
-    QUEST_REWARDS_COUNT, QUEST_REWARD_CHOICES_COUNT,
+    dialog_status, quest_confirm_accept, quest_flags, quest_push_result, CreatureQuestLinks,
+    QuestComplete, QuestConfirmAccept, QuestDetails, QuestGiverList, QuestListEntry,
+    QuestObjective, QuestOfferReward, QuestPushResult, QuestRequestItems, QuestRequiredItem,
+    QuestRewardItem, QuestShareMsg, QuestTemplate, WrathQuestInfo, QUEST_EMOTE_COUNT,
+    QUEST_OBJECTIVES_COUNT, QUEST_PVP_KILL_COUNTER, QUEST_REWARDS_COUNT,
+    QUEST_REWARD_CHOICES_COUNT,
 };
-pub use reputation::{
-    FACTION_LIST_LEN,
-    WATCHED_FACTION_NONE,
-};
+pub use reputation::{FACTION_LIST_LEN, WATCHED_FACTION_NONE};
 pub use roster::{
     CharCreateReq, CharEnumItem, Character, CHARACTER_FLAG_GHOST, CHARACTER_FLAG_HIDE_CLOAK,
     CHARACTER_FLAG_HIDE_HELM, CHARACTER_FLAG_RENAME, CHAR_CREATE_NAME_IN_USE,
@@ -181,34 +165,24 @@ pub use roster::{
     RACE_HUMAN,
 };
 pub use social::{
-    friend_list, friend_result, friend_status,
-    who,
-    FriendEntry, FriendOnline, FriendStatusUpdate, WhoEntry, WhoRequest, WhoResults,
-    WHO_MAX_SEARCH_TERMS, WHO_MAX_ZONES,
+    friend_list, friend_result, friend_status, who, FriendEntry, FriendOnline, FriendStatusUpdate,
+    WhoEntry, WhoRequest, WhoResults, WHO_MAX_SEARCH_TERMS, WHO_MAX_ZONES,
 };
 pub use spellbook::SpellCooldown;
 pub use spells::{
-    cancel_aura, cast_spell, CastOutcome, CorpseTarget, SpellCastTargets,
-    SpellChainTargets, SpellGo, SpellStart,
+    cancel_aura, cast_spell, CastOutcome, CorpseTarget, SpellCastTargets, SpellChainTargets,
+    SpellGo, SpellStart,
 };
-pub use stable::{
-    list_stabled_pets, stable_result, stable_swap_pet, unstable_pet,
-    StabledPet,
-};
+pub use stable::{list_stabled_pets, stable_result, stable_swap_pet, unstable_pet, StabledPet};
 pub use summon::{summon_response, SummonRequest};
-pub use tabard::{
-    tabard_vendor_activate, GUILD_EMBLEM_RESULT_MESSAGES,
-};
-pub use taxi::{
-    taxi_reply, TaxiMask,
-};
+pub use tabard::{tabard_vendor_activate, GUILD_EMBLEM_RESULT_MESSAGES};
+pub use taxi::{taxi_reply, TaxiMask};
 pub use trade::{
-    TradeItem,
-    TradeStatus, TradeStatusExtended, TRADE_SLOT_COUNT, TRADE_SLOT_NONTRADED,
+    TradeItem, TradeStatus, TradeStatusExtended, TRADE_SLOT_COUNT, TRADE_SLOT_NONTRADED,
     TRADE_SLOT_TRADED_COUNT,
 };
 pub use trainer::{train_fail, trainer_list, trainer_spell_state, TrainerSpell};
-pub use tutorial::{TutorialFlags};
+pub use tutorial::TutorialFlags;
 pub use update_object::field;
 pub use update_object::{
     power_display_scale, quest_slot_state, CorpseLook, CreateSpline, Field, FieldSpan,
@@ -217,9 +191,7 @@ pub use update_object::{
     AURA_FLAG_EFF_INDEX_MASK, FIELD_PLAYER_SKILL_INFO_1_1, PLAYER_EXPLORED_ZONES_SLOTS,
     PLAYER_QUEST_LOG_SLOTS, PLAYER_SKILL_SLOTS, UNIT_AURA_POSITIVE_SLOTS, UNIT_AURA_SLOTS,
 };
-pub use vendor::{
-    buy_result, sell_result, VendorItem,
-};
+pub use vendor::{buy_result, sell_result, VendorItem};
 pub use world_state::InitWorldStates;
 
 /// World `SMSG_AUTH_RESPONSE` result codes, not realmd's `AuthLogonResult` (`crate::AuthReject`):
@@ -271,7 +243,7 @@ pub const LANGUAGE_ADDON: u32 = 0xFFFF_FFFF;
 pub fn faction_language(race: u8) -> u32 {
     match race {
         2 | 5 | 6 | 8 | 10 => LANGUAGE_ORCISH, // orc, undead, tauren, troll, blood elf
-        _ => LANGUAGE_COMMON, // human, dwarf, night elf, gnome, draenei
+        _ => LANGUAGE_COMMON,                  // human, dwarf, night elf, gnome, draenei
     }
 }
 /// `ChatMsg` values (vmangos `SharedDefines.h:1191-1301`) as `CMSG_MESSAGECHAT`'s `u32` `type`

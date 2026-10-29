@@ -356,4 +356,3 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
 
     Ok(())
 }
-

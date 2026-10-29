@@ -3,9 +3,9 @@
 //! persistent `WDB` cache here to invalidate). Which addons the reply marked secure already reaches
 //! `SessionEvent::Connected`'s `addon_info`.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_bootstrap::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_bootstrap::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeBootstrapPackets(pub VecDeque<Packet>);

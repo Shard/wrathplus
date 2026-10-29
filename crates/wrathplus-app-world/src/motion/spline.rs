@@ -4,15 +4,15 @@
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::{bevy_to_wow, wow_to_bevy};
 use wrathplus_protocol::{CreateSpline, EntityKind, SplineEffect, SplineInterpolation};
-use bevy::prelude::*;
 
 use crate::app_core::movement::swim_enter_depth;
 use crate::app_core::state::CollisionHeight;
 
-use crate::net::NetEntity;
 use crate::app_core::session::ObjectStore;
+use crate::net::NetEntity;
 
 /// A server-dictated path (`SMSG_MONSTER_MOVE`) in raw WoW coordinates, walked at constant speed
 /// over `duration` from `start`; present only while the unit is on it.
@@ -467,12 +467,7 @@ const GROUND_CLAMP_DOWN: f32 = 4.0;
 ///   one walk trace (`0x63162e`), which the `max` reproduces.
 /// - `hover`: the reference ends at `z_before_snap − max(L − 1.0, 0)` (`0x636e81`-`0x636ea9`),
 ///   here `(y + 1.0).min(seat_y)`.
-pub fn grounded_y(
-    seat_y: f32,
-    floor: Option<f32>,
-    water_floor: Option<f32>,
-    hover: bool,
-) -> f32 {
+pub fn grounded_y(seat_y: f32, floor: Option<f32>, water_floor: Option<f32>, hover: bool) -> f32 {
     let mut y = floor.unwrap_or(seat_y);
     if let Some(w) = water_floor {
         y = y.max(w);
@@ -849,7 +844,12 @@ impl GroundClamped {
 /// ```
 ///
 /// A false flag term forces a stop at any depth (the `0x721290` arm), not only a refused start.
-pub(super) fn creature_swim_state(marked: bool, depth: f32, boundary: f32, unit_flags: u32) -> bool {
+pub(super) fn creature_swim_state(
+    marked: bool,
+    depth: f32,
+    boundary: f32,
+    unit_flags: u32,
+) -> bool {
     if !crate::app_core::movement::may_swim(unit_flags) {
         return false; // both legs: without a permit a unit can neither start nor stay
     }
@@ -915,9 +915,9 @@ pub(in crate::motion) fn mark_swimming_creatures(
 #[cfg(test)]
 mod under_floor {
     use avian3d::prelude::*;
-    use wrathplus_protocol::EntityKind;
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
+    use wrathplus_protocol::EntityKind;
 
     use super::{ground_clamp_creatures, GroundClamped};
     use crate::net::NetEntity;
@@ -1399,15 +1399,15 @@ mod server_moved_players {
     use std::time::{Duration, Instant};
 
     use avian3d::prelude::*;
-    use wrathplus_assets::coords::wow_to_bevy;
-    use wrathplus_protocol::EntityKind;
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
+    use wrathplus_assets::coords::wow_to_bevy;
+    use wrathplus_protocol::EntityKind;
 
     use super::{ground_clamp_creatures, ground_derived, CreatureSwimming, GroundClamped, Spline};
+    use crate::app_core::session::Embodied;
     use crate::motion::RemoteMotion;
     use crate::net::NetEntity;
-    use crate::app_core::session::Embodied;
     use wrathplus_world::collision::ColliderEpoch;
 
     /// The rims the waypoints stand on, and the trench floor 2.5 yd below, within the probe.
@@ -1737,9 +1737,9 @@ mod inside_a_hull {
     use std::time::{Duration, Instant};
 
     use avian3d::prelude::*;
-    use wrathplus_protocol::EntityKind;
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
+    use wrathplus_protocol::EntityKind;
 
     use super::{ground_clamp_creatures, GroundClamped, Spline};
     use crate::net::NetEntity;
@@ -1995,8 +1995,9 @@ mod inside_a_hull {
         use wrathplus_assets::coords::wow_to_bevy;
         let data = wrathplus_formats::wow_data_or_skip!();
         let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
-        let hull = wrathplus_formats::load_m2_collision_hull(&mut chain, "World\\Goober\\G_Cage.mdx")
-            .expect("the cage hull");
+        let hull =
+            wrathplus_formats::load_m2_collision_hull(&mut chain, "World\\Goober\\G_Cage.mdx")
+                .expect("the cage hull");
         assert_eq!(hull.positions.len(), 8, "one box");
         let verts: Vec<Vec3> = hull.positions.iter().map(|p| wow_to_bevy(*p)).collect();
         let tris: Vec<[u32; 3]> = hull

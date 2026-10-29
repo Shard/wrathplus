@@ -32,15 +32,15 @@ use bevy::prelude::*;
 use wrathplus_assets::{BillboardInfo, M2Model};
 use wrathplus_formats::BoneScaleAnim;
 
+use crate::app_core::state::QuestGiver;
 use crate::entities::BoneAttach;
 use crate::nameplates::Nameplates;
 use crate::net::GuidIndex;
-use crate::app_core::state::QuestGiver;
+use bevy::mesh::MeshTag;
 use wrathplus_assets::m2_url;
 use wrathplus_assets::WorldAssets;
 use wrathplus_world::billboard::BillboardCard;
 use wrathplus_world::mesh_tag::spawn_tag;
-use bevy::mesh::MeshTag;
 
 use crate::entities::overhead_slot;
 
@@ -127,7 +127,10 @@ fn despawn_marker(commands: &mut Commands, roots: &Query<&QuestMarkerRoot>, root
 fn sync_markers(
     mut commands: Commands,
     quest: Res<QuestGiver>,
-    fm_status: Query<(&crate::net::Guid, &crate::app_core::interaction::FlightMasterStatus)>,
+    fm_status: Query<(
+        &crate::net::Guid,
+        &crate::app_core::interaction::FlightMasterStatus,
+    )>,
     index: Res<GuidIndex>,
     asset_server: Res<AssetServer>,
     assets: Option<Res<WorldAssets>>,

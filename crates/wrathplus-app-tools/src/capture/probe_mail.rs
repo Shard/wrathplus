@@ -19,11 +19,11 @@ use wrathplus_protocol::EntityKind;
 use wrathplus_ui::script::UiScript;
 
 use super::probes::ProbeClock;
-use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
+use crate::app_core::interaction::MailOpen;
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
-use crate::app_core::interaction::MailOpen;
+use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
 
 /// The Goldshire mailbox (AzerothCore `gameobject` guid 26784, entry 142075, map 0).
 const MAILBOX_AT: [f32; 3] = [-9455.99, 45.82, 56.44];

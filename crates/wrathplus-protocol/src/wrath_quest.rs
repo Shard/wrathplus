@@ -123,7 +123,10 @@ pub fn encode(command: &Command) -> io::Result<(u32, Vec<u8>)> {
         Command::SwapQuest { slot1, slot2 } => (0x0193, vec![*slot1, *slot2]),
         Command::PoiQuery { quests } => {
             if quests.len() > MAX_POI_QUERY {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, "POI query count"));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "POI query count",
+                ));
             }
             let mut body = (quests.len() as u32).to_le_bytes().to_vec();
             for quest in quests {

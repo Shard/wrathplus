@@ -1,7 +1,7 @@
 //! Opt-in read-only native-effect fixtures; no extracted assets are written.
+use std::{io::Cursor, path::Path};
 use wrathplus_formats::Chain;
 use wrathplus_m2::wrath::parse_wrath_m2;
-use std::{io::Cursor, path::Path};
 
 #[test]
 fn installed_wrath_native_effect_records() {
@@ -133,8 +133,8 @@ fn installed_wrath_unsupported_ribbon_census() {
     assert!(models > 0 && ribbon_models > 0);
 }
 
-use wrathplus_m2::wrath::WrathTrack;
 use std::collections::BTreeMap;
+use wrathplus_m2::wrath::WrathTrack;
 
 /// How a native track is keyed: global or local, constant, animated or per-sequence.
 fn shape<V: PartialEq + Copy>(t: &WrathTrack<V>) -> &'static str {
@@ -525,7 +525,8 @@ fn installed_wrath_particle_tracks_read_external_anim_keys() {
     }
     let refs: Vec<Option<&[u8]>> = external.iter().map(|b| b.as_deref()).collect();
     let without = wrathplus_formats::parse_m2_particle_emitters(&bytes).unwrap();
-    let with = wrathplus_formats::parse_m2_particle_emitters_with_animations(&bytes, &refs).unwrap();
+    let with =
+        wrathplus_formats::parse_m2_particle_emitters_with_animations(&bytes, &refs).unwrap();
     assert_eq!(without.len(), with.len());
     let gained = without
         .iter()

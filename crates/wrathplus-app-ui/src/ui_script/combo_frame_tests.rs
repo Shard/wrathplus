@@ -62,7 +62,7 @@ fn settle(s: &mut UiScript) {
         r#"local manager = CreateFrame("Frame")
            for i = 1, 40 do UIFrameFade_OnUpdate(manager, 0.05) end"#,
     )
-        .unwrap();
+    .unwrap();
 }
 
 /// 3.3.5's combo event, `UNIT_COMBO_POINTS` for the player, which `ComboFrame_OnEvent` matches

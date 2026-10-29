@@ -34,15 +34,15 @@
 //! 1.12 `SPELLCAST_*` events still fire beside these; the stock 12340 frames do not read them.
 use std::collections::HashMap;
 
+use bevy::prelude::*;
 use wrathplus_formats::SpellDisplay;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use wrathplus_ui::script::{ScriptValue, UiScript, WrathUnitCast};
-use bevy::prelude::*;
 
-use crate::net::{GuidIndex, NetCommands, NetHandlerApp};
 use crate::app_core::session::SelfGuid;
 use crate::app_core::state::Spells;
 use crate::app_core::vm_memo::VmMemo;
+use crate::net::{GuidIndex, NetCommands, NetHandlerApp};
 
 /// One cast lifecycle edge off the wire, queued by its packet's sole owner for [`feed`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

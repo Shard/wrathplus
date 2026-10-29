@@ -17,8 +17,8 @@ fn connected() -> SessionEvent {
 /// offset the VM's `server_now` reads; leaving the world stops the ticker and forgets it.
 #[test]
 fn the_ticker_queries_every_twenty_seconds_and_replies_set_the_offset() {
-    use wrathplus_ui::script::UiScript;
     use std::time::Duration;
+    use wrathplus_ui::script::UiScript;
     let (tx, rx) = crossbeam_channel::unbounded();
     let mut app = App::new();
     app.add_plugins(bevy::state::app::StatesPlugin)

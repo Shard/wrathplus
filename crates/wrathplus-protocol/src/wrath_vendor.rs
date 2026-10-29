@@ -29,7 +29,10 @@ pub const CMSG_REPAIR_ITEM: u32 = 0x02A8;
 static SLOTS: Mutex<Option<(u64, HashMap<u32, u32>)>> = Mutex::new(None);
 
 pub const fn handles(opcode: u16) -> bool {
-    matches!(opcode, SMSG_LIST_INVENTORY | SMSG_SELL_ITEM | SMSG_BUY_ITEM | SMSG_BUY_FAILED)
+    matches!(
+        opcode,
+        SMSG_LIST_INVENTORY | SMSG_SELL_ITEM | SMSG_BUY_ITEM | SMSG_BUY_FAILED
+    )
 }
 
 pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
@@ -75,7 +78,13 @@ pub fn encode_buy_item(vendor: u64, entry: u32, count: u8) -> Vec<u8> {
 }
 
 /// `CMSG_BUY_ITEM_IN_SLOT`: `u64 vendor, u32 item, u32 slot, u64 bag, u8 bagSlot, u32 count`.
-pub fn encode_buy_item_in_slot(vendor: u64, entry: u32, bag: u64, bag_slot: u8, count: u8) -> Vec<u8> {
+pub fn encode_buy_item_in_slot(
+    vendor: u64,
+    entry: u32,
+    bag: u64,
+    bag_slot: u8,
+    count: u8,
+) -> Vec<u8> {
     let mut out = vendor.to_le_bytes().to_vec();
     out.extend(entry.to_le_bytes());
     out.extend(slot_of(vendor, entry).to_le_bytes());
@@ -122,7 +131,10 @@ fn reply(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
                 let _param = u32_le(r)?;
                 u8_le(r)
             }
-            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "vendor refusal length")),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "vendor refusal length",
+            )),
         }
     };
     let events = match opcode {
@@ -155,10 +167,18 @@ fn reply(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
                 reason,
             }]
         }
-        _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "not a vendor opcode")),
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "not a vendor opcode",
+            ))
+        }
     };
     if r.position() as usize != body.len() {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "vendor reply trailing bytes"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "vendor reply trailing bytes",
+        ));
     }
     Ok(events)
 }
@@ -190,8 +210,13 @@ mod tests {
             }
         }
         let events = decode(SMSG_LIST_INVENTORY, &b).unwrap();
-        let [SessionEvent::VendorInventory { vendor, items }] = &events[..] else { panic!() };
-        assert_eq!((*vendor, items.len(), items[1].entry, items[1].price), (0x77, 2, 159, 25));
+        let [SessionEvent::VendorInventory { vendor, items }] = &events[..] else {
+            panic!()
+        };
+        assert_eq!(
+            (*vendor, items.len(), items[1].entry, items[1].price),
+            (0x77, 2, 159, 25)
+        );
         let buy = encode_buy_item(0x77, 159, 5);
         assert_eq!(&buy[12..16], &2u32.to_le_bytes(), "the item's vendor slot");
         assert_eq!(&buy[16..20], &5u32.to_le_bytes());
@@ -233,8 +258,14 @@ mod tests {
                 reason: 2
             }]
         );
-        assert!(decode(SMSG_BUY_FAILED, &buy[..12]).is_err(), "no reason byte");
-        assert!(decode(SMSG_BUY_FAILED, &buy[..14]).is_err(), "a torn parameter");
+        assert!(
+            decode(SMSG_BUY_FAILED, &buy[..12]).is_err(),
+            "no reason byte"
+        );
+        assert!(
+            decode(SMSG_BUY_FAILED, &buy[..14]).is_err(),
+            "a torn parameter"
+        );
 
         let mut bought = 7u64.to_le_bytes().to_vec();
         for v in [3u32, u32::MAX, 1] {

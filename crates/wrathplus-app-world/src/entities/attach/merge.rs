@@ -8,10 +8,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use wrathplus_formats::{ModelBlend, RenderSubmesh};
 use bevy::asset::AssetId;
 use bevy::camera::primitives::{Aabb, MeshAabb};
 use bevy::prelude::*;
+use wrathplus_formats::{ModelBlend, RenderSubmesh};
 
 use wrathplus_assets::materials::WowModelMaterial;
 use wrathplus_formats::CharSkinSlot;

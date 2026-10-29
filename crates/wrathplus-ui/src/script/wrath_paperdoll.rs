@@ -153,7 +153,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-        #[test]
+    #[test]
     fn snapshot_preserves_school_rating_indexes_and_multi_return_shapes() {
         let mut s = UiScript::new().unwrap();
         let mut stats = WrathPaperDollStats {

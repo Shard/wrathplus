@@ -1,9 +1,9 @@
 //! Sole native WHO/WHOIS capture FIFO. No UI, shared projection, or automatic queries.
 //! WHOIS may contain private account data; never log captured packets.
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{wrath_who::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_who::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeWhoPackets(pub VecDeque<Packet>);

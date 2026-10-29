@@ -6,8 +6,8 @@ use std::io::{Cursor, Read, Write};
 use std::net::{Ipv4Addr, TcpStream};
 
 use anyhow::{anyhow, bail, Context, Result};
-use wrathplus_srp::{NormalizedString, PublicKey, SrpClientChallenge, SESSION_KEY_LENGTH};
 use sha1::{Digest, Sha1};
+use wrathplus_srp::{NormalizedString, PublicKey, SrpClientChallenge, SESSION_KEY_LENGTH};
 
 use crate::wire::{read_array, read_f32_le, read_u16_le, read_u32_le, read_u8};
 use crate::{host_port, AuthReject, AUTH_PORT};

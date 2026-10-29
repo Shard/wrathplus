@@ -2,12 +2,12 @@
 
 use super::spell_feed::{build_view, feed_spell_tooltips, ViewCaster, ViewCtx};
 use super::*;
-use crate::items::Items;
-use crate::net::{NetCommands, Objects};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::PlayerActions;
 use crate::app_core::state::Spells;
+use crate::items::Items;
+use crate::net::{NetCommands, Objects};
 
 /// The view alone, for the cell tests; the feed keeps what it read beside it.
 pub(super) fn spell_tooltip_view(
@@ -267,9 +267,11 @@ fn fireball_view_on_real_data() {
     let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
     let spells = Spells {
         catalog: wrathplus_formats::load_spell_catalog(&mut chain).expect("Spell.dbc"),
-        forms: wrathplus_formats::load_shapeshift_forms(&mut chain).expect("SpellShapeshiftForm.dbc"),
+        forms: wrathplus_formats::load_shapeshift_forms(&mut chain)
+            .expect("SpellShapeshiftForm.dbc"),
         ranges: wrathplus_formats::load_spell_ranges(&mut chain).expect("SpellRange.dbc"),
-        cast_times: wrathplus_formats::load_spell_cast_times(&mut chain).expect("SpellCastTimes.dbc"),
+        cast_times: wrathplus_formats::load_spell_cast_times(&mut chain)
+            .expect("SpellCastTimes.dbc"),
         durations: wrathplus_formats::load_spell_durations(&mut chain).expect("SpellDuration.dbc"),
         radii: wrathplus_formats::load_spell_radii(&mut chain).expect("SpellRadius.dbc"),
     };
@@ -413,8 +415,9 @@ fn the_cast_cell_takes_op_10_unclamped() {
         spell_family_flags: 1,
         ..Default::default()
     };
-    spells.catalog =
-        wrathplus_formats::SpellCatalog::from_displays([(900_001, rage_cast)].into_iter().collect());
+    spells.catalog = wrathplus_formats::SpellCatalog::from_displays(
+        [(900_001, rage_cast)].into_iter().collect(),
+    );
     spells.cast_times = wrathplus_formats::SpellCastTimeCatalog::from_rows([(
         5,
         wrathplus_formats::SpellCastTime {
@@ -445,9 +448,11 @@ fn cost_and_cast_cells_on_real_data() {
     let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
     let spells = Spells {
         catalog: wrathplus_formats::load_spell_catalog(&mut chain).expect("Spell.dbc"),
-        forms: wrathplus_formats::load_shapeshift_forms(&mut chain).expect("SpellShapeshiftForm.dbc"),
+        forms: wrathplus_formats::load_shapeshift_forms(&mut chain)
+            .expect("SpellShapeshiftForm.dbc"),
         ranges: wrathplus_formats::load_spell_ranges(&mut chain).expect("SpellRange.dbc"),
-        cast_times: wrathplus_formats::load_spell_cast_times(&mut chain).expect("SpellCastTimes.dbc"),
+        cast_times: wrathplus_formats::load_spell_cast_times(&mut chain)
+            .expect("SpellCastTimes.dbc"),
         durations: wrathplus_formats::load_spell_durations(&mut chain).expect("SpellDuration.dbc"),
         radii: wrathplus_formats::load_spell_radii(&mut chain).expect("SpellRadius.dbc"),
     };
@@ -553,9 +558,11 @@ fn range_cell_on_real_data() {
     let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
     let spells = Spells {
         catalog: wrathplus_formats::load_spell_catalog(&mut chain).expect("Spell.dbc"),
-        forms: wrathplus_formats::load_shapeshift_forms(&mut chain).expect("SpellShapeshiftForm.dbc"),
+        forms: wrathplus_formats::load_shapeshift_forms(&mut chain)
+            .expect("SpellShapeshiftForm.dbc"),
         ranges: wrathplus_formats::load_spell_ranges(&mut chain).expect("SpellRange.dbc"),
-        cast_times: wrathplus_formats::load_spell_cast_times(&mut chain).expect("SpellCastTimes.dbc"),
+        cast_times: wrathplus_formats::load_spell_cast_times(&mut chain)
+            .expect("SpellCastTimes.dbc"),
         durations: wrathplus_formats::load_spell_durations(&mut chain).expect("SpellDuration.dbc"),
         radii: wrathplus_formats::load_spell_radii(&mut chain).expect("SpellRadius.dbc"),
     };
@@ -640,9 +647,11 @@ fn the_required_item_chance_and_reagent_lines_on_real_data() {
     let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
     let spells = Spells {
         catalog: wrathplus_formats::load_spell_catalog(&mut chain).expect("Spell.dbc"),
-        forms: wrathplus_formats::load_shapeshift_forms(&mut chain).expect("SpellShapeshiftForm.dbc"),
+        forms: wrathplus_formats::load_shapeshift_forms(&mut chain)
+            .expect("SpellShapeshiftForm.dbc"),
         ranges: wrathplus_formats::load_spell_ranges(&mut chain).expect("SpellRange.dbc"),
-        cast_times: wrathplus_formats::load_spell_cast_times(&mut chain).expect("SpellCastTimes.dbc"),
+        cast_times: wrathplus_formats::load_spell_cast_times(&mut chain)
+            .expect("SpellCastTimes.dbc"),
         durations: wrathplus_formats::load_spell_durations(&mut chain).expect("SpellDuration.dbc"),
         radii: wrathplus_formats::load_spell_radii(&mut chain).expect("SpellRadius.dbc"),
     };

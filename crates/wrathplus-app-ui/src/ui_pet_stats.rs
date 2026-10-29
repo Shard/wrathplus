@@ -11,12 +11,12 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{PetStats, ScriptValue, UiScript};
 
+use crate::app_core::schedule::UnitFeed;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::state::PetBar;
 use crate::names::NameCache;
 use crate::net::NetCommands;
-use crate::app_core::session::ObjectStore;
 use crate::ui_pet::PetUnit;
-use crate::app_core::state::PetBar;
-use crate::app_core::schedule::UnitFeed;
 
 /// `UNIT_FIELD_BYTES_0` byte 1, Hunter: the class the stat gate tests (`0x611752`). The enum is
 /// pinned by `GetComboPoints` (`0x51a190`), which tests 4 and 0xB, Rogue and Druid, on that byte.
@@ -175,7 +175,10 @@ fn feed_pet_stats(
     script: Option<NonSendMut<UiScript>>,
     bar: Res<PetBar>,
     pet: PetUnit,
-    self_store: Query<(&ObjectStore, Option<&crate::net::Guid>), With<crate::app_core::session::SelfPlayer>>,
+    self_store: Query<
+        (&ObjectStore, Option<&crate::net::Guid>),
+        With<crate::app_core::session::SelfPlayer>,
+    >,
     tables: Option<Res<PetStatTables>>,
     family_tables: Option<Res<PetFamilyTables>>,
     names: Res<NameCache>,

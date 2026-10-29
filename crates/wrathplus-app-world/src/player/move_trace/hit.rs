@@ -1,7 +1,7 @@
 //! `hit`: frames losing strictly more than half their intended horizontal travel.
 use avian3d::prelude::Collider;
-use wrathplus_assets::trace;
 use bevy::prelude::*;
+use wrathplus_assets::trace;
 
 /// Capsule centres before/after the whole step. `intended` is horizontal velocity × dt, zero
 /// during hold/root. This is an opt-in replay, not an exact feature captured by the resolver.

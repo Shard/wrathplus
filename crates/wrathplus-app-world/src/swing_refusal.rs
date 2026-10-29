@@ -33,13 +33,13 @@
 
 use std::time::Duration;
 
-use wrathplus_protocol::types::AttackSwingError;
 use bevy::prelude::*;
+use wrathplus_protocol::types::AttackSwingError;
 
-use crate::creature_anim::{AttackSeam, Engaged};
-use crate::app_core::session::SelfPlayer;
 use crate::app_core::errors::UiError;
 use crate::app_core::errors::UiErrorKeys;
+use crate::app_core::session::SelfPlayer;
+use crate::creature_anim::{AttackSeam, Engaged};
 
 /// The reference's re-arm interval (`0x5ec9b6`).
 const REPEAT: Duration = Duration::from_millis(0xfa0);
@@ -224,7 +224,8 @@ mod tests {
     #[test]
     fn the_two_keys_are_the_reference_error_ids() {
         let pos = wrathplus_ui::messages::by_key(Latched::NotInRange.key()).expect("0xe7 is a row");
-        let facing = wrathplus_ui::messages::by_key(Latched::BadFacing.key()).expect("0xe6 is a row");
+        let facing =
+            wrathplus_ui::messages::by_key(Latched::BadFacing.key()).expect("0xe6 is a row");
         assert_eq!(pos.id, 0xe7);
         assert_eq!(facing.id, 0xe6);
         // Both go to the red error line, by the catalog's own `kind`.

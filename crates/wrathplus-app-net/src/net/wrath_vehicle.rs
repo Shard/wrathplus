@@ -4,12 +4,12 @@
 //! into the wire after the UI input. The Lua getters and the outbox producers are Experience's;
 //! the seat flags come from Assets' vehicle catalog by `vehicle_id` and seat.
 use super::{ClientCommand, NetCommands, NetHandlerApp, SelfGuid};
+use bevy::prelude::*;
+use std::collections::HashMap;
 use wrathplus_protocol::wrath_authority::VehicleControl;
 use wrathplus_protocol::wrath_movement_misc::Command as Misc;
 use wrathplus_protocol::wrath_vehicle::VehicleEvent;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
-use std::collections::HashMap;
 
 /// Every unit known as a vehicle and every passenger's seat.
 #[derive(Resource, Default, Debug, Clone, PartialEq)]

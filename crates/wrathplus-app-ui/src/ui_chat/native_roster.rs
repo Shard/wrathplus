@@ -1,10 +1,10 @@
 //! Native roster handoff. Ordered receipts are consumed once by the channel UI feed, not replayed.
 use crate::net::NetHandlerApp;
+use bevy::prelude::*;
 use wrathplus_protocol::{
     wrath_channel::{ChannelList, Notify},
     SessionEvent, SessionEventKind,
 };
-use bevy::prelude::*;
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeChannelRosters(pub(crate) std::collections::VecDeque<ChannelList>);

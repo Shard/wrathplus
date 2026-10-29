@@ -18,11 +18,11 @@ use wrathplus_protocol::types::Field;
 use wrathplus_protocol::ObjectFields;
 
 #[cfg(test)]
+mod repeat_cancel;
+#[cfg(test)]
 mod wrath_death;
 #[cfg(test)]
 mod wrath_oneshot;
-#[cfg(test)]
-mod repeat_cancel;
 
 /// A held non-weapon keeps Special1H(57): the substitution (`0x5fe3cc`) keys on an empty hand.
 fn holding_a_non_weapon() -> Wielded {
@@ -263,7 +263,10 @@ fn wrath_remote_automatic_reconcile_keeps_its_visual_stow() {
             AnimationPlayer::default(),
             AnimationTransitions::new(),
             AnimDriver::default(),
-            crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(Field::UnitBytes2, 1)])),
+            crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(
+                Field::UnitBytes2,
+                1,
+            )])),
             Engaged(0),
             CastHold {
                 ranged: false,
@@ -287,10 +290,9 @@ fn wrath_self_descriptor_sheath_echo_still_applies() {
 
     app.world_mut()
         .entity_mut(unit)
-        .insert(crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(
-            Field::UnitBytes2,
-            2,
-        )])));
+        .insert(crate::app_core::session::ObjectStore(
+            ObjectFields::from_fields(&[(Field::UnitBytes2, 2)]),
+        ));
     app.update();
 
     assert_eq!(sheath_state(&app, unit), Some(2));
@@ -1260,7 +1262,10 @@ fn unit_flag_looting_kneels_stationary_units_only() {
             AnimationPlayer::default(),
             AnimationTransitions::new(),
             AnimDriver::default(),
-            crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(Field::UnitFlags, 0x400)])),
+            crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(
+                Field::UnitFlags,
+                0x400,
+            )])),
         ))
         .id();
     let gait = |app: &App| app.world().entity(unit).get::<AnimDriver>().unwrap().gait;
@@ -1279,10 +1284,9 @@ fn unit_flag_looting_kneels_stationary_units_only() {
     app.world_mut().entity_mut(unit).remove::<MovementState>();
     app.world_mut()
         .entity_mut(unit)
-        .insert(crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(
-            Field::UnitFlags,
-            0,
-        )])));
+        .insert(crate::app_core::session::ObjectStore(
+            ObjectFields::from_fields(&[(Field::UnitFlags, 0)]),
+        ));
     app.update();
     assert_eq!(gait(&app), Some(0), "released — back to Stand");
 }
@@ -1313,7 +1317,10 @@ fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
             AnimationTransitions::new(),
             AnimDriver::default(),
             crate::app_core::session::SelfPlayer,
-            crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(Field::UnitFlags, 0x400)])),
+            crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(
+                Field::UnitFlags,
+                0x400,
+            )])),
             MovementState::default(),
         ))
         .id();
@@ -1370,7 +1377,10 @@ fn the_creep_vis_flag_prowls_the_body() {
             AnimationTransitions::new(),
             AnimDriver::default(),
             crate::app_core::session::SelfPlayer,
-            crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(Field::UnitBytes1, 0)])),
+            crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(
+                Field::UnitBytes1,
+                0,
+            )])),
             MovementState::default(),
         ))
         .id();
@@ -1378,10 +1388,9 @@ fn the_creep_vis_flag_prowls_the_body() {
     let set_flag = |app: &mut App, v: u32| {
         app.world_mut()
             .entity_mut(unit)
-            .insert(crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(
-                Field::UnitBytes1,
-                v,
-            )])));
+            .insert(crate::app_core::session::ObjectStore(
+                ObjectFields::from_fields(&[(Field::UnitBytes1, v)]),
+            ));
     };
 
     app.update();
@@ -2688,17 +2697,19 @@ fn the_mount_transition_takes_bone_0_back_from_a_full_body_one_shot() {
             AnimationPlayer::default(),
             AnimationTransitions::new(),
             AnimDriver::default(),
-            crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(FIELD_MOUNTDISPLAYID, 0)])),
+            crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(
+                FIELD_MOUNTDISPLAYID,
+                0,
+            )])),
             MovementState::default(),
         ))
         .id();
     let mount_field = |app: &mut App, v: u32| {
         app.world_mut()
             .entity_mut(unit)
-            .insert(crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(
-                FIELD_MOUNTDISPLAYID,
-                v,
-            )])));
+            .insert(crate::app_core::session::ObjectStore(
+                ObjectFields::from_pairs(&[(FIELD_MOUNTDISPLAYID, v)]),
+            ));
     };
     let playing = |app: &App| drv_of(app, unit).active_anim();
 
@@ -2769,17 +2780,19 @@ fn the_dismount_cuts_the_saddle_pose_where_the_mount_up_blends_into_it() {
             AnimationPlayer::default(),
             AnimationTransitions::new(),
             AnimDriver::default(),
-            crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(FIELD_MOUNTDISPLAYID, 0)])),
+            crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(
+                FIELD_MOUNTDISPLAYID,
+                0,
+            )])),
             MovementState::default(),
         ))
         .id();
     let mount_field = |app: &mut App, v: u32| {
         app.world_mut()
             .entity_mut(unit)
-            .insert(crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(
-                FIELD_MOUNTDISPLAYID,
-                v,
-            )])));
+            .insert(crate::app_core::session::ObjectStore(
+                ObjectFields::from_pairs(&[(FIELD_MOUNTDISPLAYID, v)]),
+            ));
     };
     let weight = |app: &App, node| {
         app.world()
@@ -3235,9 +3248,9 @@ fn every_shot_of_a_volley_re_arms_the_fire_clip_through_the_emote_lane() {
 /// 0.5 s (blend 0.25 s) with `replay = (0,0)`, as all 1130 shipped shuffle records carry, so a
 /// window is one span. Nodes: Stand, ShuffleLeft, ShuffleRight.
 fn spawn_vendor(app: &mut App) -> (Entity, Vec<AnimationNodeIndex>) {
-    use wrathplus_protocol::EntityKind;
     use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle};
     use bevy::animation::AnimationClip;
+    use wrathplus_protocol::EntityKind;
 
     let handles: Vec<_> = [2.667f32, 0.5, 0.5]
         .iter()
@@ -3660,7 +3673,10 @@ fn a_no_wound_creature_takes_no_flinch() {
         }
     }
     fn streamed(entry: u32) -> crate::app_core::session::ObjectStore {
-        crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(OBJECT_FIELD_ENTRY, entry)]))
+        crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(
+            OBJECT_FIELD_ENTRY,
+            entry,
+        )]))
     }
     const OBJECT_FIELD_ENTRY: u16 = Field::ObjectEntry.index();
     const SKELETON: u32 = 1783; // a Scarlet Monastery skeleton's template entry
@@ -3783,7 +3799,10 @@ fn the_no_wound_flag_takes_the_parry_but_not_the_dodge() {
                     main: Some((2, 7)),
                     ..Default::default()
                 },
-                crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(OBJECT_FIELD_ENTRY, entry)])),
+                crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(
+                    OBJECT_FIELD_ENTRY,
+                    entry,
+                )])),
             ))
             .id()
     };
@@ -4444,10 +4463,10 @@ mod routing {
 /// on clear.
 mod emote_state {
     use super::*;
-    use crate::creature_anim::Mode;
     use crate::app_core::session::ObjectStore;
     use crate::app_core::state::EmoteSounds;
     use crate::app_core::state::InteractNpc;
+    use crate::creature_anim::Mode;
     use wrathplus_formats::EmoteSoundCatalog;
 
     /// Emote states: 28 plays AnimID 234 and yields to interaction (`0x2000`); 29 plays 235 and

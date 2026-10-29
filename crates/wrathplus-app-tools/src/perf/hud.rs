@@ -7,10 +7,10 @@
 //! The HUD owns no settings: it is `#[cfg(feature = "dev")]`, so nothing a player must reach can
 //! live here. `$WOW_NOVSYNC=1` is the measurement knob for vsync.
 
-use wrathplus_ui::script::{JustifyH, JustifyV, Outline, UiScript};
 use bevy::prelude::*;
 use bevy::time::Real;
 use bevy::window::{PrimaryWindow, Window};
+use wrathplus_ui::script::{JustifyH, JustifyV, Outline, UiScript};
 
 use super::stats::FrameStats;
 use crate::overlay::UiQuad;

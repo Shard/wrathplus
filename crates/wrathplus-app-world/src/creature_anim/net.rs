@@ -2,20 +2,20 @@
 //! streamed unit. The swing record and the environmental-damage log also feed
 //! [`crate::combat_log`], whose handlers are registered first and so run first.
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{AttackSwingError, AttackerState, EnvironmentalDamageLog};
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::{
     Engaged, EnvDamageTable, KitPush, MountFlourish, PlaySeq, RangedHold, SheathRequest,
     SwingFlush, SwingImpact, SwingMessage,
 };
-use crate::net::{AiReactionMessage, EmoteKind, EmoteMessage, GuidIndex, NetHandlerApp};
-use crate::app_core::session::SelfGuid;
-use crate::swing_refusal::SwingRefusalEdge;
 use crate::app_core::errors::UiError;
 use crate::app_core::errors::UiErrorKeys;
+use crate::app_core::session::SelfGuid;
 use crate::app_core::state::CombatTextEvent;
+use crate::net::{AiReactionMessage, EmoteKind, EmoteMessage, GuidIndex, NetHandlerApp};
+use crate::swing_refusal::SwingRefusalEdge;
 
 /// Register the layer's handlers, from [`super::CreatureAnimPlugin`].
 pub(super) fn register(app: &mut App) {
@@ -500,9 +500,9 @@ fn mount_special(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
     use wrathplus_protocol::types::{ObjectFields, ObjectType};
     use wrathplus_protocol::wrath_combat::{self, MeleeDamage};
-    use bevy::ecs::system::RunSystemOnce;
 
     use crate::app_core::session::ObjectStore;
 

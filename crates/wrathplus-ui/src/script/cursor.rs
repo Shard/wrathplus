@@ -236,8 +236,14 @@ pub(crate) fn queue_cursor_update(model: &mut Model) {
 /// `PaperDollItemSlotButton_OnEvent` matches as `not arg2` (PaperDollFrame.lua:1196-1197).
 pub(crate) fn queue_lock_changed(model: &mut Model, bag: i64, slot: u32) {
     let slot = ScriptValue::Int(i64::from(slot));
-    let args = if bag == EQUIPMENT_BAG { vec![slot] } else { vec![ScriptValue::Int(bag), slot] };
-    model.pending_events.push(("ITEM_LOCK_CHANGED".to_string(), args));
+    let args = if bag == EQUIPMENT_BAG {
+        vec![slot]
+    } else {
+        vec![ScriptValue::Int(bag), slot]
+    };
+    model
+        .pending_events
+        .push(("ITEM_LOCK_CHANGED".to_string(), args));
 }
 
 /// Queue `DELETE_ITEM_CONFIRM(name, quality)` for an item dropped on the world. The payload stays
@@ -491,17 +497,31 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
             };
             let out = match &model.cursor {
                 Some(CursorPayload::Item(i)) => {
-                    vec![text("item")?, Value::Integer(i.item_id.into()), link(&i.link)?]
+                    vec![
+                        text("item")?,
+                        Value::Integer(i.item_id.into()),
+                        link(&i.link)?,
+                    ]
                 }
                 Some(CursorPayload::GuildBankItem(i)) => {
-                    vec![text("item")?, Value::Integer(i.item_id.into()), link(&i.link)?]
+                    vec![
+                        text("item")?,
+                        Value::Integer(i.item_id.into()),
+                        link(&i.link)?,
+                    ]
                 }
                 // Mode 7 shares the item case, which answers nothing for an uncached template.
                 Some(CursorPayload::ItemId(i)) if i.link.is_some() => {
-                    vec![text("item")?, Value::Integer(i.item_id.into()), link(&i.link)?]
+                    vec![
+                        text("item")?,
+                        Value::Integer(i.item_id.into()),
+                        link(&i.link)?,
+                    ]
                 }
                 Some(CursorPayload::EquipmentSet(e)) => vec![text("equipmentset")?, text(&e.name)?],
-                Some(CursorPayload::Money(m)) => vec![text("money")?, Value::Integer(m.copper.into())],
+                Some(CursorPayload::Money(m)) => {
+                    vec![text("money")?, Value::Integer(m.copper.into())]
+                }
                 Some(CursorPayload::Spell(s)) => vec![
                     text("spell")?,
                     Value::Integer(s.book_slot.into()),

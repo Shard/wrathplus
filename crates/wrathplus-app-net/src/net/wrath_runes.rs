@@ -3,9 +3,9 @@
 //! is their only source, with our own spell-go's rune list (`RunePacket::Spend`). The UI readers are
 //! `ui_runes`, which times each rune from these baselines.
 use super::NetHandlerApp;
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_spell_control::RunePacket;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 /// A death knight's six runes.
 pub const RUNES: usize = 6;

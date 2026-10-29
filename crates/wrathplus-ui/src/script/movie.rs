@@ -43,7 +43,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     m.set(
         "StartMovie",
         lua.create_function(|_, (this, file, volume): (Table, Value, Value)| {
-            let named = matches!(file, Value::String(_) | Value::Integer(_) | Value::Number(_));
+            let named = matches!(
+                file,
+                Value::String(_) | Value::Integer(_) | Value::Number(_)
+            );
             let numbered = match &volume {
                 Value::Integer(_) | Value::Number(_) => true,
                 Value::String(s) => s.to_str().is_ok_and(|s| s.trim().parse::<f64>().is_ok()),

@@ -14,9 +14,9 @@
 //! - `SMSG_TOTEM_CREATED` fills the totem bar from `crate::ui_totems`' own handler on this kind,
 //!   after this one.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_spell_control::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_spell_control::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeSpellControlPackets(pub VecDeque<Packet>);

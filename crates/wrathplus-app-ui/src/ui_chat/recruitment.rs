@@ -11,10 +11,10 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::UiScript;
 
-use crate::area::AreaTableRes;
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::area::AreaTableRes;
+use crate::net::{ClientCommand, NetCommands};
 
 use super::channels::{city_word, ZoneChannelWalk};
 use super::edit::ChannelState;

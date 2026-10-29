@@ -8,8 +8,8 @@
 
 use mlua::{Lua, MultiValue, Table, Value};
 
-use crate::heirloom::mod_name;
 use super::{ItemTemplateView, Model};
+use crate::heirloom::mod_name;
 
 /// The aggregate's integer fields, keyed by [`key`].
 const FIELDS: usize = 73;

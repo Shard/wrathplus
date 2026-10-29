@@ -13,11 +13,11 @@ use fx::{
 use std::sync::Arc;
 use std::time::Instant;
 
+use bevy::camera::primitives::Aabb;
+use bevy::prelude::*;
 use wrathplus_assets::coords::{wmo_doodad_local, wow_to_bevy};
 use wrathplus_assets::{AdtTile, DoodadBase, M2Model, WmoModel};
 use wrathplus_formats::{world_to_tile, M2Bounds};
-use bevy::camera::primitives::Aabb;
-use bevy::prelude::*;
 
 use crate::collision::{camera_layers, walk_layers, GroundDecalSurface, PickOccluder};
 use crate::doodad_anim::wants_rig;
