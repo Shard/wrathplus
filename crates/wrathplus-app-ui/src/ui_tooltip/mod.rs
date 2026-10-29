@@ -36,7 +36,10 @@ impl Plugin for UiTooltipPlugin {
             Update,
             (
                 drive_mouseover_tooltip.in_set(UnitFeed),
-                feed_unit_looters.before(drive_mouseover_tooltip),
+                // Consume this frame's loot-list packets before any input-driven tooltip read.
+                feed_unit_looters
+                    .in_set(UiFeed)
+                    .before(drive_mouseover_tooltip),
                 // After the trainer and quest feeds, so a list that lands this frame is hoverable
                 // in its tick; outside `UnitFeed`, which the trainer feed follows, so it takes that
                 // set's gate.

@@ -66,7 +66,7 @@ pub(crate) struct ViewCtx<'a, 'w, 's> {
     pub(super) attack_target: Option<wrathplus_formats::RangeUnit>,
     /// The object index the worn-item search and each reagent's carried count resolve through.
     pub(super) objects: &'a Objects<'w, 's>,
-    pub(super) items: &'a mut Items,
+    pub(super) items: &'a Items,
     pub(super) commands: &'a NetCommands,
     pub(super) sub_classes: Option<&'a wrathplus_formats::ItemSubClassCatalog>,
     /// The spell-to-line hop the `$`-tokens' skill level reads ([`crate::spell::spell_skill_value`]).
@@ -444,7 +444,7 @@ pub(super) fn reagent_state(
     entry: u32,
     store: Option<&ObjectStore>,
     objects: &Objects,
-    items: &mut Items,
+    items: &Items,
     commands: &NetCommands,
 ) -> (u32, bool) {
     let named = items.template(entry, 0, commands).is_some();
@@ -512,7 +512,7 @@ pub fn feed_spell_tooltips(
     objects: Objects,
     home_bind: Option<Res<crate::net::HomeBind>>,
     area_names: Option<Res<crate::ui_quest_log::QuestHeaderNamesRes>>,
-    mut items: ResMut<Items>,
+    items: Res<Items>,
     // One tuple param, under Bevy's 16-param ceiling.
     lookups: (
         Option<Res<crate::items::ItemSubClasses>>,
@@ -633,7 +633,7 @@ pub fn feed_spell_tooltips(
         .map(|&entry| {
             (
                 entry,
-                reagent_state(entry, self_store, &objects, &mut items, &commands),
+                reagent_state(entry, self_store, &objects, &items, &commands),
             )
         })
         .collect();
@@ -670,7 +670,7 @@ pub fn feed_spell_tooltips(
             range_caster: caster_unit,
             attack_target,
             objects: &objects,
-            items: &mut items,
+            items: &items,
             commands: &commands,
             sub_classes: sub_classes.as_deref().map(|c| &c.0),
             skill_lines: skill_lines.as_deref().map(|s| &s.catalog),

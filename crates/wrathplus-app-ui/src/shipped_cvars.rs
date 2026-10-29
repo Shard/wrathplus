@@ -24,6 +24,7 @@ pub const FEATURE_ROWS: &[&[Registered]] = &[
     crate::ui_paperdoll::CVARS,
     crate::ui_trade::CVARS,
     crate::ui_trainer::net::CVARS,
+    crate::ui_unit_quest_tooltip::CVARS,
     crate::video::CVARS,
     crate::world_backdrop::CVARS,
     crate::world_state_ui::CVARS,

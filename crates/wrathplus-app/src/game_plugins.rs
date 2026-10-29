@@ -538,10 +538,8 @@ pub(crate) mod schedule_tests {
     /// Does this build carry type names? Bevy has them only under its `debug` feature, which
     /// rides with `wrathplus-world`'s `dev`. Probed off the census, not a `cfg`, which belongs in
     /// `run_mode` alone; name-dependent tests skip without them.
-    fn type_names_available(c: &Census) -> bool {
-        c.systems
-            .values()
-            .any(|s| s.name.contains("wrathplus_app::"))
+    pub(crate) fn type_names_available(c: &Census) -> bool {
+        c.systems.values().any(|s| s.name.contains("wrathplus_app"))
     }
 
     /// One row of the class table: the type's name for the message, and its `TypeId`.
@@ -759,7 +757,7 @@ pub(crate) mod schedule_tests {
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_587;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_577;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {
