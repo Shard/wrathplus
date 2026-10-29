@@ -16,7 +16,10 @@ pub(super) fn publish_viewer(
     player: Option<Res<Player>>,
     rig: Option<Res<super::CameraControl>>,
     screen: Option<Res<crate::loading_screen::LoadingScreen>>,
-    store: Query<&crate::app_core::session::ObjectStore, With<crate::app_core::session::SelfPlayer>>,
+    store: Query<
+        &crate::app_core::session::ObjectStore,
+        With<crate::app_core::session::SelfPlayer>,
+    >,
 ) {
     // Drunk and ghost are whole-screen effects of our own character, so they read `SelfPlayer`,
     // not the body we drive: possessing a boar does not sober you up.
@@ -96,6 +99,16 @@ pub(super) fn publish_view_focus(
             None => ViewFocus::camera(),
         },
     };
+}
+
+/// Seats shallow server/floor overlaps before the residency gate releases the load hold.
+pub(super) fn seat_post_snap_floor(
+    mut player: ResMut<Player>,
+    world: wrathplus_world::collision::WorldCollision,
+) {
+    if player.active && player.settling {
+        super::mover::seat_streamed_floor(&mut player, &world);
+    }
 }
 
 /// Ends the post-snap hold when the destination's world has arrived. Runs after the stream stage,
