@@ -3,9 +3,9 @@
 //! auction pending sales (no such API string in the pinned Wow.exe), and AzerothCore always sends
 //! zero rows.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_exchange::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_exchange::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeExchangePackets(pub VecDeque<Packet>);

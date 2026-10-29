@@ -401,7 +401,12 @@ fn parse_item_arg(v: &Value) -> mlua::Result<ItemArg> {
         .map(reference_atoi)
         .collect();
     let field = |i: usize| u32::try_from(fields.get(i).copied().unwrap_or(0)).unwrap_or(0);
-    Ok(ItemArg::Id(fields.first().copied().unwrap_or(0), field(1), field(6), field(7)))
+    Ok(ItemArg::Id(
+        fields.first().copied().unwrap_or(0),
+        field(1),
+        field(6),
+        field(7),
+    ))
 }
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -656,14 +661,28 @@ mod get_item_info_tests {
         let mut s = UiScript::new().unwrap();
         s.set_item_template(25, worn_shortsword());
         assert_eq!(s.arity("GetItemInfo(25)").unwrap(), 11);
-        let (name, link, quality, ilvl, req, ty, sub_ty): (String, String, i64, i64, i64, String, String) = s
+        let (name, link, quality, ilvl, req, ty, sub_ty): (
+            String,
+            String,
+            i64,
+            i64,
+            i64,
+            String,
+            String,
+        ) = s
             .eval("local a,b,c,d,e,f,g = GetItemInfo(25) return a,b,c,d,e,f,g")
             .unwrap();
         assert_eq!(name, "Worn Shortsword");
         // The nine-field hyperlink (`0x61e290`), carrying the player's level (0: none here).
-        assert_eq!(link, "|cffffffff|Hitem:25:0:0:0:0:0:0:0:0|h[Worn Shortsword]|h|r");
+        assert_eq!(
+            link,
+            "|cffffffff|Hitem:25:0:0:0:0:0:0:0:0|h[Worn Shortsword]|h|r"
+        );
         assert_eq!((quality, ilvl, req), (1, 2, 1));
-        assert_eq!((ty.as_str(), sub_ty.as_str()), ("Weapon", "One-Handed Swords"));
+        assert_eq!(
+            (ty.as_str(), sub_ty.as_str()),
+            ("Weapon", "One-Handed Swords")
+        );
         let (stack, equip, texture, price): (i64, String, Option<String>, i64) = s
             .eval("local _,_,_,_,_,_,_,h,i,j,k = GetItemInfo(25) return h,i,j,k")
             .unwrap();
@@ -791,7 +810,10 @@ mod get_item_info_tests {
             .eval("local a,b = GetItemInfo(\"item:25:2564:0:0:0:0:7:3:80\") return a,b")
             .unwrap();
         assert_eq!(name, "Worn Shortsword");
-        assert_eq!(link, "|cffffffff|Hitem:25:2564:0:0:0:0:7:3:0|h[Worn Shortsword]|h|r");
+        assert_eq!(
+            link,
+            "|cffffffff|Hitem:25:2564:0:0:0:0:7:3:0|h[Worn Shortsword]|h|r"
+        );
         // Case-insensitive, short, inside a full hyperlink, or a cached name.
         for arg in [
             "\"ITEM:25\"",
@@ -799,14 +821,19 @@ mod get_item_info_tests {
             "\"worn shortsword\"",
         ] {
             assert_eq!(
-                s.eval::<String>(&format!("return (GetItemInfo({arg}))")).unwrap(),
+                s.eval::<String>(&format!("return (GetItemInfo({arg}))"))
+                    .unwrap(),
                 "Worn Shortsword",
                 "argument {arg}"
             );
         }
         // An unknown name or the empty string: no values and no ask.
         for arg in ["\"Nothing Such\"", "\"\""] {
-            assert_eq!(s.arity(&format!("GetItemInfo({arg})")).unwrap(), 0, "argument {arg}");
+            assert_eq!(
+                s.arity(&format!("GetItemInfo({arg})")).unwrap(),
+                0,
+                "argument {arg}"
+            );
         }
         assert!(s.take_item_stat_asks().is_empty());
 

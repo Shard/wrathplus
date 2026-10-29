@@ -1,7 +1,7 @@
 //! One-shot native display receipts and revision-bound name completion. No roster cache.
 use super::{native_membership::NativeMembership, native_roster::NativeChannelRosters};
-use wrathplus_ui::script::{UiScript, WrathChannelRosterMember, WrathDisplayChannel};
 use bevy::prelude::*;
+use wrathplus_ui::script::{UiScript, WrathChannelRosterMember, WrathDisplayChannel};
 
 #[derive(Resource, Default)]
 pub(super) struct NativeRosterFeed {
@@ -163,8 +163,8 @@ pub(super) fn disconnect(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_protocol::wrath_channel::ChannelList;
     use bevy::ecs::system::RunSystemOnce;
+    use wrathplus_protocol::wrath_channel::ChannelList;
 
     fn world() -> World {
         let mut world = World::new();
@@ -176,7 +176,9 @@ mod tests {
         world.insert_resource(channels);
         world.insert_resource(ledger);
         world.insert_resource(NativeChannelRosters::default());
-        world.insert_resource(crate::net::wrath_social_lists_capture::NativeChannelMembers::default());
+        world.insert_resource(
+            crate::net::wrath_social_lists_capture::NativeChannelMembers::default(),
+        );
         world.insert_resource(NativeRosterFeed::default());
         world.insert_resource(crate::names::NameCache::default());
         let (tx, _) = crossbeam_channel::unbounded();

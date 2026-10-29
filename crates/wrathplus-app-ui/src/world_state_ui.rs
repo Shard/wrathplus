@@ -170,7 +170,10 @@ impl Plugin for WorldStateUiPlugin {
     fn build(&self, app: &mut App) {
         crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.add_systems(Startup, load_world_state_ui.after(AssetSet::Open))
-            .add_systems(Update, feed_world_state_ui.after(crate::app_core::schedule::UiInput));
+            .add_systems(
+                Update,
+                feed_world_state_ui.after(crate::app_core::schedule::UiInput),
+            );
     }
 }
 

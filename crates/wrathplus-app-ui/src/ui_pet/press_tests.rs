@@ -5,8 +5,8 @@
 use wrathplus_formats::SpellDisplay;
 use wrathplus_protocol::types::Field;
 
-use crate::net::ClientCommand;
 use crate::app_core::session::ObjectStore;
+use crate::net::ClientCommand;
 
 pub const ME: u64 = 0x10;
 pub const PET: u64 = 0x2A;

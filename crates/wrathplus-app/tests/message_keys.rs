@@ -219,7 +219,8 @@ fn every_sounding_catalog_row_also_has_text_to_show() {
 
     let mut sounding = 0;
     for r in wrathplus_ui::messages::CATALOG {
-        let sounds = usize::from(r.type_tag) < wrathplus_formats::VOCAL_UI_LINES || r.sound.is_some();
+        let sounds =
+            usize::from(r.type_tag) < wrathplus_formats::VOCAL_UI_LINES || r.sound.is_some();
         if !sounds {
             continue;
         }

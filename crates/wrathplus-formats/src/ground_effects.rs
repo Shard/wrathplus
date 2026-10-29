@@ -340,7 +340,11 @@ pub fn load_ground_effect_catalog(
         let bytes = chain
             .read_file(GROUND_EFFECT_DOODAD)
             .with_context(|| format!("reading {GROUND_EFFECT_DOODAD}"))?;
-        let schema = if wrath { wrath_doodad_schema() } else { doodad_schema() };
+        let schema = if wrath {
+            wrath_doodad_schema()
+        } else {
+            doodad_schema()
+        };
         let rs = parse(&bytes, schema, "GroundEffectDoodad")?;
         let mut m = HashMap::with_capacity(rs.records().len());
         for r in rs.records() {

@@ -866,7 +866,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_protocol::wrath_gameplay::{FieldValue, Position, UPDATE_FLAG_STATIONARY_POSITION};
+    use wrathplus_protocol::wrath_gameplay::{
+        FieldValue, Position, UPDATE_FLAG_STATIONARY_POSITION,
+    };
 
     fn safe_movement() -> MovementInfo {
         MovementInfo {

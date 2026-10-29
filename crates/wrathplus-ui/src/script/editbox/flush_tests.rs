@@ -37,7 +37,6 @@ fn script() -> UiScript {
     s
 }
 
-
 /// The `LOG` entries since the last call, joined by spaces.
 fn take_log(s: &UiScript) -> String {
     s.eval::<String>("local l = table.concat(LOG, ' ') LOG = {} return l")
@@ -519,7 +518,8 @@ fn wrath_debugtools_cursor_setter_drives_scrolling_edit_geometry() {
     let mut s = UiScript::new().unwrap();
     s.set_text_measurer(Box::new(Mono));
     s.set_screen_size(800.0, 600.0);
-    s.run(r#"
+    s.run(
+        r#"
         E = CreateFrame('EditBox'); E:SetAutoFocus(false); E:SetMultiLine(true)
         E:SetSize(300, 194); E:SetPoint('BOTTOMLEFT', 0, 0)
         calls = 0
@@ -528,14 +528,22 @@ fn wrath_debugtools_cursor_setter_drives_scrolling_edit_geometry() {
         end)
         E:SetText('error\nstack'); E:HighlightText(0); E:SetCursorPosition(0)
         assert(calls == 0) -- native setter does not flush
-    "#).unwrap();
-    s.resolve(); s.tick(0.016);
+    "#,
+    )
+    .unwrap();
+    s.resolve();
+    s.tick(0.016);
     s.run("assert(calls == 1); assert(-E.cursorOffset == 0); assert(E.cursorHeight == 14); E:SetCursorPosition(999)").unwrap();
     s.tick(0.016);
-    s.run("assert(calls == 2 and E.cursorOffset == -14); E:SetCursorPosition('999')").unwrap();
+    s.run("assert(calls == 2 and E.cursorOffset == -14); E:SetCursorPosition('999')")
+        .unwrap();
     s.tick(0.016);
-    s.run("assert(calls == 3); E:SetCursorPosition(-10)").unwrap();
+    s.run("assert(calls == 3); E:SetCursorPosition(-10)")
+        .unwrap();
     s.tick(0.016);
-    s.run("assert(calls == 4 and E.cursorOffset == 0); assert(not pcall(E.SetCursorPosition,E,true))").unwrap();
+    s.run(
+        "assert(calls == 4 and E.cursorOffset == 0); assert(not pcall(E.SetCursorPosition,E,true))",
+    )
+    .unwrap();
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }

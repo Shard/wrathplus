@@ -69,12 +69,7 @@ fn trade_status(status: crate::wrath_trade::Status) -> TradeStatus {
     use crate::wrath_trade::StatusTail as T;
     match (status.code, status.tail) {
         (1, T::Trader { guid }) => TradeStatus::BeginTrade { partner: guid },
-        (
-            12,
-            T::Close {
-                result, item, ..
-            },
-        ) => TradeStatus::CloseWindow {
+        (12, T::Close { result, item, .. }) => TradeStatus::CloseWindow {
             result,
             item_limit_category: item,
         },
@@ -209,13 +204,15 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<SessionEvent> {
                     status: trade_status(status),
                 },
                 // AC writes every slot, empty ones zeroed (`SendUpdateTrade`).
-                crate::wrath_trade::Packet::Extended(extended) if extended.items.len() == TRADE_SLOT_COUNT => {
+                crate::wrath_trade::Packet::Extended(extended)
+                    if extended.items.len() == TRADE_SLOT_COUNT =>
+                {
                     SessionEvent::TradeStatusExtended {
                         state: Box::new(trade_extended(extended)),
                     }
                 }
                 crate::wrath_trade::Packet::Extended(_) => return Err(invalid("trade row count")),
-            })
+            });
         }
         0x0239 => {
             return match crate::wrath_mail_mutations::decode(opcode, body)? {

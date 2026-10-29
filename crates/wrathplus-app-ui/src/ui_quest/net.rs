@@ -1,15 +1,15 @@
 //! The questgiver packet handlers: each fills the [`QuestGiver`] the feed reads, and each panel
 //! packet replaces the open view.
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{
     QuestComplete, QuestDetails, QuestGiverList, QuestOfferReward, QuestRequestItems, QuestShareMsg,
 };
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::{QuestGiver, QuestLine, QuestLines};
-use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
 use crate::app_core::errors::UiError;
+use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
 use crate::ui_quest_log::QuestLog;
 
 /// One handler per kind, plus the session-end and world-enter listeners.

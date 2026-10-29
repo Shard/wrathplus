@@ -50,17 +50,15 @@ use law::{
     argb, claimed_box_px, fade_alpha, melee_text, scale_value, shadow_offset_px, text_px,
     CATEGORIES,
 };
-pub use law::{
-    damage_color, melee_styled, miss_word, spell_text, DamageSource, DamageTextGates,
-};
+pub use law::{damage_color, melee_styled, miss_word, spell_text, DamageSource, DamageTextGates};
 
 use bevy::prelude::*;
 
 use wrathplus_ui::script::{JustifyH, JustifyV, Outline};
 
+use crate::app_core::schedule::UiQuadAppend;
 use crate::entities::{overhead_anchor, BoneAttach, OverheadFallback};
 use crate::overlay::overlay_z;
-use crate::app_core::schedule::UiQuadAppend;
 use crate::overlay::UiQuads;
 use crate::ui_text::{layout_text_quads, FontSpec, Justify, UiFontAtlas};
 use wrathplus_world::view::WorldCamera;
@@ -509,10 +507,10 @@ mod tests {
     /// silenced by Gate A and by `CombatDamage 0`.
     #[test]
     fn a_travelling_spells_miss_word_is_gold_and_deferred_to_arrival() {
-        use crate::entities::MissileMiss;
         use crate::app_core::session::ObjectStore;
         use crate::app_core::session::SelfGuid;
         use crate::app_core::session::SelfPlayer;
+        use crate::entities::MissileMiss;
 
         const FIREBALL: u32 = 133;
         const AUTO_SHOT: u32 = 75;

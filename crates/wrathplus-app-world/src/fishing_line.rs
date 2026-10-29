@@ -18,9 +18,9 @@ use bevy::prelude::*;
 
 use wrathplus_protocol::EntityKind;
 
+use crate::app_core::session::ObjectStore;
 use crate::entities::OverheadFallback;
 use crate::net::{GuidIndex, NetEntity};
-use crate::app_core::session::ObjectStore;
 
 /// Marks a mainhand prop whose model authors `$CCH`, which only the fishing pole does, standing
 /// in for the reference's `{class 2, subclass 20}` item check. Despawned with the prop.

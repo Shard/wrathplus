@@ -221,9 +221,9 @@ mod tests {
         cast_target_mask, resolve_cast_target, unit_binds, CastCandidates, CastWireTarget,
     };
     use crate::spell::targeting::corpse_fixture as fx;
+    use bevy::ecs::system::RunSystemOnce;
     use wrathplus_formats::SpellDisplay;
     use wrathplus_protocol::types::GroupMemberEntry;
-    use bevy::ecs::system::RunSystemOnce;
 
     const ME: u64 = 1;
     const MEMBER: u64 = 2;

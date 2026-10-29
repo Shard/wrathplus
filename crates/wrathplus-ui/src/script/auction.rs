@@ -918,7 +918,9 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
         "SortAuctionClearSort",
         lua.create_function(move |lua, args: MultiValue| {
             let Some(kind) = string_at(lua, &args, 0) else {
-                return Err(mlua::Error::runtime("Usage: SortAuctionClearSort(\"type\")"));
+                return Err(mlua::Error::runtime(
+                    "Usage: SortAuctionClearSort(\"type\")",
+                ));
             };
             push(lua, &kind, AuctionSortOp::Clear);
             Ok(())
@@ -945,7 +947,9 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
         "SortAuctionApplySort",
         lua.create_function(move |lua, args: MultiValue| {
             let Some(kind) = string_at(lua, &args, 0) else {
-                return Err(mlua::Error::runtime("Usage: SortAuctionApplySort(\"type\")"));
+                return Err(mlua::Error::runtime(
+                    "Usage: SortAuctionApplySort(\"type\")",
+                ));
             };
             push(lua, &kind, AuctionSortOp::Apply);
             Ok(())
@@ -1073,7 +1077,9 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
                     .map(|n| n.round() as i64)
             };
             let Some(run) = num(0) else {
-                return Err(mlua::Error::runtime("Usage: CalculateAuctionDeposit(runTime)"));
+                return Err(mlua::Error::runtime(
+                    "Usage: CalculateAuctionDeposit(runTime)",
+                ));
             };
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             let Some(rate) = model.auction.as_ref().map(|a| a.deposit_percent) else {
@@ -1087,7 +1093,11 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
                 .item_templates
                 .get(&it.item_id)
                 .map_or(0, |t| t.sell_price);
-            Ok(i64::from(wrath_deposit(rate, unit.saturating_mul(count), run_minutes(run))))
+            Ok(i64::from(wrath_deposit(
+                rate,
+                unit.saturating_mul(count),
+                run_minutes(run),
+            )))
         })?,
     )?;
     Ok(())
@@ -1229,7 +1239,10 @@ mod tests {
     fn a_missing_row_still_answers_thirteen_values() {
         let s = UiScript::new().unwrap();
         let n = s.arity(r#"GetAuctionItemInfo("list", 99)"#).unwrap();
-        assert_eq!(n, 13, "build 12340's thirteen, even with no session open at all");
+        assert_eq!(
+            n, 13,
+            "build 12340's thirteen, even with no session open at all"
+        );
         let (count, quality): (i64, i64) = s
             .eval(r#"local _, _, c, q = GetAuctionItemInfo("list", 99) return c, q"#)
             .unwrap();
@@ -1387,8 +1400,7 @@ mod tests {
     /// Build 12340's sort verbs queue their ops; `GetAuctionSort` reads App's stack.
     #[test]
     fn the_wrath_sort_verbs_queue_and_read_the_stack() {
-        let mut s =
-            UiScript::new().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             "SortAuctionClearSort('owner') SortAuctionSetSort('owner', 'duration', true) \
              SortAuctionSetSort('list', 'nope') SortAuctionSetSort('list', 'quantity') \
@@ -1420,7 +1432,11 @@ mod tests {
         assert!(s.run("SetAuctionsTabShowing(1)").is_err());
         s.run("SetAuctionsTabShowing(true)").unwrap();
         // No auctioneer: CanCancelAuction answers nothing; GetAuctionSort nil, nil.
-        assert_eq!(s.eval::<i64>("return select('#', CanCancelAuction(1))").unwrap(), 0);
+        assert_eq!(
+            s.eval::<i64>("return select('#', CanCancelAuction(1))")
+                .unwrap(),
+            0
+        );
         assert!(s
             .eval::<bool>("local k, r = GetAuctionSort('owner', 1) return k == nil and r == nil")
             .unwrap());
@@ -1441,9 +1457,7 @@ mod tests {
     /// Build 12340's widths: `saleStatus` thirteenth, and the sell slot's three extras.
     #[test]
     fn wrath_answers_thirteen_auction_and_nine_sell_values() {
-        let wrath =
-            crate::script::UiScript::new()
-                .unwrap();
+        let wrath = crate::script::UiScript::new().unwrap();
         assert!(wrath
             .eval::<bool>(
                 "return select('#', GetAuctionItemInfo('owner', 1)) == 13 \

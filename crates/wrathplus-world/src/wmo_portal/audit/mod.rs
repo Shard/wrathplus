@@ -9,6 +9,7 @@
 //! The asserting audits are data-gated and the instruments are `#[ignore]`d; all of them:
 //! `cargo test -p wrathplus-world --lib wmo_portal::audit -- --include-ignored --nocapture`
 
+use bevy::math::{Affine3A, Mat4, Vec3};
 use wrathplus_assets::coords::{bevy_to_wow, placement_rotation, wow_to_bevy};
 use wrathplus_assets::WmoGroupNav;
 use wrathplus_formats::{
@@ -16,7 +17,6 @@ use wrathplus_formats::{
     open_chain, parse_wmo_root, terrain_height_at, wmo_group_footprint_tris, wmo_group_header,
     wmo_root_id, ChunkMesh,
 };
-use bevy::math::{Affine3A, Mat4, Vec3};
 
 use super::{compute_pvs, down_ray_seeds, floor_z_at, terrain_z_local, WmoModel, EXTERIOR};
 

@@ -104,11 +104,14 @@ fn party_roster_events_leave_the_level_ten_xp_bar_rendering_unchanged() {
     assert!(s.eval::<bool>("return MainMenuExpBar:IsShown()").unwrap());
     for cycle in 0..3 {
         for joined in [true, false] {
-            s.set_unit("party1", joined.then(|| UnitState {
-                guid: 0x1234,
-                name: Some("PartyMate".into()),
-                ..stock_player(10)
-            }));
+            s.set_unit(
+                "party1",
+                joined.then(|| UnitState {
+                    guid: 0x1234,
+                    name: Some("PartyMate".into()),
+                    ..stock_player(10)
+                }),
+            );
             s.set_party(if joined {
                 PartyState {
                     members: vec![PartyMemberInfo {

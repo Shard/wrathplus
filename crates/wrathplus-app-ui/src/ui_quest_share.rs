@@ -11,16 +11,16 @@
 //! reference reads its name cache (`0xc0e228` via `0x55f080`) with a null callback and drops the
 //! message on a miss, because benilla's cache may not hold a party member yet.
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{QuestConfirmAccept, QuestShareMsg};
 use wrathplus_ui::script::{ScriptValue, UiScript};
-use bevy::prelude::*;
 
-use crate::names::NameCache;
-use crate::net::{ClientCommand, NetCommands};
-use crate::ui_action::{show_messages, ui_error_text, MessageSink, Shown};
 use crate::app_core::errors::UiError;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, NetCommands};
+use crate::ui_action::{show_messages, ui_error_text, MessageSink, Shown};
 
 /// Frames a queued line waits for its name: a name query is one round trip, and a guid the server
 /// will not name would otherwise hold its line all session.
@@ -95,9 +95,9 @@ fn verdict_message(msg: QuestShareMsg) -> Option<&'static str> {
 /// The quest-share packet handlers. Both park in [`QuestShare`]: the guid may need a name query a
 /// handler cannot await.
 mod net {
+    use bevy::prelude::*;
     use wrathplus_protocol::types::{QuestConfirmAccept, QuestShareMsg};
     use wrathplus_protocol::{SessionEvent, SessionEventKind};
-    use bevy::prelude::*;
 
     use super::QuestShare;
     use crate::net::NetHandlerApp;

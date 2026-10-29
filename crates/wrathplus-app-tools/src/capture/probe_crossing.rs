@@ -7,11 +7,11 @@
 use bevy::prelude::*;
 
 use super::probes::ProbeClock;
-use crate::net::{ClientCommand, Guid};
-use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
-use crate::transport::Transport;
 use crate::app_core::movement::TransportAnchor;
+use crate::app_core::player::Player;
+use crate::app_core::session::SelfPlayer;
+use crate::net::{ClientCommand, Guid};
+use crate::transport::Transport;
 use wrathplus_world::world_map::CurrentMap;
 
 pub(crate) struct ProbeCrossingPlugin;

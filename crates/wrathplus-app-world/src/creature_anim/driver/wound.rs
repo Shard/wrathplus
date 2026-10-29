@@ -1,8 +1,8 @@
 //! The wound flinch: a decaying blend in the struck bone's secondary slot (`0x60ea70`).
 
+use bevy::prelude::*;
 use wrathplus_assets::ModelAnimations;
 use wrathplus_formats::AnimDataCatalog;
-use bevy::prelude::*;
 
 use super::super::{find_resolved, AnimDriver, MovementState, Wound};
 use super::select::{self, STAND};

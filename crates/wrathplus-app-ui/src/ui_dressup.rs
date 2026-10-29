@@ -4,17 +4,17 @@
 //! held triple through [`held_lanes`]. A tried-on item waits on its template ([`Items::template`]).
 //! There is no fit check: the reference previews whatever it is handed (`DressUpFrame.lua:2-16`).
 
+use bevy::prelude::*;
 use wrathplus_protocol::CharEnumItem;
 use wrathplus_ui::script::{DressUpIntent, UiScript};
-use bevy::prelude::*;
 
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::entities::equip_slot;
 use crate::items::Items;
 use crate::net::{NetCommands, NetEntity};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::portrait::{DressUpLook, DressUpPreview};
-use crate::app_core::schedule::UiFeed;
 
 /// Every rendered equipment slot, the set [`equip_slot`] can map an item into.
 const LOOK_SLOTS: [u8; 14] = [0, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15, 16, 17, 18];

@@ -18,13 +18,13 @@
 //! `ConfirmBinder()` in range re-sends the activate; this drops the guid on `SMSG_PLAYERBOUND`,
 //! because an answered question is not a question and the reference's dialog is gone by then.
 
-use wrathplus_ui::script::{ScriptValue, UiScript};
 use bevy::prelude::*;
+use wrathplus_ui::script::{ScriptValue, UiScript};
 
-use crate::area::AreaTableRes;
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::area::AreaTableRes;
+use crate::net::{ClientCommand, NetCommands};
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
 pub(crate) use crate::app_core::interaction::BinderState;

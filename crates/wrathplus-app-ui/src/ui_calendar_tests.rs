@@ -302,7 +302,10 @@ fn errors_take_the_build_12340_keys_and_arguments() {
     assert_eq!(line(&mut state, 9), "ERR_GUILD_PLAYER_NOT_IN_GUILD");
     assert_eq!(line(&mut state, 11), "PLAYER_NOT_FOUND");
     assert_eq!(line(&mut state, 13), "ERR_IGNORING_YOU_S\0Bob");
-    assert_eq!(line(&mut state, 1), "CALENDAR_ERROR_GUILD_EVENTS_EXCEEDED\u{0}100");
+    assert_eq!(
+        line(&mut state, 1),
+        "CALENDAR_ERROR_GUILD_EVENTS_EXCEEDED\u{0}100"
+    );
     assert_eq!(line(&mut state, 2), "CALENDAR_ERROR_EVENTS_EXCEEDED\u{0}30");
 
     let script = UiScript::new().unwrap();

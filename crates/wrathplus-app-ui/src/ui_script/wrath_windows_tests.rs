@@ -16,33 +16,121 @@ struct Window {
 const WINDOWS: &[Window] = &[
     // The character window and its tabs (`CharacterFrame.lua:28`, Experience's), each through
     // `ToggleCharacter` as the micro button and the tab buttons call it.
-    Window { name: "character", open: "ToggleCharacter('PaperDollFrame')", frame: "PaperDollFrame" },
-    Window { name: "reputation", open: "ToggleCharacter('ReputationFrame')", frame: "ReputationFrame" },
-    Window { name: "skills", open: "ToggleCharacter('SkillFrame')", frame: "SkillFrame" },
-    Window { name: "currency", open: "ToggleCharacter('TokenFrame')", frame: "TokenFrame" },
-    Window { name: "spellbook", open: "ToggleSpellBook(BOOKTYPE_SPELL)", frame: "SpellBookFrame" },
-    Window { name: "talents", open: "ToggleTalentFrame()", frame: "PlayerTalentFrame" },
-    Window { name: "quest log", open: "ToggleFrame(QuestLogFrame)", frame: "QuestLogFrame" },
-    Window { name: "bags", open: "OpenAllBags()", frame: "ContainerFrame1" },
-    Window { name: "world map", open: "ToggleFrame(WorldMapFrame)", frame: "WorldMapFrame" },
-    Window { name: "friends", open: "ToggleFriendsFrame(1)", frame: "FriendsFrame" },
-    Window { name: "who", open: "ToggleFriendsFrame(2)", frame: "FriendsFrame" },
-    Window { name: "guild", open: "ToggleFriendsFrame(3)", frame: "FriendsFrame" },
-    Window { name: "dungeon finder", open: "ToggleLFDParentFrame()", frame: "LFDParentFrame" },
-    Window { name: "pvp", open: "TogglePVPFrame()", frame: "PVPParentFrame" },
-    Window { name: "achievements", open: "ToggleAchievementFrame()", frame: "AchievementFrame" },
-    Window { name: "calendar", open: "Calendar_LoadUI() Calendar_Toggle()", frame: "CalendarFrame" },
-    Window { name: "macros", open: "ShowMacroFrame()", frame: "MacroFrame" },
+    Window {
+        name: "character",
+        open: "ToggleCharacter('PaperDollFrame')",
+        frame: "PaperDollFrame",
+    },
+    Window {
+        name: "reputation",
+        open: "ToggleCharacter('ReputationFrame')",
+        frame: "ReputationFrame",
+    },
+    Window {
+        name: "skills",
+        open: "ToggleCharacter('SkillFrame')",
+        frame: "SkillFrame",
+    },
+    Window {
+        name: "currency",
+        open: "ToggleCharacter('TokenFrame')",
+        frame: "TokenFrame",
+    },
+    Window {
+        name: "spellbook",
+        open: "ToggleSpellBook(BOOKTYPE_SPELL)",
+        frame: "SpellBookFrame",
+    },
+    Window {
+        name: "talents",
+        open: "ToggleTalentFrame()",
+        frame: "PlayerTalentFrame",
+    },
+    Window {
+        name: "quest log",
+        open: "ToggleFrame(QuestLogFrame)",
+        frame: "QuestLogFrame",
+    },
+    Window {
+        name: "bags",
+        open: "OpenAllBags()",
+        frame: "ContainerFrame1",
+    },
+    Window {
+        name: "world map",
+        open: "ToggleFrame(WorldMapFrame)",
+        frame: "WorldMapFrame",
+    },
+    Window {
+        name: "friends",
+        open: "ToggleFriendsFrame(1)",
+        frame: "FriendsFrame",
+    },
+    Window {
+        name: "who",
+        open: "ToggleFriendsFrame(2)",
+        frame: "FriendsFrame",
+    },
+    Window {
+        name: "guild",
+        open: "ToggleFriendsFrame(3)",
+        frame: "FriendsFrame",
+    },
+    Window {
+        name: "dungeon finder",
+        open: "ToggleLFDParentFrame()",
+        frame: "LFDParentFrame",
+    },
+    Window {
+        name: "pvp",
+        open: "TogglePVPFrame()",
+        frame: "PVPParentFrame",
+    },
+    Window {
+        name: "achievements",
+        open: "ToggleAchievementFrame()",
+        frame: "AchievementFrame",
+    },
+    Window {
+        name: "calendar",
+        open: "Calendar_LoadUI() Calendar_Toggle()",
+        frame: "CalendarFrame",
+    },
+    Window {
+        name: "macros",
+        open: "ShowMacroFrame()",
+        frame: "MacroFrame",
+    },
     Window {
         name: "key bindings",
         open: "KeyBindingFrame_LoadUI() ShowUIPanel(KeyBindingFrame)",
         frame: "KeyBindingFrame",
     },
-    Window { name: "mail", open: "MAIL_SHOW", frame: "MailFrame" },
-    Window { name: "merchant", open: "MERCHANT_SHOW", frame: "MerchantFrame" },
-    Window { name: "trade skill", open: "TRADE_SKILL_SHOW", frame: "TradeSkillFrame" },
-    Window { name: "auction", open: "AUCTION_HOUSE_SHOW", frame: "AuctionFrame" },
-    Window { name: "bank", open: "BANKFRAME_OPENED", frame: "BankFrame" },
+    Window {
+        name: "mail",
+        open: "MAIL_SHOW",
+        frame: "MailFrame",
+    },
+    Window {
+        name: "merchant",
+        open: "MERCHANT_SHOW",
+        frame: "MerchantFrame",
+    },
+    Window {
+        name: "trade skill",
+        open: "TRADE_SKILL_SHOW",
+        frame: "TradeSkillFrame",
+    },
+    Window {
+        name: "auction",
+        open: "AUCTION_HOUSE_SHOW",
+        frame: "AuctionFrame",
+    },
+    Window {
+        name: "bank",
+        open: "BANKFRAME_OPENED",
+        frame: "BankFrame",
+    },
 ];
 
 /// Open one window, returning what went wrong: a raise, a recorded script error, or no frame shown.
@@ -56,7 +144,12 @@ fn open(script: &mut UiScript, w: &Window) -> Vec<String> {
         problems.push(format!("raise: {e}"));
     }
     script.tick(0.05);
-    problems.extend(script.take_errors().into_iter().map(|e| format!("error: {e}")));
+    problems.extend(
+        script
+            .take_errors()
+            .into_iter()
+            .map(|e| format!("error: {e}")),
+    );
     let shown = script
         .eval::<bool>(&format!("return {f} ~= nil and {f}:IsShown()", f = w.frame))
         .unwrap_or(false);
@@ -120,18 +213,36 @@ fn installed_wrath_opens_every_major_window() {
     let mut failed = Vec::new();
     for w in WINDOWS {
         let problems = open(&mut script, w);
-        eprintln!("WINDOW {:<16} {}", w.name, if problems.is_empty() { "ok".into() } else { problems.join(" | ") });
+        eprintln!(
+            "WINDOW {:<16} {}",
+            w.name,
+            if problems.is_empty() {
+                "ok".into()
+            } else {
+                problems.join(" | ")
+            }
+        );
         if !problems.is_empty() {
             failed.push(w.name);
         }
     }
     for (name, problems) in seed_bars(&mut script) {
-        eprintln!("BAR    {name:<16} {}", if problems.is_empty() { "ok".into() } else { problems.join(" | ") });
+        eprintln!(
+            "BAR    {name:<16} {}",
+            if problems.is_empty() {
+                "ok".into()
+            } else {
+                problems.join(" | ")
+            }
+        );
         if !problems.is_empty() {
             failed.push(name);
         }
     }
-    assert!(failed.is_empty(), "windows that raised or did not show: {failed:?}");
+    assert!(
+        failed.is_empty(),
+        "windows that raised or did not show: {failed:?}"
+    );
 }
 
 /// The action bars a session swaps in, each seeded as its packets would and announced by the event
@@ -140,12 +251,17 @@ fn installed_wrath_opens_every_major_window() {
 /// (`UNIT_ENTERED_VEHICLE`, `MainMenuBar.lua:251`), each checked before the next replaces it (a
 /// vehicle hides the possess bar).
 fn seed_bars(script: &mut UiScript) -> Vec<(&'static str, Vec<String>)> {
-    use wrathplus_ui::script::{PossessView, ScriptValue, UnitState, UnitVehicleView, WrathVehicles};
+    use wrathplus_ui::script::{
+        PossessView, ScriptValue, UnitState, UnitVehicleView, WrathVehicles,
+    };
     let player = ScriptValue::Str("player".into());
     let mut out = Vec::new();
     let check = |script: &mut UiScript, frame: &str| -> Vec<String> {
-        let mut problems: Vec<String> =
-            script.take_errors().into_iter().map(|e| format!("error: {e}")).collect();
+        let mut problems: Vec<String> = script
+            .take_errors()
+            .into_iter()
+            .map(|e| format!("error: {e}"))
+            .collect();
         let shown = script
             .eval::<bool>(&format!("return {frame} ~= nil and {frame}:IsShown()"))
             .unwrap_or(false);
@@ -228,11 +344,18 @@ fn installed_wrath_framexml_load_timing() {
         let started = std::time::Instant::now();
         let (script, failures) = super::stock_session(&data);
         times.push(started.elapsed().as_secs_f64() * 1000.0);
-        eprintln!("LOAD-TIMING {:.0} ms, {} failures", times[times.len() - 1], failures.len());
+        eprintln!(
+            "LOAD-TIMING {:.0} ms, {} failures",
+            times[times.len() - 1],
+            failures.len()
+        );
         drop(script);
     }
     times.sort_by(f64::total_cmp);
-    eprintln!("LOAD-TIMING median {:.0} ms of {reps}", times[times.len() / 2]);
+    eprintln!(
+        "LOAD-TIMING median {:.0} ms of {reps}",
+        times[times.len() / 2]
+    );
 }
 
 #[path = "wrath_worldmap_poi_tests.rs"]

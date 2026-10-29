@@ -4,7 +4,6 @@
 //! below [`LAYER_TEX_SIZE`] fills the top mips by NEAREST upsample. One array has one format and
 //! one mip-0 size, so a tile uploads its layers as S3TC blocks only when all of them can.
 
-use wrathplus_formats::{BlpMipChain, BlpTexels};
 use bevy::asset::RenderAssetUsages;
 use bevy::image::{Image, ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
@@ -12,6 +11,7 @@ use bevy::render::render_resource::{
     Extent3d, TextureDataOrder, TextureDimension, TextureFormat, TextureViewDescriptor,
     TextureViewDimension,
 };
+use wrathplus_formats::{BlpMipChain, BlpTexels};
 
 /// Every layer's edge in the tile array; Elwynn's ground BLPs are natively 256² with 8 mips.
 pub(crate) const LAYER_TEX_SIZE: u32 = 256;

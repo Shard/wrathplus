@@ -7,10 +7,10 @@ use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use wrathplus_protocol::guid;
 
 use super::probes::ProbeClock;
-use crate::names::NameCache;
-use crate::net::{Guid, NetCommands, NetEntity};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::names::NameCache;
+use crate::net::{Guid, NetCommands, NetEntity};
 use wrathplus_world::view::WorldCamera;
 
 /// How far the subject gate's warning looks when listing what is nearby.

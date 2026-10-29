@@ -8,15 +8,15 @@
 //! fare comes from the character's own purse. The switches are `docs/CONTRIBUTING.md`, "Running
 //! it unattended".
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_formats::{load_taxi_nodes, load_taxi_path_nodes};
-use bevy::prelude::*;
 
 use super::probes::ProbeClock;
-use crate::net::{ClientCommand, Guid, NetEntity};
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
+use crate::net::{ClientCommand, Guid, NetEntity};
 use crate::ui_taxi::TaxiState;
 use wrathplus_assets::{LockRecover, WorldAssets};
 

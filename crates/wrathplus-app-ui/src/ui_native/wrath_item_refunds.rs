@@ -4,16 +4,16 @@
 //! slot, keyed as the binding reads it (equipped rows use bag 0). A refunded item's row goes when
 //! `SMSG_ITEM_REFUND_RESULT` succeeds. Refunds expire after two hours of played time
 //! (AzerothCore `Item::IsRefundExpired`), counted down from the reply.
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 pub(crate) use crate::net::wrath_inventory_capture::ItemRefunds;
 use crate::net::wrath_inventory_capture::NativeInventoryPackets;
 use crate::net::{ClientCommand, NetCommands, Objects};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
+use bevy::prelude::*;
 #[cfg(test)]
 use wrathplus_protocol::wrath_inventory::RefundCost;
 use wrathplus_protocol::wrath_inventory::{Command, Packet};
 use wrathplus_ui::script::{ItemRefundCost, ItemRefundView, UiScript};
-use bevy::prelude::*;
 
 /// `ITEM_FIELD_FLAG_REFUNDABLE` (AzerothCore ItemTemplate.h).
 const ITEM_FIELD_FLAG_REFUNDABLE: u32 = 0x0000_1000;
@@ -62,7 +62,9 @@ pub(crate) fn feed_item_refunds(
     icons: Option<Res<crate::entities::ItemDisplays>>,
     commands: Res<NetCommands>,
     time: Res<Time>,
-    mut last: Local<crate::app_core::vm_memo::VmMemo<Option<Vec<(bool, i32, i32, ItemRefundView)>>>>,
+    mut last: Local<
+        crate::app_core::vm_memo::VmMemo<Option<Vec<(bool, i32, i32, ItemRefundView)>>>,
+    >,
 ) {
     let Some(mut script) = script else {
         return;

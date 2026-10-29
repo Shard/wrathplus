@@ -1,6 +1,6 @@
 //! Native quest reward lookup; formulas follow AzerothCore QuestDef.cpp:199,305.
-use wrathplus_formats::{CharTitlesCatalog, QuestXpCatalog, TeamContributionPointsCatalog};
 use bevy::prelude::*;
+use wrathplus_formats::{CharTitlesCatalog, QuestXpCatalog, TeamContributionPointsCatalog};
 
 #[derive(Resource, Default)]
 pub struct QuestRewardTables {

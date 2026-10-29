@@ -11,16 +11,18 @@ mod refresh;
 mod screen;
 pub(crate) mod service_reply;
 
+use bevy::prelude::*;
 use wrathplus_protocol::CharAction;
 #[cfg(any(test, feature = "test-support"))]
 use wrathplus_protocol::Character;
-use bevy::prelude::*;
 
 use crate::glue_strings::GlueStrings;
 use crate::ui_script::glue::native_glue;
 
-use crate::net::{CharListMessage, CharPick, CharRequest, CharacterLoginFailedMessage, LoggedOutMessage};
 use crate::app_core::session::EnteredWorldMessage;
+use crate::net::{
+    CharListMessage, CharPick, CharRequest, CharacterLoginFailedMessage, LoggedOutMessage,
+};
 
 pub(crate) use crate::app_core::schedule::InWorldGated;
 pub(crate) use crate::app_core::state::{ClientState, Roster};
@@ -77,7 +79,11 @@ impl Plugin for CharSelectPlugin {
             )
             .add_systems(
                 OnExit(ClientState::CharSelect),
-                (screen::exit_select, screen::preview_exit::clear_preview, clear_select_entry),
+                (
+                    screen::exit_select,
+                    screen::preview_exit::clear_preview,
+                    clear_select_entry,
+                ),
             )
             .add_systems(Update, (debug_glue_roundtrip, debug_logout_smoke))
             .add_systems(
@@ -449,8 +455,8 @@ fn delete_result(
         Option<MessageReader<GlueRaise>>,
     ),
 ) {
-    use wrathplus_protocol::wrath_char_services::Reply;
     use crate::glue::dialog::DialogKind;
+    use wrathplus_protocol::wrath_char_services::Reply;
     let empty = GlueStrings::default();
     let strings = strings.as_deref().unwrap_or(&empty);
     for raise in raises

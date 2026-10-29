@@ -34,11 +34,11 @@ use bevy::prelude::*;
 use wrathplus_protocol::EntityKind;
 
 use super::probes::ProbeClock;
-use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
 use crate::app_core::state::QuestGiver;
+use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
 
 /// The probe's default object: the `Wanted Poster` outside the Goldshire inn (AzerothCore `gameobject` 26843,
 /// template 68, quest 176). `[x, y, z, map]`.

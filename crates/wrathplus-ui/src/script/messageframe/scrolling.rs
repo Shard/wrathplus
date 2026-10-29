@@ -121,28 +121,30 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // matches. The text gate is the plain class's ([`super::message_text`]).
     m.set(
         "AddMessage",
-        lua.create_function(|lua, (this, text, rest): (Table, Value, mlua::Variadic<Value>)| {
-            let Some(text) = super::message_text(lua, &text) else {
-                return Ok(());
-            };
-            let arg = |i: usize| rest.get(i).cloned().unwrap_or(Value::Nil);
-            let has_rgb = is_number(&arg(0)) && is_number(&arg(1)) && is_number(&arg(2));
-            let (rgb, tail) = if has_rgb {
-                let c = |i| num_f32(lua, &arg(i)).clamp(0.0, 1.0);
-                ([c(0), c(1), c(2)], 3)
-            } else {
-                let h = frame_handle_of(lua, &this)?;
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                (UiScript::message_frame_text_rgb(&model, h), 0)
-            };
-            let type_id = int_arg(lua, &arg(tail)) as u32;
-            let back_fill = matches!(arg(tail + 1), Value::Boolean(true));
-            let access_id = int_arg(lua, &arg(tail + 2));
-            let extra_data = int_arg(lua, &arg(tail + 3));
-            with_smf(lua, &this, |smf| {
-                smf.add_entry(text, rgb, type_id, back_fill, access_id, extra_data)
-            })
-        })?,
+        lua.create_function(
+            |lua, (this, text, rest): (Table, Value, mlua::Variadic<Value>)| {
+                let Some(text) = super::message_text(lua, &text) else {
+                    return Ok(());
+                };
+                let arg = |i: usize| rest.get(i).cloned().unwrap_or(Value::Nil);
+                let has_rgb = is_number(&arg(0)) && is_number(&arg(1)) && is_number(&arg(2));
+                let (rgb, tail) = if has_rgb {
+                    let c = |i| num_f32(lua, &arg(i)).clamp(0.0, 1.0);
+                    ([c(0), c(1), c(2)], 3)
+                } else {
+                    let h = frame_handle_of(lua, &this)?;
+                    let model = lua.app_data_ref::<Model>().expect("model app_data");
+                    (UiScript::message_frame_text_rgb(&model, h), 0)
+                };
+                let type_id = int_arg(lua, &arg(tail)) as u32;
+                let back_fill = matches!(arg(tail + 1), Value::Boolean(true));
+                let access_id = int_arg(lua, &arg(tail + 2));
+                let extra_data = int_arg(lua, &arg(tail + 3));
+                with_smf(lua, &this, |smf| {
+                    smf.add_entry(text, rgb, type_id, back_fill, access_id, extra_data)
+                })
+            },
+        )?,
     )?;
 
     // UpdateColorByID(id, r, g, b) (`0x7932b0`) recolours the lines printed under `id`; stock
@@ -923,7 +925,8 @@ mod tests {
         assert_eq!(s.eval::<i64>("return N").unwrap(), 2);
         assert_eq!(s.eval::<i64>("return ALL").unwrap(), 3);
         assert_eq!(
-            s.eval::<(String, i64, i64, i64)>("return T, A, L, X").unwrap(),
+            s.eval::<(String, i64, i64, i64)>("return T, A, L, X")
+                .unwrap(),
             ("c".to_string(), 3, 9, 31)
         );
         assert_eq!(s.eval::<i64>("return SRC:GetNumMessages()").unwrap(), 1);
@@ -983,9 +986,10 @@ mod tests {
         )
         .unwrap();
         let frame: mlua::Table = s.eval("return F").unwrap();
-        let colours: Vec<[u8; 3]> =
-            super::with_smf(s.lua(), &frame, |smf| smf.lines.iter().map(|l| l.color).collect())
-                .unwrap();
+        let colours: Vec<[u8; 3]> = super::with_smf(s.lua(), &frame, |smf| {
+            smf.lines.iter().map(|l| l.color).collect()
+        })
+        .unwrap();
         assert_eq!(colours, vec![[0, 255, 0], [255, 0, 0]]);
     }
 
@@ -1013,10 +1017,16 @@ mod tests {
         s.run("F:SetHyperlinksEnabled(nil)").unwrap();
         assert!(!s.model_ref().link_spans.contains_key(&h));
         s.set_link_spans(span());
-        assert!(!s.model_ref().link_spans.contains_key(&h), "the next spans are filtered");
+        assert!(
+            !s.model_ref().link_spans.contains_key(&h),
+            "the next spans are filtered"
+        );
         s.run("F:SetHyperlinksEnabled()").unwrap();
         s.set_link_spans(span());
-        assert!(s.model_ref().link_spans.contains_key(&h), "no argument enables");
+        assert!(
+            s.model_ref().link_spans.contains_key(&h),
+            "no argument enables"
+        );
     }
 
     #[test]

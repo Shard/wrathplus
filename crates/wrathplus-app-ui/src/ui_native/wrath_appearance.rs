@@ -12,13 +12,13 @@
 //! `CMSG_ALTER_APPEARANCE`, and the preview dresses our own body
 //! ([`crate::entities::BarberPreview`]). Labelled: `CancelBarberShop` (`0x52e9f0`, untraced) stands
 //! the player up here, which closes the window as getting up does.
-pub(crate) use crate::net::wrath_appearance::{AppearanceReceipts, BarberChair};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
+pub(crate) use crate::net::wrath_appearance::{AppearanceReceipts, BarberChair};
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_appearance::Packet;
 use wrathplus_ui::script::UiScript;
-use bevy::prelude::*;
 
 /// `UNIT_STAND_STATE_SIT_LOW_CHAIR`..`SIT_HIGH_CHAIR`: the barber chair sits the player at
 /// `SIT_LOW_CHAIR + chairheight` (AC `GameObject::Use`).
@@ -156,7 +156,9 @@ fn feed_barber(
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<crate::net::NetCommands>,
     mut preview: ResMut<crate::entities::BarberPreview>,
-    mut last: Local<crate::app_core::vm_memo::VmMemo<Option<Option<wrathplus_ui::script::WrathBarberShop>>>>,
+    mut last: Local<
+        crate::app_core::vm_memo::VmMemo<Option<Option<wrathplus_ui::script::WrathBarberShop>>>,
+    >,
 ) {
     let Some(mut script) = script else {
         return;
@@ -277,9 +279,9 @@ fn feed_appearance(
                 script.queue_event("BARBER_SHOP_SUCCESS", Vec::new());
                 script.queue_event("BARBER_SHOP_APPEARANCE_APPLIED", Vec::new());
             }
-            Packet::BarberShopResult { result: 1 } => errors
-                .0
-                .push(crate::app_core::errors::UiError::key("ERR_NOT_ENOUGH_MONEY")),
+            Packet::BarberShopResult { result: 1 } => errors.0.push(
+                crate::app_core::errors::UiError::key("ERR_NOT_ENOUGH_MONEY"),
+            ),
             Packet::BarberShopResult { .. } => {}
         }
     }

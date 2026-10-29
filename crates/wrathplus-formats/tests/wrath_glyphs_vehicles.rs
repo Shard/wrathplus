@@ -1,8 +1,8 @@
 //! Installed build-12340 glyph, vehicle and quest-faction-reward tables (AzerothCore layouts).
+use std::path::Path;
 use wrathplus_formats::{
     glyphs::load_glyph_catalog, load_quest_faction_reward, vehicles::load_vehicle_catalog, Chain,
 };
-use std::path::Path;
 
 fn header(chain: &mut Chain, name: &str) -> [u32; 3] {
     let b = chain

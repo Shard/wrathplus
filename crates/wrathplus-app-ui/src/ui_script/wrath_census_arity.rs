@@ -14,23 +14,50 @@ use std::collections::{BTreeMap, HashSet};
 /// Names answering narrower than the stock Lua unpacks, each with why: a 12340 shape (evidence) or
 /// a pending fix (owner).
 const SHORT_REVIEWED: &[(&str, &str)] = &[
-    ("GetBinding", "0x55e8d0: the command, then each bound key; an unbound command answers one"),
-    ("GetLFGBootProposal", "0x554a60: false alone when no vote is in progress"),
-    ("GetQuestLogTitle", "0x5e5cc0: the tenth (displayQuestID) only with that debug cvar set"),
-    ("UnitPowerType", "0x60f100: five only for a vehicle with a PowerDisplay row, else two"),
-    ("GetAchievementInfoFromCriteria", "0x5b1720: seven; the stock ten-wide unpack reads nils"),
+    (
+        "GetBinding",
+        "0x55e8d0: the command, then each bound key; an unbound command answers one",
+    ),
+    (
+        "GetLFGBootProposal",
+        "0x554a60: false alone when no vote is in progress",
+    ),
+    (
+        "GetQuestLogTitle",
+        "0x5e5cc0: the tenth (displayQuestID) only with that debug cvar set",
+    ),
+    (
+        "UnitPowerType",
+        "0x60f100: five only for a vehicle with a PowerDisplay row, else two",
+    ),
+    (
+        "GetAchievementInfoFromCriteria",
+        "0x5b1720: seven; the stock ten-wide unpack reads nils",
+    ),
 ];
 
 /// Names no probe reaches with a hit or a full-width miss, by reason.
 const UNPROBED_REVIEWED: &[&str] = &[
     // No Battle.net service in a 3.3.5 session.
-    "BNGetBlockedInfo", "BNGetBlockedToonInfo", "BNGetConversationMemberInfo",
-    "BNGetCustomMessageTable", "BNGetFOFInfo", "BNGetFriendInfo", "BNGetFriendInfoByID",
-    "BNGetFriendInviteInfo", "BNGetFriendToonInfo", "BNGetInfo", "BNGetNumFOF", "BNGetToonInfo",
+    "BNGetBlockedInfo",
+    "BNGetBlockedToonInfo",
+    "BNGetConversationMemberInfo",
+    "BNGetCustomMessageTable",
+    "BNGetFOFInfo",
+    "BNGetFriendInfo",
+    "BNGetFriendInfoByID",
+    "BNGetFriendInviteInfo",
+    "BNGetFriendToonInfo",
+    "BNGetInfo",
+    "BNGetNumFOF",
+    "BNGetToonInfo",
     // No knowledge-base service.
-    "KBArticle_GetData", "KBSetup_GetCategoryData", "KBSetup_GetSubCategoryData",
+    "KBArticle_GetData",
+    "KBSetup_GetCategoryData",
+    "KBSetup_GetSubCategoryData",
     // No debug zone map or debug objects in a retail client.
-    "GetDebugZoneMap", "GetMapDebugObjectInfo",
+    "GetDebugZoneMap",
+    "GetMapDebugObjectInfo",
     // No voice-chat service: GetVoiceSessionInfo (`0x7db0b0`) answers one nil without sessions.
     "GetVoiceSessionInfo",
     // QuestPOIFrame's blob hit test answers nothing off a drawn blob (the map's blobs, Wire A).
@@ -79,7 +106,10 @@ fn ends_expression(rest: &str) -> bool {
     if line.starts_with(|c: char| ",.:[(+-*/^%<>=~".contains(c)) {
         return false;
     }
-    let word: String = line.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
+    let word: String = line
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect();
     word != "or" && word != "and"
 }
 
@@ -95,7 +125,11 @@ fn unpacked(prefix: &str) -> Option<usize> {
         }
         let n: usize = p[p.len() - digits..].parse().ok()?;
         let head = p[..p.len() - digits].trim_end();
-        return head.strip_suffix('(')?.trim_end().ends_with("select").then_some(n);
+        return head
+            .strip_suffix('(')?
+            .trim_end()
+            .ends_with("select")
+            .then_some(n);
     }
     // `local a, b = Name(` / `a.b, c = Name(`
     let lhs = p.strip_suffix('=')?;
@@ -110,7 +144,11 @@ fn unpacked(prefix: &str) -> Option<usize> {
     }
     let lhs = lhs.trim();
     let lhs = lhs.strip_prefix("local ").unwrap_or(lhs).trim();
-    if lhs.is_empty() || !lhs.chars().all(|c| c.is_ascii_alphanumeric() || "_., []".contains(c)) {
+    if lhs.is_empty()
+        || !lhs
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "_., []".contains(c))
+    {
         return None;
     }
     let n = lhs.split(',').count();
@@ -140,7 +178,8 @@ pub(super) fn scan(src: &str, path: &str, locals: &HashSet<String>, wants: &mut 
         }
         let before = if start > 0 { bytes[start - 1] } else { b' ' };
         let method = before == b':';
-        if before == b'.' || before == b'"' || before == b'\'' || (!method && locals.contains(name)) {
+        if before == b'.' || before == b'"' || before == b'\'' || (!method && locals.contains(name))
+        {
             continue;
         }
         // The statement starts before the receiver: `self.bar:GetPoint(` walks back over `self.bar`.
@@ -152,8 +191,12 @@ pub(super) fn scan(src: &str, path: &str, locals: &HashSet<String>, wants: &mut 
             }
         }
         let line_start = src[..stmt].rfind('\n').map_or(0, |n| n + 1);
-        let Some(want) = unpacked(&src[line_start..stmt]) else { continue };
-        let Some(end) = close_paren(bytes, j) else { continue };
+        let Some(want) = unpacked(&src[line_start..stmt]) else {
+            continue;
+        };
+        let Some(end) = close_paren(bytes, j) else {
+            continue;
+        };
         if !ends_expression(&src[end..]) {
             continue;
         }
@@ -285,26 +328,47 @@ pub(super) fn audit(
         } else if got < w.want {
             short += 1;
             short_names.push(name.clone());
-            lines.push(format!("ARITY SHORT {kind} {name} want={} got={got} sites={} at {}", w.want, w.sites, w.at));
+            lines.push(format!(
+                "ARITY SHORT {kind} {name} want={} got={got} sites={} at {}",
+                w.want, w.sites, w.at
+            ));
         }
     }
-    eprintln!("arity: {short} short, {unprobed} unprobed, of {} unpacked names", wants.len());
+    eprintln!(
+        "arity: {short} short, {unprobed} unprobed, of {} unpacked names",
+        wants.len()
+    );
     for line in lines {
         eprintln!("{line}");
     }
     let unlisted: Vec<&String> = short_names
         .iter()
         .filter(|n| !SHORT_REVIEWED.iter().any(|(r, _)| r == n))
-        .chain(unprobed_names.iter().filter(|n| !UNPROBED_REVIEWED.contains(&n.as_str())))
+        .chain(
+            unprobed_names
+                .iter()
+                .filter(|n| !UNPROBED_REVIEWED.contains(&n.as_str())),
+        )
         .collect();
-    assert!(unlisted.is_empty(), "arity rows missing from the reviewed lists: {unlisted:?}");
+    assert!(
+        unlisted.is_empty(),
+        "arity rows missing from the reviewed lists: {unlisted:?}"
+    );
     let stale: Vec<&str> = SHORT_REVIEWED
         .iter()
         .map(|(n, _)| *n)
         .filter(|n| !short_names.iter().any(|s| s == n))
-        .chain(UNPROBED_REVIEWED.iter().copied().filter(|n| !unprobed_names.iter().any(|s| s == n)))
+        .chain(
+            UNPROBED_REVIEWED
+                .iter()
+                .copied()
+                .filter(|n| !unprobed_names.iter().any(|s| s == n)),
+        )
         .collect();
-    assert!(stale.is_empty(), "reviewed arity rows that no longer apply: {stale:?}");
+    assert!(
+        stale.is_empty(),
+        "reviewed arity rows that no longer apply: {stale:?}"
+    );
     (short, unprobed)
 }
 
@@ -313,7 +377,12 @@ fn unpacking_sites_read_the_widest_target_list() {
     let mut wants = Wants::new();
     let src = "local a, b, c = GetThing(1)\nx, y = self.bar:GetPoint(1)\nlocal z = select(4, GetThing(2))\n\
                local p, q = GetOther() or 1\nif ok then m, n = GetMore(1, 2) end\nlocal s = Single()\n";
-    scan(src, r"Interface\FrameXML\X.lua", &HashSet::new(), &mut wants);
+    scan(
+        src,
+        r"Interface\FrameXML\X.lua",
+        &HashSet::new(),
+        &mut wants,
+    );
     let get = |m: bool, n: &str| wants.get(&(m, n.to_string())).map(|w| (w.want, w.sites));
     assert_eq!(get(false, "GetThing"), Some((4, 2)));
     assert_eq!(get(true, "GetPoint"), Some((2, 1)));

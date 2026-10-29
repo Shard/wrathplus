@@ -98,7 +98,13 @@ fn fixtures() -> Vec<(u16, Vec<u8>, SessionEvent)> {
     hello.extend(words(&[2]));
     hello.push(1);
     vec![
-        (0x120, words(&[0]), SessionEvent::TradeStatus { status: TradeStatus::Busy }),
+        (
+            0x120,
+            words(&[0]),
+            SessionEvent::TradeStatus {
+                status: TradeStatus::Busy,
+            },
+        ),
         (
             0x120,
             [words(&[1]), 9u64.to_le_bytes().to_vec()].concat(),
@@ -106,7 +112,13 @@ fn fixtures() -> Vec<(u16, Vec<u8>, SessionEvent)> {
                 status: TradeStatus::BeginTrade { partner: 9 },
             },
         ),
-        (0x120, words(&[2, 0]), SessionEvent::TradeStatus { status: TradeStatus::OpenWindow }),
+        (
+            0x120,
+            words(&[2, 0]),
+            SessionEvent::TradeStatus {
+                status: TradeStatus::OpenWindow,
+            },
+        ),
         (
             0x120,
             [words(&[12, 3]), vec![1], words(&[4])].concat(),
@@ -318,9 +330,16 @@ fn every_fixture_maps_to_its_shared_event_and_rejects_bad_extent() {
     let covered: std::collections::BTreeSet<_> = fixtures.iter().map(|f| f.0).collect();
     assert_eq!(covered, OPCODES.into_iter().collect());
     for (opcode, body, expected) in fixtures {
-        assert_eq!(debug(&decode(opcode, &body).unwrap()), debug(&expected), "{opcode:#x}");
+        assert_eq!(
+            debug(&decode(opcode, &body).unwrap()),
+            debug(&expected),
+            "{opcode:#x}"
+        );
         for end in 0..body.len() {
-            assert!(decode(opcode, &body[..end]).is_err(), "{opcode:#x} truncated at {end}");
+            assert!(
+                decode(opcode, &body[..end]).is_err(),
+                "{opcode:#x} truncated at {end}"
+            );
         }
         let mut trailing = body.clone();
         trailing.push(0);
@@ -342,7 +361,10 @@ fn dispatch_routes_every_opcode_and_reports_malformed_as_unhandled() {
     for (opcode, body, expected) in fixtures() {
         match adapter.dispatch(opcode, &body, 0).unwrap() {
             crate::wrath_events::WrathDispatch::Handled { session_events, .. } => {
-                assert_eq!(format!("{session_events:?}"), format!("{:?}", vec![expected]))
+                assert_eq!(
+                    format!("{session_events:?}"),
+                    format!("{:?}", vec![expected])
+                )
             }
             other => panic!("{opcode:#x}: {other:?}"),
         }
@@ -368,10 +390,19 @@ fn commands_encode_ac_read_order() {
                 etime_minutes: 720,
             },
             0x256,
-            [gb.clone(), words(&[1]), 9u64.to_le_bytes().to_vec(), words(&[20, 100, 500, 720])].concat(),
+            [
+                gb.clone(),
+                words(&[1]),
+                9u64.to_le_bytes().to_vec(),
+                words(&[20, 100, 500, 720]),
+            ]
+            .concat(),
         ),
         (
-            Command::AuctionRemove { auctioneer: g, auction_id: 7 },
+            Command::AuctionRemove {
+                auctioneer: g,
+                auction_id: 7,
+            },
             0x257,
             [gb.clone(), words(&[7])].concat(),
         ),
@@ -400,7 +431,10 @@ fn commands_encode_ac_read_order() {
             .concat(),
         ),
         (
-            Command::AuctionListOwner { auctioneer: g, list_from: 0 },
+            Command::AuctionListOwner {
+                auctioneer: g,
+                list_from: 0,
+            },
             0x259,
             [gb.clone(), words(&[0])].concat(),
         ),
@@ -414,13 +448,25 @@ fn commands_encode_ac_read_order() {
             [gb.clone(), words(&[0, 2, 3, 4])].concat(),
         ),
         (
-            Command::AuctionPlaceBid { auctioneer: g, auction_id: 7, price: 120 },
+            Command::AuctionPlaceBid {
+                auctioneer: g,
+                auction_id: 7,
+                price: 120,
+            },
             0x25a,
             [gb.clone(), words(&[7, 120])].concat(),
         ),
-        (Command::AuctionListPendingSales { auctioneer: g }, 0x48f, gb.clone()),
         (
-            Command::LootMasterGive { loot: g, slot: 3, target: 9 },
+            Command::AuctionListPendingSales { auctioneer: g },
+            0x48f,
+            gb.clone(),
+        ),
+        (
+            Command::LootMasterGive {
+                loot: g,
+                slot: 3,
+                target: 9,
+            },
             0x2a3,
             [gb.clone(), vec![3], 9u64.to_le_bytes().to_vec()].concat(),
         ),

@@ -2,8 +2,8 @@
 //! `SMSG_TRIGGER_MOVIE` names a row of.
 
 use anyhow::{Context, Result};
-use wrathplus_dbc::{FieldType, Schema, SchemaField};
 use std::collections::HashMap;
+use wrathplus_dbc::{FieldType, Schema, SchemaField};
 
 use crate::dbc::{parse, str_at, u32_at};
 use crate::Chain;

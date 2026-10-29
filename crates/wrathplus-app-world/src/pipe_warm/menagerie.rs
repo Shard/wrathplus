@@ -1,12 +1,12 @@
 //! The menagerie, `pipe_warm`'s warm set: one tiny rig per reachable pipeline variant, and the
 //! lane-coverage tests that keep a new lane from shipping unwarmed.
 
-use wrathplus_formats::{FogPolicy, ModelBlend};
 use bevy::camera::primitives::MeshAabb;
 use bevy::ecs::system::SystemParam;
 use bevy::mesh::MeshTag;
 use bevy::prelude::*;
 use bevy::render::render_resource::Buffer;
+use wrathplus_formats::{FogPolicy, ModelBlend};
 
 use wrathplus_assets::materials::{LiquidMaterial, WowModelMaterial};
 use wrathplus_world::clouds::CloudMaterial;

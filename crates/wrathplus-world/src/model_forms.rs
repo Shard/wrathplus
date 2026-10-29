@@ -7,12 +7,12 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use wrathplus_assets::{
-    submesh_to_skinned_mesh, submesh_to_static_mesh, M2Model, ModelSubmesh, WmoModel,
-};
 use bevy::asset::AssetId;
 use bevy::camera::primitives::{Aabb, MeshAabb};
 use bevy::prelude::*;
+use wrathplus_assets::{
+    submesh_to_skinned_mesh, submesh_to_static_mesh, M2Model, ModelSubmesh, WmoModel,
+};
 
 /// Request bit: the static (unskinned) render form.
 pub(crate) const WANT_STATIC: u8 = 1;

@@ -2,8 +2,8 @@
 //! reaction's forced leg scans (`005d06a0`, `[0xc23494]`, `[0xc23490]` rows): each packet replaces
 //! the whole list, as AzerothCore's `SendForceReactions` sends it whole.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_faction::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{wrath_faction::Packet, SessionEvent, SessionEventKind};
 
 /// (`Faction.dbc` id, rank) in wire order; the first row naming a faction wins.
 #[derive(Resource, Default, Debug, PartialEq, Eq)]

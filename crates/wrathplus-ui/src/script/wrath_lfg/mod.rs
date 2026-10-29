@@ -100,7 +100,11 @@ pub(crate) fn lock_encounter(
         .iter()
         .filter(|e| e.map == map && e.difficulty == difficulty)
         .nth(index)?;
-    Some((e.name.clone(), e.icon.clone(), mask & (1 << (e.bit & 31)) != 0))
+    Some((
+        e.name.clone(),
+        e.icon.clone(),
+        mask & (1 << (e.bit & 31)) != 0,
+    ))
 }
 pub use queue::{
     WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem, WrathLfgEncounter, WrathLfgProposal,
@@ -213,7 +217,7 @@ fn dungeon_info(lua: &Lua, state: &State, row: &WrathLfgDungeon) -> mlua::Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn dungeon_tuple_abi_and_expansion_override() {
         let mut script = UiScript::new().unwrap();

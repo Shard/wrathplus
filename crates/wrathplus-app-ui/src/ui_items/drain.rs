@@ -6,10 +6,10 @@ use bevy::prelude::*;
 use wrathplus_protocol::types::BAG_PLAYER_INVENTORY;
 use wrathplus_ui::script::{UiScript, EQUIPMENT_BAG};
 
-use crate::items::Items;
-use crate::net::{ClientCommand, NetCommands, Objects};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::items::Items;
+use crate::net::{ClientCommand, NetCommands, Objects};
 use crate::pending_item_ops::PendingItemOps;
 
 use super::{slot_guid, slot_guid_count, wire_pos_for, INVTYPE_AMMO};
@@ -755,8 +755,8 @@ pub(super) fn drain_container_destroys(
 /// `UseContainerItem` calls through their applier.
 #[cfg(test)]
 fn run_container_clicks(world: &mut World) {
-    use wrathplus_ui::script::ScriptCall;
     use bevy::ecs::system::RunSystemOnce;
+    use wrathplus_ui::script::ScriptCall;
     world.run_system_once(drain_container_repairs).unwrap();
     world
         .run_system_once(
@@ -866,7 +866,9 @@ mod tests {
             "the open arm ships CMSG_OPEN_ITEM for backpack slot 1"
         );
         assert_eq!(
-            app.world().resource::<crate::app_core::state::LootLatch>().0,
+            app.world()
+                .resource::<crate::app_core::state::LootLatch>()
+                .0,
             Some(CLAM),
             "…having first latched the item's own guid, or the type-1 answer is refused"
         );
@@ -1267,9 +1269,9 @@ pub(super) fn drain_bind_on_use_confirms(
 #[cfg(test)]
 mod bind_confirm_tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
     use wrathplus_protocol::types::{ItemInfo, ObjectFields};
     use wrathplus_ui::script::{ContainerSlot, ContainerState};
-    use bevy::ecs::system::RunSystemOnce;
 
     /// Flurry Axe, a real `item_template` row: quality 4, bonding 2 (bind on equip).
     const FLURRY_AXE: u32 = 871;

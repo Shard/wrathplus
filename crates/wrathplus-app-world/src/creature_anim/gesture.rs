@@ -240,8 +240,8 @@ mod tests {
     /// The real system over the real `Emotes.dbc`; a unit in combat plays nothing.
     #[test]
     fn a_queued_gesture_reaches_the_one_shot_player() {
-        use crate::net::GuidIndex;
         use crate::app_core::session::ObjectStore;
+        use crate::net::GuidIndex;
         use wrathplus_protocol::ObjectFields;
 
         let data = wrathplus_formats::wow_data_or_skip!();

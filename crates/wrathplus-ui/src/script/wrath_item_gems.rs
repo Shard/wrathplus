@@ -30,7 +30,10 @@ fn gems(lua: &Lua, bag: i64, slot: u32) -> mlua::Result<MultiValue> {
 }
 
 fn number(lua: &Lua, v: Value) -> Option<i64> {
-    lua.coerce_number(v).ok().flatten().map(|n| n.trunc() as i64)
+    lua.coerce_number(v)
+        .ok()
+        .flatten()
+        .map(|n| n.trunc() as i64)
 }
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -40,7 +43,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetContainerItemGems",
         lua.create_function(|lua, (bag, slot): (Value, Value)| {
             let (Some(bag), Some(slot)) = (number(lua, bag), number(lua, slot)) else {
-                return Err(mlua::Error::runtime("Usage: GetContainerItemGems(bag, slot)"));
+                return Err(mlua::Error::runtime(
+                    "Usage: GetContainerItemGems(bag, slot)",
+                ));
             };
             gems(lua, bag, slot as u32)
         })?,
@@ -76,14 +81,29 @@ mod tests {
     fn gems_read_the_host_table() {
         let mut s = UiScript::new().unwrap();
         s.model_mut().unit_guids.player = 1;
-        s.set_unit("player", Some(UnitState { guid: 1, exists: true, ..Default::default() }));
+        s.set_unit(
+            "player",
+            Some(UnitState {
+                guid: 1,
+                exists: true,
+                ..Default::default()
+            }),
+        );
         let mut slots: crate::script::InventorySlots = Default::default();
-        slots[1] = Some(InvSlotView { item_id: 5, ..Default::default() });
+        slots[1] = Some(InvSlotView {
+            item_id: 5,
+            ..Default::default()
+        });
         s.set_inventory_slots(slots);
-        s.set_wrath_item_gems(vec![(0, 3, [Some(40111), None, Some(40112)]), (EQUIPMENT_BAG, 1, [Some(41398), None, None])]);
+        s.set_wrath_item_gems(vec![
+            (0, 3, [Some(40111), None, Some(40112)]),
+            (EQUIPMENT_BAG, 1, [Some(41398), None, None]),
+        ]);
         assert!(s
             .eval::<bool>("local a, b, c = GetContainerItemGems(0, 3) return a == 40111 and b == nil and c == 40112 and select('#', GetContainerItemGems(0, 4)) == 3 and GetInventoryItemGems(1) == 41398 and select('#', GetInventoryItemGems(2)) == 0")
             .unwrap());
-        assert!(s.run("GetContainerItemGems(0)").is_err() && s.run("GetInventoryItemGems()").is_err());
+        assert!(
+            s.run("GetContainerItemGems(0)").is_err() && s.run("GetInventoryItemGems()").is_err()
+        );
     }
 }

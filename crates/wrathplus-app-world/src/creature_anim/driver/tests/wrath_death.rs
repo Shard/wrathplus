@@ -2,13 +2,13 @@
 
 use super::*;
 use crate::app_core::session::ObjectStore;
+use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle};
+use bevy::animation::RepeatAnimation;
 use wrathplus_assets::{ModelJoint, ModelSkeleton, PoseBone, PoseClip, PoseSource, PoseTrack};
 use wrathplus_protocol::field::{
     FIELD_UNIT_DYNAMIC_FLAGS, FIELD_UNIT_HEALTH, FIELD_UNIT_MAXHEALTH, UNIT_DYNFLAG_DEAD,
 };
 use wrathplus_world::rig_anim::RigPose;
-use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle};
-use bevy::animation::RepeatAnimation;
 
 fn fixture() -> App {
     let mut app = app_with_net().0;
@@ -218,8 +218,8 @@ fn installed_wrath_wolf_death_residency_cannot_request_perpetual_corpse_playback
     );
     assert_eq!(u32::from_le_bytes(native[4..8].try_into().unwrap()), 1833);
     let skin = chain.read(r"Creature\Wolf\Wolf00.skin").expect("Wolf skin");
-    let rendered =
-        wrathplus_formats::parse_wrath_render_model(&bytes, &skin, "", &[]).expect("render metadata");
+    let rendered = wrathplus_formats::parse_wrath_render_model(&bytes, &skin, "", &[])
+        .expect("render metadata");
     let sequence = rendered
         .animations
         .iter()

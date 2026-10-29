@@ -137,7 +137,10 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
         }
         SMSG_QUESTGIVER_QUEST_FAILED => {
             let (quest_id, reason) = (u32_le(&mut r)?, u32_le(&mut r)?);
-            end(&r, vec![SessionEvent::QuestGiverFailed { quest_id, reason }])?
+            end(
+                &r,
+                vec![SessionEvent::QuestGiverFailed { quest_id, reason }],
+            )?
         }
         SMSG_QUESTLOG_FULL => end(&r, vec![SessionEvent::QuestLogFull])?,
         SMSG_QUESTUPDATE_FAILED | SMSG_QUESTUPDATE_FAILEDTIMER => {
@@ -175,7 +178,10 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
             } else {
                 (u32_le(&mut r)?, u32_le(&mut r)?)
             };
-            end(&r, vec![SessionEvent::QuestObjectiveItem { item_id, count }])?
+            end(
+                &r,
+                vec![SessionEvent::QuestObjectiveItem { item_id, count }],
+            )?
         }
         SMSG_QUEST_CONFIRM_ACCEPT => {
             let confirm = QuestConfirmAccept {
@@ -202,14 +208,22 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
             let msg = QuestShareMsg(u8_le(&mut r)?);
             end(&r, vec![SessionEvent::QuestPushResult { member, msg }])?
         }
-        _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "not an NPC opcode")),
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "not an NPC opcode",
+            ))
+        }
     })
 }
 
 /// The events of a body read to its end; trailing bytes are a layout this decoder does not know.
 fn end(r: &Cursor<&[u8]>, events: Vec<SessionEvent>) -> io::Result<Vec<SessionEvent>> {
     if r.position() as usize != r.get_ref().len() {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "NPC message trailing bytes"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "NPC message trailing bytes",
+        ));
     }
     Ok(events)
 }
@@ -645,7 +659,6 @@ mod tests {
         out.push(0);
     }
 
-
     #[test]
     fn a_gossip_menu_keeps_its_options_and_quests_and_its_id_rides_the_select() {
         let mut b = 0x42u64.to_le_bytes().to_vec();
@@ -921,15 +934,24 @@ mod tests {
                 SMSG_QUESTGIVER_QUEST_FAILED,
                 &[5u32.to_le_bytes(), 4u32.to_le_bytes()].concat()
             ),
-            [E::QuestGiverFailed { quest_id: 5, reason: 4 }]
+            [E::QuestGiverFailed {
+                quest_id: 5,
+                reason: 4
+            }]
         );
         same!(
             one(SMSG_QUESTUPDATE_FAILEDTIMER, &5u32.to_le_bytes()),
-            [E::QuestFailed { quest_id: 5, timed: true }]
+            [E::QuestFailed {
+                quest_id: 5,
+                timed: true
+            }]
         );
         same!(
             one(SMSG_QUESTUPDATE_FAILED, &5u32.to_le_bytes()),
-            [E::QuestFailed { quest_id: 5, timed: false }]
+            [E::QuestFailed {
+                quest_id: 5,
+                timed: false
+            }]
         );
         same!(
             one(SMSG_QUESTUPDATE_COMPLETE, &5u32.to_le_bytes()),
@@ -949,17 +971,26 @@ mod tests {
                 required: 6
             }]
         );
-        assert!(decode(SMSG_QUESTUPDATE_ADD_KILL, &kill[..16]).is_err(), "no guid");
+        assert!(
+            decode(SMSG_QUESTUPDATE_ADD_KILL, &kill[..16]).is_err(),
+            "no guid"
+        );
         same!(
             one(SMSG_QUESTUPDATE_ADD_ITEM, &[]),
-            [E::QuestObjectiveItem { item_id: 0, count: 0 }]
+            [E::QuestObjectiveItem {
+                item_id: 0,
+                count: 0
+            }]
         );
         same!(
             one(
                 SMSG_QUESTUPDATE_ADD_ITEM,
                 &[2589u32.to_le_bytes(), 3u32.to_le_bytes()].concat()
             ),
-            [E::QuestObjectiveItem { item_id: 2589, count: 3 }]
+            [E::QuestObjectiveItem {
+                item_id: 2589,
+                count: 3
+            }]
         );
         let mut confirm = 5u32.to_le_bytes().to_vec();
         cstr(&mut confirm, "Escort");
@@ -991,7 +1022,11 @@ mod tests {
             text.extend([0u8; 4 + 24]);
         }
         let events = one(SMSG_NPC_TEXT_UPDATE, &text);
-        let [E::NpcGreeting { text_id: 77, blocks }] = &events[..] else {
+        let [E::NpcGreeting {
+            text_id: 77,
+            blocks,
+        }] = &events[..]
+        else {
             panic!("one greeting")
         };
         same!((blocks.len(), blocks[0].male.as_str()), (8, "Hello $N"));

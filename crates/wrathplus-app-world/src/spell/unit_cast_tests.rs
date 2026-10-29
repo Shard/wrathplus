@@ -1,7 +1,7 @@
 use super::*;
+use crossbeam_channel::Receiver;
 use wrathplus_formats::SpellCatalog;
 use wrathplus_ui::script::UnitGuids;
-use crossbeam_channel::Receiver;
 
 const ME: u64 = 0x10;
 const MOB: u64 = 0x20;

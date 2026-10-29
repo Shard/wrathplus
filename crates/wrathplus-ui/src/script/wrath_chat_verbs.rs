@@ -436,13 +436,20 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // CancelItemTempEnchantment(slot) (`0x8021d0`): 1 or 2, the main or off hand, holding an item.
     // Labelled: the temporary-enchant check `0x518b30` is the server's to refuse here.
     set(lua, "CancelItemTempEnchantment", |lua, args| {
-        let has_player = lua.app_data_ref::<Model>().expect("model app_data").unit_guids.player != 0;
+        let has_player = lua
+            .app_data_ref::<Model>()
+            .expect("model app_data")
+            .unit_guids
+            .player
+            != 0;
         if !has_player {
             return none();
         }
         let slot = number(lua, &arg(&args, 0)).map(|n| n.trunc() as i64);
         let Some(slot) = slot.filter(|s| (1..=2).contains(s)) else {
-            return Err(mlua::Error::runtime("Usage: CancelItemTempEnchantment(slot)"));
+            return Err(mlua::Error::runtime(
+                "Usage: CancelItemTempEnchantment(slot)",
+            ));
         };
         let held = {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
@@ -451,7 +458,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 .is_some_and(|s| s.item_id != 0)
         };
         if held {
-            push(lua, WrathChatVerbRequest::CancelTempEnchantment { slot: slot as u8 });
+            push(
+                lua,
+                WrathChatVerbRequest::CancelTempEnchantment { slot: slot as u8 },
+            );
         }
         none()
     })?;
@@ -481,7 +491,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         let dressable = id
             .and_then(|id| model.item_templates.get(&id))
             .is_some_and(|t| t.icon.is_some());
-        Ok(MultiValue::from_vec(vec![super::binding_abi::flag(dressable)]))
+        Ok(MultiValue::from_vec(vec![super::binding_abi::flag(
+            dressable,
+        )]))
     })?;
     // Sound_GameSystem_RestartSoundSystem() (`0x985d30`): the host restarts its sound system.
     set(lua, "Sound_GameSystem_RestartSoundSystem", |lua, _| {
@@ -873,11 +885,28 @@ mod tests {
         use crate::script::{InvSlotView, ItemTemplateView};
         let mut s = UiScript::new().unwrap();
         s.model_mut().unit_guids.player = 0x10;
-        s.set_unit("player", Some(crate::script::UnitState { guid: 0x10, exists: true, ..Default::default() }));
+        s.set_unit(
+            "player",
+            Some(crate::script::UnitState {
+                guid: 0x10,
+                exists: true,
+                ..Default::default()
+            }),
+        );
         let mut slots: crate::script::InventorySlots = Default::default();
-        slots[16] = Some(InvSlotView { item_id: 7, ..Default::default() });
+        slots[16] = Some(InvSlotView {
+            item_id: 7,
+            ..Default::default()
+        });
         s.set_inventory_slots(slots);
-        s.set_item_template(7, ItemTemplateView { name: "Blade".into(), icon: Some("I".into()), ..Default::default() });
+        s.set_item_template(
+            7,
+            ItemTemplateView {
+                name: "Blade".into(),
+                icon: Some("I".into()),
+                ..Default::default()
+            },
+        );
         s.run("CancelItemTempEnchantment(1) CancelItemTempEnchantment(2) Sound_GameSystem_RestartSoundSystem()").unwrap();
         assert!(s.run("CancelItemTempEnchantment(3)").is_err());
         assert!(s.eval::<bool>("return IsDressableItem(7) == 1 and IsDressableItem('Blade') == 1 and IsDressableItem(8) == nil").unwrap());
@@ -886,5 +915,4 @@ mod tests {
             vec![R::CancelTempEnchantment { slot: 1 }, R::RestartSoundSystem]
         );
     }
-
 }

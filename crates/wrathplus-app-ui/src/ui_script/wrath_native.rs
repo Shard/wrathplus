@@ -3,16 +3,19 @@
 
 use bevy::prelude::*;
 
-use crate::ui_script::{CapturePointerPinned, EguiPointerOver, PointerOverUiPanel, SyntheticPointer, UiCostWanted, UiFrameCost, UiPaint, UiPassState};
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
 use crate::app_core::state::CursorPayloadHeld;
+use crate::app_core::state::PointerOverUi;
 use crate::app_core::ui_flags::InspectMode;
 use crate::app_core::ui_flags::PlayerUiClickConsumed;
 use crate::app_core::ui_flags::PlayerUiHover;
-use crate::app_core::state::PointerOverUi;
 use crate::app_core::ui_flags::UiClock;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
 use crate::app_core::ui_flags::UiKeyboardCapture;
+use crate::ui_script::{
+    CapturePointerPinned, EguiPointerOver, PointerOverUiPanel, SyntheticPointer, UiCostWanted,
+    UiFrameCost, UiPaint, UiPassState,
+};
 
 pub(super) fn build(app: &mut App) {
     app.insert_resource(super::UiScaleCvar(super::default_ui_scale()))

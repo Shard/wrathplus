@@ -1,8 +1,8 @@
 //! The stock glue screens' calls and the session's progress into them ([`stock_glue`]).
 
+use bevy::prelude::*;
 use wrathplus_ui::script::glue::GlueRequest;
 use wrathplus_ui::script::{ScriptValue, UiScript};
-use bevy::prelude::*;
 
 use crate::glue_strings::GlueStrings;
 use crate::net::{LoginFailedMessage, LoginStageMessage};
@@ -126,7 +126,9 @@ pub(crate) fn stock_glue(
                 let n = roster.chars.len();
                 let row = index.checked_sub(1).filter(|&i| i < n);
                 if row != roster.selected() {
-                    let who = row.and_then(|i| roster.chars.get(i)).map(|c| c.name.as_str());
+                    let who = row
+                        .and_then(|i| roster.chars.get(i))
+                        .map(|c| c.name.as_str());
                     info!("char select: stock glue selects row {row:?} ({who:?})");
                 }
                 roster.select(row);

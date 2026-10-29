@@ -153,7 +153,10 @@ pub fn shadeat(chain: &mut Chain, map: &str, x: f32, y: f32) -> Result<()> {
     };
     println!(
         "MCSH at ({x:.2}, {y:.2}): {}",
-        word(wrathplus_formats::mcsh_shadowed_at(&tile.chunks, [x, y, 0.0]))
+        word(wrathplus_formats::mcsh_shadowed_at(
+            &tile.chunks,
+            [x, y, 0.0]
+        ))
     );
     println!(
         "neighborhood, texel {texel:.3} yd — rows +X (north) up, cols +Y (west) left; center marked:"

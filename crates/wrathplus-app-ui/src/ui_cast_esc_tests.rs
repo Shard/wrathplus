@@ -5,10 +5,10 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use wrathplus_formats::SpellDisplay;
-use wrathplus_ui::script::{ScriptCall, UiScript};
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
+use wrathplus_formats::SpellDisplay;
+use wrathplus_ui::script::{ScriptCall, UiScript};
 
 use super::push_casting_flag;
 use crate::spell::cast_test_support::{harness, mark_casting, ARCANE_MISSILES, HEROIC_STRIKE};

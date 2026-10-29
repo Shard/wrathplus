@@ -17,8 +17,8 @@
 
 use std::collections::BTreeSet;
 
-use wrathplus_formats::{LockSlot, LOCK_KEY_ITEM, LOCK_KEY_SKILL};
 use bevy::prelude::*;
+use wrathplus_formats::{LockSlot, LOCK_KEY_ITEM, LOCK_KEY_SKILL};
 
 use crate::app_core::session::ObjectStore;
 

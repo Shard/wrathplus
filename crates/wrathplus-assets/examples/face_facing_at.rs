@@ -9,8 +9,8 @@
 //! placement `Transform`; both are proper rotations, so the winding and the sign of `n·dir`
 //! survive. Output is Blizzard data: never commit it.
 
-use wrathplus_assets::coords::{placement_rotation, wow_to_bevy};
 use bevy::prelude::*;
+use wrathplus_assets::coords::{placement_rotation, wow_to_bevy};
 
 /// The reference's facing gate: `[0x80c5c4] = 0xb727c5ac`. A face is processed iff `n·dir <= EPS`.
 const FACING_EPS: f32 = f32::from_bits(0xb727_c5ac);

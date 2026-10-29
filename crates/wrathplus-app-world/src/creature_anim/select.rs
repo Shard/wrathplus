@@ -1,7 +1,7 @@
 //! The pure animation selection: `0x5fd8b0`'s gait picks, the one-shot tables, the rate math.
 
-use wrathplus_assets::AnimClip;
 use bevy::prelude::*;
+use wrathplus_assets::AnimClip;
 
 use crate::motion::RemoteMotion;
 use crate::motion::Spline;

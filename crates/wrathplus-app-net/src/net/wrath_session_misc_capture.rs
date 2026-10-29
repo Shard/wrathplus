@@ -1,9 +1,9 @@
 //! Ordered native session receipts without a shared event: the daily-reset countdown, play-time
 //! warnings, inebriation and the feature-system status. App owns any future reducer/UI feed.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_session_misc::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_session_misc::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeSessionMiscPackets(pub VecDeque<Packet>);

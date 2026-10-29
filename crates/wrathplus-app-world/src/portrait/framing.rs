@@ -103,10 +103,7 @@ pub(crate) fn glue_box_physical(
 /// The pillarbox's left and right bars in logical px, the glue chrome canvas's inset. Two numbers,
 /// not one halved: an odd leftover puts the box a pixel off centre. Measured in physical pixels
 /// and divided by the scale factor, so they cannot round differently from the camera viewport.
-pub fn glue_canvas_bars(
-    window: Option<&Window>,
-    viewport_aspect: Option<f32>,
-) -> (f32, f32) {
+pub fn glue_canvas_bars(window: Option<&Window>, viewport_aspect: Option<f32>) -> (f32, f32) {
     let Some(w) = window else {
         return (0.0, 0.0);
     };

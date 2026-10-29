@@ -13,11 +13,11 @@ use bevy::prelude::*;
 use wrathplus_formats::CreatureVoiceCatalog;
 use wrathplus_protocol::EntityKind;
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::creature_anim::AnimSoundEvent;
 use crate::entities::mount::{MountBody, MountChild};
 use crate::net::{FieldChanged, NetEntity};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 use wrathplus_world::schedule::WorldStage;
 

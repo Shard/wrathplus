@@ -38,7 +38,9 @@ fn shown_skills_page() -> UiScript {
 }
 
 /// [`shown_skills_page`] with a text measurer seated before the load, as at world entry.
-fn shown_skills_page_with(measurer: Option<Box<dyn wrathplus_ui::script::TextMeasure>>) -> UiScript {
+fn shown_skills_page_with(
+    measurer: Option<Box<dyn wrathplus_ui::script::TextMeasure>>,
+) -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     if let Some(m) = measurer {

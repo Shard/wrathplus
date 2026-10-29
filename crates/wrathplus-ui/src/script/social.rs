@@ -575,5 +575,4 @@ mod tests {
             "a raised call sorts nothing and fires nothing"
         );
     }
-
 }

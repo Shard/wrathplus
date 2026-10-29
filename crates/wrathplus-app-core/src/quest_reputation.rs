@@ -120,8 +120,8 @@ fn stage(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_formats::FactionInfo;
     use std::collections::HashMap;
+    use wrathplus_formats::FactionInfo;
 
     fn catalog() -> FactionCatalog {
         let mut c = FactionCatalog::from_rows(HashMap::new(), HashMap::new());

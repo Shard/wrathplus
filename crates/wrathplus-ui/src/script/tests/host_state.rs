@@ -263,7 +263,7 @@ fn the_engine_reads_the_handler_slot_not_the_geterrorhandler_global() {
 /// Wrath 0x51ba50 supplies factionName in slot 3, as Minimap.lua and ZoneText.lua read it.
 #[test]
 fn wrath_zone_pvp_tuple_keeps_faction_in_the_stock_consumer_slot() {
-    use crate::script::{ZoneTexts};
+    use crate::script::ZoneTexts;
     let mut s = UiScript::new().unwrap();
     assert_eq!(s.arity("GetZonePVPInfo()").unwrap(), 0);
     for kind in ["friendly", "hostile", "contested"] {
@@ -289,7 +289,7 @@ fn wrath_zone_pvp_tuple_keeps_faction_in_the_stock_consumer_slot() {
 /// Wrath 0x51ba50's special areas: two values, isSubZone 1 only when the leaf carried the flag.
 #[test]
 fn wrath_zone_pvp_special_areas_return_type_and_leaf_flag() {
-    use crate::script::{ZoneTexts};
+    use crate::script::ZoneTexts;
     let mut s = UiScript::new().unwrap();
     for kind in ["sanctuary", "arena", "combat"] {
         for leaf in [false, true] {

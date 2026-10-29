@@ -13,13 +13,13 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{ItemTextState, UiScript};
 
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
 use crate::go_templates::GameObjectTemplates;
 use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, NetCommands, Objects};
 use crate::query_cache::QueryCache;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
 
 /// One page of a book as the wire gave it (`SMSG_PAGE_TEXT_QUERY_RESPONSE`).
 pub(crate) struct PageText {
@@ -63,8 +63,8 @@ impl PageTexts {
 
 /// The page-text reply's handler.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::PageTexts;
     use crate::net::NetHandlerApp;
@@ -184,7 +184,10 @@ fn feed_item_text(
     materials: Option<Res<PageMaterials>>,
     commands: Res<NetCommands>,
     // The `$`-macro subject for the page body: the local player.
-    self_q: Query<(&crate::app_core::session::ObjectStore, &crate::net::Guid), With<crate::app_core::session::SelfPlayer>>,
+    self_q: Query<
+        (&crate::app_core::session::ObjectStore, &crate::net::Guid),
+        With<crate::app_core::session::SelfPlayer>,
+    >,
     states: Res<crate::app_core::state::WorldStates>,
 ) {
     let Some(mut script) = script else {

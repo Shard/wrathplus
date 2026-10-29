@@ -1,7 +1,7 @@
 //! The movement modes the server grants a unit we do not control: the `SMSG_SPLINE_MOVE_*` state.
 
-use wrathplus_protocol::SplineMode;
 use bevy::prelude::*;
+use wrathplus_protocol::SplineMode;
 
 use crate::app_core::movement::move_flags;
 

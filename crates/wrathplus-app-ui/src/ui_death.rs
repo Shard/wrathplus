@@ -9,13 +9,13 @@ use wrathplus_ui::script::{DeathAction, DeathUiState, ScriptValue, UiScript};
 
 use crate::app_core::death::DeathNet;
 use crate::app_core::death::ResurrectOffer;
-use crate::net::{ClientCommand, NetCommands, Objects};
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::Spells;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
+use crate::net::{ClientCommand, NetCommands, Objects};
 
 /// The feed's memory in two scopes: the body's state survives a `/reload`, as the reference's
 /// engine-side death mirror (`[0xb4e340]`) does, while what the VM was told dies with the VM.

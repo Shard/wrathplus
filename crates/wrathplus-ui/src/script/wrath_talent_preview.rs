@@ -279,7 +279,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "ResetPreviewTalentPoints",
         lua.create_function(|lua, args: MultiValue| {
-            let Some(tab) = args.front()
+            let Some(tab) = args
+                .front()
                 .cloned()
                 .and_then(|v| lua.coerce_integer(v).ok().flatten())
             else {

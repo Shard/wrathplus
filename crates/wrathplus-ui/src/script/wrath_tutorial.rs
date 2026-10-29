@@ -34,7 +34,8 @@ impl History {
             .split(|&byte| byte == 0)
             .next()
             .unwrap_or_default()
-            .as_chunks::<3>().0
+            .as_chunks::<3>()
+            .0
         {
             let value = triple.iter().fold(0u32, |value, &digit| {
                 value
@@ -139,9 +140,7 @@ mod tests {
     use super::*;
 
     fn vm() -> super::super::UiScript {
-        let mut script =
-            super::super::UiScript::new()
-                .unwrap();
+        let mut script = super::super::UiScript::new().unwrap();
         script.seed_cvars([super::super::SeededCvar {
             name: "flaggedTutorials".into(),
             value: "v\x01".into(),
@@ -309,7 +308,9 @@ impl State {
     /// Whether any tutorial-seen bit is set: `CanResetTutorials`' test (`0x530700` scans the
     /// flag words `[0xbd1aec]` for a nonzero one).
     pub(super) fn any_seen(&self) -> bool {
-        self.seen.as_ref().is_some_and(|s| s.iter().any(|&b| b != 0))
+        self.seen
+            .as_ref()
+            .is_some_and(|s| s.iter().any(|&b| b != 0))
     }
 }
 

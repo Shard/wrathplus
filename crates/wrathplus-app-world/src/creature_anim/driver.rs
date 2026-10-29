@@ -5,20 +5,20 @@
 
 use std::time::Duration;
 
-use wrathplus_assets::ModelAnimations;
-use wrathplus_formats::AnimDataCatalog;
 use bevy::animation::graph::AnimationNodeIndex;
 use bevy::animation::transition::AnimationTransitions;
 use bevy::prelude::*;
+use wrathplus_assets::ModelAnimations;
+use wrathplus_formats::AnimDataCatalog;
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::EmoteSounds;
 use crate::motion::FacingStep;
 use crate::motion::RemoteMotion;
 use crate::motion::Spline;
 use crate::names::type_flags::DO_NOT_PLAY_WOUND_ANIM;
 use crate::net::{ClientCommand, NetCommands, UnitSpeeds};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::app_core::state::EmoteSounds;
 
 use super::select::{
     self, current_special, defense_anim, is_swing_id, route_mounted, route_oneshot,

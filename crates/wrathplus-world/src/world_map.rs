@@ -1,9 +1,9 @@
 //! World-map state: the `Map.dbc` catalog and the current map id, for every subsystem that keys
 //! off the map (the terrain and WDL streamers, the loading screen, time-of-day lighting).
 
+use bevy::prelude::*;
 use wrathplus_assets::MapCatalogRes;
 use wrathplus_formats::load_map_catalog;
-use bevy::prelude::*;
 
 use wrathplus_assets::LockRecover;
 use wrathplus_assets::{AssetSet, WorldAssets};

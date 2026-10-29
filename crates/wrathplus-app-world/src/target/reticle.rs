@@ -22,9 +22,9 @@ use bevy::prelude::*;
 
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Spells;
 use crate::spell::{ground_cast_radius, SpellTargeting, TargetingWants};
 use crate::target::{PickOcclusion, WorldCursor};
-use crate::app_core::state::Spells;
 use wrathplus_world::decal::{DecalFrame, WorldDecal};
 use wrathplus_world::particles::buffer::EffectVertex;
 use wrathplus_world::view::WorldCamera;
@@ -187,8 +187,8 @@ mod tests {
     use super::*;
     use crate::spell::CastCommit;
     use avian3d::prelude::Collider;
-    use wrathplus_world::collision::GroundDecalSurface;
     use bevy::ecs::system::RunSystemOnce;
+    use wrathplus_world::collision::GroundDecalSurface;
 
     /// `0x4820f0`'s second guard. The ground is a real trimesh, so a DEST word draws and "nothing
     /// drawn" is a verdict, not an empty scene.

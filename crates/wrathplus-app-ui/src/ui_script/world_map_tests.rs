@@ -690,8 +690,9 @@ fn the_real_feralas_catalog_names_dire_maul_under_the_cursor() {
 
     let mut chain = wrathplus_formats::open_chain(&data).expect("chain");
     let areas = wrathplus_formats::load_area_table_catalog(&mut chain).expect("AreaTable");
-    let maps =
-        wrathplus_assets::MapCatalogRes(wrathplus_formats::load_map_catalog(&mut chain).expect("Map"));
+    let maps = wrathplus_assets::MapCatalogRes(
+        wrathplus_formats::load_map_catalog(&mut chain).expect("Map"),
+    );
     let (views, _) =
         crate::ui_world_map::build_catalog(&mut chain, &areas, &maps).expect("the real catalog");
     // Feralas' place in the pushed catalog, found the way Lua would.

@@ -14,12 +14,12 @@
 //! the server may test it against the pre-teleport position and ignore it; the latch does not
 //! retry. Probe by moving into the volume instead.
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_formats::AreaTriggerCatalog;
-use bevy::prelude::*;
 
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::player::Player;
+use crate::net::{ClientCommand, NetCommands};
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 use wrathplus_world::schedule::WorldStage;
 use wrathplus_world::world_map::CurrentMap;

@@ -7,7 +7,6 @@
 
 use std::collections::HashMap;
 
-use wrathplus_ui::widget::{FrameHandle, ModelFog, ModelLight};
 use bevy::camera::visibility::RenderLayers;
 use bevy::math::Rect;
 use bevy::prelude::*;
@@ -16,6 +15,7 @@ use bevy::render::render_resource::{
 };
 use bevy::shader::ShaderRef;
 use bevy::sprite_render::{Material2d, Material2dKey};
+use wrathplus_ui::widget::{FrameHandle, ModelFog, ModelLight};
 
 /// The append lane's z bands, far below the scripted UI's keys (a [`wrathplus_ui::order::ZKey`]
 /// region sets `1 << 20`), so the whole lane paints under the player UI.

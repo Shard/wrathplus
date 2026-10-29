@@ -96,14 +96,23 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // needResponse)` and `UpdateGMTicket(ticketDescription)`, each raising its usage string on a
     // non-string description.
     for (name, is_new, usage) in [
-        ("NewGMTicket", true, "Usage: NewGMTicket(ticketDescription, needResponse)"),
-        ("UpdateGMTicket", false, "Usage: UpdateGMTicket(ticketDescription)"),
+        (
+            "NewGMTicket",
+            true,
+            "Usage: NewGMTicket(ticketDescription, needResponse)",
+        ),
+        (
+            "UpdateGMTicket",
+            false,
+            "Usage: UpdateGMTicket(ticketDescription)",
+        ),
     ] {
         g.set(
             name,
             lua.create_function(move |lua, (text, need_response): (Value, Value)| {
                 let text = super::binding_abi::string_arg(lua, text, usage)?;
-                let need_response = is_new && !matches!(need_response, Value::Nil | Value::Boolean(false));
+                let need_response =
+                    is_new && !matches!(need_response, Value::Nil | Value::Boolean(false));
                 lua.app_data_mut::<Model>()
                     .expect("model app_data")
                     .gm_ticket_intents

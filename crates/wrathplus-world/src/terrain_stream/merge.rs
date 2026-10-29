@@ -632,9 +632,9 @@ fn spawn_blob(
 mod tests {
     use super::super::{ModelHandle, Placement, Placements, TerrainStreamer, TileState, ViewFocus};
     use super::*;
-    use wrathplus_assets::{ATTRIBUTE_WOW_FADE_SPHERE, ATTRIBUTE_WOW_MERGED_SLOT};
     use bevy::app::TaskPoolPlugin;
     use bevy::ecs::system::RunSystemOnce;
+    use wrathplus_assets::{ATTRIBUTE_WOW_FADE_SPHERE, ATTRIBUTE_WOW_MERGED_SLOT};
 
     fn geometry(verts: usize) -> Arc<RenderSubmesh> {
         Arc::new(RenderSubmesh {

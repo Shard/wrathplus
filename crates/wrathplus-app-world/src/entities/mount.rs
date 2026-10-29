@@ -11,11 +11,11 @@
 //! anchors move between the unit's frame and the seat, re-pointing [`RigPose::joints_root`], so
 //! nothing that rides the rider is rebuilt.
 
-use wrathplus_protocol::EntityKind;
 use bevy::prelude::*;
+use wrathplus_protocol::EntityKind;
 
-use crate::net::NetEntity;
 use crate::app_core::session::ObjectStore;
+use crate::net::NetEntity;
 use wrathplus_world::rig_anim::RigPose;
 
 /// The mount child, the client's `unit+0xdc` second model.

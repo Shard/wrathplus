@@ -9,9 +9,9 @@ use super::super::binding_abi::flag;
 use super::super::calls::ScriptCall;
 use super::super::Model;
 use super::{
-    check_unit_token, classification_word, grey_band, level_reads_unknown,
-    pick_unit_token, unit_predicate, unknownobject, with_unit, PlayerRecord, SelectionRequest,
-    UnitBase, UnitTokenParse,
+    check_unit_token, classification_word, grey_band, level_reads_unknown, pick_unit_token,
+    unit_predicate, unknownobject, with_unit, PlayerRecord, SelectionRequest, UnitBase,
+    UnitTokenParse,
 };
 
 /// The `"player"` fast path of `UnitName`, `UnitRace`, `UnitClass` and `UnitSex`, never
@@ -546,7 +546,10 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
             // A `partyN` token itself names a member; a chain off one (`party1target`) names
             // whoever that member targets, which the guid arms below judge.
             let party_slot = matches!(
-                crate::script::unit::parse_unit_token_in(&t, lua.app_data_ref::<Model>().expect("model").unit_guids.wrath),
+                crate::script::unit::parse_unit_token_in(
+                    &t,
+                    lua.app_data_ref::<Model>().expect("model").unit_guids.wrath
+                ),
                 UnitTokenParse::Unit {
                     base: UnitBase::Party(_),
                     hops: 0

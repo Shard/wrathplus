@@ -77,14 +77,20 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let Some((w, h)) = saved.0[slot].dimensions else {
                 return Ok(MultiValue::new());
             };
-            Ok(MultiValue::from_vec(vec![Value::Number(f64::from(w)), Value::Number(f64::from(h))]))
+            Ok(MultiValue::from_vec(vec![
+                Value::Number(f64::from(w)),
+                Value::Number(f64::from(h)),
+            ]))
         })?,
     )?;
     g.set(
         "SetChatWindowSavedDimensions",
         lua.create_function(|lua, (id, w, h): (Value, Value, Value)| {
             if let Some(Some(slot)) = window_slot(lua, &id) {
-                let (w, h) = (lua.coerce_number(w)?.unwrap_or(0.0), lua.coerce_number(h)?.unwrap_or(0.0));
+                let (w, h) = (
+                    lua.coerce_number(w)?.unwrap_or(0.0),
+                    lua.coerce_number(h)?.unwrap_or(0.0),
+                );
                 let mut saved = lua.app_data_mut::<SavedGeometry>().expect("geometry");
                 saved.0[slot].dimensions = Some((w as f32, h as f32));
             }
@@ -112,8 +118,14 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "SetChatWindowSavedPosition",
         lua.create_function(|lua, (id, point, x, y): (Value, Value, Value, Value)| {
             if let Some(Some(slot)) = window_slot(lua, &id) {
-                let point = lua.coerce_string(point)?.map(|s| s.to_string_lossy()).unwrap_or_default();
-                let (x, y) = (lua.coerce_number(x)?.unwrap_or(0.0), lua.coerce_number(y)?.unwrap_or(0.0));
+                let point = lua
+                    .coerce_string(point)?
+                    .map(|s| s.to_string_lossy())
+                    .unwrap_or_default();
+                let (x, y) = (
+                    lua.coerce_number(x)?.unwrap_or(0.0),
+                    lua.coerce_number(y)?.unwrap_or(0.0),
+                );
                 let mut saved = lua.app_data_mut::<SavedGeometry>().expect("geometry");
                 saved.0[slot].position = Some((point, x as f32, y as f32));
             }
@@ -445,5 +457,4 @@ mod tests {
         let n = super::super::editbox::history_len(s.lua(), h);
         assert_eq!(n, Some(0));
     }
-
 }

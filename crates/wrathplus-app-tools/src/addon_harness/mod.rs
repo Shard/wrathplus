@@ -304,7 +304,8 @@ fn survey_one(
         .diagnostics()
         .into_iter()
         .filter(|d| {
-            d.seq > warn_mark && d.kind == wrathplus_ui::script::diagnostics::DiagnosticKind::Warning
+            d.seq > warn_mark
+                && d.kind == wrathplus_ui::script::diagnostics::DiagnosticKind::Warning
         })
         .map(|d| {
             if d.count > 1 {
@@ -1310,7 +1311,11 @@ fn bag_slot(item_id: u32, name: &str, count: u32) -> wrathplus_ui::script::Conta
 }
 
 /// One seated spellbook slot: the fields a book reader reads, defaulted otherwise.
-fn spell_slot(spell_id: u32, name: &str, rank: Option<&str>) -> wrathplus_ui::script::SpellSlotView {
+fn spell_slot(
+    spell_id: u32,
+    name: &str,
+    rank: Option<&str>,
+) -> wrathplus_ui::script::SpellSlotView {
     wrathplus_ui::script::SpellSlotView {
         spell_id,
         name: name.to_string(),

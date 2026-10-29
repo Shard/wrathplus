@@ -9,12 +9,12 @@
 use bevy::prelude::*;
 
 use super::probes::ProbeClock;
-use crate::net::{ClientCommand, Guid, NetEntity};
+use crate::app_core::interaction::GossipState;
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
+use crate::net::{ClientCommand, Guid, NetEntity};
 use crate::poi_marker::PoiMarker;
-use crate::app_core::interaction::GossipState;
 
 /// A Stormwind City Guard's spawn (AzerothCore `creature` guid 79664, entry 68, map 0); the guard is
 /// then found in the streamed world by his gossip flag.

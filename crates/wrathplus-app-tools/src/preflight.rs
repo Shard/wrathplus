@@ -25,13 +25,13 @@ use bevy::prelude::*;
 use bevy::render::view::Msaa;
 use bevy::window::PrimaryWindow;
 
-use crate::area::AreaTableRes;
-use crate::names::NameCache;
 use crate::app_core::session::DisconnectedMessage;
 use crate::app_core::session::EnteredWorldMessage;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
+use crate::area::AreaTableRes;
+use crate::names::NameCache;
 use crate::probe_shield::{ProbeShield, ShieldReport};
 use wrathplus_world::world_map::CurrentMap;
 

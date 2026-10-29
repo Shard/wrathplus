@@ -664,8 +664,20 @@ mod tests {
         });
         s.set_wrath_lfg_location(Some((533, 1)));
         s.set_wrath_lfg_encounters(std::sync::Arc::new(vec![
-            crate::script::WrathLfgEncounter { map: 533, difficulty: 1, bit: 1, name: "Patchwerk".into(), icon: None },
-            crate::script::WrathLfgEncounter { map: 533, difficulty: 1, bit: 2, name: "Grobbulus".into(), icon: None },
+            crate::script::WrathLfgEncounter {
+                map: 533,
+                difficulty: 1,
+                bit: 1,
+                name: "Patchwerk".into(),
+                icon: None,
+            },
+            crate::script::WrathLfgEncounter {
+                map: 533,
+                difficulty: 1,
+                bit: 2,
+                name: "Grobbulus".into(),
+                icon: None,
+            },
         ]));
         assert!(s
             .eval::<bool>("return select(1, GetInstanceLockTimeRemainingEncounter(1)) == 'Patchwerk' and select(3, GetInstanceLockTimeRemainingEncounter(1)) == true and select(3, GetInstanceLockTimeRemainingEncounter(2)) == false and select('#', GetInstanceLockTimeRemainingEncounter(3)) == 3")

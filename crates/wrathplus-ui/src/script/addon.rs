@@ -175,7 +175,6 @@ fn version_check(model: &Model) -> bool {
         .is_none_or(|s| s.value != "0")
 }
 
-
 /// [`can_load`] in the in-game flavour (`dl=1`). A loaded addon is loadable before the gate
 /// runs, as in `0x48e390`, so disabling it mid-session does not mark it unloadable.
 fn verdict(model: &Model, i: usize) -> Verdict {

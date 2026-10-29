@@ -1,7 +1,7 @@
 //! The per-hand weapon-grip finger overlay.
 
-use wrathplus_assets::ModelAnimations;
 use bevy::prelude::*;
+use wrathplus_assets::ModelAnimations;
 
 use super::super::{HandGrip, HAND_GRIP_WEIGHT};
 

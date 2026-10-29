@@ -6,9 +6,9 @@
 
 use std::collections::HashMap;
 
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::ecs::system::SystemId;
 use bevy::prelude::*;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 /// One registered handler: the one-shot system and its name for the census.
 type Handler = (SystemId<In<SessionEvent>>, &'static str);

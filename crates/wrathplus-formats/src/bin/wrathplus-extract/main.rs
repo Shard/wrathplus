@@ -5,8 +5,8 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use wrathplus_formats::open_chain;
 use clap::{Parser, Subcommand};
+use wrathplus_formats::open_chain;
 
 mod chaincensus;
 mod charatlas;

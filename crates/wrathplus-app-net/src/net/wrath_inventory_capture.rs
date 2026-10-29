@@ -3,11 +3,11 @@
 //! replies, equipment-set traffic and socket results stay in the FIFO for those feeds; a letter's
 //! text goes to the item-text reader (`ui_item_text::LetterTexts`); read receipts stay here.
 use super::NetHandlerApp;
+use bevy::prelude::*;
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use wrathplus_protocol::wrath_inventory::{EquipmentSet, Packet, RefundCost};
 use wrathplus_protocol::wrath_items::{SocketMetadata, ITEM_SOCKET_BLOCKS};
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 #[derive(Resource, Default)]
 pub struct NativeInventoryPackets(pub VecDeque<Packet>);

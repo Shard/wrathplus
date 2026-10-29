@@ -1,13 +1,13 @@
 //! The trainer feed's tests: the laws, service resolution, the snapshot and the re-evaluator.
 
 use super::*;
+use std::collections::HashMap;
 use wrathplus_formats::{
     ItemDisplay, ItemDisplayCatalog, SpellDisplay, SPELL_ATTR_IS_TRADESKILL,
     SPELL_EFFECT_CREATE_ITEM, SPELL_EFFECT_LEARN_PET_SPELL, SPELL_EFFECT_LEARN_SPELL,
 };
 use wrathplus_protocol::types::trainer_spell_state;
 use wrathplus_ui::script::TrainerTooltip;
-use std::collections::HashMap;
 
 /// An empty spell catalog, as before `Spell.dbc` loads.
 fn empty_catalog() -> SpellCatalog {

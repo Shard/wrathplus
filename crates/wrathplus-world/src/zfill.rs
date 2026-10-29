@@ -122,8 +122,8 @@ pub fn plugin(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_assets::materials::WowModelMaterial;
     use bevy::pbr::{check_entities_needing_specialization, EntitiesNeedingSpecialization};
+    use wrathplus_assets::materials::WowModelMaterial;
 
     fn lifecycle_app(late_producer: bool) -> (App, Entity) {
         let mut app = App::new();

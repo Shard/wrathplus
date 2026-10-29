@@ -690,8 +690,10 @@ mod tests {
         assert_eq!(s.take_loot_picks(), vec![3], "and then the take, 1-based");
 
         // An erroring handler still loots: `0x4c1833`'s result is never tested.
-        s.run(r#"lb:SetScript("OnClick", function(this, arg1, arg2, arg3, arg4) error("boom") end)"#)
-            .unwrap();
+        s.run(
+            r#"lb:SetScript("OnClick", function(this, arg1, arg2, arg3, arg4) error("boom") end)"#,
+        )
+        .unwrap();
         hardware_click(&mut s, "LB1", "LeftButton");
         assert_eq!(s.take_loot_picks(), vec![3], "a broken hook still loots");
     }

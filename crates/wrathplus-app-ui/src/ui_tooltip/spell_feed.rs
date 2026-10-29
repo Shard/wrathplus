@@ -13,15 +13,15 @@ use wrathplus_ui::strings::Arg;
 
 use super::keyed;
 use super::spell_deps::{Chance, Changes, Deps, RangeSeen, Reagents, Seen, UnitField};
-use crate::items::Items;
-use crate::net::{NetCommands, Objects};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::spell::usable::{self, CostBasis};
 use crate::app_core::state::PlayerActions;
 use crate::app_core::state::Spells;
 use crate::inventory::count_of;
 use crate::inventory::InventoryScope;
+use crate::items::Items;
+use crate::net::{NetCommands, Objects};
+use crate::spell::usable::{self, CostBasis};
 use crate::ui_trainer::TrainerTooltipSubjects;
 
 /// The unit a view's caster cells are computed against, the spell builder `0x52e610`'s fourth
@@ -66,7 +66,7 @@ pub(crate) struct ViewCtx<'a, 'w, 's> {
     pub(super) attack_target: Option<wrathplus_formats::RangeUnit>,
     /// The object index the worn-item search and each reagent's carried count resolve through.
     pub(super) objects: &'a Objects<'w, 's>,
-    pub(super) items: &'a mut Items,
+    pub(super) items: &'a Items,
     pub(super) commands: &'a NetCommands,
     pub(super) sub_classes: Option<&'a wrathplus_formats::ItemSubClassCatalog>,
     /// The spell-to-line hop the `$`-tokens' skill level reads ([`crate::spell::spell_skill_value`]).
@@ -444,7 +444,7 @@ pub(super) fn reagent_state(
     entry: u32,
     store: Option<&ObjectStore>,
     objects: &Objects,
-    items: &mut Items,
+    items: &Items,
     commands: &NetCommands,
 ) -> (u32, bool) {
     let named = items.template(entry, 0, commands).is_some();
@@ -512,7 +512,7 @@ pub fn feed_spell_tooltips(
     objects: Objects,
     home_bind: Option<Res<crate::net::HomeBind>>,
     area_names: Option<Res<crate::ui_quest_log::QuestHeaderNamesRes>>,
-    mut items: ResMut<Items>,
+    items: Res<Items>,
     // One tuple param, under Bevy's 16-param ceiling.
     lookups: (
         Option<Res<crate::items::ItemSubClasses>>,
@@ -633,7 +633,7 @@ pub fn feed_spell_tooltips(
         .map(|&entry| {
             (
                 entry,
-                reagent_state(entry, self_store, &objects, &mut items, &commands),
+                reagent_state(entry, self_store, &objects, &items, &commands),
             )
         })
         .collect();
@@ -645,12 +645,9 @@ pub fn feed_spell_tooltips(
     let pet_guid = self_store.and_then(|s| s.0.unit_pet_guid());
     let pet = pet_guid.and_then(|g| objects.object(g));
     let pet_entity = pet_guid.and_then(|g| objects.entity(g));
-    let pet_unit =
-        pet_entity
-            .and_then(|e| range_units.unit(e))
-            .unwrap_or(wrathplus_formats::RangeUnit::still(
-                crate::spell::DEFAULT_REACH,
-            ));
+    let pet_unit = pet_entity.and_then(|e| range_units.unit(e)).unwrap_or(
+        wrathplus_formats::RangeUnit::still(crate::spell::DEFAULT_REACH),
+    );
     let pet_target = pet_entity.and_then(|e| range_units.attack_target(e));
     let pet_inputs = PetInputs::of(pet_guid, pet, RangeSeen::of(&pet_unit, pet_target.as_ref()));
     if memory.pet != Some(pet_inputs) {
@@ -673,7 +670,7 @@ pub fn feed_spell_tooltips(
             range_caster: caster_unit,
             attack_target,
             objects: &objects,
-            items: &mut items,
+            items: &items,
             commands: &commands,
             sub_classes: sub_classes.as_deref().map(|c| &c.0),
             skill_lines: skill_lines.as_deref().map(|s| &s.catalog),

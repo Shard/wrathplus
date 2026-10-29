@@ -8,14 +8,14 @@
 
 use std::collections::HashMap;
 
-use wrathplus_formats::LanguageWords;
 use bevy::prelude::*;
+use wrathplus_formats::LanguageWords;
 
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::PlayerActions;
-use crate::app_core::state::Spells;
 use crate::app_core::state::SkillLines;
+use crate::app_core::state::Spells;
 
 /// The GM bit of `PLAYER_FLAGS` (descriptor 190), as `0x49a9cc` reads it.
 const PLAYER_FLAGS_GM: u32 = 0x8;

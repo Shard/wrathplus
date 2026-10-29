@@ -13,16 +13,16 @@
 //! The repeat form tells a transient cube from a stuck one. How to run it: `docs/CONTRIBUTING.md`,
 //! "Running it unattended".
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_protocol::EntityKind;
-use bevy::prelude::*;
 
 use super::ProbeClock;
+use crate::app_core::session::SelfPlayer;
 use crate::entities::{FallbackCube, HeldAttached, VisualAttached, ATTACH_SLOT_NAMES};
 use crate::motion::Spline;
 use crate::names::NameCache;
 use crate::net::{Guid, NetEntity};
-use crate::app_core::session::SelfPlayer;
 use crate::target::hover::pick_model_roots;
 
 /// Census radius in yards, past the server's visibility radius; `WOW_UNIT_VISUALS_RADIUS` sets it.

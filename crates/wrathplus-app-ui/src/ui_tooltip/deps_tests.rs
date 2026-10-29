@@ -16,15 +16,15 @@ use wrathplus_ui::script::SpellTooltipView;
 use super::spell_deps::{Changes, Deps, RangeSeen, Reagents, Seen, UnitField};
 use super::spell_feed::{build_view, reagent_state, PetInputs, ViewCaster, ViewCtx};
 use super::tests::{real_spells, TestCtx};
-use crate::items::Items;
-use crate::net::{NetCommands, Objects};
 use crate::app_core::session::ObjectStore;
+use crate::app_core::state::Spells;
+use crate::items::Items;
+use crate::items::TestObjects;
+use crate::net::{NetCommands, Objects};
 use crate::spell::usable::{
     slot_item_cached, worn_slots_read, SlotItem, EQUIPMENT_MASK, EQUIPMENT_SLOTS,
 };
 use crate::spell::{ModsDiff, SpellModifiers};
-use crate::app_core::state::Spells;
-use crate::items::TestObjects;
 use wrathplus_formats::{RangeUnit, UnitMotion};
 
 /// One side of each input group, so that moving an input is an xor: `false` is the empty side (no
@@ -884,7 +884,7 @@ fn a_reagent_moving_requeues_the_views_that_list_it() {
         reagents
             .iter()
             .map(|&e| {
-                let state = reagent_state(e, Some(store), &objects, &mut t.items, &t.commands);
+                let state = reagent_state(e, Some(store), &objects, &t.items, &t.commands);
                 (e, state)
             })
             .collect()
@@ -1328,7 +1328,7 @@ fn the_search_answers_the_same_wherever_the_watched_state_is_the_same() {
                             range_caster: RangeUnit::still(1.5),
                             attack_target: None,
                             objects: &objects,
-                            items: &mut items,
+                            items: &items,
                             commands: &commands,
                             sub_classes: None,
                             skill_lines: None,

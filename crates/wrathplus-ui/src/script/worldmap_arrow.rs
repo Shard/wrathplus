@@ -135,7 +135,12 @@ fn create(lua: &Lua, which: Arrow, parent: Value) -> mlua::Result<()> {
     // PlayerArrowFrame (WorldMapFrame.lua:108, Blizzard_BattlefieldMinimap.lua:52-54).
     let mini = ["", "Mini"][usize::from(matches!(which, Arrow::Mini))];
     let name = Value::String(lua.create_string(format!("Player{mini}ArrowEffectFrame"))?);
-    let effect = ("Frame".to_string(), Some(name), Some(Value::Table(wrapper.clone())), None);
+    let effect = (
+        "Frame".to_string(),
+        Some(name),
+        Some(Value::Table(wrapper.clone())),
+        None,
+    );
     create_frame(lua, effect)?;
     let id = decode_id(&wrapper)?;
     let scale = {

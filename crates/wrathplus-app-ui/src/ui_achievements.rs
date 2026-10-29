@@ -1,10 +1,10 @@
 //! Wrath static achievement metadata. This is not a player-progress store.
+use bevy::prelude::*;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 use wrathplus_ui::script::{
     UiScript, WrathAchievement, WrathAchievementCategory, WrathAchievementCriterion,
     WrathAchievementMetadata,
 };
-use bevy::prelude::*;
 
 #[derive(Resource)]
 pub(crate) struct AchievementMetadata(WrathAchievementMetadata);
@@ -26,7 +26,10 @@ impl Plugin for UiAchievementsPlugin {
 fn load(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
     let Some(assets) = assets else { return };
     let mut chain = assets.chain.lock_recover();
-    if !matches!(chain.profile(), wrathplus_formats::DataProfile::Wrath { .. }) {
+    if !matches!(
+        chain.profile(),
+        wrathplus_formats::DataProfile::Wrath { .. }
+    ) {
         return;
     }
     if let Some(metadata) = metadata_from(&mut chain) {
@@ -36,7 +39,9 @@ fn load(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
 
 /// The static achievement catalogs as the VM reads them, from the client's DBCs; `None` without
 /// Achievement.dbc or Achievement_Criteria.dbc.
-pub(crate) fn metadata_from(chain: &mut wrathplus_formats::Chain) -> Option<WrathAchievementMetadata> {
+pub(crate) fn metadata_from(
+    chain: &mut wrathplus_formats::Chain,
+) -> Option<WrathAchievementMetadata> {
     use wrathplus_formats::achievements::{
         load_achievement_categories, load_achievement_criteria, load_achievement_icons,
         load_achievements,
@@ -49,10 +54,7 @@ pub(crate) fn metadata_from(chain: &mut wrathplus_formats::Chain) -> Option<Wrat
     let categories = load_achievement_categories(chain).map_err(|e| {
         warn!("achievement categories unavailable: {e:#}");
     });
-    match (
-        load_achievements(chain),
-        load_achievement_criteria(chain),
-    ) {
+    match (load_achievements(chain), load_achievement_criteria(chain)) {
         (Ok(achievements), Ok(criteria)) => {
             let mut metadata = WrathAchievementMetadata::default();
             if let Ok(categories) = categories {

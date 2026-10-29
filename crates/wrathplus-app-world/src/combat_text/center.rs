@@ -4,9 +4,9 @@
 
 use bevy::prelude::*;
 
-use crate::net::GuidIndex;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
+use crate::net::GuidIndex;
 
 use super::DamageSource;
 

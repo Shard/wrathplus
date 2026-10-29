@@ -236,7 +236,11 @@ impl<'a> DbcParser<'a> {
     /// Attach a schema whose slots read the given file columns: `columns[i]` is slot `i`'s
     /// column, `None` for a value the file does not carry (read as 0). For a 1.12 schema over a
     /// 3.3.5 file with an explicit layout map.
-    pub fn with_schema_columns(mut self, schema: Schema, columns: Vec<Option<usize>>) -> Result<Self> {
+    pub fn with_schema_columns(
+        mut self,
+        schema: Schema,
+        columns: Vec<Option<usize>>,
+    ) -> Result<Self> {
         let fc = self.header.field_count as usize;
         if columns.len() != schema.expanded_len() || columns.iter().flatten().any(|&c| c >= fc) {
             return Err(Error::SchemaFieldMismatch {
@@ -422,7 +426,12 @@ mod tests {
     /// A WDBC of `rows` (each `fields` u32s) over string block `strings`.
     fn wdbc(fields: usize, rows: &[Vec<u32>], strings: &[u8]) -> Vec<u8> {
         let mut b = b"WDBC".to_vec();
-        for v in [rows.len() as u32, fields as u32, (fields * 4) as u32, strings.len() as u32] {
+        for v in [
+            rows.len() as u32,
+            fields as u32,
+            (fields * 4) as u32,
+            strings.len() as u32,
+        ] {
             b.extend(v.to_le_bytes());
         }
         for row in rows {
@@ -454,7 +463,11 @@ mod tests {
 
     #[test]
     fn a_vanilla_schema_reads_a_wrath_file_whose_locale_blocks_widened() {
-        let bytes = wdbc(19, &[wrath_row(7, 1, 42), wrath_row(9, 5, 43)], b"\0Ash\0Oak\0");
+        let bytes = wdbc(
+            19,
+            &[wrath_row(7, 1, 42), wrath_row(9, 5, 43)],
+            b"\0Ash\0Oak\0",
+        );
         let set = DbcParser::parse(&mut Cursor::new(&bytes[..]))
             .unwrap()
             .with_schema(vanilla_schema())
@@ -463,9 +476,14 @@ mod tests {
             .unwrap();
         let rows = set.records();
         assert!(matches!(rows[1].get_value(0), Some(Value::UInt32(9))));
-        let Some(Value::StringRef(name)) = rows[1].get_value(1) else { panic!() };
+        let Some(Value::StringRef(name)) = rows[1].get_value(1) else {
+            panic!()
+        };
         assert_eq!(set.get_string(*name).unwrap(), "Oak");
-        assert!(matches!(rows[0].get_value(9), Some(Value::UInt32(0x00FF_01FE))));
+        assert!(matches!(
+            rows[0].get_value(9),
+            Some(Value::UInt32(0x00FF_01FE))
+        ));
         assert!(matches!(rows[0].get_value(10), Some(Value::UInt32(42))));
     }
 

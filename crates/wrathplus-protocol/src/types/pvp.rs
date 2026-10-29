@@ -39,8 +39,7 @@ pub struct InspectHonorStats {
     pub this_week_honor: u32,
     /// Last week's standing, the ladder position and not a rank; 0 if unranked that week.
     pub last_week_rank: u32,
-    /// Progress within the target's current rank, 0..255, computed as
-    /// [`crate::types::ObjectFields::player_honor_rank_bar`] is.
+    /// Progress within the target's current rank, 0..255, from the inspect-honor reply.
     pub rank_bar: u8,
 }
 

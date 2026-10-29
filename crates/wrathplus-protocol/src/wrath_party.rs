@@ -45,12 +45,7 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<SessionEvent> {
             delay_ms: u32_(r)?,
             reason: u32_(r)?,
         },
-        _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "party opcode",
-            ))
-        }
+        _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "party opcode")),
     };
     if r.position() as usize != body.len() {
         return Err(io::Error::new(

@@ -1,6 +1,6 @@
 use super::*;
-use wrathplus_protocol::wrath_achievement::Criteria;
 use std::collections::VecDeque;
+use wrathplus_protocol::wrath_achievement::Criteria;
 
 fn snapshot(earned: &[(u32, u32)], criteria: &[(u32, u64)]) -> Snapshot {
     Snapshot {

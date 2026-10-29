@@ -1,8 +1,8 @@
 //! The `fxview` fixture's driver: stands the effect-viewer's subject up in the world; the
 //! request, its knobs and the camera are [`super`]'s.
 
-use wrathplus_protocol::types::Field;
 use bevy::prelude::*;
+use wrathplus_protocol::types::Field;
 
 use wrathplus_assets::m2_url;
 use wrathplus_assets::materials::WowModelMaterial;
@@ -73,12 +73,14 @@ pub(crate) fn drive_fx_view(
                         display_id: Some(display),
                         scale: req.scale,
                     },
-                    crate::app_core::session::ObjectStore(wrathplus_protocol::types::ObjectFields::from_fields(&[
-                        (Field::UnitHealth, 100),
-                        (Field::UnitMaxHealth, 100),
-                        (Field::UnitLevel, 60),
-                        (Field::UnitFactionTemplate, 35), // friendly, no combat pose
-                    ])),
+                    crate::app_core::session::ObjectStore(
+                        wrathplus_protocol::types::ObjectFields::from_fields(&[
+                            (Field::UnitHealth, 100),
+                            (Field::UnitMaxHealth, 100),
+                            (Field::UnitLevel, 60),
+                            (Field::UnitFactionTemplate, 35), // friendly, no combat pose
+                        ]),
+                    ),
                     Transform::from_translation(pos)
                         .with_rotation(Quat::from_rotation_y(req.yaw_deg.to_radians())),
                     Visibility::default(),
@@ -107,10 +109,12 @@ pub(crate) fn drive_fx_view(
                         display_id: Some(display),
                         scale: req.scale,
                     },
-                    crate::app_core::session::ObjectStore(wrathplus_protocol::types::ObjectFields::from_fields(
-                        // `GAMEOBJECT_BYTES_1`: state byte 0, type byte 1.
-                        &[(Field::GameobjectBytes1, req.go_state | (req.go_type << 8))],
-                    )),
+                    crate::app_core::session::ObjectStore(
+                        wrathplus_protocol::types::ObjectFields::from_fields(
+                            // `GAMEOBJECT_BYTES_1`: state byte 0, type byte 1.
+                            &[(Field::GameobjectBytes1, req.go_state | (req.go_type << 8))],
+                        ),
+                    ),
                     Transform::from_translation(pos)
                         .with_rotation(Quat::from_rotation_y(req.yaw_deg.to_radians())),
                     Visibility::default(),

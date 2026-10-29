@@ -83,7 +83,11 @@ impl super::UiScript {
     /// The preview to render: hair style, hair color, facial hair, skin; `None` when closed.
     pub fn wrath_barber_preview(&self) -> Option<(u32, u32, u32, u32)> {
         let model = self.model_ref();
-        model.wrath_barber.shop.as_ref().map(|_| model.wrath_barber.preview)
+        model
+            .wrath_barber
+            .shop
+            .as_ref()
+            .map(|_| model.wrath_barber.preview)
     }
 
     /// Drain the barber verbs in call order.
@@ -154,7 +158,11 @@ fn cycle(list: &[WrathBarberStyle], data: u32, backward: bool) -> u32 {
     }
     let at = list.iter().position(|r| r.data == data).unwrap_or(0);
     let n = list.len();
-    let next = if backward { (at + n - 1) % n } else { (at + 1) % n };
+    let next = if backward {
+        (at + n - 1) % n
+    } else {
+        (at + 1) % n
+    };
     list[next].data
 }
 
@@ -193,10 +201,18 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             return Ok(MultiValue::new());
         }
         let (name, description, cost) = if cat == 1 {
-            (Value::Nil, Value::Nil, round(shop.base_cost * HAIR_COLOR_MODIFIER))
+            (
+                Value::Nil,
+                Value::Nil,
+                round(shop.base_cost * HAIR_COLOR_MODIFIER),
+            )
         } else {
             let r = selected(state, shop, cat).unwrap_or_default();
-            (text(lua, &r.name)?, text(lua, &r.description)?, round(shop.base_cost * r.cost_modifier))
+            (
+                text(lua, &r.name)?,
+                text(lua, &r.description)?,
+                round(shop.base_cost * r.cost_modifier),
+            )
         };
         Ok(MultiValue::from_vec(vec![
             name,
@@ -226,7 +242,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             0 => p.0 = cycle(&shop.hair_styles, p.0, backward),
             1 if shop.hair_colors > 0 => {
                 let n = shop.hair_colors;
-                p.1 = if backward { (p.1 + n - 1) % n } else { (p.1 + 1) % n };
+                p.1 = if backward {
+                    (p.1 + n - 1) % n
+                } else {
+                    (p.1 + 1) % n
+                };
             }
             2 => p.2 = cycle(&shop.facial_styles, p.2, backward),
             3 if !shop.skin_styles.is_empty() => p.3 = cycle(&shop.skin_styles, p.3, backward),
@@ -238,25 +258,41 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     set(lua, "GetBarberShopTotalCost", |lua, _| {
         let m = lua.app_data_ref::<Model>().expect("model app_data");
         let state = &m.wrath_barber;
-        let cost = state.shop.as_ref().map_or(0, |shop| total_cost(state, shop));
+        let cost = state
+            .shop
+            .as_ref()
+            .map_or(0, |shop| total_cost(state, shop));
         Ok(MultiValue::from_vec(vec![Value::Integer(cost)]))
     })?;
     // CanAlterSkin() (`0x52e4f0`): the race has skin styles.
     set(lua, "CanAlterSkin", |lua, _| {
         let m = lua.app_data_ref::<Model>().expect("model app_data");
-        let can = m.wrath_barber.shop.as_ref().is_some_and(|s| !s.skin_styles.is_empty());
+        let can = m
+            .wrath_barber
+            .shop
+            .as_ref()
+            .is_some_and(|s| !s.skin_styles.is_empty());
         Ok(MultiValue::from_vec(vec![Value::Boolean(can)]))
     })?;
     // GetHairCustomization() / GetFacialHairCustomization() (`0x52e6d0`/`0x52e730`): ChrRaces'
     // tokens, "NORMAL" without them.
-    for (global, facial) in [("GetHairCustomization", false), ("GetFacialHairCustomization", true)] {
+    for (global, facial) in [
+        ("GetHairCustomization", false),
+        ("GetFacialHairCustomization", true),
+    ] {
         set(lua, global, move |lua, _| {
             let m = lua.app_data_ref::<Model>().expect("model app_data");
             let token = m
                 .wrath_barber
                 .shop
                 .as_ref()
-                .map(|s| if facial { &s.facial_customization } else { &s.hair_customization })
+                .map(|s| {
+                    if facial {
+                        &s.facial_customization
+                    } else {
+                        &s.hair_customization
+                    }
+                })
                 .filter(|t| !t.is_empty())
                 .map_or("NORMAL", String::as_str);
             Ok(MultiValue::from_vec(vec![text(lua, token)?]))
@@ -296,7 +332,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             hair: id(0),
             hair_color: state.preview.1,
             facial_hair: id(2),
-            skin_color: if is_current(state, &shop, 3) { 0 } else { id(3) },
+            skin_color: if is_current(state, &shop, 3) {
+                0
+            } else {
+                id(3)
+            },
         };
         state.requests.push(request);
         Ok(MultiValue::new())
@@ -310,7 +350,13 @@ mod tests {
     use crate::script::UiScript;
 
     fn style(id: u32, name: &str, cost_modifier: f32, data: u32) -> WrathBarberStyle {
-        WrathBarberStyle { id, name: name.into(), description: format!("{name} desc"), cost_modifier, data }
+        WrathBarberStyle {
+            id,
+            name: name.into(),
+            description: format!("{name} desc"),
+            cost_modifier,
+            data,
+        }
     }
 
     #[test]
@@ -339,21 +385,36 @@ mod tests {
         // A new color costs half the base; a new style replaces that, and facial hair adds.
         s.run("SetNextBarberShopStyle(2)").unwrap();
         assert_eq!(s.wrath_barber_preview(), Some((0, 0, 0, 4)));
-        assert_eq!(s.eval::<i64>("return GetBarberShopTotalCost()").unwrap(), 50);
-        s.run("SetNextBarberShopStyle(1) SetNextBarberShopStyle(3, true)").unwrap();
+        assert_eq!(
+            s.eval::<i64>("return GetBarberShopTotalCost()").unwrap(),
+            50
+        );
+        s.run("SetNextBarberShopStyle(1) SetNextBarberShopStyle(3, true)")
+            .unwrap();
         assert!(s.eval::<bool>("return select(1, GetBarberShopStyleInfo(1)) == 'Long' and select(4, GetBarberShopStyleInfo(1)) == nil").unwrap());
-        assert_eq!(s.eval::<i64>("return GetBarberShopTotalCost()").unwrap(), 152 + 76);
+        assert_eq!(
+            s.eval::<i64>("return GetBarberShopTotalCost()").unwrap(),
+            152 + 76
+        );
         s.run("ApplyBarberShopStyle() BarberShopReset()").unwrap();
         assert_eq!(s.eval::<i64>("return GetBarberShopTotalCost()").unwrap(), 0);
         s.run("CancelBarberShop()").unwrap();
         assert_eq!(
             s.take_wrath_barber_requests(),
             vec![
-                WrathBarberRequest::Apply { hair: 2, hair_color: 0, facial_hair: 11, skin_color: 0 },
+                WrathBarberRequest::Apply {
+                    hair: 2,
+                    hair_color: 0,
+                    facial_hair: 11,
+                    skin_color: 0
+                },
                 WrathBarberRequest::Cancel,
             ]
         );
-        assert!(s.run("GetBarberShopStyleInfo()").is_err() && s.run("SetNextBarberShopStyle()").is_err());
+        assert!(
+            s.run("GetBarberShopStyleInfo()").is_err()
+                && s.run("SetNextBarberShopStyle()").is_err()
+        );
         s.set_wrath_barber_shop(None);
         assert_eq!(s.wrath_barber_preview(), None);
     }

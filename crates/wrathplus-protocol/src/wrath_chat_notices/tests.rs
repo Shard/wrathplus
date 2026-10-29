@@ -15,39 +15,79 @@ fn debug(events: &[SessionEvent]) -> String {
 
 fn fixtures() -> Vec<(u16, Vec<u8>, Vec<SessionEvent>)> {
     vec![
-        (0x103, [w(10), q(9)].concat(), vec![SessionEvent::Emote { emote_id: 10, guid: 9 }]),
+        (
+            0x103,
+            [w(10), q(9)].concat(),
+            vec![SessionEvent::Emote {
+                emote_id: 10,
+                guid: 9,
+            }],
+        ),
         (
             0x105,
             [q(9), w(101), w(0), w(3), b"Bob\0".to_vec()].concat(),
-            vec![SessionEvent::TextEmote { guid: 9, text_emote: 101, target_name: "Bob".into() }],
+            vec![SessionEvent::TextEmote {
+                guid: 9,
+                text_emote: 101,
+                target_name: "Bob".into(),
+            }],
         ),
         (
             0x105,
             [q(9), w(101), w(0), w(0), vec![0]].concat(),
-            vec![SessionEvent::TextEmote { guid: 9, text_emote: 101, target_name: String::new() }],
+            vec![SessionEvent::TextEmote {
+                guid: 9,
+                text_emote: 101,
+                target_name: String::new(),
+            }],
         ),
-        (0x1cb, b"Hi\0".to_vec(), vec![SessionEvent::Notification { text: "Hi".into() }]),
+        (
+            0x1cb,
+            b"Hi\0".to_vec(),
+            vec![SessionEvent::Notification { text: "Hi".into() }],
+        ),
         (0x219, vec![], vec![SessionEvent::ChatWrongFaction]),
-        (0x254, w(12), vec![SessionEvent::ZoneUnderAttack { area_id: 12 }]),
+        (
+            0x254,
+            w(12),
+            vec![SessionEvent::ZoneUnderAttack { area_id: 12 }],
+        ),
         (
             0x291,
             [w(3), b"5\0".to_vec()].concat(),
-            vec![SessionEvent::ServerMessage { message_type: 3, text: "5".into() }],
+            vec![SessionEvent::ServerMessage {
+                message_type: 3,
+                text: "5".into(),
+            }],
         ),
-        (0x2a9, b"Bob\0".to_vec(), vec![SessionEvent::ChatPlayerNotFound { name: "Bob".into() }]),
+        (
+            0x2a9,
+            b"Bob\0".to_vec(),
+            vec![SessionEvent::ChatPlayerNotFound { name: "Bob".into() }],
+        ),
         (
             0x2b8,
             [w(3), b"Go\0".to_vec()].concat(),
             vec![SessionEvent::AreaTriggerMessage { text: "Go".into() }],
         ),
-        (0x2d2, w(888), vec![SessionEvent::PlaySound { sound_id: 888 }]),
+        (
+            0x2d2,
+            w(888),
+            vec![SessionEvent::PlaySound { sound_id: 888 }],
+        ),
         (0x2fd, vec![1], vec![SessionEvent::ChatRestricted]),
         (
             0x32d,
             b"Bob\0".to_vec(),
-            vec![SessionEvent::WrathChatNotice { packet: Packet::PlayerAmbiguous { name: "Bob".into() } }],
+            vec![SessionEvent::WrathChatNotice {
+                packet: Packet::PlayerAmbiguous { name: "Bob".into() },
+            }],
         ),
-        (0x33d, [w(2), b"Welcome\0Rules\0".to_vec()].concat(), vec![system_line("Welcome".into()), system_line("Rules".into())]),
+        (
+            0x33d,
+            [w(2), b"Welcome\0Rules\0".to_vec()].concat(),
+            vec![system_line("Welcome".into()), system_line("Rules".into())],
+        ),
         (0x33d, w(0), vec![]),
     ]
 }
@@ -59,9 +99,16 @@ fn every_fixture_maps_to_its_shared_events_and_rejects_bad_extent() {
     assert_eq!(covered, OPCODES.into_iter().collect());
     let mut adapter = crate::wrath_events::WrathEventAdapter::new();
     for (opcode, body, expected) in fixtures {
-        assert_eq!(debug(&decode(opcode, &body).unwrap()), debug(&expected), "{opcode:#x}");
+        assert_eq!(
+            debug(&decode(opcode, &body).unwrap()),
+            debug(&expected),
+            "{opcode:#x}"
+        );
         for end in 0..body.len() {
-            assert!(decode(opcode, &body[..end]).is_err(), "{opcode:#x} truncated at {end}");
+            assert!(
+                decode(opcode, &body[..end]).is_err(),
+                "{opcode:#x} truncated at {end}"
+            );
         }
         let trailing = [body.as_slice(), &[0]].concat();
         assert!(decode(opcode, &trailing).is_err(), "{opcode:#x} trailing");
@@ -90,17 +137,45 @@ fn channel_notices_follow_ac_tails_and_leave_joined_left_to_wrath_channel() {
         (0x11, vec![], ChannelNoticeTail::Empty),
         (0x13, vec![], ChannelNoticeTail::Empty),
         (0x21, vec![], ChannelNoticeTail::Empty),
-        (0x0b, b"Nobody\0".to_vec(), ChannelNoticeTail::Name("Nobody".into())),
-        (0x0c, [q(9), vec![1, 2]].concat(), ChannelNoticeTail::ModeChange { guid: 9, old_flags: 1, new_flags: 2 }),
-        (0x12, [q(9), q(8)].concat(), ChannelNoticeTail::Actors { target: 9, source: 8 }),
+        (
+            0x0b,
+            b"Nobody\0".to_vec(),
+            ChannelNoticeTail::Name("Nobody".into()),
+        ),
+        (
+            0x0c,
+            [q(9), vec![1, 2]].concat(),
+            ChannelNoticeTail::ModeChange {
+                guid: 9,
+                old_flags: 1,
+                new_flags: 2,
+            },
+        ),
+        (
+            0x12,
+            [q(9), q(8)].concat(),
+            ChannelNoticeTail::Actors {
+                target: 9,
+                source: 8,
+            },
+        ),
     ];
     let mut adapter = crate::wrath_events::WrathEventAdapter::new();
     for (n, tail, expected) in rows {
         let body = notice(n, tail);
-        let expected = SessionEvent::ChannelNotify { notice: n, channel: "Trade".into(), tail: expected };
-        assert_eq!(format!("{:?}", decode_channel_notify(&body).unwrap()), format!("{expected:?}"));
+        let expected = SessionEvent::ChannelNotify {
+            notice: n,
+            channel: "Trade".into(),
+            tail: expected,
+        };
+        assert_eq!(
+            format!("{:?}", decode_channel_notify(&body).unwrap()),
+            format!("{expected:?}")
+        );
         assert!(decode_channel_notify(&[body.as_slice(), &[0]].concat()).is_err());
-        assert!(decode_channel_notify(&body[..body.len() - 1]).is_err() || body.len() == name.len() + 1);
+        assert!(
+            decode_channel_notify(&body[..body.len() - 1]).is_err() || body.len() == name.len() + 1
+        );
         match adapter.dispatch(0x99, &body, 0).unwrap() {
             crate::wrath_events::WrathDispatch::Handled { session_events, .. } => {
                 assert_eq!(debug(&session_events), debug(&[expected]))
@@ -116,7 +191,17 @@ fn channel_notices_follow_ac_tails_and_leave_joined_left_to_wrath_channel() {
 #[test]
 fn chat_lines_dispatch_only_the_raw_capture() {
     // Type SAY, language 7, sender, flags, receiver, sized text, tag.
-    let say = [vec![0x01], w(7), q(9), w(0), q(9), w(3), b"hi\0".to_vec(), vec![0]].concat();
+    let say = [
+        vec![0x01],
+        w(7),
+        q(9),
+        w(0),
+        q(9),
+        w(3),
+        b"hi\0".to_vec(),
+        vec![0],
+    ]
+    .concat();
     let mut adapter = crate::wrath_events::WrathEventAdapter::new();
     match adapter.dispatch(0x96, &say, 0).unwrap() {
         crate::wrath_events::WrathDispatch::Handled { session_events, .. } => assert!(
@@ -131,15 +216,50 @@ fn chat_lines_dispatch_only_the_raw_capture() {
 fn commands_encode_ac_read_order() {
     for (command, opcode, body) in [
         (
-            Command::Join { channel_id: 2, name: "Trade - City".into(), password: String::new() },
+            Command::Join {
+                channel_id: 2,
+                name: "Trade - City".into(),
+                password: String::new(),
+            },
             0x97,
             [w(2), vec![0, 0], b"Trade - City\0\0".to_vec()].concat(),
         ),
-        (Command::Leave { name: "x".into() }, 0x98, [w(0), b"x\0".to_vec()].concat()),
-        (Command::Named { opcode: 0x9a, name: "x".into() }, 0x9a, b"x\0".to_vec()),
-        (Command::NamedPair { opcode: 0xa4, name: "x".into(), other: "Bob".into() }, 0xa4, b"x\0Bob\0".to_vec()),
-        (Command::TextEmote { text_emote: 101, emote_num: 0, target: 9 }, 0x104, [w(101), w(0), q(9)].concat()),
-        (Command::ChatIgnored { guid: 9 }, 0x225, [q(9), vec![0]].concat()),
+        (
+            Command::Leave { name: "x".into() },
+            0x98,
+            [w(0), b"x\0".to_vec()].concat(),
+        ),
+        (
+            Command::Named {
+                opcode: 0x9a,
+                name: "x".into(),
+            },
+            0x9a,
+            b"x\0".to_vec(),
+        ),
+        (
+            Command::NamedPair {
+                opcode: 0xa4,
+                name: "x".into(),
+                other: "Bob".into(),
+            },
+            0xa4,
+            b"x\0Bob\0".to_vec(),
+        ),
+        (
+            Command::TextEmote {
+                text_emote: 101,
+                emote_num: 0,
+                target: 9,
+            },
+            0x104,
+            [w(101), w(0), q(9)].concat(),
+        ),
+        (
+            Command::ChatIgnored { guid: 9 },
+            0x225,
+            [q(9), vec![0]].concat(),
+        ),
         (Command::ClearWatch, 0x3f3, vec![]),
     ] {
         assert_eq!(encode(&command), (opcode, body), "{command:?}");

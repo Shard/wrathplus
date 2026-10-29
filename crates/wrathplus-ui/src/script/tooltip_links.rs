@@ -12,7 +12,9 @@ use std::collections::HashMap;
 use mlua::{Lua, Table};
 
 use super::object::frame_handle_of;
-use super::tooltip::{append_line, clear_content, finish_content, fire_cleared, show_or_hide_empty};
+use super::tooltip::{
+    append_line, clear_content, finish_content, fire_cleared, show_or_hide_empty,
+};
 use super::Model;
 use crate::widget::FrameHandle;
 
@@ -166,17 +168,32 @@ pub(super) fn set_quest(lua: &Lua, this: &Table, quest_id: u32) -> mlua::Result<
         .iter()
         .any(|e| !e.is_header && e.quest_id == quest_id);
     let global = |name: &str| -> mlua::Result<String> {
-        Ok(lua.globals().get::<Option<String>>(name)?.unwrap_or_default())
+        Ok(lua
+            .globals()
+            .get::<Option<String>>(name)?
+            .unwrap_or_default())
     };
     append_line(lua, this, (view.title.clone(), GOLD), None, false)?;
     if in_log {
-        append_line(lua, this, (global("QUEST_TOOLTIP_ACTIVE")?, GREEN), None, false)?;
+        append_line(
+            lua,
+            this,
+            (global("QUEST_TOOLTIP_ACTIVE")?, GREEN),
+            None,
+            false,
+        )?;
     }
     append_line(lua, this, (BLANK.to_string(), GOLD), None, false)?;
     append_line(lua, this, (view.objectives.clone(), WHITE), None, true)?;
     if !view.requirements.is_empty() {
         append_line(lua, this, (BLANK.to_string(), GOLD), None, false)?;
-        append_line(lua, this, (global("QUEST_TOOLTIP_REQUIREMENTS")?, GOLD), None, false)?;
+        append_line(
+            lua,
+            this,
+            (global("QUEST_TOOLTIP_REQUIREMENTS")?, GOLD),
+            None,
+            false,
+        )?;
         for row in &view.requirements {
             append_line(lua, this, (format!(" - {row}"), WHITE), None, false)?;
         }
@@ -251,7 +268,10 @@ pub(super) fn set_achievement(lua: &Lua, this: &Table, payload: &str) -> mlua::R
             let name = if link.guid != 0 && link.guid == model.unit_guids.player {
                 Some(model.player_record.name.clone()).filter(|n| !n.is_empty())
             } else {
-                model.units_by_guid.get(&link.guid).and_then(|u| u.name.clone())
+                model
+                    .units_by_guid
+                    .get(&link.guid)
+                    .and_then(|u| u.name.clone())
             };
             Some((row, criteria, name))
         })
@@ -266,7 +286,10 @@ pub(super) fn set_achievement(lua: &Lua, this: &Table, payload: &str) -> mlua::R
     fire_cleared(lua, h);
     let name = match name {
         Some(name) => name,
-        None => lua.globals().get::<Option<String>>("UNKNOWN")?.unwrap_or_default(),
+        None => lua
+            .globals()
+            .get::<Option<String>>("UNKNOWN")?
+            .unwrap_or_default(),
     };
     let status: String = if link.completed {
         lua.load("return format(ACHIEVEMENT_TOOLTIP_COMPLETE or '', ...)")
@@ -281,7 +304,11 @@ pub(super) fn set_achievement(lua: &Lua, this: &Table, payload: &str) -> mlua::R
     append_line(lua, this, (BLANK.to_string(), GOLD), None, false)?;
     append_line(lua, this, (row.description.clone(), WHITE), None, true)?;
     append_line(lua, this, (BLANK.to_string(), GOLD), None, false)?;
-    let done = |i: usize| link.criteria.get(i / 32).is_some_and(|m| m & (1 << (i % 32)) != 0);
+    let done = |i: usize| {
+        link.criteria
+            .get(i / 32)
+            .is_some_and(|m| m & (1 << (i % 32)) != 0)
+    };
     let colour = |i: usize| if done(i) { CRITERION_DONE } else { CRITERION };
     for (pair, chunk) in criteria.chunks(2).enumerate() {
         let left = (chunk[0].clone(), colour(pair * 2));
@@ -368,7 +395,9 @@ pub(super) fn set_talent(lua: &Lua, this: &Table, payload: &str) -> mlua::Result
 /// spell's description (gold, wrapped), or `GLYPH_EMPTY_DESC` for no glyph. A link draws no
 /// remove line, and 12340 runs no content script here.
 pub(super) fn set_glyph(lua: &Lua, this: &Table, payload: &str) -> mlua::Result<()> {
-    let mut fields = payload.split(':').map(|f| f.trim().parse::<u32>().unwrap_or(0));
+    let mut fields = payload
+        .split(':')
+        .map(|f| f.trim().parse::<u32>().unwrap_or(0));
     let (slot, glyph) = (fields.next().unwrap_or(0), fields.next().unwrap_or(0));
     let (spell, slot_row) = {
         let state = lua.app_data_ref::<State>().expect("link tooltip state");
@@ -384,14 +413,24 @@ pub(super) fn set_glyph(lua: &Lua, this: &Table, payload: &str) -> mlua::Result<
     }
     fire_cleared(lua, h);
     let view = spell.and_then(|s| super::tooltip_spell::spell_view_of(lua, s, false));
-    let text = |key: &str| lua.globals().get::<Option<String>>(key).map(Option::unwrap_or_default);
+    let text = |key: &str| {
+        lua.globals()
+            .get::<Option<String>>(key)
+            .map(Option::unwrap_or_default)
+    };
     match &view {
         Some(v) => append_line(lua, this, (v.name.clone(), WHITE), None, false)?,
         None => append_line(lua, this, (text("GLYPH_INACTIVE")?, CRITERION), None, false)?,
     }
     let minor = slot_row.is_some_and(|(kind, _)| kind != 0);
     let kind = if minor { "MINOR_GLYPH" } else { "MAJOR_GLYPH" };
-    append_line(lua, this, (text(kind)?, super::wrath_glyphs::GLYPH_BLUE), None, false)?;
+    append_line(
+        lua,
+        this,
+        (text(kind)?, super::wrath_glyphs::GLYPH_BLUE),
+        None,
+        false,
+    )?;
     match &view {
         Some(v) if !v.description.is_empty() => {
             append_line(lua, this, (v.description.clone(), GOLD), None, true)?
@@ -496,7 +535,12 @@ mod tests {
                 ..Default::default()
             },
         );
-        for (id, text, flags) in [(1, "First", 0), (2, "Hidden", 2), (3, "Second", 0), (4, "Third", 0)] {
+        for (id, text, flags) in [
+            (1, "First", 0),
+            (2, "Hidden", 2),
+            (3, "Second", 0),
+            (4, "Third", 0),
+        ] {
             meta.criteria.insert(
                 id,
                 WrathAchievementCriterion {
@@ -551,7 +595,10 @@ mod tests {
                 "Third"
             ]
         );
-        assert_eq!(s.eval::<String>("return TTTextRight7:GetText()").unwrap(), "Second");
+        assert_eq!(
+            s.eval::<String>("return TTTextRight7:GetText()").unwrap(),
+            "Second"
+        );
         // Mask 5: criteria 0 and 2 done (First, Third); Second is not.
         let colour = |region: &str| {
             let (r, g, b) = s
@@ -566,7 +613,8 @@ mod tests {
         assert_eq!(colour("TTTextLeft8"), [64, 192, 64]);
         assert_eq!(s.eval::<i64>("return RUNS").unwrap(), 1);
         // An unknown id writes nothing.
-        s.run("TT:SetHyperlink('achievement:999:0:0:0:0:0:0:0:0:0')").unwrap();
+        s.run("TT:SetHyperlink('achievement:999:0:0:0:0:0:0:0:0:0')")
+            .unwrap();
         assert_eq!(s.eval::<i64>("return RUNS").unwrap(), 1);
     }
 
@@ -578,7 +626,11 @@ mod tests {
         use std::collections::HashMap;
         let mut s = UiScript::new().unwrap();
         s.set_screen_size(800.0, 600.0);
-        for (id, name, desc) in [(10, "Improved Fireball", "Rank one."), (11, "Improved Fireball", "Rank two."), (20, "Glyph of Fireball", "Faster fireballs.")] {
+        for (id, name, desc) in [
+            (10, "Improved Fireball", "Rank one."),
+            (11, "Improved Fireball", "Rank two."),
+            (20, "Glyph of Fireball", "Faster fireballs."),
+        ] {
             s.set_spell_tooltip(
                 id,
                 SpellTooltipView {
@@ -620,16 +672,33 @@ mod tests {
         )
         .unwrap();
         let talent = lines(&s);
-        assert_eq!(talent.first().map(String::as_str), Some("Improved Fireball"));
+        assert_eq!(
+            talent.first().map(String::as_str),
+            Some("Improved Fireball")
+        );
         assert!(talent.iter().any(|l| l == "Rank 1/2"), "{talent:?}");
         assert_eq!(s.eval::<i64>("return RUNS").unwrap(), 1);
         s.run(r#"TT:SetHyperlink("|cff66bbff|Hglyph:21:5|h[Glyph of Fireball]|h|r")"#)
             .unwrap();
-        assert_eq!(lines(&s), ["Glyph of Fireball", "Major Glyph", "Faster fireballs."]);
-        assert_eq!(s.eval::<i64>("return RUNS").unwrap(), 1, "the glyph core runs no script");
-        s.run(r#"TT:SetHyperlink("unit:F130000045000001")"#).unwrap();
+        assert_eq!(
+            lines(&s),
+            ["Glyph of Fireball", "Major Glyph", "Faster fireballs."]
+        );
+        assert_eq!(
+            s.eval::<i64>("return RUNS").unwrap(),
+            1,
+            "the glyph core runs no script"
+        );
+        s.run(r#"TT:SetHyperlink("unit:F130000045000001")"#)
+            .unwrap();
         assert_eq!(lines(&s).first().map(String::as_str), Some("Timber Wolf"));
-        let err = s.run(r#"TT:SetHyperlink("bogus:1")"#).unwrap_err().to_string();
-        assert!(err.contains("TT:SetHyperlink(): Unknown link type"), "{err}");
+        let err = s
+            .run(r#"TT:SetHyperlink("bogus:1")"#)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("TT:SetHyperlink(): Unknown link type"),
+            "{err}"
+        );
     }
 }

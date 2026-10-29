@@ -1,6 +1,6 @@
 //! Installed native spell visual routes.
-use wrathplus_formats::{load_spell_catalog, load_spell_visual_catalog, Chain};
 use std::path::Path;
+use wrathplus_formats::{load_spell_catalog, load_spell_visual_catalog, Chain};
 #[test]
 fn installed_common_spell_visuals() {
     if std::env::var("WOW_CLIENT_PROFILE").as_deref() != Ok("wrath") {

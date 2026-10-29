@@ -8,9 +8,9 @@ use bevy::prelude::*;
 use wrathplus_formats::{RangeTargets, RangeUnit, SpellDisplay, SpellRange};
 
 use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Spells;
 use crate::spell::SpellModifiers;
 use crate::target::{CursorKind, PickOcclusion, WorldCursor};
-use crate::app_core::state::Spells;
 
 use super::{SpellTargeting, TargetingWants};
 
@@ -419,8 +419,8 @@ mod tests {
     /// Fixture rows mirror the real table: row 14 is 8.0 (Blizzard), row 8 is 5.0 (Flamestrike).
     #[test]
     fn ground_cast_radius_mirrors_get_current_cast_radius() {
-        use wrathplus_formats::{SpellDisplay, SpellRadius};
         use std::collections::HashMap;
+        use wrathplus_formats::{SpellDisplay, SpellRadius};
         let mut spells = crate::app_core::state::Spells::empty_for_tests();
         let display = |idx: [u32; 3]| SpellDisplay {
             effect_radius_index: idx,
@@ -674,9 +674,9 @@ mod tests {
     #[test]
     fn the_object_leg_reads_the_range_talent() {
         use super::super::corpse_fixture as fx;
-        use wrathplus_formats::{LockCatalog, LockSlot, OpenLock, LOCK_KEY_SKILL};
         use bevy::ecs::system::RunSystemOnce;
         use std::collections::HashMap;
+        use wrathplus_formats::{LockCatalog, LockSlot, OpenLock, LOCK_KEY_SKILL};
 
         const OPENER: u32 = 6477;
         const LOCK: u32 = 55;
@@ -801,10 +801,12 @@ mod tests {
             world.insert_resource(spells);
             // `UNIT_FIELD_HEALTH` 100: a store with no health reads dead to `BindTarget`'s gates.
             let live = || {
-                crate::app_core::session::ObjectStore(wrathplus_protocol::ObjectFields::from_fields(&[(
-                    wrathplus_protocol::types::Field::UnitHealth,
-                    100,
-                )]))
+                crate::app_core::session::ObjectStore(
+                    wrathplus_protocol::ObjectFields::from_fields(&[(
+                        wrathplus_protocol::types::Field::UnitHealth,
+                        100,
+                    )]),
+                )
             };
             world.spawn((
                 SelfPlayer,
@@ -875,11 +877,13 @@ mod tests {
             world.init_resource::<crate::spell::SpellModifiers>();
             world.insert_resource(crate::net::Reputations(Vec::new()));
             world.init_resource::<PickOcclusion>();
-            world.insert_resource(crate::app_core::player::Player::with_move_flags(if caster_runs {
-                crate::app_core::movement::move_flags::FORWARD
-            } else {
-                0
-            }));
+            world.insert_resource(crate::app_core::player::Player::with_move_flags(
+                if caster_runs {
+                    crate::app_core::movement::move_flags::FORWARD
+                } else {
+                    0
+                },
+            ));
             let mut spells = Spells::empty_for_tests();
             spells.catalog = wrathplus_formats::SpellCatalog::from_displays(HashMap::from([(
                 HAMSTRING,
@@ -909,10 +913,12 @@ mod tests {
                 pitch_rate: std::f32::consts::PI,
             });
             let live = || {
-                crate::app_core::session::ObjectStore(wrathplus_protocol::ObjectFields::from_fields(&[(
-                    wrathplus_protocol::types::Field::UnitHealth,
-                    100,
-                )]))
+                crate::app_core::session::ObjectStore(
+                    wrathplus_protocol::ObjectFields::from_fields(&[(
+                        wrathplus_protocol::types::Field::UnitHealth,
+                        100,
+                    )]),
+                )
             };
             world.spawn((
                 SelfPlayer,

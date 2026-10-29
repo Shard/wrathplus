@@ -10,9 +10,9 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{FollowRequest as ScriptFollowRequest, ScriptValue, UiScript};
 
-use crate::player::{FollowRequest, FollowState};
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::player::{FollowRequest, FollowState};
 
 /// The followee guid each VM was last told of, so the events fire on transitions only; a VM
 /// replaced by `/reload` mid-follow starts at `None` and is told `BEGIN` again.

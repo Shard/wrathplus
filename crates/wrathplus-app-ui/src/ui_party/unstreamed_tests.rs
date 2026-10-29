@@ -4,9 +4,9 @@
 //! `LFDQueueFrameRandomCooldownFrame_Update` formats `UnitName("party"..i)` for every member, so
 //! a nil there raises.
 
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_group::{Member, Roster};
 use wrathplus_ui::script::UiScript;
-use bevy::prelude::*;
 
 use super::pets::tests::app_with;
 use super::GroupState;

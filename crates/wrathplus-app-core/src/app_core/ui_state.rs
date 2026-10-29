@@ -19,7 +19,8 @@ pub fn ingame_ui_up(
     pending: Option<Res<PendingEntryUiLoad>>,
     state: Option<Res<State<crate::app_core::state::ClientState>>>,
 ) -> bool {
-    pending.is_none() && state.is_some_and(|s| *s.get() == crate::app_core::state::ClientState::InWorld)
+    pending.is_none()
+        && state.is_some_and(|s| *s.get() == crate::app_core::state::ClientState::InWorld)
 }
 
 /// The seam scale `s`, window px per UI unit (`windowH/768 × uiScale`), used at every crossing of

@@ -12,17 +12,17 @@
 //! `SMSG_PETITION_QUERY_RESPONSE`, the signer names from the name cache. It answers our request
 //! and delivers an offer alike (`PetitionsHandler.cpp:390-397`); only `owner` tells them apart.
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{
     petition_result, PetitionQueryResponse, PetitionRename, PetitionShowList,
     PetitionShowSignatures, PetitionSignResults,
 };
-use bevy::prelude::*;
 
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, NetCommands};
 use crate::query_cache::QueryCache;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
 use crate::ui_session::NpcSession;
 
 mod feed;
@@ -296,10 +296,10 @@ pub(crate) mod net {
 
     use crate::net::NetHandlerApp;
 
-    use crate::net::GuidIndex;
+    use crate::app_core::interaction::SocialState;
     use crate::app_core::session::ObjectStore;
     use crate::app_core::session::SelfGuid;
-    use crate::app_core::interaction::SocialState;
+    use crate::net::GuidIndex;
 
     pub(super) fn register(app: &mut App) {
         use SessionEventKind as K;
@@ -525,8 +525,8 @@ pub(crate) mod net {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_protocol::types::{PetitionShowListEntry, PetitionSignature};
     use crossbeam_channel::unbounded;
+    use wrathplus_protocol::types::{PetitionShowListEntry, PetitionSignature};
 
     fn commands() -> (NetCommands, crossbeam_channel::Receiver<ClientCommand>) {
         let (tx, rx) = unbounded();

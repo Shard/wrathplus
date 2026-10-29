@@ -1,10 +1,10 @@
 //! What the streamed world answers about a position: MCSH ground shade, ground effect, terrain
 //! height, and the area authority (the `AreaTable.dbc` leaf under the player's feet).
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_assets::AdtTile;
 use wrathplus_formats::{mcsh_shadowed_at, world_to_tile};
-use bevy::prelude::*;
 
 use super::TerrainStreamer;
 

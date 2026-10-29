@@ -8,9 +8,9 @@
 //! `0x810188`/`0x81018c`/`0x810190`, band ends (start + range) `0x8101a0`/`a4`/`a8`, ranges
 //! `0x810194`/`98`/`9c`, `1.0` at `0x7ff9d8`.
 
-use wrathplus_assets::materials::WowModelMaterial;
 use bevy::mesh::MeshTag;
 use bevy::prelude::*;
+use wrathplus_assets::materials::WowModelMaterial;
 
 /// A doodad submesh's distance-fade inputs. `apply_model_visibility` writes the fade into its
 /// `MeshTag` and draws `blend` while `0 < fade < 1`, `cutout` otherwise.

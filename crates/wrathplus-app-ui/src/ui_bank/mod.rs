@@ -2,16 +2,16 @@
 //! intents. The vault itself is descriptor fields that [`crate::ui_items`] feeds as containers
 //! `-1` and `5..=10`, and moves items in and out of on a right-click.
 
-use wrathplus_protocol::types::bank_slot_result;
 use bevy::prelude::*;
+use wrathplus_protocol::types::bank_slot_result;
 
 use wrathplus_ui::script::{BankState, UiScript};
 
-use crate::net::{ClientCommand, NetCommands};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::net::{ClientCommand, NetCommands};
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 
 pub(crate) use crate::app_core::catalogs::BankPrices;

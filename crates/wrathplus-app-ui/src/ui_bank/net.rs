@@ -1,12 +1,12 @@
 //! The bank's packet handlers: they fill [`BankOpen`] and [`BankErrors`] for the bank feed.
 
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 use super::{BankErrors, BankOpen};
-use crate::net::NetHandlerApp;
 use crate::app_core::interaction::GossipState;
 use crate::app_core::state::QuestGiver;
+use crate::net::NetHandlerApp;
 
 /// Register the bank handlers and the session-end listener.
 pub(super) fn register(app: &mut App) {

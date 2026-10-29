@@ -187,12 +187,13 @@ fn category_catalog(limit: u32) -> CategoryLimits {
     }
     bytes.push(0);
     CategoryLimits(
-        wrathplus_formats::item_limit_category::parse_item_limit_categories(&bytes, "enUS").unwrap(),
+        wrathplus_formats::item_limit_category::parse_item_limit_categories(&bytes, "enUS")
+            .unwrap(),
     )
 }
 fn inventory(app: &mut App) {
-    use crate::net::GuidIndex;
     use crate::app_core::session::ObjectStore;
+    use crate::net::GuidIndex;
     use wrathplus_protocol::types::Field;
     let mut pairs = Vec::new();
     for (field, n) in [

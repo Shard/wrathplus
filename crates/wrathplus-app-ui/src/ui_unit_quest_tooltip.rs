@@ -71,12 +71,17 @@ fn on_creature_name(In(ev): In<SessionEvent>, mut cache: ResMut<CreatureQuestLin
 }
 
 fn on_session_end(
-    In(_): In<SessionEvent>,
+    In(event): In<SessionEvent>,
     mut cache: ResMut<CreatureQuestLinksCache>,
     mut quest_log: ResMut<QuestLog>,
 ) {
-    cache.0.clear();
-    quest_log.tooltip_rows.clear();
+    if matches!(
+        event,
+        SessionEvent::Disconnected { .. } | SessionEvent::LoggedOut
+    ) {
+        cache.0.clear();
+        quest_log.tooltip_rows.clear();
+    }
 }
 
 /// Rebuild the blocks every frame and hand them over when they change.

@@ -158,19 +158,36 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Packet> {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
-    Query { team_id: u32 },
-    Roster { team_id: u32 },
-    Invite { team_id: u32, name: Vec<u8> },
+    Query {
+        team_id: u32,
+    },
+    Roster {
+        team_id: u32,
+    },
+    Invite {
+        team_id: u32,
+        name: Vec<u8>,
+    },
     Accept,
     Decline,
     /// `CMSG_ARENA_TEAM_LEAVE`.
-    Leave { team_id: u32 },
+    Leave {
+        team_id: u32,
+    },
     /// `CMSG_ARENA_TEAM_REMOVE`: a member by name.
-    Remove { team_id: u32, name: Vec<u8> },
+    Remove {
+        team_id: u32,
+        name: Vec<u8>,
+    },
     /// `CMSG_ARENA_TEAM_DISBAND`.
-    Disband { team_id: u32 },
+    Disband {
+        team_id: u32,
+    },
     /// `CMSG_ARENA_TEAM_LEADER`: the new captain by name.
-    Leader { team_id: u32, name: Vec<u8> },
+    Leader {
+        team_id: u32,
+        name: Vec<u8>,
+    },
 }
 impl Command {
     pub fn opcode(&self) -> u32 {
@@ -191,9 +208,7 @@ impl Command {
             Self::Query { team_id }
             | Self::Roster { team_id }
             | Self::Leave { team_id }
-            | Self::Disband { team_id } => {
-                Ok(team_id.to_le_bytes().to_vec())
-            }
+            | Self::Disband { team_id } => Ok(team_id.to_le_bytes().to_vec()),
             Self::Invite { team_id, name }
             | Self::Remove { team_id, name }
             | Self::Leader { team_id, name } => {

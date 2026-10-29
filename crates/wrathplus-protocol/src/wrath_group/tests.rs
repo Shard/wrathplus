@@ -255,10 +255,25 @@ fn assignments_encode_full_guid_and_clear_all_without_vanilla_repacking() {
     assert_eq!(MSG_PARTY_ASSIGNMENT, 0x38e);
     for assignment in [0, 1] {
         for apply in [false, true] {
-            assert_eq!(encode_assignment(assignment, apply, 0x8877665544332211),
-                vec![assignment, u8::from(apply), 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]);
-            assert_eq!(encode_assignment(assignment, apply, 0),
-                vec![assignment, u8::from(apply), 0, 0, 0, 0, 0, 0, 0, 0]);
+            assert_eq!(
+                encode_assignment(assignment, apply, 0x8877665544332211),
+                vec![
+                    assignment,
+                    u8::from(apply),
+                    0x11,
+                    0x22,
+                    0x33,
+                    0x44,
+                    0x55,
+                    0x66,
+                    0x77,
+                    0x88
+                ]
+            );
+            assert_eq!(
+                encode_assignment(assignment, apply, 0),
+                vec![assignment, u8::from(apply), 0, 0, 0, 0, 0, 0, 0, 0]
+            );
         }
     }
 }

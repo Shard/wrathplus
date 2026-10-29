@@ -1,7 +1,7 @@
 //! Read-only build-12340 rows for the sizes a spell effect model takes: `SpellVisualEffectName`
 //! fields 4-6 and `CreatureModelData`'s world and attached effect scales (fields 23/24).
-use wrathplus_formats::{Chain, EffectScale};
 use std::path::Path;
+use wrathplus_formats::{Chain, EffectScale};
 
 #[test]
 fn installed_wrath_effect_scales() {

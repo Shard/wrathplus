@@ -196,7 +196,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     fn row(name: Option<&str>) -> WrathSavedInstance {
         WrathSavedInstance {
             map: 533,

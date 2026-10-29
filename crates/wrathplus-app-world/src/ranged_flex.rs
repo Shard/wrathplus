@@ -227,8 +227,8 @@ fn remaining(player: &AnimationPlayer, anims: &ModelAnimations, anim_id: u16) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_assets::AnimClip;
     use bevy::animation::graph::AnimationNodeIndex;
+    use wrathplus_assets::AnimClip;
 
     fn clip(anim_id: u16, node: u32, duration: f32, looping: bool) -> AnimClip {
         AnimClip {

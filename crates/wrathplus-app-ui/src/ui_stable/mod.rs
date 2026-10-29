@@ -7,17 +7,17 @@
 //! Slot 0 is read from the wire like every row, because a dismissed pet still has one; stock
 //! `PetStable.lua:123-138` prefers the live pet and falls back to it.
 
-use wrathplus_protocol::types::StabledPet;
 use bevy::prelude::*;
+use wrathplus_protocol::types::StabledPet;
 
 use wrathplus_ui::script::{StableIntent, StablePetSlot, StableState, UiScript, NUM_STABLE_SLOTS};
 
-use crate::names::NameCache;
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::catalogs::PetFamilyTables;
 use crate::app_core::catalogs::PetStatTables;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, NetCommands};
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 
 mod net;

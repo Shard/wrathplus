@@ -2,8 +2,8 @@
 //! [`TraceLog`](super::super::probe) recorder as the in-client dump button; and the site
 //! regressions pinned at such spots.
 
-use wrathplus_assets::coords::{bevy_to_wow, wow_to_bevy};
 use bevy::math::{Mat4, Vec3};
+use wrathplus_assets::coords::{bevy_to_wow, wow_to_bevy};
 
 use super::super::seed::down_ray_claim;
 use super::super::EXTERIOR_LIT;

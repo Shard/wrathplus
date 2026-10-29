@@ -52,7 +52,8 @@ pub(super) fn update(
     // is read; the last writer wins, and all land on the single commit below.
     let mut request_stand = asks.read().last().map(|r| r.state);
     // A swimmer's or flier's sit key is the descend (`SitStandOrDescendStart`): it never sits there.
-    if binds.fired(crate::app_core::state::Input::SitOrStand) && !player.flying && !player.swimming {
+    if binds.fired(crate::app_core::state::Input::SitOrStand) && !player.flying && !player.swimming
+    {
         request_stand = Some(u8::from(stand_state == 0));
     }
     // Movement stands us up, volunteered, as the server never does: translation, a keyboard turn
@@ -178,16 +179,16 @@ fn predict(pending: &mut Option<u8>, s: u8, stand_now: u8) -> bool {
 
 #[cfg(test)]
 mod setter_tests {
-    use wrathplus_protocol::ObjectFields;
     use bevy::prelude::*;
     use crossbeam_channel::{unbounded, Receiver};
+    use wrathplus_protocol::ObjectFields;
 
     use super::{predict, update};
-    use crate::net::NetCommands;
+    use crate::app_core::player::Player;
     use crate::app_core::session::Embodied;
     use crate::app_core::session::ObjectStore;
+    use crate::net::NetCommands;
     use crate::player::{BodyQuery, ClientCommand, ServerStandState, StandStateRequest};
-    use crate::app_core::player::Player;
 
     #[derive(Resource)]
     struct Moving(bool);

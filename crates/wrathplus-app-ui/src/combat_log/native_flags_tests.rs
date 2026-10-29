@@ -1,7 +1,7 @@
 use super::*;
+use std::collections::HashMap;
 use wrathplus_protocol::types::{Field, ObjectFields};
 use wrathplus_protocol::wrath_group::{Member, Roster};
-use std::collections::HashMap;
 
 const ME: u64 = 0x10;
 const MATE: u64 = 0x11;

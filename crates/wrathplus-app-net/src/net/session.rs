@@ -2,16 +2,16 @@
 //! server clocks, reputations and the player's login-scoped stores. Registered ahead of every
 //! window plugin, so the teardown runs before the windows' own `Disconnected` listeners.
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::Character;
 use wrathplus_protocol::JumpInfo;
-use bevy::prelude::*;
 
+use crate::app_core::state::QuestGiver;
 use crate::items::Items;
 use crate::names::NameCache;
-use crate::app_core::state::QuestGiver;
 
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::ecs::system::SystemParam;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 use super::{
     CharListMessage, CharacterLoginFailedMessage, CinematicTriggeredMessage, ClientControlMessage,

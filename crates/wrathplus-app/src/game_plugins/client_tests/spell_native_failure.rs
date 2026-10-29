@@ -2,16 +2,18 @@
 //! They build the client with `headless_client`, so they live in the root layer.
 
 use crate::spell::native_failure::*;
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
 use wrathplus_protocol::SessionEvent;
 use wrathplus_protocol::SessionEventKind;
-use bevy::prelude::*;
 
 #[test]
 fn registered_capture_never_duplicates_shared_cleanup_or_clears_colliding_player_cast() {
     use crate::creature_anim::{CastEvent, Casting};
     let mut app = crate::game_plugins::schedule_tests::headless_client();
-    app.world_mut().resource_mut::<crate::app_core::session::SelfGuid>().0 = Some(42);
+    app.world_mut()
+        .resource_mut::<crate::app_core::session::SelfGuid>()
+        .0 = Some(42);
     let entity = app
         .world_mut()
         .spawn(Casting {

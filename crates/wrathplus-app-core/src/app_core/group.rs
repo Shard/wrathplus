@@ -7,13 +7,13 @@ use std::collections::HashMap;
 use super::errors::UiError;
 use super::state::GROUPTYPE_RAID;
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::{
     party_operation, party_result, patch_auras, GroupLootInfo, GroupMemberEntry, ObjectFields,
     PartyMemberStatsInfo,
 };
 use wrathplus_protocol::wrath_group::Stats;
 use wrathplus_protocol::wrath_instance::RaidInstanceInfo;
-use bevy::prelude::*;
 
 /// Native response fields that the shared presentation does not represent.
 #[derive(Default)]
@@ -320,11 +320,7 @@ impl GroupState {
     }
 
     /// `SMSG_GROUP_SET_LEADER`; vmangos sends the full list right after (`Group::ChangeLeader`).
-    pub fn apply_leader_changed(
-        &mut self,
-        name: &str,
-        own_name: Option<&str>,
-    ) -> Vec<UiError> {
+    pub fn apply_leader_changed(&mut self, name: &str, own_name: Option<&str>) -> Vec<UiError> {
         if own_name == Some(name) {
             vec![UiError::key("ERR_NEW_LEADER_YOU")]
         } else {

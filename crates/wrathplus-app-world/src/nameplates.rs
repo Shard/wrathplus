@@ -26,14 +26,14 @@ use bevy::prelude::*;
 use wrathplus_protocol::EntityKind;
 use wrathplus_ui::script::{JustifyH, JustifyV, Outline};
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Factions;
+use crate::app_core::state::Selection;
 use crate::entities::{overhead_anchor, BoneAttach, OverheadFallback};
 use crate::names::NameCache;
 use crate::net::{Guid, NetCommands, NetEntity, Reputations};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::target::{ring_variant, CombatFlash, RingVariant};
-use crate::app_core::state::Factions;
-use crate::app_core::state::Selection;
 use crate::ui_text::{layout_text_quads, FontSpec, Justify, TextSeat, UiFontAtlas};
 use wrathplus_world::view::WorldCamera;
 
@@ -548,8 +548,9 @@ pub(crate) fn drive_nameplates(
                 .and_then(|e| names.creature_subname(e))
                 // vmangos sends "" for most templates: an empty subname is no line.
                 .filter(|s| !s.trim().is_empty()),
-            EntityKind::Player if name_cfg.on(name_bit::GUILD) => store
-                .and_then(|s| crate::guild::unit_guild_name(&s.0, &mut guilds, &net_commands)),
+            EntityKind::Player if name_cfg.on(name_bit::GUILD) => {
+                store.and_then(|s| crate::guild::unit_guild_name(&s.0, &mut guilds, &net_commands))
+            }
             _ => None,
         };
         // The colour: the ring's reaction rank and the shared selector.

@@ -7,11 +7,11 @@ use std::collections::VecDeque;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 
+use crate::app_core::session::SelfGuid;
+use crate::app_core::state::Spells;
 use crate::creature_anim::{CastEvent, CastEventKind};
 use crate::debug_panel::{overlay_text, OVERLAY_FILL, OVERLAY_TEXT_DIM};
 use crate::net::{Guid, NetCommands};
-use crate::app_core::session::SelfGuid;
-use crate::app_core::state::Spells;
 
 use crate::app_core::ui_flags::InspectMode;
 

@@ -8,6 +8,8 @@
 use crate::net::wrath_social_lists_capture::NativeRaidBrowser;
 pub(crate) use crate::net::wrath_social_lists_capture::RaidBrowser;
 use crate::net::{ClientCommand, NetCommands};
+use bevy::prelude::*;
+use std::sync::Arc;
 #[cfg(test)]
 use wrathplus_protocol::wrath_raid_browser::Group;
 use wrathplus_protocol::wrath_raid_browser::{Command, Packet, Player};
@@ -15,8 +17,6 @@ use wrathplus_ui::script::{
     UiScript, WrathRaidBrowserGroup, WrathRaidBrowserMember, WrathRaidBrowserRequest,
     WrathRaidBrowserStats, WrathRaidBrowserView,
 };
-use bevy::prelude::*;
-use std::sync::Arc;
 
 pub(crate) fn register(app: &mut App) {
     app.add_systems(

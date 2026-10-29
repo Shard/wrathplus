@@ -11,7 +11,11 @@ fn the_reach_feed_runs_after_the_aura_feed_it_reads() {
 
     let mut app = headless_client();
     let c = census(&mut app, Update, SyncPoints::Declared);
-    if !c.systems.values().any(|s| s.name.contains("wrathplus_app::")) {
+    if !c
+        .systems
+        .values()
+        .any(|s| s.name.contains("wrathplus_app::"))
+    {
         eprintln!("skipped: this build carries no type names");
         return;
     }

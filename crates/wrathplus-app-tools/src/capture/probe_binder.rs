@@ -21,13 +21,13 @@ use wrathplus_protocol::EntityKind;
 use wrathplus_ui::script::UiScript;
 
 use super::probes::ProbeClock;
-use crate::area::AreaTableRes;
-use crate::app_core::session::SelfPlayer;
-use crate::net::{ChatKind, ClientCommand, Guid, HomeBind, NetCommands, NetEntity};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::player::Player;
 use crate::app_core::interaction::BinderState;
 use crate::app_core::interaction::GossipState;
+use crate::app_core::player::Player;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::area::AreaTableRes;
+use crate::net::{ChatKind, ClientCommand, Guid, HomeBind, NetCommands, NetEntity};
 use crate::ui_session::NpcSession;
 
 /// Innkeeper Keldamyr's spawn (AzerothCore `creature` guid 46343), the `.go xyz` target.

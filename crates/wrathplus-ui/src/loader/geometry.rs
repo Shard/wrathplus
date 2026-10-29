@@ -13,18 +13,27 @@ impl Loader<'_> {
         // Trusted Wrath attributes are ordinary frame state, not secure execution.
         for attrs in children_named(el, "Attributes") {
             for attr in children_named(attrs, "Attribute") {
-                let Some(name) = attr.attr("name") else { continue };
+                let Some(name) = attr.attr("name") else {
+                    continue;
+                };
                 let text = attr.attr("value").unwrap_or("");
                 let value = match attr.attr("type").unwrap_or("string") {
                     "string" => self.lua().create_string(text).map(mlua::Value::String),
-                    "number" => text.parse::<f64>().map(mlua::Value::Number)
+                    "number" => text
+                        .parse::<f64>()
+                        .map(mlua::Value::Number)
                         .map_err(mlua::Error::external),
                     "boolean" => Ok(mlua::Value::Boolean(text == "true")),
-                    kind => Err(mlua::Error::external(format!("unknown attribute type {kind}"))),
+                    kind => Err(mlua::Error::external(format!(
+                        "unknown attribute type {kind}"
+                    ))),
                 };
                 match value {
                     Ok(value) => self.call(wrapper, "SetAttribute", (name.to_string(), value), dbg),
-                    Err(e) => self.report.errors.push(format!("{dbg}: <Attribute> {name}: {e}")),
+                    Err(e) => self
+                        .report
+                        .errors
+                        .push(format!("{dbg}: <Attribute> {name}: {e}")),
                 }
             }
         }

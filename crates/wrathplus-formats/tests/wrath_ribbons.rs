@@ -1,9 +1,9 @@
 //! Opt-in read-only ribbon fixtures over the installed archives: what the adaptation reduces, the
 //! modulate blends, and the material flags the ribbon draw (`0x980b70`) reads.
-use wrathplus_formats::Chain;
-use wrathplus_m2::wrath::parse_wrath_m2;
 use std::collections::BTreeMap;
 use std::{io::Cursor, path::Path};
+use wrathplus_formats::Chain;
+use wrathplus_m2::wrath::parse_wrath_m2;
 
 /// What the ribbon adaptation (`models::wrath_effects::adapt_ribbon`) reduces, counted over the
 /// install: ribbons by their first material's blend mode, more than one texture or material, a

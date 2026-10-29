@@ -17,11 +17,11 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{HonorState, InspectHonorData, ScriptValue, UiScript};
 
-use crate::net::{ClientCommand, NetCommands};
+use crate::app_core::schedule::UiFeed;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::schedule::UiFeed;
 use crate::app_core::vm_memo::VmMemo;
+use crate::net::{ClientCommand, NetCommands};
 
 /// Build 12340's `MSG_INSPECT_HONOR_STATS` reply (`0x5e7a50`), filled by the native battleground
 /// drain ([`crate::ui_battlefield`]).
@@ -56,8 +56,8 @@ struct HonorFeedMemo {
 
 /// The inspect-honor reply's handler; the honor award, `SMSG_PVP_CREDIT`, is the chat family's.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use crate::net::NetHandlerApp;
 

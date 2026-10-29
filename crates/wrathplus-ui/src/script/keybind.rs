@@ -575,7 +575,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 .and_then(|i| i.checked_sub(1))
                 .and_then(|i| kb.visible().nth(i));
             let Some(row) = row else {
-                return Ok(MultiValue::from_vec(vec![Value::String(lua.create_string("")?)]));
+                return Ok(MultiValue::from_vec(vec![Value::String(
+                    lua.create_string("")?,
+                )]));
             };
             let mut out = Vec::new();
             match row {

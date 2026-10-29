@@ -50,9 +50,9 @@ use wrathplus_protocol::wrath_instance_control::Packet;
 use wrathplus_ui::script::ScriptValue as V;
 use wrathplus_ui::script::{UiScript, WrathPopupRequest, WrathPopupState};
 
-use crate::net::{ClientCommand, NetCommands, Objects};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::net::{ClientCommand, NetCommands, Objects};
 
 /// The pending instance lock and its session clear. The answers drain inside
 /// [`crate::ui_summon`]'s drain ([`PopupInputs`]), which already holds the VM, the summon latch

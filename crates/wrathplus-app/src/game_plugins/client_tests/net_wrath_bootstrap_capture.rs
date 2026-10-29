@@ -2,11 +2,11 @@
 //! They build the client with `headless_client`, so they live in the root layer.
 
 use crate::net::wrath_bootstrap_capture::*;
+use std::collections::VecDeque;
 use wrathplus_protocol::wrath_bootstrap::Packet;
 use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
 use wrathplus_protocol::SessionEvent;
 use wrathplus_protocol::SessionEventKind;
-use std::collections::VecDeque;
 
 #[test]
 fn one_owner_keeps_the_bootstrap_published_after_connected() {

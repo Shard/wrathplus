@@ -1,9 +1,9 @@
 //! The taxi map's packet handlers: they fill [`TaxiState`] and the flight masters' overhead
 //! status.
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::TaxiMask;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::TaxiState;
 use crate::net::{GuidIndex, NetHandlerApp};

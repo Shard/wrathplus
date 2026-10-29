@@ -161,7 +161,11 @@ fn the_stock_realm_list_is_fed_and_answers_the_park() {
         matches!(sent.last(), Some(crate::net::RealmRequest::Enter(name)) if name == "Second"),
         "{sent:?}"
     );
-    assert!(!app.world().resource::<crate::app_core::ui_flags::Realms>().shown);
+    assert!(
+        !app.world()
+            .resource::<crate::app_core::ui_flags::Realms>()
+            .shown
+    );
 }
 
 /// The Realmlist button's address becomes the session's; one that is not an address opens the
@@ -205,9 +209,9 @@ fn the_realmlist_button_sets_the_session_address() {
 /// events, and the stock calls drive the native roster, pick and booth.
 #[test]
 fn the_stock_character_select_drives_the_roster_pick_and_booth() {
-    use crate::char_select::test_character;
     use crate::app_core::state::ClientState;
     use crate::app_core::state::Roster;
+    use crate::char_select::test_character;
     let (mut app, _rx) = app();
     let (pick_tx, pick_rx) = crossbeam_channel::unbounded();
     app.insert_resource(crate::net::CharPick(pick_tx));

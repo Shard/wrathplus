@@ -1,10 +1,10 @@
 use super::*;
 #[cfg(test)]
-use crate::net::wrath_pet_name_capture::UiNativePetNamePlugin;
-#[cfg(test)]
 use crate::net::wrath_pet_name_capture::NativePetNamePackets;
-use wrathplus_protocol::{wrath_pet_name::Response, SessionEvent};
+#[cfg(test)]
+use crate::net::wrath_pet_name_capture::UiNativePetNamePlugin;
 use bevy::ecs::system::RunSystemOnce;
+use wrathplus_protocol::{wrath_pet_name::Response, SessionEvent};
 fn response(name: &[u8]) -> Response {
     Response {
         pet_number: 7,

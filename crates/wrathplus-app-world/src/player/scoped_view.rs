@@ -12,10 +12,10 @@
 use bevy::camera::{PerspectiveProjection, Projection};
 use bevy::prelude::*;
 
-use crate::net::wrath_auras::PacketAuras;
-use crate::net::Guid;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::Spells;
+use crate::net::wrath_auras::PacketAuras;
+use crate::net::Guid;
 use wrathplus_world::view::{WorldCamera, CAM_FOVY};
 
 /// `0x4c`, the aura name the reference's effect walk matches.

@@ -10,9 +10,9 @@ use bevy::prelude::*;
 use wrathplus_protocol::types::{PET_ACT_COMMAND, PET_COMMAND_DISMISS};
 use wrathplus_ui::script::UiScript;
 
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::errors::UiError;
 use crate::app_core::errors::UiErrorKeys;
+use crate::net::{ClientCommand, NetCommands};
 
 use super::{PetBar, PetUnit};
 

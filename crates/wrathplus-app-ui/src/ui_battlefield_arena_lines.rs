@@ -7,8 +7,8 @@
 //! `SMSG_ARENA_UNIT_DESTROYED` (04C7) stays in the rest FIFO: no arena-opponent model takes it.
 use crate::app_core::errors::FillArg;
 use crate::app_core::errors::UiError;
-use wrathplus_protocol::wrath_battleground::Packet;
 use bevy::prelude::*;
+use wrathplus_protocol::wrath_battleground::Packet;
 
 pub(crate) fn register(app: &mut App) {
     app.add_systems(

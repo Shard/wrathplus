@@ -54,14 +54,20 @@ fn every_fixture_decodes_and_rejects_truncation_and_trailing_bytes() {
     for (opcode, body, expected) in fixtures {
         assert_eq!(decode(opcode, &body).unwrap(), expected, "{opcode:#x}");
         for end in 0..body.len() {
-            assert!(decode(opcode, &body[..end]).is_err(), "{opcode:#x} truncated at {end}");
+            assert!(
+                decode(opcode, &body[..end]).is_err(),
+                "{opcode:#x} truncated at {end}"
+            );
         }
         let mut trailing = body.clone();
         trailing.push(0);
         assert!(decode(opcode, &trailing).is_err(), "{opcode:#x} trailing");
     }
     assert!(decode(0x1e4, &w(&[u32::MAX])).is_err());
-    assert!(decode(0x21e, &w(&[1])).is_err(), "force-remove has no AC sender");
+    assert!(
+        decode(0x21e, &w(&[1])).is_err(),
+        "force-remove has no AC sender"
+    );
 }
 
 #[test]
@@ -71,7 +77,10 @@ fn dispatch_routes_every_opcode_and_reports_malformed_as_unhandled() {
         match adapter.dispatch(opcode, &body, 0).unwrap() {
             crate::wrath_events::WrathDispatch::Handled { session_events, .. } => assert_eq!(
                 format!("{session_events:?}"),
-                format!("{:?}", vec![crate::SessionEvent::WrathQuest { packet: expected }])
+                format!(
+                    "{:?}",
+                    vec![crate::SessionEvent::WrathQuest { packet: expected }]
+                )
             ),
             other => panic!("{opcode:#x}: {other:?}"),
         }
@@ -87,15 +96,39 @@ fn commands_encode_ac_read_order() {
     for (command, opcode, body) in [
         (Command::AutoLaunch, 0x187, vec![]),
         (Command::Cancel, 0x190, vec![]),
-        (Command::SwapQuest { slot1: 3, slot2: 24 }, 0x193, vec![3, 24]),
-        (Command::PoiQuery { quests: vec![783, 784] }, 0x1e3, w(&[2, 783, 784])),
+        (
+            Command::SwapQuest {
+                slot1: 3,
+                slot2: 24,
+            },
+            0x193,
+            vec![3, 24],
+        ),
+        (
+            Command::PoiQuery {
+                quests: vec![783, 784],
+            },
+            0x1e3,
+            w(&[2, 783, 784]),
+        ),
         (Command::StatusMultipleQuery, 0x417, vec![]),
     ] {
         assert_eq!(encode(&command).unwrap(), (opcode, body), "{command:?}");
     }
-    assert!(encode(&Command::PoiQuery { quests: vec![1; 26] }).is_err());
+    assert!(encode(&Command::PoiQuery {
+        quests: vec![1; 26]
+    })
+    .is_err());
     assert_eq!(
         encode_push_result(0x42, 783, 4),
-        (0x276, [0x42u64.to_le_bytes().as_slice(), &783u32.to_le_bytes(), &[4]].concat())
+        (
+            0x276,
+            [
+                0x42u64.to_le_bytes().as_slice(),
+                &783u32.to_le_bytes(),
+                &[4]
+            ]
+            .concat()
+        )
     );
 }

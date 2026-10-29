@@ -252,7 +252,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     fn companion(spell_id: u32, active: bool) -> CompanionView {
         CompanionView {
             creature_id: spell_id + 1000,

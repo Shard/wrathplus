@@ -65,7 +65,11 @@ fn fixtures() -> Vec<(u16, Vec<u8>, Packet)> {
             },
         ),
         (0x47d, snapshot_bytes(), Packet::AllData(snapshot())),
-        (0x47d, words(&[END, END]), Packet::AllData(Snapshot::default())),
+        (
+            0x47d,
+            words(&[END, END]),
+            Packet::AllData(Snapshot::default()),
+        ),
         (
             0x46c,
             [vec![0x01, 0x09], snapshot_bytes()].concat(),
@@ -74,8 +78,16 @@ fn fixtures() -> Vec<(u16, Vec<u8>, Packet)> {
                 data: snapshot(),
             },
         ),
-        (0x49f, words(&[6]), Packet::AchievementDeleted { achievement: 6 }),
-        (0x49e, words(&[111]), Packet::CriteriaDeleted { criteria: 111 }),
+        (
+            0x49f,
+            words(&[6]),
+            Packet::AchievementDeleted { achievement: 6 },
+        ),
+        (
+            0x49e,
+            words(&[111]),
+            Packet::CriteriaDeleted { criteria: 111 },
+        ),
     ]
 }
 
@@ -87,13 +99,19 @@ fn every_fixture_decodes_and_rejects_truncation_and_trailing_bytes() {
     for (opcode, body, expected) in fixtures {
         assert_eq!(decode(opcode, &body).unwrap(), expected, "{opcode:#x}");
         for end in 0..body.len() {
-            assert!(decode(opcode, &body[..end]).is_err(), "{opcode:#x} truncated at {end}");
+            assert!(
+                decode(opcode, &body[..end]).is_err(),
+                "{opcode:#x} truncated at {end}"
+            );
         }
         let mut trailing = body.clone();
         trailing.push(0);
         assert!(decode(opcode, &trailing).is_err(), "{opcode:#x} trailing");
     }
-    assert!(decode(0x46a, &[0; 4]).is_err(), "criteria updates belong to wrath_progress");
+    assert!(
+        decode(0x46a, &[0; 4]).is_err(),
+        "criteria updates belong to wrath_progress"
+    );
 }
 
 #[test]
@@ -104,7 +122,10 @@ fn dispatch_routes_every_opcode_and_reports_malformed_as_unhandled() {
             crate::wrath_events::WrathDispatch::Handled { session_events, .. } => {
                 assert_eq!(
                     format!("{session_events:?}"),
-                    format!("{:?}", vec![crate::SessionEvent::WrathAchievement { packet: expected }])
+                    format!(
+                        "{:?}",
+                        vec![crate::SessionEvent::WrathAchievement { packet: expected }]
+                    )
                 )
             }
             other => panic!("{opcode:#x}: {other:?}"),
@@ -118,6 +139,9 @@ fn dispatch_routes_every_opcode_and_reports_malformed_as_unhandled() {
 
 #[test]
 fn inspect_query_is_a_packed_guid() {
-    assert_eq!(encode_inspect_query(0x4000_0000_0000_0007), (0x46b, vec![0x81, 0x07, 0x40]));
+    assert_eq!(
+        encode_inspect_query(0x4000_0000_0000_0007),
+        (0x46b, vec![0x81, 0x07, 0x40])
+    );
     assert_eq!(encode_inspect_query(0), (0x46b, vec![0]));
 }

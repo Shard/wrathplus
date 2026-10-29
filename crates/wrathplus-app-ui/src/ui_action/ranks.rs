@@ -12,8 +12,8 @@ use bevy::prelude::*;
 use wrathplus_protocol::types::ACTION_KIND_SPELL;
 
 use super::PlayerActions;
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::state::SkillLines;
+use crate::net::{ClientCommand, NetCommands};
 
 /// Re-points each spell slot at the highest known rank of its chain and sends the move, so the
 /// server's stored copy is fixed too. Runs on `dirty`, before the feed consumes it.
@@ -57,8 +57,8 @@ pub(super) fn normalize_action_ranks(
 
 #[cfg(test)]
 mod tests {
-    use wrathplus_protocol::types::{ActionButton, ACTION_KIND_ITEM, ACTION_KIND_MACRO};
     use crossbeam_channel::Receiver;
+    use wrathplus_protocol::types::{ActionButton, ACTION_KIND_ITEM, ACTION_KIND_MACRO};
 
     use super::*;
 

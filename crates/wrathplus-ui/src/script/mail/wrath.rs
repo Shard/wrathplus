@@ -354,9 +354,7 @@ mod tests {
     use super::*;
     #[test]
     fn native_link_argument_slot_and_zero_return_abi() {
-        let mut script =
-            crate::script::UiScript::new()
-                .unwrap();
+        let mut script = crate::script::UiScript::new().unwrap();
         script.set_wrath_mail(Some(Inbox {
             rows: vec![Row {
                 attachments: vec![
@@ -449,9 +447,7 @@ mod tests {
 
     #[test]
     fn first_occupied_unresolved_link_does_not_skip_to_resolved_slot() {
-        let mut script =
-            crate::script::UiScript::new()
-                .unwrap();
+        let mut script = crate::script::UiScript::new().unwrap();
         script.set_wrath_mail(Some(Inbox {
             rows: vec![Row {
                 attachments: vec![
@@ -664,5 +660,4 @@ mod family_tests {
             vec!["A".to_string(), "B".to_string(), "C".to_string()]
         );
     }
-
 }

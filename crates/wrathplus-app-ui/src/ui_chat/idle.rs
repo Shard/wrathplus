@@ -126,7 +126,10 @@ pub(crate) fn idle_handler(
     time: Res<Time<Real>>,
     last: Res<LastInput>,
     script: Option<NonSendMut<wrathplus_ui::script::UiScript>>,
-    self_q: Query<&crate::app_core::session::ObjectStore, With<crate::app_core::session::SelfPlayer>>,
+    self_q: Query<
+        &crate::app_core::session::ObjectStore,
+        With<crate::app_core::session::SelfPlayer>,
+    >,
     mut mirror: ResMut<AfkMirror>,
     mut chat: ResMut<ChatLog>,
     commands: Res<crate::net::NetCommands>,
@@ -200,14 +203,14 @@ pub(crate) fn idle_handler(
 
 #[cfg(test)]
 mod tests {
+    use bevy::ecs::system::RunSystemOnce;
     use wrathplus_protocol::types::Field;
     use wrathplus_protocol::ObjectFields;
-    use bevy::ecs::system::RunSystemOnce;
 
     use super::*;
-    use crate::net::{ClientCommand, NetCommands};
     use crate::app_core::session::ObjectStore;
     use crate::app_core::session::SelfPlayer;
+    use crate::net::{ClientCommand, NetCommands};
 
     /// Descriptor indices, spelled here so a fixture reads like the field it sets.
     const UNIT_FLAGS: u16 = Field::UnitFlags.index();
@@ -621,7 +624,9 @@ mod tests {
             app.init_resource::<crate::ui_script::ReloadUiPending>()
                 .init_resource::<crate::cinematic::Cinematic>()
                 .add_message::<AppExit>()
-                .insert_resource(crate::app_core::session::SelfGuid(Some(0x4000_0000_0000_0009)));
+                .insert_resource(crate::app_core::session::SelfGuid(Some(
+                    0x4000_0000_0000_0009,
+                )));
             // One schedule for every frame, so any state a system keeps between frames persists.
             let mut schedule = Schedule::default();
             if idle_first {

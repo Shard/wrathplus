@@ -2,9 +2,9 @@
 //! declined names, realm split); `char_select::delete_result` drains them into the glue dialog.
 //! A roster change rides `CharacterList`, published before the reply.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_char_services::Reply, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_char_services::Reply, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeCharServiceReplies(pub VecDeque<Reply>);

@@ -16,12 +16,12 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{FactionEntry, ReputationSend, ReputationState, UiScript};
 
-use crate::net::{ClientCommand, NetCommands, Reputations};
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::Factions;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
+use crate::net::{ClientCommand, NetCommands, Reputations};
 
 /// Rank `r` spans `RANK_BOUNDS[r]..RANK_BOUNDS[r + 1]`, the client's table at `0x80928c`: vmangos's
 /// `PointsInRank` walked up from -42000 (`ReputationMgr.cpp:30`), the edges
@@ -39,7 +39,9 @@ impl Plugin for UiReputationPlugin {
                 // Stock UPDATE_FACTION reads UnitLevel/UnitXPMax and may hide the XP bar
                 // while its range is still zero (ReputationFrame.lua:323-413). Publish the
                 // unit/XP snapshot first; PLAYER_XP_UPDATE alone does not undo that hide.
-                feed_reputation.in_set(UiFeed).after(crate::ui_unit::UnitFeed),
+                feed_reputation
+                    .in_set(UiFeed)
+                    .after(crate::ui_unit::UnitFeed),
                 drain_reputation_sends.after(UiInput),
             ),
         );
@@ -176,8 +178,9 @@ fn drain_reputation_sends(script: Option<NonSendMut<UiScript>>, commands: Res<Ne
             },
             // No watch is -1 on the wire: slot 0 is the Bloodsail Buccaneers.
             ReputationSend::Watch(slot) => ClientCommand::SetWatchedFaction {
-                rep_list_id: slot
-                    .map_or(wrathplus_protocol::types::WATCHED_FACTION_NONE, |s| s as i32),
+                rep_list_id: slot.map_or(wrathplus_protocol::types::WATCHED_FACTION_NONE, |s| {
+                    s as i32
+                }),
             },
         };
         let _ = commands.0.send(cmd);

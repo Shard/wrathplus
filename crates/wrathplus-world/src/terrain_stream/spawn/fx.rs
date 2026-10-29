@@ -1,9 +1,9 @@
 //! A placed model's point lights, particle emitters and ribbon trails, baked at its placement.
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::wow_to_bevy;
 use wrathplus_assets::{ModelEmitter, ModelLight};
 use wrathplus_formats::WmoLight;
-use bevy::prelude::*;
 
 use crate::lighting::WorldPointLight;
 use crate::particles;

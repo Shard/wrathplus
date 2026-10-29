@@ -25,13 +25,13 @@ use wrathplus_protocol::EntityKind;
 use wrathplus_ui::script::UiScript;
 
 use super::probes::ProbeClock;
-use crate::names::NameCache;
-use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
+use crate::app_core::interaction::MerchantOpen;
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
+use crate::names::NameCache;
+use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
 use crate::portrait::{BoothPanes, PortraitImages, PortraitSource};
-use crate::app_core::interaction::MerchantOpen;
 
 /// Brog Hamfist `<General Supplies>`: `creature_template.entry = 151`, `npc_flags = 4`.
 const BROG_ENTRY: u32 = 151;

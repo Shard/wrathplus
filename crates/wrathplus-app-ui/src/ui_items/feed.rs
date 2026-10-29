@@ -15,11 +15,11 @@ use bevy::prelude::*;
 use wrathplus_protocol::ItemInfo;
 use wrathplus_ui::script::{ContainerSlot, ContainerState, ScriptValue, UiScript};
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::net::{NetCommands, Objects};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 use crate::ui_script::gate;
 
@@ -271,7 +271,9 @@ pub(super) fn feed_item_sets(
     skill_lines: Option<Res<crate::app_core::state::SkillLines>>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     mut pending: Local<
-        crate::app_core::vm_memo::VmMemo<std::collections::HashMap<u32, wrathplus_ui::script::ItemSetView>>,
+        crate::app_core::vm_memo::VmMemo<
+            std::collections::HashMap<u32, wrathplus_ui::script::ItemSetView>,
+        >,
     >,
     mut mod_sensitive: Local<crate::app_core::vm_memo::VmMemo<HashSet<u32>>>,
     mut last_skills: Local<crate::app_core::vm_memo::VmMemo<Option<crate::spell::SkillSnapshot>>>,

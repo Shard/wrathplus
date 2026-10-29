@@ -94,7 +94,11 @@ pub struct PartyState {
 #[derive(Clone, Debug, PartialEq)]
 pub enum PartyRequest {
     /// Wrath assignment intent, resolved by the VM; roster flags await the server echo.
-    Assignment { assignment: u8, apply: bool, guid: u64 },
+    Assignment {
+        assignment: u8,
+        apply: bool,
+        guid: u64,
+    },
     /// `AcceptGroup()`.
     Accept,
     /// `DeclineGroup()`.
@@ -395,7 +399,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 None => Value::Nil,
             };
             let guid = model.party.master_looter_guid;
-            let raid = match model.party.raid.iter().position(|m| guid != 0 && m.guid == guid) {
+            let raid = match model
+                .party
+                .raid
+                .iter()
+                .position(|m| guid != 0 && m.guid == guid)
+            {
                 Some(i) => Value::Integer(i as i64 + 1),
                 None => Value::Nil,
             };
@@ -796,17 +805,25 @@ mod tests {
         // Build 12340's third return: the master's raid roster index, nil outside the roster.
         assert_eq!(s.arity("GetLootMethod()").unwrap(), 3);
         assert_eq!(
-            s.eval::<Option<i64>>("local _, _, r = GetLootMethod() return r").unwrap(),
+            s.eval::<Option<i64>>("local _, _, r = GetLootMethod() return r")
+                .unwrap(),
             None
         );
         party.master_looter_guid = 0xb0b;
         party.raid = vec![
-            super::RaidMemberInfo { guid: 0xa, ..Default::default() },
-            super::RaidMemberInfo { guid: 0xb0b, ..Default::default() },
+            super::RaidMemberInfo {
+                guid: 0xa,
+                ..Default::default()
+            },
+            super::RaidMemberInfo {
+                guid: 0xb0b,
+                ..Default::default()
+            },
         ];
         s.set_party(party);
         assert_eq!(
-            s.eval::<Option<i64>>("local _, _, r = GetLootMethod() return r").unwrap(),
+            s.eval::<Option<i64>>("local _, _, r = GetLootMethod() return r")
+                .unwrap(),
             Some(2)
         );
     }
@@ -1364,5 +1381,4 @@ mod tests {
         assert!(s.take_ready_check_lines().is_empty());
         assert_eq!(s.model_mut().ready_check.deadline, Some(130.0));
     }
-
 }

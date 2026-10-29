@@ -329,8 +329,10 @@ pub(super) fn follow_sun(
                 tf.scale = Vec3::splat(if hidden { 0.0 } else { units });
                 // Alpha is `lerp(0.5, 1, f)` (`[glare+0x9c]`) × the envelope × the weather seed,
                 // `0x6cf490`'s `[+0x1b] = floor(255·lerp·[+0x30])` on the seed byte.
-                let env =
-                    wrathplus_assets::quantize((0.5 + 0.5 * f) * env30 * seed.unwrap_or(1.0), 255.0);
+                let env = wrathplus_assets::quantize(
+                    (0.5 + 0.5 * f) * env30 * seed.unwrap_or(1.0),
+                    255.0,
+                );
                 let color = Color::srgba(tint[0], tint[1], tint[2], env);
                 wrathplus_assets::write_gated(
                     &mut mats,
@@ -459,8 +461,10 @@ pub(super) fn follow_moons(
                 // `lerp(0.1, 1, f)` (`[0xce9794]`) × the envelope, `0x6cf490`'s byte shape.
                 let f = view_lerp(*cam_gt.forward(), to_moon);
                 // × the weather seed on the glare's alpha byte (`0x6d2c74`).
-                let env =
-                    wrathplus_assets::quantize((0.1 + 0.9 * f) * env30 * seed.unwrap_or(1.0), 255.0);
+                let env = wrathplus_assets::quantize(
+                    (0.1 + 0.9 * f) * env30 * seed.unwrap_or(1.0),
+                    255.0,
+                );
                 let color = Color::srgba(tint[0], tint[1], tint[2], env);
                 wrathplus_assets::write_gated(
                     &mut mats,

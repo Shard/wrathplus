@@ -7,10 +7,10 @@ use bevy::ui_render::ui_material::MaterialNode;
 use bevy::window::PrimaryWindow;
 
 use crate::char_select::race_name;
-use crate::ui_text::wow_font;
 use crate::entities::CharCreate;
 use crate::glue_strings::GlueStrings;
 use crate::portrait::{GlueLook, GluePreview, PortraitImages, PortraitSource, GLUE_SLOT};
+use crate::ui_text::wow_font;
 use wrathplus_assets::WorldAssets;
 
 use super::parts::{CharCreateUi, DialRow, DynIcon, DynText, DynTint, StatusLine};

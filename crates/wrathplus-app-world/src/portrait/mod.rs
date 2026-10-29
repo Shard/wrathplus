@@ -26,17 +26,19 @@ use std::collections::HashMap;
 
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::RenderLayers;
-use bevy::camera::{OrthographicProjection, PerspectiveProjection, Projection, RenderTarget, ScalingMode};
+use bevy::camera::{
+    OrthographicProjection, PerspectiveProjection, Projection, RenderTarget, ScalingMode,
+};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
 use bevy::render::view::Msaa;
 
-use crate::entities::Creatures;
-use crate::net::NetEntity;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::Selection;
+use crate::entities::Creatures;
+use crate::net::NetEntity;
 use wrathplus_assets::materials::WowModelMaterial;
 
 mod framing;
@@ -63,9 +65,9 @@ mod glue_stage;
 pub use glue_stage::{glue_stage, stage_from_path};
 mod light;
 mod model_pane;
-pub use model_pane::{glue_pane, model_pane_booth};
 pub use light::{material_variant, VariantLane};
 use light::{model_pane_light, studio_light, BoothLight};
+pub use model_pane::{glue_pane, model_pane_booth};
 pub mod test_bake;
 
 /// The round portrait slots, each with its own layer and camera. `"npc"` is an interaction
@@ -1112,7 +1114,10 @@ pub(crate) struct ModelRevision(pub(crate) u32);
 fn bump_model_revision(
     mut commands: Commands,
     mut swaps: MessageReader<crate::creature_anim::SheathSwapMessage>,
-    glows: Query<&wrathplus_world::model_fade::ParentModel, Added<crate::entities::ItemGlowAttached>>,
+    glows: Query<
+        &wrathplus_world::model_fade::ParentModel,
+        Added<crate::entities::ItemGlowAttached>,
+    >,
     revs: Query<&ModelRevision>,
 ) {
     let mut bumped = <bevy::platform::collections::HashSet<Entity>>::default();
@@ -2222,7 +2227,10 @@ fn gate_booth_cameras(
 const TEMPORARY_PORTRAIT: &str = "Interface\\CharacterFrame\\TemporaryPortrait";
 
 /// The 2D stand-in for a unit that is not yet renderable: the player file is `0x525ba0`'s.
-fn temporary_portrait(net: Option<&NetEntity>, store: Option<&crate::app_core::session::ObjectStore>) -> String {
+fn temporary_portrait(
+    net: Option<&NetEntity>,
+    store: Option<&crate::app_core::session::ObjectStore>,
+) -> String {
     use wrathplus_protocol::EntityKind;
     if net.map(|n| n.kind) == Some(EntityKind::Player) {
         return match store {
@@ -2347,18 +2355,13 @@ mod tests {
         let held = world.spawn_empty().id();
         let summon = |guid: u64| {
             crate::app_core::session::ObjectStore(ObjectFields::from_field_slots(&[
-                    (
-                        wrathplus_protocol::types::Field::UnitSummon,
-                        0,
-                        guid as u32,
-                    ),
-                    (
-                        wrathplus_protocol::types::Field::UnitSummon,
-                        1,
-                        (guid >> 32) as u32,
-                    ),
-                ],
-            ))
+                (wrathplus_protocol::types::Field::UnitSummon, 0, guid as u32),
+                (
+                    wrathplus_protocol::types::Field::UnitSummon,
+                    1,
+                    (guid >> 32) as u32,
+                ),
+            ]))
         };
         let group = |status: u8| {
             let mut g = crate::app_core::group::GroupState::default();
@@ -2385,18 +2388,19 @@ mod tests {
             );
             g
         };
-        let subject = |g: &crate::app_core::group::GroupState,
-                       drawn: bool,
-                       pet_held: bool,
-                       owner: Option<&crate::app_core::session::ObjectStore>| {
-            party_pet_subject(
-                g,
-                "partypet1",
-                drawn,
-                |guid| (pet_held && guid == PET).then_some(held),
-                |guid| owner.filter(|_| guid == MEMBER),
-            )
-        };
+        let subject =
+            |g: &crate::app_core::group::GroupState,
+             drawn: bool,
+             pet_held: bool,
+             owner: Option<&crate::app_core::session::ObjectStore>| {
+                party_pet_subject(
+                    g,
+                    "partypet1",
+                    drawn,
+                    |guid| (pet_held && guid == PET).then_some(held),
+                    |guid| owner.filter(|_| guid == MEMBER),
+                )
+            };
         let online = group(member_status::ONLINE);
         let stand_in = Some(pet_temporary_portrait());
         assert!(stand_in

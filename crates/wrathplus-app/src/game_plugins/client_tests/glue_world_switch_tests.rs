@@ -20,6 +20,10 @@ fn the_glue_systems_run_only_on_the_glue_screens() {
     ];
     let mut app = headless_client();
     let update = census(&mut app, Update, SyncPoints::Declared);
+    if !crate::game_plugins::schedule_tests::type_names_available(&update) {
+        eprintln!("skipped: this build carries no Bevy system names");
+        return;
+    }
     for name in GLUE_CALLERS {
         let found: Vec<_> = update
             .systems

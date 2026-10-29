@@ -2,18 +2,18 @@
 //! [`feed_gossip`] pushes the menu and fires its events, and [`drain_gossip`] sends the selects.
 //! As in the reference's `0x4e2010`, a menu opens only once its greeting is drawn.
 
-use wrathplus_protocol::types::{select_greeting, GossipOption, NpcTextBlock};
 use bevy::prelude::*;
+use wrathplus_protocol::types::{select_greeting, GossipOption, NpcTextBlock};
 
 use wrathplus_ui::script::{GossipMenu, GossipOptionView, GossipQuestRow, ScriptValue, UiScript};
 
-use crate::names::NameCache;
-use crate::net::{ClientCommand, Guid, NetCommands};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::ui_quest::{row_is_active, row_is_one_click};
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, Guid, NetCommands};
+use crate::ui_quest::{row_is_active, row_is_one_click};
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 
 pub(crate) use crate::app_core::interaction::GossipState;

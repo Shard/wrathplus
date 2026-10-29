@@ -4,13 +4,13 @@
 //! bright arc toward the camera. The vertical fade on wall and ledge pieces is matched to
 //! captures: the reference's edge-fade ramp (`0x6147f0`) is untraced.
 
+use bevy::prelude::*;
 use wrathplus_formats::{load_faction_catalog, Reaction};
 use wrathplus_protocol::EntityKind;
-use bevy::prelude::*;
 
-use crate::net::{Guid, NetEntity, Reputations};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::net::{Guid, NetEntity, Reputations};
 use wrathplus_assets::{LockRecover, WorldAssets};
 use wrathplus_world::decal::{DecalFrame, WorldDecal};
 use wrathplus_world::particles::buffer::EffectVertex;
@@ -533,10 +533,7 @@ pub fn can_attack_from_player(
 
 /// A unit's `FactionTemplate` faction-group mask (`row + 0xc`), the one number `CanCooperate`
 /// compares: 3 on every Alliance race row, 5 on every Horde one. `/reaction` prints it.
-pub fn faction_group_mask(
-    factions: Option<&Factions>,
-    store: Option<&ObjectStore>,
-) -> Option<u32> {
+pub fn faction_group_mask(factions: Option<&Factions>, store: Option<&ObjectStore>) -> Option<u32> {
     let catalog = &factions?.0;
     Some(
         catalog
@@ -660,8 +657,8 @@ pub(crate) mod tests {
 
     #[test]
     fn ffa_reaction_uses_native_source_and_keeps_control_and_duel_precedence() {
-        use crate::net::Reputations;
         use crate::app_core::session::ObjectStore;
+        use crate::net::Reputations;
         use wrathplus_protocol::types::{Field, ObjectFields};
         let make = |pc: bool, ffa: bool, old_ffa: bool, team: u32| {
             let mut pairs = Vec::new();
@@ -769,8 +766,8 @@ pub(crate) mod tests {
     /// friendly: the two run the reaction in opposite directions.
     #[test]
     fn the_plate_category_reproduces_the_reference_on_the_real_dbc() {
-        use crate::net::Reputations;
         use crate::app_core::session::ObjectStore;
+        use crate::net::Reputations;
         use wrathplus_protocol::ObjectFields;
 
         let data = wrathplus_formats::wow_data_or_skip!();
@@ -887,8 +884,8 @@ pub(crate) mod tests {
     /// attackable nor, without a service bit, interactable, while the rank stays neutral.
     #[test]
     fn a_not_at_war_cenarion_circle_npc_takes_no_cursor_at_neutral() {
-        use crate::net::Reputations;
         use crate::app_core::session::ObjectStore;
+        use crate::net::Reputations;
         use wrathplus_protocol::ObjectFields;
 
         let data = wrathplus_formats::wow_data_or_skip!();
@@ -984,8 +981,8 @@ pub(crate) mod tests {
     /// mask 0, so a GM-mode character leaves every player's friendly bucket while NPCs keep theirs.
     #[test]
     fn the_player_subject_category_on_the_real_dbc() {
-        use crate::net::Reputations;
         use crate::app_core::session::ObjectStore;
+        use crate::net::Reputations;
         use wrathplus_protocol::ObjectFields;
 
         let data = wrathplus_formats::wow_data_or_skip!();
@@ -1075,8 +1072,8 @@ pub(crate) mod tests {
     /// `CanAttack`'s flag refusals (`0x6069b7`–`0x6069ff`) beat a hostile reaction.
     #[test]
     fn an_unattackable_flag_beats_a_hostile_reaction() {
-        use crate::net::Reputations;
         use crate::app_core::session::ObjectStore;
+        use crate::net::Reputations;
         use wrathplus_protocol::ObjectFields;
 
         let data = wrathplus_formats::wow_data_or_skip!();

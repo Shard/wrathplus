@@ -155,7 +155,12 @@ pub(super) struct FollowInput<'w, 's> {
     /// runs first).
     rig: Res<'w, CameraControl>,
     /// The mover's descriptor block, for the cancel terms that are state: health and stun.
-    mover: Query<'w, 's, &'static crate::app_core::session::ObjectStore, With<crate::app_core::session::Embodied>>,
+    mover: Query<
+        'w,
+        's,
+        &'static crate::app_core::session::ObjectStore,
+        With<crate::app_core::session::Embodied>,
+    >,
     /// What the camera orbits, for the far-sight term; possibly a frame behind its publisher.
     view_subject: Res<'w, super::view_subject::ViewSubject>,
 }

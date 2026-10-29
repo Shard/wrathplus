@@ -22,9 +22,9 @@ use wrathplus_formats::SUMMON_FLAG_UNDISMISSABLE;
 use wrathplus_protocol::types::Field;
 use wrathplus_ui::script::{UiScript, WrathChatLine, WrathUnitPopupRequest, WrathUnitPopupState};
 
-use crate::net::{ClientCommand, Guid, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::net::{ClientCommand, Guid, NetCommands};
 
 /// `UNIT_DYNFLAG_REFER_A_FRIEND` (AzerothCore `SharedDefines.h`).
 const UNIT_DYNFLAG_REFER_A_FRIEND: u32 = 0x40;
@@ -58,11 +58,11 @@ fn command_for(request: WrathUnitPopupRequest) -> Option<ClientCommand> {
                 mode: difficulty,
             },
         ),
-        R::SetOptOutOfLoot { on } => {
-            ClientCommand::NativeExchange(wrathplus_protocol::wrath_exchange::Command::OptOutOfLoot {
+        R::SetOptOutOfLoot { on } => ClientCommand::NativeExchange(
+            wrathplus_protocol::wrath_exchange::Command::OptOutOfLoot {
                 pass: u32::from(on),
-            })
-        }
+            },
+        ),
         R::GrantLevel { guid } => ClientCommand::NativeReferFriend(
             wrathplus_protocol::wrath_refer_friend::Command::GrantLevel { target: guid },
         ),

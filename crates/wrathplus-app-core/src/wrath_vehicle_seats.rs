@@ -34,7 +34,10 @@ impl Plugin for VehicleSeatsPlugin {
 fn load(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
     let Some(assets) = assets else { return };
     let mut chain = assets.chain.lock_recover();
-    if !matches!(chain.profile(), wrathplus_formats::DataProfile::Wrath { .. }) {
+    if !matches!(
+        chain.profile(),
+        wrathplus_formats::DataProfile::Wrath { .. }
+    ) {
         return;
     }
     match wrathplus_formats::vehicles::load_vehicle_catalog(&mut chain) {

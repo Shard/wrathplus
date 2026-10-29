@@ -138,7 +138,11 @@ fn system_line(lua: &Lua, key: &str) -> mlua::Result<()> {
         Value::String(s) => s.to_string_lossy(),
         _ => key.to_string(),
     };
-    super::tick::fire_event_into(lua, "CHAT_MSG_SYSTEM", vec![super::ScriptValue::Str(message)]);
+    super::tick::fire_event_into(
+        lua,
+        "CHAT_MSG_SYSTEM",
+        vec![super::ScriptValue::Str(message)],
+    );
     Ok(())
 }
 
@@ -172,7 +176,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // count, and the `index`th icon's `Interface\Icons\` path, "" out of range or for an empty
     // name.
     set(lua, "GetNumMacroItemIcons", |lua, _| {
-        let n = lua.app_data_ref::<MacroItemIcons>().map_or(0, |i| i.0.len());
+        let n = lua
+            .app_data_ref::<MacroItemIcons>()
+            .map_or(0, |i| i.0.len());
         Ok(MultiValue::from_vec(vec![int(n as i64)]))
     })?;
     set(lua, "GetMacroItemIconInfo", |lua, args| {
@@ -185,7 +191,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 icons.0.get(i).filter(|n| !n.is_empty()).cloned()
             })
             .map_or_else(String::new, |n| format!("Interface\\Icons\\{n}"));
-        Ok(MultiValue::from_vec(vec![Value::String(lua.create_string(&path)?)]))
+        Ok(MultiValue::from_vec(vec![Value::String(
+            lua.create_string(&path)?,
+        )]))
     })?;
     let two = |lua: &Lua, args: &MultiValue, usage: &'static str| match (
         index(lua, &arg(args, 0)),
@@ -292,7 +300,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             match model.cursor.take() {
                 Some(CursorPayload::Item(held)) => {
                     model.cursor = Some(CursorPayload::Item(held));
-                    model.wrath_friends.requests.push(R::PickupItem { tab, slot });
+                    model
+                        .wrath_friends
+                        .requests
+                        .push(R::PickupItem { tab, slot });
                 }
                 Some(CursorPayload::GuildBankItem(held)) => {
                     if held.tab == tab && held.slot == slot {
@@ -570,7 +581,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(move |lua, args: MultiValue| {
             let this = match args.front() {
                 Some(Value::Table(t)) => t.clone(),
-                _ => return Err(mlua::Error::runtime("Invalid tab or slot in SetGuildBankItem")),
+                _ => {
+                    return Err(mlua::Error::runtime(
+                        "Invalid tab or slot in SetGuildBankItem",
+                    ))
+                }
             };
             let rest: MultiValue = args.iter().skip(1).cloned().collect();
             let (Some(t), Some(sl)) = two(lua, &rest, "Invalid tab or slot in SetGuildBankItem")?
@@ -579,7 +594,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             };
             let link = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                (t < 6).then(|| slot_at(&model, t, sl)).flatten().and_then(|s| s.link)
+                (t < 6)
+                    .then(|| slot_at(&model, t, sl))
+                    .flatten()
+                    .and_then(|s| s.link)
             };
             if let Some(link) = link {
                 mlua::ObjectLike::call_method::<()>(&this, "SetHyperlink", link)?;
@@ -731,7 +749,10 @@ mod tests {
         // Without deposit rights on tab 2 the move is refused and the item stays held.
         s.run("PickupGuildBankItem(2, 1)").unwrap();
         assert!(s.take_wrath_guild_bank_requests().is_empty());
-        assert!(matches!(s.cursor_payload(), Some(CursorPayload::GuildBankItem(_))));
+        assert!(matches!(
+            s.cursor_payload(),
+            Some(CursorPayload::GuildBankItem(_))
+        ));
         {
             let mut m = s.model_mut();
             m.wrath_friends.bank.rank_rights = vec![crate::script::WrathGuildBankRankRights {
@@ -752,8 +773,10 @@ mod tests {
         );
         assert!(s.cursor_payload().is_none());
         // A split of 7 drops on a bag slot as a withdraw; the whole stack splits as a pickup.
-        s.run("SplitGuildBankItem(1, 5, 7) PickupContainerItem(0, 3)").unwrap();
-        s.run("SplitGuildBankItem(1, 5, 20) PickupInventoryItem(16)").unwrap();
+        s.run("SplitGuildBankItem(1, 5, 7) PickupContainerItem(0, 3)")
+            .unwrap();
+        s.run("SplitGuildBankItem(1, 5, 20) PickupInventoryItem(16)")
+            .unwrap();
         assert_eq!(
             s.take_wrath_guild_bank_requests(),
             vec![

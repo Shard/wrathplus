@@ -257,9 +257,18 @@ impl Loader<'_> {
     /// `blinkSpeed` is the caret half-period (`E+0x370`).
     /// Wrath's frame flags and `<PushedTextOffset>`, forwarded where the frame has the setter.
     pub(super) fn apply_wrath_frame_flags(&mut self, el: &Element, wrapper: &Table, dbg: &str) {
-        let has = |m: &str| wrapper.get::<Option<mlua::Function>>(m).ok().flatten().is_some();
+        let has = |m: &str| {
+            wrapper
+                .get::<Option<mlua::Function>>(m)
+                .ok()
+                .flatten()
+                .is_some()
+        };
         for (attr, method) in [
-            ("motionScriptsWhileDisabled", "SetMotionScriptsWhileDisabled"),
+            (
+                "motionScriptsWhileDisabled",
+                "SetMotionScriptsWhileDisabled",
+            ),
             ("reverse", "SetReverse"),
             ("drawEdge", "SetDrawEdge"),
             ("rotatesTexture", "SetRotatesTexture"),
@@ -281,21 +290,24 @@ impl Loader<'_> {
                     .filter(|t| !t.is_empty())
                     .map(str::to_string)
                     .collect();
-                if let Err(e) =
-                    wrapper.call_method::<()>("RegisterForClicks", mlua::Variadic::from_iter(tokens))
+                if let Err(e) = wrapper
+                    .call_method::<()>("RegisterForClicks", mlua::Variadic::from_iter(tokens))
                 {
-                    self.report.errors.push(format!("{dbg}: RegisterForClicks: {e}"));
+                    self.report
+                        .errors
+                        .push(format!("{dbg}: RegisterForClicks: {e}"));
                 }
             }
         }
         if let Some(offset) = children_named(el, "PushedTextOffset").last() {
             let (x, y) = abs_dim(offset);
             if has("SetPushedTextOffset") {
-                if let Err(e) = wrapper.call_method::<()>(
-                    "SetPushedTextOffset",
-                    (x.unwrap_or(0.0), y.unwrap_or(0.0)),
-                ) {
-                    self.report.errors.push(format!("{dbg}: SetPushedTextOffset: {e}"));
+                if let Err(e) = wrapper
+                    .call_method::<()>("SetPushedTextOffset", (x.unwrap_or(0.0), y.unwrap_or(0.0)))
+                {
+                    self.report
+                        .errors
+                        .push(format!("{dbg}: SetPushedTextOffset: {e}"));
                 }
             }
         }

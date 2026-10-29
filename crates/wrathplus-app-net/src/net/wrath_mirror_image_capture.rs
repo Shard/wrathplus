@@ -5,11 +5,11 @@
 //! `UNIT_FLAG2_MIRROR_IMAGE` (`0x10`) asks for its caster's look once per object (`0x716f10`:
 //! `[unit+0xa30] |= 0x20000`, then `CMSG_GET_MIRRORIMAGE_DATA` with the unit's guid).
 use super::{Guid, NetCommands, NetHandlerApp, ObjectStore};
-use wrathplus_protocol::types::Field;
-use wrathplus_protocol::{wrath_mirror_image::Packet, SessionEvent, SessionEventKind};
 use bevy::ecs::entity::EntityHashSet;
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::types::Field;
+use wrathplus_protocol::{wrath_mirror_image::Packet, SessionEvent, SessionEventKind};
 
 /// `UNIT_FLAG2_MIRROR_IMAGE` (AzerothCore `UnitDefines.h`).
 const MIRROR_IMAGE: u32 = 0x10;

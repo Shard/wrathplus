@@ -1,14 +1,14 @@
 //! Equipment resolution: what each unit holds and wears this frame, and where each item hangs.
 
-use wrathplus_protocol::EntityKind;
 use bevy::prelude::*;
+use wrathplus_protocol::EntityKind;
 
-use crate::creature_anim::{HandGrip, NockedAmmo, VisualSheath, Wielded};
 use crate::app_core::anim::NockLatch;
+use crate::app_core::session::ObjectStore;
 use crate::app_core::state::UNIT_FLAG_DISARMED;
+use crate::creature_anim::{HandGrip, NockedAmmo, VisualSheath, Wielded};
 use crate::items::Items;
 use crate::net::{NetCommands, NetEntity};
-use crate::app_core::session::ObjectStore;
 
 use super::super::item_glow::{self, ItemGlows};
 use super::super::Creatures;
@@ -675,15 +675,15 @@ pub(in crate::entities) fn resolve_corpse_equipment(
 
 #[cfg(test)]
 mod tests {
-    use wrathplus_protocol::types::Field;
     use bevy::prelude::*;
+    use wrathplus_protocol::types::Field;
 
     use super::super::HELD_SLOTS;
     use super::super::{Equipment, HeldItems, ItemDisplays};
     use super::{ammo_attach, attach_id, placement, resolve_corpse_equipment, resolve_equipment};
+    use crate::app_core::session::ObjectStore;
     use crate::items::Items;
     use crate::net::{ClientCommand, NetCommands, NetEntity};
-    use crate::app_core::session::ObjectStore;
     use wrathplus_protocol::types::{ItemInfo, ObjectFields};
     use wrathplus_protocol::EntityKind;
 

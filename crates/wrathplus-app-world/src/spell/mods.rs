@@ -23,9 +23,9 @@ use bevy::prelude::*;
 
 use wrathplus_formats::{SpellDisplay, SpellRange};
 
-use crate::chr_classes::ChrClassTable;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::chr_classes::ChrClassTable;
 
 /// SpellModOps per row: the index stride (`imul eax,eax,0x1d`; the reader's `add edx,0x74`).
 const OPS: usize = 29;

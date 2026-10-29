@@ -1,9 +1,9 @@
 use super::*;
 use crate::target::wrath_relations::{attack, ByGuid, NoStores, StoreLookup};
+use std::collections::HashMap;
 use wrathplus_formats::vehicles::{Vehicle, VehicleCatalog};
 use wrathplus_formats::{FactionInfo, FactionTemplate};
 use wrathplus_protocol::types::ObjectFields;
-use std::collections::HashMap;
 
 const ME: u64 = 0x10;
 const MATE: u64 = 0x11;

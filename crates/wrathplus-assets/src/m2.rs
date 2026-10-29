@@ -5,11 +5,11 @@
 
 use std::sync::Arc;
 
-use wrathplus_formats::{CollisionMesh, M2Bounds, M2Light, ParticleEmitterDef};
 use bevy::asset::Asset;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
+use wrathplus_formats::{CollisionMesh, M2Bounds, M2Light, ParticleEmitterDef};
 
 #[path = "wrath_m2.rs"]
 mod wrath_m2;

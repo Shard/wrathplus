@@ -17,12 +17,12 @@ use wrathplus_protocol::EntityKind;
 use wrathplus_ui::script::UiScript;
 
 use super::probes::ProbeClock;
-use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
+use crate::app_core::catalogs::BankPrices;
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
+use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
 use crate::ui_bank::BankOpen;
-use crate::app_core::catalogs::BankPrices;
 
 /// Soleil Stonemantle's spawn (AzerothCore `creature` guid 111, map 0).
 const BANKER_AT: [f32; 3] = [-4895.64, -1004.66, 504.024];

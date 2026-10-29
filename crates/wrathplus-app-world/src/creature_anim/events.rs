@@ -1,9 +1,9 @@
 //! The model event-keyframe scanner: [`fire_anim_events`] fires the M2 `$xxx` keys each playing
 //! clip crossed this frame as [`AnimSoundEvent`]s.
 
-use wrathplus_assets::{AnimClip, ModelAnimations};
 use bevy::animation::graph::AnimationNodeIndex;
 use bevy::prelude::*;
+use wrathplus_assets::{AnimClip, ModelAnimations};
 
 use super::{resolved_id, AnimData, AnimDriver};
 use crate::names::type_flags::MORE_AUDIBLE;

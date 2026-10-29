@@ -306,8 +306,8 @@ fn bag_closed_fires_on_the_bag_guid_moving_and_only_off_a_non_empty_slot() {
          this return"
     );
 }
-use wrathplus_ui::script::{ContainerState, UiScript};
 use std::collections::HashMap;
+use wrathplus_ui::script::{ContainerState, UiScript};
 
 /// An absent self store is no source, never an empty bag burst; a present source that lost a
 /// bag still announces.

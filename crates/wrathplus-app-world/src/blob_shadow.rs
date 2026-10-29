@@ -31,14 +31,14 @@
 //! Each shadow's triangles are rebuilt only when [`ShadowKey`] moves and copied onto the effect
 //! stream every shown frame.
 
-use wrathplus_assets::ModelAnimations;
-use wrathplus_protocol::EntityKind;
 use bevy::ecs::entity::EntityHashSet;
 use bevy::prelude::*;
+use wrathplus_assets::ModelAnimations;
+use wrathplus_protocol::EntityKind;
 
+use crate::app_core::session::Embodied;
 use crate::creature_anim::AnimData;
 use crate::net::NetEntity;
-use crate::app_core::session::Embodied;
 use wrathplus_world::decal::{DecalFrame, WorldDecal};
 use wrathplus_world::particles::buffer::{begin_effect_frame, EffectVertex};
 use wrathplus_world::schedule::WorldStage;

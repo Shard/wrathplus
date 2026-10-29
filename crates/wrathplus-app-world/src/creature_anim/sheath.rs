@@ -1,9 +1,9 @@
 //! Weapon sheath state: the one setter's request, the draw/stow ceremony overlays and the
 //! `AnimationData.dbc` weapon flags; `drive_animations` executes every transition.
 
+use bevy::prelude::*;
 use wrathplus_assets::ModelAnimations;
 use wrathplus_formats::AnimDataCatalog;
-use bevy::prelude::*;
 
 use wrathplus_assets::{LockRecover, WorldAssets};
 

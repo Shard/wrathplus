@@ -4,17 +4,17 @@
 //! with a jump played out locally under gravity. Poses live in raw WoW space on the components;
 //! the `Transform` is derived from them and keeps the renderer's baked scale.
 
-use wrathplus_world::schedule::WorldStage;
 use bevy::prelude::*;
+use wrathplus_world::schedule::WorldStage;
 
 mod facing;
 mod handlers;
 mod modes;
 mod relay;
 mod remote;
-mod spline;
 #[cfg(test)]
 mod slope_tests;
+mod spline;
 #[cfg(test)]
 mod swim_depth_tests;
 #[cfg(test)]

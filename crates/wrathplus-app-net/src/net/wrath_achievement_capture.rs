@@ -2,9 +2,9 @@
 //! `crate::ui_native::wrath_achievements` through [`Achievements`]; other players' earns and
 //! server firsts stay here.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_achievement::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
+use wrathplus_protocol::{wrath_achievement::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeAchievementPackets(pub VecDeque<Packet>);

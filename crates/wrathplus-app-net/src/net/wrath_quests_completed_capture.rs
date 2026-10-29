@@ -3,9 +3,9 @@
 //! wrath_quests_completed_capture`) publishes with `QUEST_QUERY_COMPLETE` (event `0x296`).
 //! No quest-log mutation or inferred completion state.
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{wrath_quests_completed::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_quests_completed::Packet, SessionEvent, SessionEventKind};
 
 /// The last reply's ids, re-pushed into every new VM: the reference keeps one list, replaced by a
 /// reply (`0x5b5190`) and emptied when the world handlers register (`0x5b6df0` calls the same

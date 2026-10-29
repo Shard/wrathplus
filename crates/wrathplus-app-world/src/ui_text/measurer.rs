@@ -14,11 +14,7 @@ use super::engine::TextEngine;
 /// measures at the drawn raster size, the host's `seam` ([`crate::ui_script::seam_scale`]) times
 /// the owner frame's `effective_scale`, and divides that back out: whole-pixel glyph steps do not
 /// commute with scaling.
-pub fn measure_request(
-    e: &mut TextEngine,
-    seam: f32,
-    r: &MeasureRequest,
-) -> (f32, f32, f32) {
+pub fn measure_request(e: &mut TextEngine, seam: f32, r: &MeasureRequest) -> (f32, f32, f32) {
     let rs = seam * r.scale;
     let spec = || super::FontSpec {
         path: r.font.as_deref(),

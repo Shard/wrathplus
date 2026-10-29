@@ -18,14 +18,14 @@ use bevy::prelude::*;
 use wrathplus_formats::{SkillLineCatalog, SpellCatalog};
 use wrathplus_ui::script::{ScriptValue, SpellBookState, SpellSlotView, SpellTabView, UiScript};
 
+use crate::app_core::schedule::UnitFeed;
+use crate::app_core::state::PlayerActions;
+use crate::app_core::state::Spells;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::net::NetCommands;
 use crate::ui_action::{melee_auto_attack_icon, ranged_weapon_icon};
-use crate::app_core::state::PlayerActions;
-use crate::app_core::state::Spells;
 use crate::ui_script::gate;
-use crate::app_core::schedule::UnitFeed;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 
 pub(crate) use crate::app_core::state::{LearnedInTab, SkillLines};
@@ -482,7 +482,9 @@ pub(crate) fn cast_spell(cast: &mut crate::spell::ScriptCast, spell_id: u32, on_
     if let (Some(sp), Some(store)) = (ladder.spells.as_ref(), targeting.self_store.iter().next()) {
         if let Some(d) = sp.catalog.get(spell_id) {
             let (commands, objects) = (&ladder.commands, &ladder.objects);
-            if crate::ui_action::toggle::send_press_again(commands, recent, spell_id, d, objects, store) {
+            if crate::ui_action::toggle::send_press_again(
+                commands, recent, spell_id, d, objects, store,
+            ) {
                 return;
             }
             let form = store.0.unit_shapeshift_form();
@@ -541,8 +543,8 @@ mod tests {
         assert_eq!(highest_rank_slots(&book, Some(&lines), &known), [0, 2]);
         assert_eq!(highest_rank_slots(&book, None, &known), [0, 1, 2]);
     }
-    use wrathplus_formats::SpellDisplay;
     use std::collections::HashMap;
+    use wrathplus_formats::SpellDisplay;
 
     #[test]
     fn wrath_catalog_seed_includes_unlearned_spells_and_replacement_vms() {

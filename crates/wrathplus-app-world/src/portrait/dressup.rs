@@ -5,10 +5,10 @@
 //! (`0x495c00`) shares the `CharacterModelBase` ctor (`0x505680`) with the character window's
 //! `<PlayerModel>`, so it lights through [`BoothLight::pane`] with no glow, as the paper doll does.
 
-use wrathplus_protocol::CharEnumItem;
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::PerspectiveProjection;
 use bevy::prelude::*;
+use wrathplus_protocol::CharEnumItem;
 
 use crate::entities::Creatures;
 use wrathplus_assets::materials::WowModelMaterial;

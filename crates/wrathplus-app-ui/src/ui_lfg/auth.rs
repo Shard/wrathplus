@@ -1,7 +1,7 @@
 //! Transport-only authenticated expansion capture; App owns catalog-context presentation.
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeAccountExpansion(pub(crate) Option<u8>);

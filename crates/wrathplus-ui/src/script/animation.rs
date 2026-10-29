@@ -26,7 +26,14 @@ fn list(object: &Table, key: &str) -> mlua::Result<MultiValue> {
 /// both after `OnEvent` (`0x816830`), matched case-insensitively.
 fn script_kind(t: &Table, name: &str) -> mlua::Result<Option<&'static str>> {
     const KINDS: [&str; 8] = [
-        "OnEvent", "OnLoad", "OnPlay", "OnPause", "OnStop", "OnFinished", "OnUpdate", "OnLoop",
+        "OnEvent",
+        "OnLoad",
+        "OnPlay",
+        "OnPause",
+        "OnStop",
+        "OnFinished",
+        "OnUpdate",
+        "OnLoop",
     ];
     let group = t.raw_get::<String>("_kind")? == "AnimationGroup";
     Ok(KINDS

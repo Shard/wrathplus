@@ -8,14 +8,14 @@
 
 use super::ui_pet_press_tests::{rig, Rig};
 use crate::app_core::session::ObjectStore;
-use crate::ui_pet::press_tests::{claw, growl, listen, listening_vm, CLAW, GROWL, ME, PET};
 use crate::app_core::state::PetBar;
+use crate::ui_pet::press_tests::{claw, growl, listen, listening_vm, CLAW, GROWL, ME, PET};
+use bevy::prelude::*;
+use std::time::{Duration, Instant};
 use wrathplus_formats::SpellDisplay;
 use wrathplus_protocol::types::Field;
 use wrathplus_protocol::types::{PetSpellCooldown, PetSpells};
 use wrathplus_protocol::SessionEvent;
-use bevy::prelude::*;
-use std::time::{Duration, Instant};
 
 /// The flush reads what the feeds pushed: it runs after the bar's feed and the book's, which
 /// push the pet's cooldown triples the handlers ask for, and (declared through the cooldown

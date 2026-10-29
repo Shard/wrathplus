@@ -1,12 +1,11 @@
 use wrathplus_protocol::events::SessionEvent;
 use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEvent, WrathEventAdapter};
 use wrathplus_protocol::wrath_loot::{
-    self, CMSG_AUTOSTORE_LOOT_ITEM, CMSG_LOOT, CMSG_LOOT_MONEY, CMSG_LOOT_RELEASE,
-    InventoryFailureExtra, LootCodecError, LootResponse, MAX_LOOT_ITEMS,
+    self, decode, decode_loot_response, encode_autostore_loot_item, encode_loot, encode_loot_money,
+    encode_loot_release, InventoryFailureExtra, LootCodecError, LootResponse, ServerLootPacket,
+    CMSG_AUTOSTORE_LOOT_ITEM, CMSG_LOOT, CMSG_LOOT_MONEY, CMSG_LOOT_RELEASE, MAX_LOOT_ITEMS,
     SMSG_INVENTORY_CHANGE_FAILURE, SMSG_ITEM_PUSH_RESULT, SMSG_LOOT_CLEAR_MONEY,
     SMSG_LOOT_MONEY_NOTIFY, SMSG_LOOT_RELEASE_RESPONSE, SMSG_LOOT_REMOVED, SMSG_LOOT_RESPONSE,
-    ServerLootPacket, decode, decode_loot_response, encode_autostore_loot_item, encode_loot,
-    encode_loot_money, encode_loot_release,
 };
 
 const CORPSE: u64 = 0xf130_0001_0000_002a;
@@ -444,7 +443,13 @@ fn adapter_emits_success_only_after_server_ack() {
         assert_eq!(session_events.len(), 1, "{expected}");
         match (expected, &session_events[0]) {
             ("removed", SessionEvent::LootRemoved { slot: 4 })
-            | ("money", SessionEvent::LootMoneyNotify { amount: 9, sole_looter: true })
+            | (
+                "money",
+                SessionEvent::LootMoneyNotify {
+                    amount: 9,
+                    sole_looter: true,
+                },
+            )
             | ("clear", SessionEvent::LootClearMoney)
             | ("release", SessionEvent::LootReleaseResponse { guid: CORPSE }) => {}
             _ => panic!("wrong event for {expected}: {:?}", session_events[0]),

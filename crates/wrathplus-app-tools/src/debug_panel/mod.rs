@@ -558,7 +558,8 @@ fn debug_panel_ui(
                                 });
                                 for (op, t) in rows {
                                     let name =
-                                        wrathplus_protocol::wrath_opcode_names::opcode_name(*op).unwrap_or("?");
+                                        wrathplus_protocol::wrath_opcode_names::opcode_name(*op)
+                                            .unwrap_or("?");
                                     let mut line =
                                         format!("{op:#06x} {name} · {}", t.unknown + t.unparseable);
                                     if t.unparseable > 0 {

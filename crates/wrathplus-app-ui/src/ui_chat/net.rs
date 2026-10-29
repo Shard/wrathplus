@@ -3,16 +3,16 @@
 //! queued on [`UiErrorTexts`].
 
 use crate::ui_chat::feed::ChatLogFeed;
+use bevy::prelude::*;
 use wrathplus_protocol::types::{ChatMessage, CHAT_MSG_WHISPER};
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::{Broadcast, ChatEvent, ChatEventKind, ChatLog};
-use crate::net::{ClientCommand, NetCommands, NetHandlerApp, PlayedTimeAnswer};
-use crate::app_core::session::ServerSaidMessage;
 use crate::app_core::errors::UiErrorKeys;
 use crate::app_core::errors::UiErrorTexts;
 use crate::app_core::interaction::SocialState;
+use crate::app_core::session::ServerSaidMessage;
+use crate::net::{ClientCommand, NetCommands, NetHandlerApp, PlayedTimeAnswer};
 
 /// Register the chat window's handlers and its session-end listener.
 pub(super) fn register(app: &mut App) {
@@ -217,9 +217,9 @@ fn chat_player_not_found(name: &str, errors: &mut crate::app_core::errors::UiErr
 
 /// A cross-faction whisper was refused: message 240, `ERR_CHAT_WRONG_FACTION`.
 fn chat_wrong_faction(errors: &mut crate::app_core::errors::UiErrorKeys) {
-    errors
-        .0
-        .push(crate::app_core::errors::UiError::key("ERR_CHAT_WRONG_FACTION"));
+    errors.0.push(crate::app_core::errors::UiError::key(
+        "ERR_CHAT_WRONG_FACTION",
+    ));
 }
 
 /// `SMSG_NOTIFICATION` (`0x1cb`, handler `0x401800`): the red `UIErrorsFrame` line,

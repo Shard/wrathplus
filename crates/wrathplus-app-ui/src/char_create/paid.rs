@@ -16,9 +16,9 @@
 //! Labelled: the name check is the 2-12 character rule; `0x7e18c0`'s locale rules are left to the
 //! server's reply.
 
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_char_services::{Appearance, Command};
 use wrathplus_protocol::Character;
-use bevy::prelude::*;
 
 /// `CHAR_CUSTOMIZE_FLAG_*`.
 const FLAG_CUSTOMIZE: u32 = 0x1;

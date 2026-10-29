@@ -10,10 +10,10 @@
 
 use bevy::prelude::*;
 
-use crate::creature_anim::Engaged;
-use crate::net::Reputations;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::creature_anim::Engaged;
+use crate::net::Reputations;
 
 use super::relations::can_attack;
 use super::{Factions, Selection};

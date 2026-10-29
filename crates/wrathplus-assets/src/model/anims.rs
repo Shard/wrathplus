@@ -1,9 +1,9 @@
 //! A model's playable animations, and how a requested animation id resolves to one of them.
 
-use wrathplus_formats::AnimDataCatalog;
-pub use wrathplus_formats::PlayableAnim;
 use bevy::animation::graph::{AnimationGraph, AnimationNodeIndex};
 use bevy::prelude::*;
+use wrathplus_formats::AnimDataCatalog;
+pub use wrathplus_formats::PlayableAnim;
 
 /// One event keyframe on a clip, with where as well as when: the reference's event kernel
 /// (`0x719370`) fires at `placement · boneMatrix[bone] · position`, and many records sit far from

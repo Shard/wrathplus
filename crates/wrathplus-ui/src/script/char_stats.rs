@@ -893,11 +893,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     "Invalid inventory slot in GetInventorySlotInfo",
                 ));
             };
-            let id = if *id >= 64 {
-                *id + 4
-            } else {
-                *id
-            };
+            let id = if *id >= 64 { *id + 4 } else { *id };
             Ok((
                 id,
                 // The DBC's bytes verbatim, unnormalised (`0x4c825b`): a lowercase directory and

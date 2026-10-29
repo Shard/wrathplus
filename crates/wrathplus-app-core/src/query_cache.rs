@@ -12,8 +12,8 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::sync::Mutex;
 
-use wrathplus_assets::LockRecover;
 use bevy::prelude::*;
+use wrathplus_assets::LockRecover;
 
 use crate::app_core::session::EnteredWorldMessage;
 

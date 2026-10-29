@@ -5,11 +5,11 @@
 
 #[cfg(test)]
 use crate::app_core::{errors::UiError, group::ListOutcome};
+use bevy::prelude::*;
 #[cfg(test)]
 use wrathplus_protocol::types::{
     party_operation, party_result, GroupMemberEntry, PartyMemberStatsInfo,
 };
-use bevy::prelude::*;
 
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;

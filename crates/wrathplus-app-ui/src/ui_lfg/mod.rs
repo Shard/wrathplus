@@ -7,9 +7,9 @@ mod l1;
 mod l2;
 
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{wrath_lfg::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_lfg::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeLfgPackets(pub(crate) VecDeque<Packet>);
@@ -24,7 +24,10 @@ impl Plugin for UiLfgPlugin {
         app.init_resource::<NativeLfgPackets>()
             .net_handler(SessionEventKind::WrathLfg, receive)
             .net_handler(SessionEventKind::Disconnected, clear)
-            .add_systems(Startup, catalog::load.after(wrathplus_assets::AssetSet::Open))
+            .add_systems(
+                Startup,
+                catalog::load.after(wrathplus_assets::AssetSet::Open),
+            )
             .add_systems(
                 Update,
                 (

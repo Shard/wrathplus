@@ -1109,7 +1109,22 @@ fn convert_entry(
 ) {
     let transform = eq.animation_transform;
     let start = out.len();
-    convert_entry_inner(eq, s, w, h, dpi, assets, images, font_atlas, booths, text_ui, caret_pinned, out, link_spans, minimap_slot);
+    convert_entry_inner(
+        eq,
+        s,
+        w,
+        h,
+        dpi,
+        assets,
+        images,
+        font_atlas,
+        booths,
+        text_ui,
+        caret_pinned,
+        out,
+        link_spans,
+        minimap_slot,
+    );
     animation_transform::apply(&mut out[start..], transform, s, h);
 }
 
@@ -1178,7 +1193,10 @@ fn convert_entry_inner(
             use crate::portrait::{glue_pane, PortraitSource};
             // A file pane publishes an idempotent tile request `ui_models::compose_tiles` draws each
             // frame (no re-conversion); a glue backdrop ([`glue_pane`]) is the glue booth's scene.
-            if let Some(path) = model.as_deref().filter(|_| !name.as_deref().is_some_and(glue_pane)) {
+            if let Some(path) = model
+                .as_deref()
+                .filter(|_| !name.as_deref().is_some_and(glue_pane))
+            {
                 let tiles = &mut booths.tiles;
                 let dpi = tiles.dpi.max(0.01);
                 let aspect = if h > 0.0 { w / h } else { 4.0 / 3.0 };
@@ -1567,7 +1585,11 @@ fn cooldown_wedges(rect: Rect, remaining: f32, reverse: bool) -> Vec<[Vec2; 4]> 
         return Vec::new();
     }
     let elapsed = (1.0 - remaining.clamp(0.0, 1.0)) * TAU;
-    let (from, to) = if reverse { (0.0, elapsed) } else { (elapsed, TAU) };
+    let (from, to) = if reverse {
+        (0.0, elapsed)
+    } else {
+        (elapsed, TAU)
+    };
     // Clockwise from 12 o'clock on a y-down screen: (sin θ, −cos θ).
     let point = |a: f32| {
         let d = Vec2::new(a.sin(), -a.cos());

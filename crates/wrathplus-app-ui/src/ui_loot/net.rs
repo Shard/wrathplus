@@ -2,16 +2,16 @@
 //! reads, the fishing verdicts, and the item push behind "You receive …".
 
 use crate::ui_loot::LootStateRows;
+use bevy::prelude::*;
 use wrathplus_protocol::types::ItemPushResult;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
-use bevy::prelude::*;
 
 use super::{LootLatch, LootState};
-use crate::net::{ClientCommand, NetHandlerApp};
-use crate::app_core::session::SelfGuid;
-use crate::pending_item_ops::{LockTransitions, PendingItemOps};
-use crate::app_core::errors::{UiError, UiErrorKeys};
 use crate::app_core::chat::{ChatLog, Pending};
+use crate::app_core::errors::{UiError, UiErrorKeys};
+use crate::app_core::session::SelfGuid;
+use crate::net::{ClientCommand, NetHandlerApp};
+use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 
 pub(super) fn register(app: &mut App) {
     use SessionEventKind as K;
@@ -181,12 +181,19 @@ fn on_removed(In(ev): In<SessionEvent>, mut loot: ResMut<LootState>) {
 /// `SMSG_LOOT_MONEY_NOTIFY` (`0x6ceca0`): a nonzero coin prints as a `CHAT_MSG_MONEY` line the feed
 /// fills, `YOU_LOOT_MONEY` for the only looter, else `LOOT_MONEY_SPLIT`.
 fn on_money_notify(In(ev): In<SessionEvent>, loot: Res<LootState>, mut chat: ResMut<ChatLog>) {
-    if let SessionEvent::LootMoneyNotify { amount, sole_looter } = ev {
+    if let SessionEvent::LootMoneyNotify {
+        amount,
+        sole_looter,
+    } = ev
+    {
         if !loot.wrath.acknowledge_money_notify() {
             return;
         }
         if amount != 0 {
-            chat.pending.push(Pending::LootMoney { amount, sole: sole_looter });
+            chat.pending.push(Pending::LootMoney {
+                amount,
+                sole: sole_looter,
+            });
         }
     }
 }
@@ -308,7 +315,6 @@ fn loot_removed(slot: u8, loot: &mut LootState) {
     loot.remove_slot(slot);
 }
 
-
 /// `SMSG_LOOT_CLEAR_MONEY`: the coin row goes, for every looter.
 fn loot_clear_money(loot: &mut LootState) {
     debug!("net: loot coin line cleared");
@@ -351,8 +357,8 @@ fn item_push_result(
 mod tests {
     use super::*;
     use crate::net::{ClientCommand, NetCommands};
-    use wrathplus_protocol::types::Field;
     use bevy::ecs::system::RunSystemOnce;
+    use wrathplus_protocol::types::Field;
 
     use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 
@@ -428,10 +434,9 @@ mod tests {
                     scale: 1.0,
                 },
                 // `UNIT_FIELD_HEALTH` (22) at 0.
-                crate::app_core::session::ObjectStore(wrathplus_protocol::types::ObjectFields::from_fields(&[(
-                    Field::UnitHealth,
-                    0,
-                )])),
+                crate::app_core::session::ObjectStore(
+                    wrathplus_protocol::types::ObjectFields::from_fields(&[(Field::UnitHealth, 0)]),
+                ),
             ))
             .id();
         world
@@ -466,13 +471,11 @@ mod tests {
                 SessionEvent::LootReleaseResponse { guid: CORPSE },
             )
             .expect("the handler runs as a one-shot system");
-        assert!(
-            world
-                .resource_mut::<bevy::ecs::message::Messages<crate::target::DeselectGuid>>()
-                .drain()
-                .next()
-                .is_none()
-        );
+        assert!(world
+            .resource_mut::<bevy::ecs::message::Messages<crate::target::DeselectGuid>>()
+            .drain()
+            .next()
+            .is_none());
     }
 
     /// Runs [`on_error`] for `guid` with `error` in `world`.
@@ -734,13 +737,13 @@ mod tests {
 
     /// [`tabbed_world`]'s seating, into any world.
     fn seat_tabbed(world: &mut World) -> crossbeam_channel::Receiver<ClientCommand> {
-        use crate::net::{Guid, GuidIndex, NetEntity};
         use crate::app_core::session::ObjectStore;
         use crate::app_core::session::SelfPlayer;
+        use crate::net::{Guid, GuidIndex, NetEntity};
         const FIELD_UNIT_FLAGS: u16 = wrathplus_protocol::types::Field::UnitFlags.index();
         const FIELD_UNIT_HEALTH: u16 = wrathplus_protocol::types::Field::UnitHealth.index();
-        use wrathplus_protocol::EntityKind::{GameObject, Unit};
         use wrathplus_protocol::types::{ObjectFields, ObjectType};
+        use wrathplus_protocol::EntityKind::{GameObject, Unit};
         let unit = |kind, type_mask, pairs: &[(u16, u32)]| {
             let mut fields = vec![(OBJECT_FIELD_TYPE, type_mask)];
             fields.extend_from_slice(pairs);
@@ -833,9 +836,13 @@ mod tests {
         use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
         use wrathplus_protocol::wrath_loot::{LOOT_SLOT_OWNER, SMSG_LOOT_RESPONSE};
         let (mut world, rx) = tabbed_world();
-        world.resource_mut::<crate::app_core::state::Selection>().guid = Some(CORPSE);
+        world
+            .resource_mut::<crate::app_core::state::Selection>()
+            .guid = Some(CORPSE);
         let corpse = world.resource::<crate::net::GuidIndex>().0[&CORPSE];
-        world.resource_mut::<crate::app_core::state::Selection>().target = Some(corpse);
+        world
+            .resource_mut::<crate::app_core::state::Selection>()
+            .target = Some(corpse);
         assert!(world.resource_scope(|world, mut loot: Mut<LootState>| {
             world.resource_scope(|world, mut latch: Mut<LootLatch>| {
                 crate::loot::begin_wrath_corpse_loot(

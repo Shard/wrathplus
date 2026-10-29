@@ -7,33 +7,83 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
-        ("SetFactionAtWar", ClientCommand::SetFactionAtWar { rep_list_id: 7, at_war: true }),
-        ("SetFactionInactive", ClientCommand::SetFactionInactive { rep_list_id: 7, inactive: true }),
-        ("SetWatchedFaction", ClientCommand::SetWatchedFaction { rep_list_id: -1 }),
+        (
+            "SetFactionAtWar",
+            ClientCommand::SetFactionAtWar {
+                rep_list_id: 7,
+                at_war: true,
+            },
+        ),
+        (
+            "SetFactionInactive",
+            ClientCommand::SetFactionInactive {
+                rep_list_id: 7,
+                inactive: true,
+            },
+        ),
+        (
+            "SetWatchedFaction",
+            ClientCommand::SetWatchedFaction { rep_list_id: -1 },
+        ),
         (
             "NativeInspect",
-            ClientCommand::NativeInspect(wrathplus_protocol::wrath_inspect::Command::LearnPreviewTalents { talents: vec![(1, 0)] }),
+            ClientCommand::NativeInspect(
+                wrathplus_protocol::wrath_inspect::Command::LearnPreviewTalents {
+                    talents: vec![(1, 0)],
+                },
+            ),
         ),
         ("Inspect", ClientCommand::Inspect { target: 1 }),
-        ("LearnTalent", ClientCommand::LearnTalent { talent_id: 1, rank: 0 }),
-        ("TalentWipeConfirm", ClientCommand::TalentWipeConfirm { trainer: 1 }),
-        ("NativeSessionMeta", ClientCommand::NativeSessionMeta(wrathplus_protocol::wrath_session_meta::Command::ReadyForAccountDataTimes)),
+        (
+            "LearnTalent",
+            ClientCommand::LearnTalent {
+                talent_id: 1,
+                rank: 0,
+            },
+        ),
+        (
+            "TalentWipeConfirm",
+            ClientCommand::TalentWipeConfirm { trainer: 1 },
+        ),
+        (
+            "NativeSessionMeta",
+            ClientCommand::NativeSessionMeta(
+                wrathplus_protocol::wrath_session_meta::Command::ReadyForAccountDataTimes,
+            ),
+        ),
         ("TutorialFlag", ClientCommand::TutorialFlag { id: 1 }),
-        ("NativeHelp", ClientCommand::NativeHelp(wrathplus_protocol::wrath_help::Command::ResolveResponse)),
-        ("GameObjUse", ClientCommand::GameObjUse { guid: 0xf110_0000_0000_0007 }),
+        (
+            "NativeHelp",
+            ClientCommand::NativeHelp(wrathplus_protocol::wrath_help::Command::ResolveResponse),
+        ),
+        (
+            "GameObjUse",
+            ClientCommand::GameObjUse {
+                guid: 0xf110_0000_0000_0007,
+            },
+        ),
         ("QueryTime", ClientCommand::QueryTime),
-        ("UnlearnSkill", ClientCommand::UnlearnSkill { skill_id: 186 }),
+        (
+            "UnlearnSkill",
+            ClientCommand::UnlearnSkill { skill_id: 186 },
+        ),
         (
             "NativeSessionMisc",
-            ClientCommand::NativeSessionMisc(wrathplus_protocol::wrath_session_misc::Command::Emote { emote: 3 }),
+            ClientCommand::NativeSessionMisc(
+                wrathplus_protocol::wrath_session_misc::Command::Emote { emote: 3 },
+            ),
         ),
         (
             "NativeWorldObjects",
-            ClientCommand::NativeWorldObjects(wrathplus_protocol::wrath_world_objects::Command::ReportUse { object: 1 }),
+            ClientCommand::NativeWorldObjects(
+                wrathplus_protocol::wrath_world_objects::Command::ReportUse { object: 1 },
+            ),
         ),
         (
             "NativeReferFriend",
-            ClientCommand::NativeReferFriend(wrathplus_protocol::wrath_refer_friend::Command::AcceptLevelGrant { granter: 1 }),
+            ClientCommand::NativeReferFriend(
+                wrathplus_protocol::wrath_refer_friend::Command::AcceptLevelGrant { granter: 1 },
+            ),
         ),
         ("GmTicketGet", ClientCommand::GmTicketGet),
         ("GmTicketDelete", ClientCommand::GmTicketDelete),
@@ -44,73 +94,183 @@ fn every_wrath_writer_route_is_admitted() {
         ("NextCinematicCamera", ClientCommand::NextCinematicCamera),
         ("CompleteCinematic", ClientCommand::CompleteCinematic),
         ("AreaTrigger", ClientCommand::AreaTrigger { trigger_id: 45 }),
-        ("SetActionBarToggles", ClientCommand::SetActionBarToggles { toggles: 1 }),
-        ("NativeDeath", ClientCommand::NativeDeath(wrathplus_protocol::wrath_death::Command::HearthAndResurrect)),
+        (
+            "SetActionBarToggles",
+            ClientCommand::SetActionBarToggles { toggles: 1 },
+        ),
+        (
+            "NativeDeath",
+            ClientCommand::NativeDeath(
+                wrathplus_protocol::wrath_death::Command::HearthAndResurrect,
+            ),
+        ),
         ("RepopRequest", ClientCommand::RepopRequest),
         ("CorpseQuery", ClientCommand::CorpseQuery),
         ("ReclaimCorpse", ClientCommand::ReclaimCorpse { corpse: 1 }),
-        ("SummonResponse", ClientCommand::SummonResponse { summoner: 1 }),
+        (
+            "SummonResponse",
+            ClientCommand::SummonResponse { summoner: 1 },
+        ),
         ("SelfRes", ClientCommand::SelfRes),
         ("FriendListRequest", ClientCommand::FriendListRequest),
         ("AddFriend", ClientCommand::AddFriend { name: "Bob".into() }),
         ("DelFriend", ClientCommand::DelFriend { guid: 1 }),
         ("AddIgnore", ClientCommand::AddIgnore { name: "Bob".into() }),
         ("DelIgnore", ClientCommand::DelIgnore { guid: 1 }),
-        ("SetContactNotes", ClientCommand::SetContactNotes { guid: 1, note: "tank".into() }),
-        ("GuildCreate", ClientCommand::GuildCreate { name: "G".into() }),
+        (
+            "SetContactNotes",
+            ClientCommand::SetContactNotes {
+                guid: 1,
+                note: "tank".into(),
+            },
+        ),
+        (
+            "GuildCreate",
+            ClientCommand::GuildCreate { name: "G".into() },
+        ),
         ("GuildLeave", ClientCommand::GuildLeave),
         ("GuildDisband", ClientCommand::GuildDisband),
-        ("GuildLeader", ClientCommand::GuildLeader { name: "Bob".into() }),
-        ("GuildAddRank", ClientCommand::GuildAddRank { name: "Alt".into() }),
+        (
+            "GuildLeader",
+            ClientCommand::GuildLeader { name: "Bob".into() },
+        ),
+        (
+            "GuildAddRank",
+            ClientCommand::GuildAddRank { name: "Alt".into() },
+        ),
         ("GuildDelRank", ClientCommand::GuildDelRank),
-        ("GuildSetPublicNote", ClientCommand::GuildSetPublicNote { name: "Bob".into(), note: "n".into() }),
-        ("GuildSetOfficerNote", ClientCommand::GuildSetOfficerNote { name: "Bob".into(), note: "n".into() }),
-        ("GuildInfoText", ClientCommand::GuildInfoText { text: "hi".into() }),
-        ("SaveGuildEmblem", ClientCommand::SaveGuildEmblem { vendor: 1, design: [0; 5] }),
-        ("TabardVendorActivate", ClientCommand::TabardVendorActivate { npc: 1 }),
+        (
+            "GuildSetPublicNote",
+            ClientCommand::GuildSetPublicNote {
+                name: "Bob".into(),
+                note: "n".into(),
+            },
+        ),
+        (
+            "GuildSetOfficerNote",
+            ClientCommand::GuildSetOfficerNote {
+                name: "Bob".into(),
+                note: "n".into(),
+            },
+        ),
+        (
+            "GuildInfoText",
+            ClientCommand::GuildInfoText { text: "hi".into() },
+        ),
+        (
+            "SaveGuildEmblem",
+            ClientCommand::SaveGuildEmblem {
+                vendor: 1,
+                design: [0; 5],
+            },
+        ),
+        (
+            "TabardVendorActivate",
+            ClientCommand::TabardVendorActivate { npc: 1 },
+        ),
         ("GuildEventLogQuery", ClientCommand::GuildEventLogQuery),
-        ("BattlefieldStatusRequest", ClientCommand::BattlefieldStatusRequest),
+        (
+            "BattlefieldStatusRequest",
+            ClientCommand::BattlefieldStatusRequest,
+        ),
         ("ClearChannelWatch", ClientCommand::ClearChannelWatch),
-        ("DeclineChannelInvite", ClientCommand::DeclineChannelInvite { name: "Trade".into() }),
+        (
+            "DeclineChannelInvite",
+            ClientCommand::DeclineChannelInvite {
+                name: "Trade".into(),
+            },
+        ),
         (
             "NativeRaidBrowser",
-            ClientCommand::NativeRaidBrowser(wrathplus_protocol::wrath_raid_browser::Command::Join { dungeon: 251 }),
+            ClientCommand::NativeRaidBrowser(
+                wrathplus_protocol::wrath_raid_browser::Command::Join { dungeon: 251 },
+            ),
         ),
-        ("PetitionShowList", ClientCommand::PetitionShowList { npc: 1 }),
-        ("PetitionBuy", ClientCommand::PetitionBuy { npc: 1, name: "G".into(), index: 1 }),
-        ("PetitionShowSignatures", ClientCommand::PetitionShowSignatures { item: 1 }),
-        ("PetitionSign", ClientCommand::PetitionSign { item: 1, byte: 1 }),
-        ("OfferPetition", ClientCommand::OfferPetition { item: 1, player: 2 }),
-        ("TurnInPetition", ClientCommand::TurnInPetition { item: 1, banner: None }),
-        ("PetitionQuery", ClientCommand::PetitionQuery { petition_id: 1, item: 1 }),
-        ("PetitionRename", ClientCommand::PetitionRename { item: 1, name: "N".into() }),
-        ("PetitionDecline", ClientCommand::PetitionDecline { item: 1 }),
+        (
+            "PetitionShowList",
+            ClientCommand::PetitionShowList { npc: 1 },
+        ),
+        (
+            "PetitionBuy",
+            ClientCommand::PetitionBuy {
+                npc: 1,
+                name: "G".into(),
+                index: 1,
+            },
+        ),
+        (
+            "PetitionShowSignatures",
+            ClientCommand::PetitionShowSignatures { item: 1 },
+        ),
+        (
+            "PetitionSign",
+            ClientCommand::PetitionSign { item: 1, byte: 1 },
+        ),
+        (
+            "OfferPetition",
+            ClientCommand::OfferPetition { item: 1, player: 2 },
+        ),
+        (
+            "TurnInPetition",
+            ClientCommand::TurnInPetition {
+                item: 1,
+                banner: None,
+            },
+        ),
+        (
+            "PetitionQuery",
+            ClientCommand::PetitionQuery {
+                petition_id: 1,
+                item: 1,
+            },
+        ),
+        (
+            "PetitionRename",
+            ClientCommand::PetitionRename {
+                item: 1,
+                name: "N".into(),
+            },
+        ),
+        (
+            "PetitionDecline",
+            ClientCommand::PetitionDecline { item: 1 },
+        ),
         (
             "NativeAppearance",
-            ClientCommand::NativeAppearance(wrathplus_protocol::wrath_appearance::Command::ShowingHelm { show: true }),
+            ClientCommand::NativeAppearance(
+                wrathplus_protocol::wrath_appearance::Command::ShowingHelm { show: true },
+            ),
         ),
         (
             "NativeGuildBankSwap",
             ClientCommand::NativeGuildBankSwap(wrathplus_protocol::wrath_guild_bank_swap::Swap {
                 banker: 1,
                 transfer: wrathplus_protocol::wrath_guild_bank_swap::Transfer::AutoStore {
-                    source: wrathplus_protocol::wrath_guild_bank_swap::BankSlot { tab: 0, slot: 0, item: 1 },
+                    source: wrathplus_protocol::wrath_guild_bank_swap::BankSlot {
+                        tab: 0,
+                        slot: 0,
+                        item: 1,
+                    },
                     count: 1,
                 },
             }),
         ),
         (
             "NativeGuildBankTab",
-            ClientCommand::NativeGuildBankTab(wrathplus_protocol::wrath_guild_bank_tab::UpdateTab {
-                banker: 1,
-                tab: 0,
-                name: b"Mats".to_vec(),
-                icon: b"INV_Box_01".to_vec(),
-            }),
+            ClientCommand::NativeGuildBankTab(
+                wrathplus_protocol::wrath_guild_bank_tab::UpdateTab {
+                    banker: 1,
+                    tab: 0,
+                    name: b"Mats".to_vec(),
+                    icon: b"INV_Box_01".to_vec(),
+                },
+            ),
         ),
         (
             "NativeGuildBankText",
-            ClientCommand::NativeGuildBankText(wrathplus_protocol::wrath_guild_bank_text::Command::QueryText { tab: 0 }),
+            ClientCommand::NativeGuildBankText(
+                wrathplus_protocol::wrath_guild_bank_text::Command::QueryText { tab: 0 },
+            ),
         ),
         (
             "NativeGuildRank",
@@ -119,73 +279,269 @@ fn every_wrath_writer_route_is_admitted() {
                 flags: 0x41,
                 name: b"Officer".to_vec(),
                 money_limit: 0,
-                tabs: std::array::from_fn(|_| wrathplus_protocol::wrath_guild_rank::TabPermission { rights: 0, item_limit: 0 }),
+                tabs: std::array::from_fn(|_| {
+                    wrathplus_protocol::wrath_guild_rank::TabPermission {
+                        rights: 0,
+                        item_limit: 0,
+                    }
+                }),
             }),
         ),
         (
             "NativeGuildBank",
-            ClientCommand::NativeGuildBank(wrathplus_protocol::wrath_guild_bank_commands::Command::BuyTab { banker: 1, tab: 0 }),
+            ClientCommand::NativeGuildBank(
+                wrathplus_protocol::wrath_guild_bank_commands::Command::BuyTab {
+                    banker: 1,
+                    tab: 0,
+                },
+            ),
         ),
         ("DuelAccepted", ClientCommand::DuelAccepted { arbiter: 1 }),
         ("DuelCancelled", ClientCommand::DuelCancelled { arbiter: 1 }),
-        ("NativeBattleground", ClientCommand::NativeBattleground(wrathplus_protocol::wrath_battleground::Command::BfExit { battle_id: 1 })),
+        (
+            "NativeBattleground",
+            ClientCommand::NativeBattleground(
+                wrathplus_protocol::wrath_battleground::Command::BfExit { battle_id: 1 },
+            ),
+        ),
         (
             "BattlegroundJoin",
-            ClientCommand::NativeBattleground(wrathplus_protocol::wrath_battleground::Command::Join { battlemaster: 1, bg_type: 2, instance_id: 0, as_group: 0 }),
+            ClientCommand::NativeBattleground(
+                wrathplus_protocol::wrath_battleground::Command::Join {
+                    battlemaster: 1,
+                    bg_type: 2,
+                    instance_id: 0,
+                    as_group: 0,
+                },
+            ),
         ),
-        ("BattlemasterHello", ClientCommand::BattlemasterHello { npc: 1 }),
-        ("AreaSpiritHealerQuery", ClientCommand::AreaSpiritHealerQuery { healer: 1 }),
-        ("AreaSpiritHealerQueue", ClientCommand::AreaSpiritHealerQueue { healer: 1 }),
-        ("SpiritHealerActivate", ClientCommand::SpiritHealerActivate { npc: 1 }),
-        ("InspectHonorStats", ClientCommand::InspectHonorStats { target: 1 }),
+        (
+            "BattlemasterHello",
+            ClientCommand::BattlemasterHello { npc: 1 },
+        ),
+        (
+            "AreaSpiritHealerQuery",
+            ClientCommand::AreaSpiritHealerQuery { healer: 1 },
+        ),
+        (
+            "AreaSpiritHealerQueue",
+            ClientCommand::AreaSpiritHealerQueue { healer: 1 },
+        ),
+        (
+            "SpiritHealerActivate",
+            ClientCommand::SpiritHealerActivate { npc: 1 },
+        ),
+        (
+            "InspectHonorStats",
+            ClientCommand::InspectHonorStats { target: 1 },
+        ),
         ("TogglePvp", ClientCommand::TogglePvp),
-        ("RequestBattlefieldScoreData", ClientCommand::RequestBattlefieldScoreData),
-        ("RequestBattlefieldPositions", ClientCommand::RequestBattlefieldPositions),
+        (
+            "RequestBattlefieldScoreData",
+            ClientCommand::RequestBattlefieldScoreData,
+        ),
+        (
+            "RequestBattlefieldPositions",
+            ClientCommand::RequestBattlefieldPositions,
+        ),
         ("LeaveBattlefield", ClientCommand::LeaveBattlefield),
         (
             "Chat",
-            ClientCommand::Chat { kind: crate::net::ChatKind::Say, target: None, text: "hi".into(), language: None },
+            ClientCommand::Chat {
+                kind: crate::net::ChatKind::Say,
+                target: None,
+                text: "hi".into(),
+                language: None,
+            },
         ),
         (
             "AddonMessage",
-            ClientCommand::AddonMessage { distribution: wrathplus_ui::script::AddonDistribution::Party, text: "p\tm".into(), target: None },
+            ClientCommand::AddonMessage {
+                distribution: wrathplus_ui::script::AddonDistribution::Party,
+                text: "p\tm".into(),
+                target: None,
+            },
         ),
-        ("JoinChannel", ClientCommand::JoinChannel { name: "General - Elwynn Forest".into(), password: String::new(), channel_id: 1 }),
-        ("LeaveChannel", ClientCommand::LeaveChannel { name: "x".into() }),
-        ("ChannelList", ClientCommand::ChannelList { name: "x".into() }),
-        ("ChannelOwner", ClientCommand::ChannelOwner { name: "x".into() }),
-        ("ChannelSetOwner", ClientCommand::ChannelSetOwner { name: "x".into(), player: "Bob".into() }),
-        ("ChannelPassword", ClientCommand::ChannelPassword { name: "x".into(), password: "p".into() }),
-        ("ChannelModerator", ClientCommand::ChannelModerator { name: "x".into(), player: "Bob".into() }),
-        ("ChannelUnmoderator", ClientCommand::ChannelUnmoderator { name: "x".into(), player: "Bob".into() }),
-        ("ChannelMute", ClientCommand::ChannelMute { name: "x".into(), player: "Bob".into() }),
-        ("ChannelUnmute", ClientCommand::ChannelUnmute { name: "x".into(), player: "Bob".into() }),
-        ("ChannelInvite", ClientCommand::ChannelInvite { name: "x".into(), player: "Bob".into() }),
-        ("ChannelKick", ClientCommand::ChannelKick { name: "x".into(), player: "Bob".into() }),
-        ("ChannelBan", ClientCommand::ChannelBan { name: "x".into(), player: "Bob".into() }),
-        ("ChannelUnban", ClientCommand::ChannelUnban { name: "x".into(), player: "Bob".into() }),
-        ("ChannelAnnouncements", ClientCommand::ChannelAnnouncements { name: "x".into() }),
-        ("ChannelModerate", ClientCommand::ChannelModerate { name: "x".into() }),
-        ("TextEmote", ClientCommand::TextEmote { text_id: 101, target: 0 }),
+        (
+            "JoinChannel",
+            ClientCommand::JoinChannel {
+                name: "General - Elwynn Forest".into(),
+                password: String::new(),
+                channel_id: 1,
+            },
+        ),
+        (
+            "LeaveChannel",
+            ClientCommand::LeaveChannel { name: "x".into() },
+        ),
+        (
+            "ChannelList",
+            ClientCommand::ChannelList { name: "x".into() },
+        ),
+        (
+            "ChannelOwner",
+            ClientCommand::ChannelOwner { name: "x".into() },
+        ),
+        (
+            "ChannelSetOwner",
+            ClientCommand::ChannelSetOwner {
+                name: "x".into(),
+                player: "Bob".into(),
+            },
+        ),
+        (
+            "ChannelPassword",
+            ClientCommand::ChannelPassword {
+                name: "x".into(),
+                password: "p".into(),
+            },
+        ),
+        (
+            "ChannelModerator",
+            ClientCommand::ChannelModerator {
+                name: "x".into(),
+                player: "Bob".into(),
+            },
+        ),
+        (
+            "ChannelUnmoderator",
+            ClientCommand::ChannelUnmoderator {
+                name: "x".into(),
+                player: "Bob".into(),
+            },
+        ),
+        (
+            "ChannelMute",
+            ClientCommand::ChannelMute {
+                name: "x".into(),
+                player: "Bob".into(),
+            },
+        ),
+        (
+            "ChannelUnmute",
+            ClientCommand::ChannelUnmute {
+                name: "x".into(),
+                player: "Bob".into(),
+            },
+        ),
+        (
+            "ChannelInvite",
+            ClientCommand::ChannelInvite {
+                name: "x".into(),
+                player: "Bob".into(),
+            },
+        ),
+        (
+            "ChannelKick",
+            ClientCommand::ChannelKick {
+                name: "x".into(),
+                player: "Bob".into(),
+            },
+        ),
+        (
+            "ChannelBan",
+            ClientCommand::ChannelBan {
+                name: "x".into(),
+                player: "Bob".into(),
+            },
+        ),
+        (
+            "ChannelUnban",
+            ClientCommand::ChannelUnban {
+                name: "x".into(),
+                player: "Bob".into(),
+            },
+        ),
+        (
+            "ChannelAnnouncements",
+            ClientCommand::ChannelAnnouncements { name: "x".into() },
+        ),
+        (
+            "ChannelModerate",
+            ClientCommand::ChannelModerate { name: "x".into() },
+        ),
+        (
+            "TextEmote",
+            ClientCommand::TextEmote {
+                text_id: 101,
+                target: 0,
+            },
+        ),
         ("ChatIgnored", ClientCommand::ChatIgnored { guid: 1 }),
-        ("NativeParty", ClientCommand::NativeParty(wrathplus_protocol::wrath_party::Command::ReadyCheckFinished)),
-        ("PartyUninviteGuid", ClientCommand::NativeParty(wrathplus_protocol::wrath_party::Command::UninviteGuid { guid: 1, reason: String::new() })),
-        ("GroupUninvite", ClientCommand::GroupUninvite { name: "Bob".into() }),
+        (
+            "NativeParty",
+            ClientCommand::NativeParty(
+                wrathplus_protocol::wrath_party::Command::ReadyCheckFinished,
+            ),
+        ),
+        (
+            "PartyUninviteGuid",
+            ClientCommand::NativeParty(wrathplus_protocol::wrath_party::Command::UninviteGuid {
+                guid: 1,
+                reason: String::new(),
+            }),
+        ),
+        (
+            "GroupUninvite",
+            ClientCommand::GroupUninvite { name: "Bob".into() },
+        ),
         ("GroupSetLeader", ClientCommand::GroupSetLeader { guid: 1 }),
         ("MinimapPing", ClientCommand::MinimapPing { x: 1.0, y: 2.0 }),
         ("RandomRoll", ClientCommand::RandomRoll { min: 1, max: 100 }),
-        ("NativeQuest", ClientCommand::NativeQuest(wrathplus_protocol::wrath_quest::Command::StatusMultipleQuery)),
-        ("QuestPoiQuery", ClientCommand::NativeQuest(wrathplus_protocol::wrath_quest::Command::PoiQuery { quests: vec![783] })),
+        (
+            "NativeQuest",
+            ClientCommand::NativeQuest(
+                wrathplus_protocol::wrath_quest::Command::StatusMultipleQuery,
+            ),
+        ),
+        (
+            "QuestPoiQuery",
+            ClientCommand::NativeQuest(wrathplus_protocol::wrath_quest::Command::PoiQuery {
+                quests: vec![783],
+            }),
+        ),
         (
             "QuestPushResult",
-            ClientCommand::QuestPushResult { sharer: 1, quest: 783, msg: wrathplus_protocol::types::QuestShareMsg::DECLINE_QUEST },
+            ClientCommand::QuestPushResult {
+                sharer: 1,
+                quest: 783,
+                msg: wrathplus_protocol::types::QuestShareMsg::DECLINE_QUEST,
+            },
         ),
-        ("NativeCalendar", ClientCommand::NativeCalendar(wrathplus_protocol::wrath_calendar::Command::GetCalendar)),
-        ("CalendarRsvp", ClientCommand::NativeCalendar(wrathplus_protocol::wrath_calendar::Command::Rsvp { event_id: 1, invite_id: 2, status: 1 })),
-        ("NativeInspectAchievements", ClientCommand::NativeInspectAchievements { player: 1 }),
-        ("NativeExchange", ClientCommand::NativeExchange(wrathplus_protocol::wrath_exchange::Command::OptOutOfLoot { pass: 1 })),
-        ("ExchangePendingSales", ClientCommand::NativeExchange(wrathplus_protocol::wrath_exchange::Command::AuctionListPendingSales { auctioneer: 1 })),
-        ("AuctionHello", ClientCommand::AuctionHello { auctioneer: 1 }),
+        (
+            "NativeCalendar",
+            ClientCommand::NativeCalendar(wrathplus_protocol::wrath_calendar::Command::GetCalendar),
+        ),
+        (
+            "CalendarRsvp",
+            ClientCommand::NativeCalendar(wrathplus_protocol::wrath_calendar::Command::Rsvp {
+                event_id: 1,
+                invite_id: 2,
+                status: 1,
+            }),
+        ),
+        (
+            "NativeInspectAchievements",
+            ClientCommand::NativeInspectAchievements { player: 1 },
+        ),
+        (
+            "NativeExchange",
+            ClientCommand::NativeExchange(
+                wrathplus_protocol::wrath_exchange::Command::OptOutOfLoot { pass: 1 },
+            ),
+        ),
+        (
+            "ExchangePendingSales",
+            ClientCommand::NativeExchange(
+                wrathplus_protocol::wrath_exchange::Command::AuctionListPendingSales {
+                    auctioneer: 1,
+                },
+            ),
+        ),
+        (
+            "AuctionHello",
+            ClientCommand::AuctionHello { auctioneer: 1 },
+        ),
         (
             "AuctionListItems",
             ClientCommand::AuctionListItems {
@@ -201,12 +557,54 @@ fn every_wrath_writer_route_is_admitted() {
                 usable: 0,
             },
         ),
-        ("AuctionListOwnerItems", ClientCommand::AuctionListOwnerItems { auctioneer: 1, list_from: 0 }),
-        ("AuctionListBidderItems", ClientCommand::AuctionListBidderItems { auctioneer: 1, list_from: 0, auction_ids: vec![2] }),
-        ("AuctionSellItem", ClientCommand::AuctionSellItem { auctioneer: 1, items: vec![(2, 1)], bid: 3, buyout: 4, etime_minutes: 720 }),
-        ("AuctionPlaceBid", ClientCommand::AuctionPlaceBid { auctioneer: 1, auction_id: 2, price: 3 }),
-        ("AuctionRemoveItem", ClientCommand::AuctionRemoveItem { auctioneer: 1, auction_id: 2 }),
-        ("LootMasterGive", ClientCommand::LootMasterGive { guid: 1, slot: 0, target: 2 }),
+        (
+            "AuctionListOwnerItems",
+            ClientCommand::AuctionListOwnerItems {
+                auctioneer: 1,
+                list_from: 0,
+            },
+        ),
+        (
+            "AuctionListBidderItems",
+            ClientCommand::AuctionListBidderItems {
+                auctioneer: 1,
+                list_from: 0,
+                auction_ids: vec![2],
+            },
+        ),
+        (
+            "AuctionSellItem",
+            ClientCommand::AuctionSellItem {
+                auctioneer: 1,
+                items: vec![(2, 1)],
+                bid: 3,
+                buyout: 4,
+                etime_minutes: 720,
+            },
+        ),
+        (
+            "AuctionPlaceBid",
+            ClientCommand::AuctionPlaceBid {
+                auctioneer: 1,
+                auction_id: 2,
+                price: 3,
+            },
+        ),
+        (
+            "AuctionRemoveItem",
+            ClientCommand::AuctionRemoveItem {
+                auctioneer: 1,
+                auction_id: 2,
+            },
+        ),
+        (
+            "LootMasterGive",
+            ClientCommand::LootMasterGive {
+                guid: 1,
+                slot: 0,
+                target: 2,
+            },
+        ),
         ("InitiateTrade", ClientCommand::InitiateTrade { target: 1 }),
         ("BeginTrade", ClientCommand::BeginTrade),
         ("BusyTrade", ClientCommand::BusyTrade),
@@ -215,11 +613,36 @@ fn every_wrath_writer_route_is_admitted() {
         ("UnacceptTrade", ClientCommand::UnacceptTrade),
         ("CancelTrade", ClientCommand::CancelTrade),
         ("SetTradeGold", ClientCommand::SetTradeGold { copper: 1 }),
-        ("SetTradeItem", ClientCommand::SetTradeItem { trade_slot: 0, bag: 255, slot: 23 }),
-        ("ClearTradeItem", ClientCommand::ClearTradeItem { trade_slot: 0 }),
-        ("NativeInventory", ClientCommand::NativeInventory(wrathplus_protocol::wrath_inventory::Command::ReadItem { bag: 255, slot: 23 })),
-        ("InventoryEquipmentSetDelete", ClientCommand::NativeInventory(wrathplus_protocol::wrath_inventory::Command::EquipmentSetDelete { set_guid: 1 })),
-        ("InventoryRefund", ClientCommand::NativeInventory(wrathplus_protocol::wrath_inventory::Command::Refund { item_guid: 1 })),
+        (
+            "SetTradeItem",
+            ClientCommand::SetTradeItem {
+                trade_slot: 0,
+                bag: 255,
+                slot: 23,
+            },
+        ),
+        (
+            "ClearTradeItem",
+            ClientCommand::ClearTradeItem { trade_slot: 0 },
+        ),
+        (
+            "NativeInventory",
+            ClientCommand::NativeInventory(
+                wrathplus_protocol::wrath_inventory::Command::ReadItem { bag: 255, slot: 23 },
+            ),
+        ),
+        (
+            "InventoryEquipmentSetDelete",
+            ClientCommand::NativeInventory(
+                wrathplus_protocol::wrath_inventory::Command::EquipmentSetDelete { set_guid: 1 },
+            ),
+        ),
+        (
+            "InventoryRefund",
+            ClientCommand::NativeInventory(wrathplus_protocol::wrath_inventory::Command::Refund {
+                item_guid: 1,
+            }),
+        ),
         (
             "UseItem",
             ClientCommand::UseItem {
@@ -231,26 +654,129 @@ fn every_wrath_writer_route_is_admitted() {
                 target: wrathplus_protocol::types::UseItemTarget::SelfImplicit,
             },
         ),
-        ("OpenItem", ClientCommand::OpenItem { bag_index: 255, slot: 23 }),
-        ("WrapItem", ClientCommand::WrapItem { gift_bag: 255, gift_slot: 23, item_bag: 255, item_slot: 24 }),
-        ("AutoEquipItem", ClientCommand::AutoEquipItem { bag_index: 255, slot: 23 }),
+        (
+            "OpenItem",
+            ClientCommand::OpenItem {
+                bag_index: 255,
+                slot: 23,
+            },
+        ),
+        (
+            "WrapItem",
+            ClientCommand::WrapItem {
+                gift_bag: 255,
+                gift_slot: 23,
+                item_bag: 255,
+                item_slot: 24,
+            },
+        ),
+        (
+            "AutoEquipItem",
+            ClientCommand::AutoEquipItem {
+                bag_index: 255,
+                slot: 23,
+            },
+        ),
         ("SetAmmo", ClientCommand::SetAmmo { entry: 2512 }),
-        ("SwapInvItem", ClientCommand::SwapInvItem { src_slot: 23, dst_slot: 24 }),
-        ("SwapItem", ClientCommand::SwapItem { dst_bag: 19, dst_slot: 0, src_bag: 255, src_slot: 23 }),
-        ("AutoStoreBagItem", ClientCommand::AutoStoreBagItem { src_bag: 255, src_slot: 23, dst_bag: 19 }),
-        ("SplitItem", ClientCommand::SplitItem { src_bag: 255, src_slot: 23, dst_bag: 255, dst_slot: 24, count: 1 }),
-        ("DestroyItem", ClientCommand::DestroyItem { bag_index: 255, slot: 23, count: 0 }),
+        (
+            "SwapInvItem",
+            ClientCommand::SwapInvItem {
+                src_slot: 23,
+                dst_slot: 24,
+            },
+        ),
+        (
+            "SwapItem",
+            ClientCommand::SwapItem {
+                dst_bag: 19,
+                dst_slot: 0,
+                src_bag: 255,
+                src_slot: 23,
+            },
+        ),
+        (
+            "AutoStoreBagItem",
+            ClientCommand::AutoStoreBagItem {
+                src_bag: 255,
+                src_slot: 23,
+                dst_bag: 19,
+            },
+        ),
+        (
+            "SplitItem",
+            ClientCommand::SplitItem {
+                src_bag: 255,
+                src_slot: 23,
+                dst_bag: 255,
+                dst_slot: 24,
+                count: 1,
+            },
+        ),
+        (
+            "DestroyItem",
+            ClientCommand::DestroyItem {
+                bag_index: 255,
+                slot: 23,
+                count: 0,
+            },
+        ),
         ("BankerActivate", ClientCommand::BankerActivate { guid: 1 }),
         ("BuyBankSlot", ClientCommand::BuyBankSlot { guid: 1 }),
-        ("AutoBankItem", ClientCommand::AutoBankItem { bag: 255, slot: 23 }),
-        ("AutoStoreBankItem", ClientCommand::AutoStoreBankItem { bag: 255, slot: 39 }),
-        ("PageTextQuery", ClientCommand::PageTextQuery { page_id: 1, guid: 1 }),
-        ("NativeInstanceControl", ClientCommand::NativeInstanceControl(wrathplus_protocol::wrath_instance_control::Command::ResetInstances)),
-        ("InstanceDungeonDifficulty", ClientCommand::NativeInstanceControl(wrathplus_protocol::wrath_instance_control::Command::SetDungeonDifficulty { mode: 1 })),
-        ("InstanceRaidDifficulty", ClientCommand::NativeInstanceControl(wrathplus_protocol::wrath_instance_control::Command::SetRaidDifficulty { mode: 3 })),
-        ("InstanceLockResponse", ClientCommand::NativeInstanceControl(wrathplus_protocol::wrath_instance_control::Command::LockResponse { raw_accept: 1 })),
-        ("InstanceExtend", ClientCommand::NativeInstanceControl(wrathplus_protocol::wrath_instance_control::Command::SetSavedInstanceExtend { map: 1, difficulty: 3, raw_extend: 1 })),
-        ("NativeMirrorImageQuery", ClientCommand::NativeMirrorImageQuery { guid: u64::MAX }),
+        (
+            "AutoBankItem",
+            ClientCommand::AutoBankItem { bag: 255, slot: 23 },
+        ),
+        (
+            "AutoStoreBankItem",
+            ClientCommand::AutoStoreBankItem { bag: 255, slot: 39 },
+        ),
+        (
+            "PageTextQuery",
+            ClientCommand::PageTextQuery {
+                page_id: 1,
+                guid: 1,
+            },
+        ),
+        (
+            "NativeInstanceControl",
+            ClientCommand::NativeInstanceControl(
+                wrathplus_protocol::wrath_instance_control::Command::ResetInstances,
+            ),
+        ),
+        (
+            "InstanceDungeonDifficulty",
+            ClientCommand::NativeInstanceControl(
+                wrathplus_protocol::wrath_instance_control::Command::SetDungeonDifficulty {
+                    mode: 1,
+                },
+            ),
+        ),
+        (
+            "InstanceRaidDifficulty",
+            ClientCommand::NativeInstanceControl(
+                wrathplus_protocol::wrath_instance_control::Command::SetRaidDifficulty { mode: 3 },
+            ),
+        ),
+        (
+            "InstanceLockResponse",
+            ClientCommand::NativeInstanceControl(
+                wrathplus_protocol::wrath_instance_control::Command::LockResponse { raw_accept: 1 },
+            ),
+        ),
+        (
+            "InstanceExtend",
+            ClientCommand::NativeInstanceControl(
+                wrathplus_protocol::wrath_instance_control::Command::SetSavedInstanceExtend {
+                    map: 1,
+                    difficulty: 3,
+                    raw_extend: 1,
+                },
+            ),
+        ),
+        (
+            "NativeMirrorImageQuery",
+            ClientCommand::NativeMirrorImageQuery { guid: u64::MAX },
+        ),
         (
             "NativeWhoCommand",
             ClientCommand::NativeWhoCommand(wrathplus_protocol::wrath_who::Command::Whois {
@@ -324,35 +850,166 @@ fn every_wrath_writer_route_is_admitted() {
                 guid: Default::default(),
             },
         ),
-        ("PetAction", ClientCommand::PetAction { pet_guid: 1, packed: 0x0700_0003, target_guid: 2 }),
-        ("PetSetAction", ClientCommand::PetSetAction { pet_guid: 1, entries: vec![(3, 0xC100_0001)] }),
-        ("PetStopAttack", ClientCommand::PetStopAttack { pet_guid: 1 }),
-        ("PetCancelAura", ClientCommand::PetCancelAura { pet_guid: 1, spell_id: 7 }),
-        ("PetSpellAutocast", ClientCommand::PetSpellAutocast { pet_guid: 1, spell_id: 7, enabled: true }),
+        (
+            "PetAction",
+            ClientCommand::PetAction {
+                pet_guid: 1,
+                packed: 0x0700_0003,
+                target_guid: 2,
+            },
+        ),
+        (
+            "PetSetAction",
+            ClientCommand::PetSetAction {
+                pet_guid: 1,
+                entries: vec![(3, 0xC100_0001)],
+            },
+        ),
+        (
+            "PetStopAttack",
+            ClientCommand::PetStopAttack { pet_guid: 1 },
+        ),
+        (
+            "PetCancelAura",
+            ClientCommand::PetCancelAura {
+                pet_guid: 1,
+                spell_id: 7,
+            },
+        ),
+        (
+            "PetSpellAutocast",
+            ClientCommand::PetSpellAutocast {
+                pet_guid: 1,
+                spell_id: 7,
+                enabled: true,
+            },
+        ),
         ("PetAbandon", ClientCommand::PetAbandon { pet_guid: 1 }),
-        ("PetRename", ClientCommand::PetRename { pet_guid: 1, name: "Rex".into() }),
+        (
+            "PetRename",
+            ClientCommand::PetRename {
+                pet_guid: 1,
+                name: "Rex".into(),
+            },
+        ),
         ("CancelAutoRepeat", ClientCommand::CancelAutoRepeat),
-        ("TeleportAck", ClientCommand::TeleportAck { guid: 1, counter: 2 }),
+        (
+            "TeleportAck",
+            ClientCommand::TeleportAck {
+                guid: 1,
+                counter: 2,
+            },
+        ),
         ("MountSpecial", ClientCommand::MountSpecial),
-        ("MoveTimeSkipped", ClientCommand::MoveTimeSkipped { guid: 1, lag_ms: 250 }),
-        ("NativeMovementMisc", ClientCommand::NativeMovementMisc(wrathplus_protocol::wrath_movement_misc::Command::TaxiBenchmark { on: true })),
-        ("MovementVehicleExit", ClientCommand::NativeMovementMisc(wrathplus_protocol::wrath_movement_misc::Command::VehicleExit)),
-        ("MovementVehicleSwitchSeat", ClientCommand::NativeMovementMisc(wrathplus_protocol::wrath_movement_misc::Command::VehicleSwitchSeat { vehicle: 1, seat: 0 })),
-        ("MovementEjectPassenger", ClientCommand::NativeMovementMisc(wrathplus_protocol::wrath_movement_misc::Command::EjectPassenger { passenger: 2 })),
-        ("CancelChannelling", ClientCommand::CancelChannelling { spell_id: 5143 }),
-        ("ResurrectResponse", ClientCommand::ResurrectResponse { caster: 1, accept: true }),
+        (
+            "MoveTimeSkipped",
+            ClientCommand::MoveTimeSkipped {
+                guid: 1,
+                lag_ms: 250,
+            },
+        ),
+        (
+            "NativeMovementMisc",
+            ClientCommand::NativeMovementMisc(
+                wrathplus_protocol::wrath_movement_misc::Command::TaxiBenchmark { on: true },
+            ),
+        ),
+        (
+            "MovementVehicleExit",
+            ClientCommand::NativeMovementMisc(
+                wrathplus_protocol::wrath_movement_misc::Command::VehicleExit,
+            ),
+        ),
+        (
+            "MovementVehicleSwitchSeat",
+            ClientCommand::NativeMovementMisc(
+                wrathplus_protocol::wrath_movement_misc::Command::VehicleSwitchSeat {
+                    vehicle: 1,
+                    seat: 0,
+                },
+            ),
+        ),
+        (
+            "MovementEjectPassenger",
+            ClientCommand::NativeMovementMisc(
+                wrathplus_protocol::wrath_movement_misc::Command::EjectPassenger { passenger: 2 },
+            ),
+        ),
+        (
+            "CancelChannelling",
+            ClientCommand::CancelChannelling { spell_id: 5143 },
+        ),
+        (
+            "ResurrectResponse",
+            ClientCommand::ResurrectResponse {
+                caster: 1,
+                accept: true,
+            },
+        ),
         ("FarSight", ClientCommand::FarSight { engage: true }),
-        ("SpellControlDismissCritter", ClientCommand::NativeSpellControl(wrathplus_protocol::wrath_spell_control::Command::DismissCritter { critter: 1 })),
-        ("SpellControlStableRevivePet", ClientCommand::NativeSpellControl(wrathplus_protocol::wrath_spell_control::Command::StableRevivePet { npc: 1, pet_number: 2 })),
-        ("SpellControlPreviewTalentsPet", ClientCommand::NativeSpellControl(wrathplus_protocol::wrath_spell_control::Command::LearnPreviewTalentsPet { pet: 1, talents: vec![(2107, 0)] })),
-        ("NativeSpellControl", ClientCommand::NativeSpellControl(wrathplus_protocol::wrath_spell_control::Command::SpellClick { unit: 1 })),
-        ("SpellControlTotemDestroyed", ClientCommand::NativeSpellControl(wrathplus_protocol::wrath_spell_control::Command::TotemDestroyed { slot: 1 })),
-        ("SpellControlCancelMountAura", ClientCommand::NativeSpellControl(wrathplus_protocol::wrath_spell_control::Command::CancelMountAura)),
-        ("SpellControlCancelGrowthAura", ClientCommand::NativeSpellControl(wrathplus_protocol::wrath_spell_control::Command::CancelGrowthAura)),
-        ("SpellControlRequestPetInfo", ClientCommand::NativeSpellControl(wrathplus_protocol::wrath_spell_control::Command::RequestPetInfo)),
+        (
+            "SpellControlDismissCritter",
+            ClientCommand::NativeSpellControl(
+                wrathplus_protocol::wrath_spell_control::Command::DismissCritter { critter: 1 },
+            ),
+        ),
+        (
+            "SpellControlStableRevivePet",
+            ClientCommand::NativeSpellControl(
+                wrathplus_protocol::wrath_spell_control::Command::StableRevivePet {
+                    npc: 1,
+                    pet_number: 2,
+                },
+            ),
+        ),
+        (
+            "SpellControlPreviewTalentsPet",
+            ClientCommand::NativeSpellControl(
+                wrathplus_protocol::wrath_spell_control::Command::LearnPreviewTalentsPet {
+                    pet: 1,
+                    talents: vec![(2107, 0)],
+                },
+            ),
+        ),
+        (
+            "NativeSpellControl",
+            ClientCommand::NativeSpellControl(
+                wrathplus_protocol::wrath_spell_control::Command::SpellClick { unit: 1 },
+            ),
+        ),
+        (
+            "SpellControlTotemDestroyed",
+            ClientCommand::NativeSpellControl(
+                wrathplus_protocol::wrath_spell_control::Command::TotemDestroyed { slot: 1 },
+            ),
+        ),
+        (
+            "SpellControlCancelMountAura",
+            ClientCommand::NativeSpellControl(
+                wrathplus_protocol::wrath_spell_control::Command::CancelMountAura,
+            ),
+        ),
+        (
+            "SpellControlCancelGrowthAura",
+            ClientCommand::NativeSpellControl(
+                wrathplus_protocol::wrath_spell_control::Command::CancelGrowthAura,
+            ),
+        ),
+        (
+            "SpellControlRequestPetInfo",
+            ClientCommand::NativeSpellControl(
+                wrathplus_protocol::wrath_spell_control::Command::RequestPetInfo,
+            ),
+        ),
         (
             "SpellControlPetLearnTalent",
-            ClientCommand::NativeSpellControl(wrathplus_protocol::wrath_spell_control::Command::PetLearnTalent { pet: 1, talent_id: 2107, rank: 0 }),
+            ClientCommand::NativeSpellControl(
+                wrathplus_protocol::wrath_spell_control::Command::PetLearnTalent {
+                    pet: 1,
+                    talent_id: 2107,
+                    rank: 0,
+                },
+            ),
         ),
         (
             "NativeWorldportAck",

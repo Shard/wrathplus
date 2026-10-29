@@ -137,7 +137,9 @@ pub(crate) use probe_pitch::ProbePitchPlugin;
 pub(crate) fn start_state() -> crate::app_core::state::ClientState {
     match glue_screen() {
         Some(GlueScreen::CharCreate) => crate::app_core::state::ClientState::CharCreate,
-        Some(GlueScreen::Login | GlueScreen::RealmList) => crate::app_core::state::ClientState::Login,
+        Some(GlueScreen::Login | GlueScreen::RealmList) => {
+            crate::app_core::state::ClientState::Login
+        }
         None if crate::run_mode::scenario_active() => crate::app_core::state::ClientState::InWorld,
         None => crate::app_core::state::ClientState::Login,
     }
@@ -671,7 +673,10 @@ impl Plugin for CapturePlugin {
             .add_systems(Update, pin_scene.in_set(WorldStage::Present))
             // Before `UnitFeed`: the seed stands in for wire data live play delivers on earlier
             // frames, so the same frame's feeds and the one-shot `MERCHANT_SHOW` paint must see it.
-            .add_systems(Update, seed_ui_fixture.before(crate::app_core::schedule::UnitFeed))
+            .add_systems(
+                Update,
+                seed_ui_fixture.before(crate::app_core::schedule::UnitFeed),
+            )
             .add_systems(Update, realm_list::seed_realm_list)
             .add_systems(Last, drive_capture);
     }

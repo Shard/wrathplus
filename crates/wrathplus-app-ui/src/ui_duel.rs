@@ -8,16 +8,16 @@
 //! delays the popup rather than dropping it; the reference reads it off the streamed player and
 //! fires nothing without one (`0x4d4a72`).
 
-use wrathplus_ui::script::{DuelRequest, ScriptValue, UiScript};
 use bevy::prelude::*;
+use wrathplus_ui::script::{DuelRequest, ScriptValue, UiScript};
 
-use crate::names::NameCache;
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::Selection;
 use crate::app_core::state::Spells;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
 
 /// The `Effect[0]` that marks the duel spell (7266 on 1.12 data): the reference's spell-learned
 /// walk stores any learned spell with `SpellRec+0xf4 == 0x53` in `[0xb71130]` (`0x4b2605`), which

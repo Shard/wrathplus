@@ -4,19 +4,19 @@
 
 #[cfg(test)]
 use crate::app_core::state::GROUPTYPE_RAID;
-use wrathplus_protocol::types::{slot_type, ItemPushResult, LootItem, BAG_PLAYER_INVENTORY};
 use bevy::prelude::*;
+use wrathplus_protocol::types::{slot_type, ItemPushResult, LootItem, BAG_PLAYER_INVENTORY};
 
 use wrathplus_ui::script::{LootRow, LootState as LootSnapshot, ScriptValue, UiScript};
 
-use crate::entities::ItemDisplays;
-use crate::items::{Items, RollCatalogs};
-use crate::names::NameCache;
-use crate::net::{ClientCommand, NetCommands};
-use crate::inventory::KEYRING_CONTAINER;
 use crate::app_core::group::GroupState;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::entities::ItemDisplays;
+use crate::inventory::KEYRING_CONTAINER;
+use crate::items::{Items, RollCatalogs};
+use crate::names::NameCache;
+use crate::net::{ClientCommand, NetCommands};
 
 mod net;
 mod wrath;
@@ -623,15 +623,15 @@ fn drain_loot(
             // `LootSlot 0x589140` branches on the slot type first: a row under a group roll and a
             // locked row only answer a message.
             Some(LootAction::Item { slot_type, .. }) if slot_type == slot_type::ROLL_ONGOING => {
-                errors
-                    .0
-                    .push(crate::app_core::errors::UiError::key("ERR_LOOT_ROLL_PENDING"));
+                errors.0.push(crate::app_core::errors::UiError::key(
+                    "ERR_LOOT_ROLL_PENDING",
+                ));
                 // 0x1bb
             }
             Some(LootAction::Item { slot_type, .. }) if slot_type == slot_type::LOCKED => {
-                errors
-                    .0
-                    .push(crate::app_core::errors::UiError::key("ERR_LOOT_CANT_LOOT_THAT"));
+                errors.0.push(crate::app_core::errors::UiError::key(
+                    "ERR_LOOT_CANT_LOOT_THAT",
+                ));
                 // 0x252
             }
             // A master-loot row opens the candidate dropdown instead (event `0x1b8`), and the Lua
@@ -794,13 +794,13 @@ impl LootStateRows for LootState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
     use wrathplus_protocol::types::loot_type;
     use wrathplus_protocol::types::Field;
     use wrathplus_protocol::types::GroupMemberEntry;
     use wrathplus_protocol::types::ItemInfo;
     use wrathplus_protocol::types::ObjectFields;
     use wrathplus_protocol::EntityKind;
-    use bevy::ecs::system::RunSystemOnce;
 
     fn nobody() -> (GroupState, NameCache) {
         (GroupState::default(), NameCache::default())
@@ -980,10 +980,9 @@ mod tests {
             let kind = if unit { 0x9 } else { 0x21 };
             let e = app
                 .world_mut()
-                .spawn(crate::app_core::session::ObjectStore(ObjectFields::from_fields(&[(
-                    Field::ObjectType,
-                    kind,
-                )])))
+                .spawn(crate::app_core::session::ObjectStore(
+                    ObjectFields::from_fields(&[(Field::ObjectType, kind)]),
+                ))
                 .id();
             app.world_mut()
                 .resource_mut::<crate::net::GuidIndex>()
@@ -1285,7 +1284,10 @@ mod tests {
             let (mut app, rx) =
                 drain_with(0, vec![group_item(0, TOUGH_JERKY, slot_type)], &[1], "");
             assert!(sent(&rx).is_empty(), "{key}");
-            assert_eq!(errors(&mut app), [crate::app_core::errors::UiError::key(key)]);
+            assert_eq!(
+                errors(&mut app),
+                [crate::app_core::errors::UiError::key(key)]
+            );
             assert_eq!(pending_confirm(&app), None);
         }
     }
@@ -2147,7 +2149,10 @@ mod tests {
                         display_id: None,
                         scale: 1.0,
                     },
-                    crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(F_UNIT_HEALTH, health)])),
+                    crate::app_core::session::ObjectStore(ObjectFields::from_pairs(&[(
+                        F_UNIT_HEALTH,
+                        health,
+                    )])),
                 ))
                 .id();
             app.world_mut()

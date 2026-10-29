@@ -91,7 +91,10 @@ fn errors_quote_with_apostrophes_and_nested_long_strings_are_rejected() {
         err.contains("global 'NoSuchGlobalFunction'"),
         "5.1 quoting: {err}"
     );
-    let err = s.run("local x = [[ a [[ b ]] c ]]").unwrap_err().to_string();
+    let err = s
+        .run("local x = [[ a [[ b ]] c ]]")
+        .unwrap_err()
+        .to_string();
     assert!(
         err.contains("nesting of [[...]] is deprecated"),
         "5.1 long strings: {err}"

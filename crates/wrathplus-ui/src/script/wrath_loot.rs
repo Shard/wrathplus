@@ -126,5 +126,4 @@ mod tests {
         script.set_modifiers(true, false, false);
         assert!(script.eval::<bool>("return IsAutoLootKeyDown()").unwrap());
     }
-
 }

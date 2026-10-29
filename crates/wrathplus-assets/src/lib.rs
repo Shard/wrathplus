@@ -5,13 +5,13 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
-use wrathplus_formats::Chain;
 use bevy::asset::io::{
     AssetReader, AssetReaderError, AssetSourceBuilder, ErasedAssetReader, PathStream, Reader,
     VecReader,
 };
 use bevy::asset::AssetApp;
 use bevy::prelude::*;
+use wrathplus_formats::Chain;
 
 pub mod column_grid;
 pub mod coords;
@@ -48,15 +48,15 @@ mod tex_filter;
 pub use tex_filter::{publish_tex_filter, tex_filter, TexFilterSetting, ANISO_RANGE};
 mod m2;
 pub use m2::{
-    EmitterBillboard, M2Model, M2SequenceInfo, ModelEmitter, ModelLight,
-    ModelRibbon, PortraitCamera, WrathM2ModelLoader,
+    EmitterBillboard, M2Model, M2SequenceInfo, ModelEmitter, ModelLight, ModelRibbon,
+    PortraitCamera, WrathM2ModelLoader,
 };
 mod wmo;
-pub use wrathplus_formats::{WmoPortalInfo, WmoPortalRef};
 pub use wmo::{
     cap96, collision_tri_bounds, collision_tri_grids, floor168, footprint_tri_bounds,
     footprint_tri_grids, DoodadBase, WmoGroupNav, WmoLiquidState, WmoModel, WmoModelLoader,
 };
+pub use wrathplus_formats::{WmoPortalInfo, WmoPortalRef};
 
 /// The asset-source id for MPQ-backed assets: load paths look like `mpq://World/Azeroth/foo.adt`.
 pub const MPQ_SOURCE: &str = "mpq";

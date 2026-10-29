@@ -1,17 +1,17 @@
 //! Whole-client tests of `crate::target::ring::tests`, from `target/ring.rs` (`teardown`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::target::AttackPick;
 use crate::app_core::state::Selection;
-use wrathplus_protocol::types::ObjectType;
-use wrathplus_protocol::{EntityKind, ObjectFields, SessionEvent};
-use wrathplus_world::model_fade::DespawnFade;
+use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands};
+use crate::target::AttackPick;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use crossbeam_channel::Receiver;
+use wrathplus_protocol::types::ObjectType;
+use wrathplus_protocol::{EntityKind, ObjectFields, SessionEvent};
+use wrathplus_world::model_fade::DespawnFade;
 
 const FIELD_UNIT_FLAGS: u16 = wrathplus_protocol::types::Field::UnitFlags.index();
 

@@ -8,8 +8,8 @@
 
 use bevy::prelude::*;
 
-use crate::net::{ClientCommand, GuidIndex, NetCommands};
 use crate::app_core::session::SelfPlayer;
+use crate::net::{ClientCommand, GuidIndex, NetCommands};
 use crate::target::SERVICE_RANGE_SQ;
 use wrathplus_world::schedule::WorldStage;
 

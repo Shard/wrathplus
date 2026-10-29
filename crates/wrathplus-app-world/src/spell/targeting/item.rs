@@ -272,7 +272,10 @@ pub fn commit_item_cast_on_pick(
             }
             ItemBind::ConfirmRefund => {
                 parked.0 = Some(item_guid);
-                script.fire_event("END_REFUND", vec![wrathplus_ui::script::ScriptValue::Int(1)]);
+                script.fire_event(
+                    "END_REFUND",
+                    vec![wrathplus_ui::script::ScriptValue::Int(1)],
+                );
             }
             ItemBind::ConfirmTradeable => {
                 parked.0 = Some(item_guid);

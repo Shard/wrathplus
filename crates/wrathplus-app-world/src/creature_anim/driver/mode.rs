@@ -1,10 +1,10 @@
 //! The mode machine: what the base track (bone 0) plays this frame. It reads only [`Frame`], none
 //! of the pass's frame-local flags, and writes the driver, the player and the transitions.
 
-use wrathplus_assets::ModelAnimations;
-use wrathplus_formats::AnimDataCatalog;
 use bevy::animation::transition::AnimationTransitions;
 use bevy::prelude::*;
+use wrathplus_assets::ModelAnimations;
+use wrathplus_formats::AnimDataCatalog;
 
 use crate::app_core::session::ObjectStore;
 use crate::app_core::state::EmoteSounds;

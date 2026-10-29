@@ -157,7 +157,13 @@ pub(in crate::script) fn guid_of(m: &Model, name: &str) -> u64 {
         .iter()
         .find(|p| by_name(&p.name))
         .map(|p| p.guid)
-        .or_else(|| m.party.raid.iter().find(|p| by_name(&p.name)).map(|p| p.guid))
+        .or_else(|| {
+            m.party
+                .raid
+                .iter()
+                .find(|p| by_name(&p.name))
+                .map(|p| p.guid)
+        })
         .unwrap_or(0)
 }
 
@@ -271,7 +277,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // GetPVPDesired() (`0x51bca0`) → PLAYER_FLAGS bit 0x200 as a number, 0 with no player.
     set(lua, "GetPVPDesired", |lua, _| {
         let m = lua.app_data_ref::<Model>().expect("model app_data");
-        let on = m.unit("player").is_some_and(|p| p.player_flags & 0x200 != 0);
+        let on = m
+            .unit("player")
+            .is_some_and(|p| p.player_flags & 0x200 != 0);
         one(Value::Integer(i64::from(on)))
     })?;
     set(lua, "SetPVP", |lua, args| {
@@ -318,8 +326,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         let guid = {
             let m = lua.app_data_ref::<Model>().expect("model app_data");
             let guid = guid_of(&m, &name);
-            (player_guid(&m) != 0 && guid != 0 && m.wrath_unit_popup.state.grantable.contains(&guid))
-                .then_some(guid)
+            (player_guid(&m) != 0
+                && guid != 0
+                && m.wrath_unit_popup.state.grantable.contains(&guid))
+            .then_some(guid)
         };
         if let Some(guid) = guid {
             push(lua, R::GrantLevel { guid });
@@ -328,7 +338,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     })?;
     set(lua, "ReportPlayerIsPVPAFK", |lua, args| {
         let Some(name) = text(lua, &arg(&args, 0))? else {
-            return Err(mlua::Error::runtime(r#"Usage: ReportPlayerIsPVPAFK("unit")"#));
+            return Err(mlua::Error::runtime(
+                r#"Usage: ReportPlayerIsPVPAFK("unit")"#,
+            ));
         };
         let guid = {
             let m = lua.app_data_ref::<Model>().expect("model app_data");
@@ -358,12 +370,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let same = matches!((&unit.guild, &me.guild), (Some(a), Some(b)) if a.name == b.name);
             return one(flag(same));
         }
-        let name = m
-            .unit(&name)
-            .and_then(|u| u.name.clone())
-            .unwrap_or(name);
+        let name = m.unit(&name).and_then(|u| u.name.clone()).unwrap_or(name);
         one(flag(
-            m.guild.roster.iter().any(|r| r.name.eq_ignore_ascii_case(&name)),
+            m.guild
+                .roster
+                .iter()
+                .any(|r| r.name.eq_ignore_ascii_case(&name)),
         ))
     })?;
 
@@ -382,13 +394,20 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             ));
         };
         let m = lua.app_data_ref::<Model>().expect("model app_data");
-        let found = m.wrath_unit_popup.state.chat_lines.iter().rev().find(|l| match line {
-            Some(id) => l.line_id == id,
-            None => {
-                name.as_deref().is_some_and(|n| l.sender.eq_ignore_ascii_case(n))
-                    && said.as_deref().is_none_or(|t| l.text == t)
-            }
-        });
+        let found = m
+            .wrath_unit_popup
+            .state
+            .chat_lines
+            .iter()
+            .rev()
+            .find(|l| match line {
+                Some(id) => l.line_id == id,
+                None => {
+                    name.as_deref()
+                        .is_some_and(|n| l.sender.eq_ignore_ascii_case(n))
+                        && said.as_deref().is_none_or(|t| l.text == t)
+                }
+            });
         let me = player_guid(&m);
         one(match found {
             Some(l) if l.guid != 0 && l.guid != me => Value::Integer(1),
@@ -399,10 +418,15 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // ── channels and voice ──
     // IsDisplayChannelOwner() (`0x4ffa70`, bit 1) / IsDisplayChannelModerator() (`0x4ffae0`,
     // bits 1|2): the player's flags in the selected display channel.
-    for (global, bits) in [("IsDisplayChannelOwner", 1u8), ("IsDisplayChannelModerator", 3)] {
+    for (global, bits) in [
+        ("IsDisplayChannelOwner", 1u8),
+        ("IsDisplayChannelModerator", 3),
+    ] {
         set(lua, global, move |lua, _| {
             let m = lua.app_data_ref::<Model>().expect("model app_data");
-            one(flag(display_channel_flags(&m).is_some_and(|f| f & bits != 0)))
+            one(flag(
+                display_channel_flags(&m).is_some_and(|f| f & bits != 0),
+            ))
         })?;
     }
     // IsSilenced(name) (`0x4ffb50`): 1 when the name is in the selected channel's roster without
@@ -412,11 +436,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             return none();
         };
         let m = lua.app_data_ref::<Model>().expect("model app_data");
-        let row = m
-            .wrath_channel_roster
-            .members
-            .iter()
-            .find(|r| r.name.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(&name)));
+        let row = m.wrath_channel_roster.members.iter().find(|r| {
+            r.name
+                .as_deref()
+                .is_some_and(|n| n.eq_ignore_ascii_case(&name))
+        });
         one(flag(row.is_some_and(|r| r.flags & 0x10 == 0)))
     })?;
     // UnitIsSilenced(name [, channel]) (`0x4fccf0`): the voice session's silence list, empty with
@@ -430,7 +454,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // IsMuted(name) (`0x6b6cf0`): the voice mute list, empty with voice off.
     set(lua, "IsMuted", |_, _| one(Value::Nil))?;
     // ChannelSilenceVoice / ChannelUnSilenceVoice(channel, name).
-    for (global, silence) in [("ChannelSilenceVoice", true), ("ChannelUnSilenceVoice", false)] {
+    for (global, silence) in [
+        ("ChannelSilenceVoice", true),
+        ("ChannelUnSilenceVoice", false),
+    ] {
         set(lua, global, move |lua, args| {
             let (Some(channel), Some(name)) =
                 (text(lua, &arg(&args, 0))?, text(lua, &arg(&args, 1))?)
@@ -502,7 +529,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, (this, event): (Table, String)| {
             let h = super::object::frame_handle_of(lua, &this)?;
             let m = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(flag(m.frame_events.get(&h).is_some_and(|s| s.contains(&event))))
+            Ok(flag(
+                m.frame_events.get(&h).is_some_and(|s| s.contains(&event)),
+            ))
         })?,
     )?;
     Ok(())
@@ -540,7 +569,9 @@ mod tests {
             .unwrap());
         assert!(s.run("SetDungeonDifficulty('x')").is_err());
         s.run("SEEN=nil local f=CreateFrame('Frame') f:RegisterEvent('CHAT_MSG_SYSTEM') f:SetScript('OnEvent', function(_, _, msg) SEEN=msg end) assert(f:IsEventRegistered('CHAT_MSG_SYSTEM')==1 and f:IsEventRegistered('BAG_UPDATE')==nil) SetOptOutOfLoot(1)").unwrap();
-        assert!(s.eval::<bool>("return GetOptOutOfLoot()==1 and SEEN~=nil").unwrap());
+        assert!(s
+            .eval::<bool>("return GetOptOutOfLoot()==1 and SEEN~=nil")
+            .unwrap());
         assert_eq!(
             s.take_wrath_unit_popup_requests(),
             vec![
@@ -568,7 +599,9 @@ mod tests {
         s.run("SEEN=nil SetRaidDifficulty(1)").unwrap();
         assert!(s.take_wrath_unit_popup_requests().is_empty());
         assert!(s.take_ui_errors().is_empty());
-        assert!(s.eval::<bool>("return SEEN=='ERR_NOT_LEADER' or SEEN==ERR_NOT_LEADER").unwrap());
+        assert!(s
+            .eval::<bool>("return SEEN=='ERR_NOT_LEADER' or SEEN==ERR_NOT_LEADER")
+            .unwrap());
         assert!(s
             .eval::<bool>("local a,b=CanChangePlayerDifficulty(); return a==false and b==false")
             .unwrap());
@@ -622,7 +655,10 @@ mod tests {
             "UnitIsInMyGuild('Pal')==nil",
             "select('#', GetAutoCompletePresenceID('x'))==0",
         ] {
-            assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
+            assert!(
+                s.eval::<bool>(&format!("return {check}")).unwrap(),
+                "{check}"
+            );
         }
         assert!(s.run("CanComplainChat()").is_err());
         assert!(s.run("GetAutoCompletePresenceID()").is_err());

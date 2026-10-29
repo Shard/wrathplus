@@ -482,5 +482,4 @@ mod tests {
             .to_string()
             .contains("COPPER_AMOUNT_SYMBOL"));
     }
-
 }

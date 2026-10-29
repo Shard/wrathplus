@@ -52,18 +52,33 @@ fn the_shop_takes_our_race_and_sex_rows_the_level_cost_and_our_bytes() {
     };
     let shop = barber_shop(&tables, &sitter, 10, ("HAIR", "BEARD"));
     assert_eq!(
-        shop.hair_styles.iter().map(|s| (s.id, s.data)).collect::<Vec<_>>(),
+        shop.hair_styles
+            .iter()
+            .map(|s| (s.id, s.data))
+            .collect::<Vec<_>>(),
         [(1, 0), (2, 3)]
     );
     assert_eq!(shop.facial_styles.len(), 1);
-    assert!(shop.skin_styles.is_empty(), "no skin rows: CanAlterSkin is false");
+    assert!(
+        shop.skin_styles.is_empty(),
+        "no skin rows: CanAlterSkin is false"
+    );
     assert_eq!(shop.base_cost, 20.0);
     assert_eq!(
-        (shop.skin, shop.hair_style, shop.hair_color, shop.facial_hair, shop.hair_colors),
+        (
+            shop.skin,
+            shop.hair_style,
+            shop.hair_color,
+            shop.facial_hair,
+            shop.hair_colors
+        ),
         (4, 3, 7, 2, 10)
     );
     assert_eq!(
-        (shop.hair_customization.as_str(), shop.facial_customization.as_str()),
+        (
+            shop.hair_customization.as_str(),
+            shop.facial_customization.as_str()
+        ),
         ("HAIR", "BEARD")
     );
 }

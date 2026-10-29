@@ -172,7 +172,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-        use super::*;
+    use super::*;
     #[test]
     fn refunds_keep_arity_signed_costs_and_unavailable_item_fields() {
         let mut ui = UiScript::new().unwrap();

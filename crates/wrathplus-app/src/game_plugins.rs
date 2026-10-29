@@ -45,9 +45,11 @@ use crate::ui_binder::UiBinderPlugin;
 use crate::ui_cast::UiCastPlugin;
 use crate::ui_char::UiCharPlugin;
 use crate::ui_chat::UiChatPlugin;
+use crate::ui_companions::UiCompanionsPlugin;
 use crate::ui_dialog_verbs::UiDialogVerbsPlugin;
 use crate::ui_duel::UiDuelPlugin;
 use crate::ui_follow::UiFollowPlugin;
+use crate::ui_glyphs::UiGlyphsPlugin;
 use crate::ui_gm_ticket::UiGmTicketPlugin;
 use crate::ui_gossip::UiGossipPlugin;
 use crate::ui_guild::UiGuildPlugin;
@@ -67,17 +69,13 @@ use crate::ui_pass::PlayerUiPlugin;
 use crate::ui_pet::UiPetPlugin;
 use crate::ui_pet_book::UiPetBookPlugin;
 use crate::ui_pet_doll::UiPetDollPlugin;
-use crate::ui_companions::UiCompanionsPlugin;
-use crate::ui_totems::UiTotemsPlugin;
-use crate::ui_glyphs::UiGlyphsPlugin;
-use crate::ui_raid_vehicles::UiRaidVehiclesPlugin;
-use crate::ui_unit_popup::UiUnitPopupPlugin;
-use crate::ui_runes::UiRunesPlugin;
 use crate::ui_pet_stats::UiPetStatsPlugin;
 use crate::ui_petition::UiPetitionPlugin;
 use crate::ui_quest::UiQuestPlugin;
 use crate::ui_quest_log::UiQuestLogPlugin;
 use crate::ui_quest_share::QuestSharePlugin;
+use crate::ui_raid_vehicles::UiRaidVehiclesPlugin;
+use crate::ui_runes::UiRunesPlugin;
 use crate::ui_saved::UiSavedPlugin;
 use crate::ui_script::UiScriptPlugin;
 use crate::ui_shapeshift::UiShapeshiftPlugin;
@@ -91,10 +89,12 @@ use crate::ui_talent_wipe::UiTalentWipePlugin;
 use crate::ui_taxi::UiTaxiPlugin;
 use crate::ui_text::UiTextPlugin;
 use crate::ui_tooltip::UiTooltipPlugin;
+use crate::ui_totems::UiTotemsPlugin;
 use crate::ui_trade::UiTradePlugin;
 use crate::ui_tradeskill::UiTradeSkillPlugin;
 use crate::ui_trainer::UiTrainerPlugin;
 use crate::ui_unit::UiUnitPlugin;
+use crate::ui_unit_popup::UiUnitPopupPlugin;
 use crate::world_backdrop::WorldBackdropPlugin;
 
 /// The game, as one plugin group. The two fields are the two plugins `run()` parameterises.
@@ -538,8 +538,8 @@ pub(crate) mod schedule_tests {
     /// Does this build carry type names? Bevy has them only under its `debug` feature, which
     /// rides with `wrathplus-world`'s `dev`. Probed off the census, not a `cfg`, which belongs in
     /// `run_mode` alone; name-dependent tests skip without them.
-    fn type_names_available(c: &Census) -> bool {
-        c.systems.values().any(|s| s.name.contains("wrathplus_app::"))
+    pub(crate) fn type_names_available(c: &Census) -> bool {
+        c.systems.values().any(|s| s.name.contains("wrathplus_app"))
     }
 
     /// One row of the class table: the type's name for the message, and its `TypeId`.
@@ -586,8 +586,14 @@ pub(crate) mod schedule_tests {
         const SINKS: &[ClassRow] = &[
             ("ChatLog", TypeId::of::<crate::app_core::chat::ChatLog>),
             ("MessageSounds", TypeId::of::<crate::sound::MessageSounds>),
-            ("UiErrorKeys", TypeId::of::<crate::app_core::errors::UiErrorKeys>),
-            ("UiErrorTexts", TypeId::of::<crate::app_core::errors::UiErrorTexts>),
+            (
+                "UiErrorKeys",
+                TypeId::of::<crate::app_core::errors::UiErrorKeys>,
+            ),
+            (
+                "UiErrorTexts",
+                TypeId::of::<crate::app_core::errors::UiErrorTexts>,
+            ),
         ];
         const STREAMS: &[ClassRow] = &[
             ("SoundKits", TypeId::of::<crate::sound::SoundKits>),
@@ -751,7 +757,7 @@ pub(crate) mod schedule_tests {
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_587;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_577;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {

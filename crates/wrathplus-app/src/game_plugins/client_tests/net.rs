@@ -2,8 +2,8 @@
 //! They build the client with `headless_client`, so they live in the root layer.
 
 use crate::net::*;
-use wrathplus_protocol::SessionEvent;
 use bevy::prelude::*;
+use wrathplus_protocol::SessionEvent;
 
 fn connected() -> SessionEvent {
     SessionEvent::Connected {
@@ -41,7 +41,9 @@ fn wrath_connected_clears_old_pose_before_publishing_the_new_endpoint() {
         .insert_resource(CommandEndpoints(endpoint_rx))
         .init_resource::<crate::app_core::player::Player>();
     {
-        let mut player = app.world_mut().resource_mut::<crate::app_core::player::Player>();
+        let mut player = app
+            .world_mut()
+            .resource_mut::<crate::app_core::player::Player>();
         player.active = true;
         player.pos = Vec3::new(11.0, 22.0, 33.0);
     }
@@ -90,7 +92,11 @@ fn raw_offline_connected_neither_waits_for_a_sidechannel_nor_resets_vanilla_play
 
     handlers::dispatch(app.world_mut(), vec![connected()]);
 
-    assert!(app.world().resource::<crate::app_core::player::Player>().active);
+    assert!(
+        app.world()
+            .resource::<crate::app_core::player::Player>()
+            .active
+    );
     assert!(matches!(
         app.world().resource::<NetCommands>().0,
         CommandSender::Raw(_)

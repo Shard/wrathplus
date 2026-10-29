@@ -27,12 +27,12 @@ use std::collections::VecDeque;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 
-use crate::creature_anim::{footfall_culls, footfall_side, AnimSoundEvent, MovementState};
 use crate::app_core::movement::move_flags;
-use crate::entities::Creatures;
-use crate::net::NetEntity;
 use crate::app_core::session::Embodied;
 use crate::app_core::session::ObjectStore;
+use crate::creature_anim::{footfall_culls, footfall_side, AnimSoundEvent, MovementState};
+use crate::entities::Creatures;
+use crate::net::NetEntity;
 use crate::sound::footsteps::Footsteps;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 use wrathplus_world::decal::{DecalFrame, WorldDecal};

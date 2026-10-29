@@ -1,9 +1,9 @@
 //! Ordered native refer-a-friend receipts: level-grant proposals (who offers) and failures. App
 //! owns any future reducer/UI feed.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_refer_friend::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_refer_friend::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeReferFriendPackets(pub VecDeque<Packet>);

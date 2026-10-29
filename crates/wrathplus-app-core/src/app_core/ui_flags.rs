@@ -2,9 +2,9 @@
 //! pointer's click and hover, the glue canvas, the realm list and the login intent; their owners
 //! keep the systems and re-export the types.
 
+use bevy::prelude::*;
 use wrathplus_formats::RealmCategory;
 use wrathplus_protocol::RealmInfo;
-use bevy::prelude::*;
 
 /// Whether the dev `I` inspector's world picking is armed; `player::control` and `target::click`
 /// read it every frame, so it lives here, and the default (disarmed) is the player's.

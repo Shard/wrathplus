@@ -175,11 +175,11 @@ mod tests {
     /// are each a no-op (`0x489a40`'s bare `ret`), never a deselect or a panic.
     #[test]
     fn the_selection_calls_run_assist_and_last_enemy_without_ever_deselecting() {
-        use crate::net::Guid;
         use crate::app_core::session::ObjectStore;
         use crate::app_core::session::SelfPlayer;
-        use wrathplus_ui::script::UiScript;
+        use crate::net::Guid;
         use bevy::ecs::system::RunSystemOnce;
+        use wrathplus_ui::script::UiScript;
 
         const ME: u64 = 1;
         const BASIS: u64 = 0xB0A2;
@@ -274,12 +274,12 @@ mod tests {
     /// a slot with no member, or one whose pet is not held, is a no-op, never a deselect.
     #[test]
     fn target_unit_selects_a_party_pet() {
-        use crate::net::Guid;
         use crate::app_core::session::ObjectStore;
         use crate::app_core::session::SelfPlayer;
+        use crate::net::Guid;
+        use bevy::ecs::system::RunSystemOnce;
         use wrathplus_protocol::types::{member_status, GroupMemberEntry};
         use wrathplus_ui::script::UiScript;
-        use bevy::ecs::system::RunSystemOnce;
 
         const ME: u64 = 1;
         const MEMBER: u64 = 0x1234;
@@ -376,12 +376,12 @@ mod tests {
     /// A chain that breaks, and text that is not a hop, is a no-op, never a deselect.
     #[test]
     fn target_and_assist_unit_follow_a_target_chain() {
-        use crate::net::Guid;
         use crate::app_core::session::ObjectStore;
         use crate::app_core::session::SelfPlayer;
+        use crate::net::Guid;
+        use bevy::ecs::system::RunSystemOnce;
         use wrathplus_protocol::types::{member_status, GroupMemberEntry};
         use wrathplus_ui::script::UiScript;
-        use bevy::ecs::system::RunSystemOnce;
 
         const ME: u64 = 1;
         const MEMBER: u64 = 0x1234;
@@ -393,13 +393,21 @@ mod tests {
         let unit = |kind: u32, summon: u64, target: u64| {
             ObjectStore(wrathplus_protocol::ObjectFields::from_field_slots(&[
                 (wrathplus_protocol::types::Field::ObjectType, 0, kind),
-                (wrathplus_protocol::types::Field::UnitSummon, 0, summon as u32),
+                (
+                    wrathplus_protocol::types::Field::UnitSummon,
+                    0,
+                    summon as u32,
+                ),
                 (
                     wrathplus_protocol::types::Field::UnitSummon,
                     1,
                     (summon >> 32) as u32,
                 ),
-                (wrathplus_protocol::types::Field::UnitTarget, 0, target as u32),
+                (
+                    wrathplus_protocol::types::Field::UnitTarget,
+                    0,
+                    target as u32,
+                ),
                 (
                     wrathplus_protocol::types::Field::UnitTarget,
                     1,

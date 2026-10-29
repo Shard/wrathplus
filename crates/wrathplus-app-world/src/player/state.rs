@@ -554,7 +554,10 @@ mod move_mode_tests {
         // A root alone is only the movement bit.
         let mut modes = MoveModes::default();
         modes.set(MoveMode::Root, true);
-        assert_eq!(modes.wire_flags(), crate::app_core::movement::move_flags::ROOT);
+        assert_eq!(
+            modes.wire_flags(),
+            crate::app_core::movement::move_flags::ROOT
+        );
     }
 
     #[test]

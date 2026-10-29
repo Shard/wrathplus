@@ -11,9 +11,9 @@
 use bevy::prelude::*;
 
 use super::{head_height, CameraPivot};
-use crate::net::{ClientCommand, GuidIndex, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::net::{ClientCommand, GuidIndex, NetCommands};
 
 /// Where the camera rig sits this frame when it is not our body; `None` is the body. It carries a
 /// resolved pose because the controller, holding our own `Transform`, cannot query another's.

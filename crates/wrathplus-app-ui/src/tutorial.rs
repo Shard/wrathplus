@@ -22,14 +22,14 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{ScriptValue, UiScript, WrathTutorialRequest};
 
-use crate::app_core::state::ClientState;
-use crate::net::{ClientCommand, NetCommands};
-use crate::app_core::session::EnteredWorldMessage;
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::app_core::player::Player;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::app_core::session::EnteredWorldMessage;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::ClientState;
+use crate::net::{ClientCommand, NetCommands};
 
 /// The popup cue `0x4b5390` plays on both legs (`0x846b68`).
 const TUTORIAL_POPUP_SOUND: &str = "TutorialPopup";
@@ -517,8 +517,8 @@ impl Plugin for TutorialPlugin {
 
 /// The tutorial flags' packet handler.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::Tutorials;
     use crate::net::NetHandlerApp;

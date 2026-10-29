@@ -61,11 +61,17 @@ pub enum Packet {
         result: u32,
     },
     /// `MSG_SAVE_GUILD_EMBLEM` from the server: the save's result (`PlayerSaveGuildEmblem`).
-    EmblemResult { error: u32 },
+    EmblemResult {
+        error: u32,
+    },
     /// `MSG_TABARDVENDOR_ACTIVATE` from the server: open the tabard designer for this vendor.
-    TabardVendor { vendor: u64 },
+    TabardVendor {
+        vendor: u64,
+    },
     /// `MSG_GUILD_EVENT_LOG_QUERY` from the server, newest first as AC writes it.
-    EventLog { entries: Vec<EventLogEntry> },
+    EventLog {
+        entries: Vec<EventLogEntry>,
+    },
 }
 
 /// One guild event-log row (`GuildEventLogQueryResults::Write`): 1 invite, 2 join, 3 promote,

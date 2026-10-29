@@ -2,10 +2,10 @@
 //! They build the client with `headless_client`, so they live in the root layer.
 
 use crate::net::wrath_combo_points::*;
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
 use wrathplus_protocol::SessionEvent;
 use wrathplus_protocol::SessionEventKind;
-use bevy::prelude::*;
 
 fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, body: &[u8]) {
     if let WrathDispatch::Handled { session_events, .. } =

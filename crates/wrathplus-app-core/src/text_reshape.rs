@@ -42,12 +42,11 @@ pub mod harness {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::image::TextureAtlasLayout;
     use bevy::prelude::*;
-    use bevy::text::{
-        ComputedTextBlock, CosmicFontSystem, Font,
-        FontHinting, TextBounds, TextPipeline,
-    };
     #[cfg(test)]
     use bevy::text::{detect_text_needs_rerender, FontAtlasSet, SwashCache, TextLayoutInfo};
+    use bevy::text::{
+        ComputedTextBlock, CosmicFontSystem, Font, FontHinting, TextBounds, TextPipeline,
+    };
     use bevy::ui::widget::TextUiReader;
 
     /// Wide enough for one line; nothing depends on it.

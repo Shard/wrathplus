@@ -16,10 +16,10 @@
 use bevy::prelude::*;
 
 use super::probes::ProbeClock;
-use crate::net::{ClientCommand, Guid, NetEntity};
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
+use crate::net::{ClientCommand, Guid, NetEntity};
 use crate::ui_battlefield::Battlefield;
 use crate::ui_dialog_verbs::BattlefieldQueue;
 

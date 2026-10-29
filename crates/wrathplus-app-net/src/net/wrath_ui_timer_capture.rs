@@ -4,9 +4,9 @@
 //! the VM's copy are the feed's (`crate::ui_native::wrath_ui_timer_capture`). Evidence:
 //! `/tmp/azb-app-mig/ghidra/ui-timer{,2,3}.log`.
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{wrath_ui_timer::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_ui_timer::Packet, SessionEvent, SessionEventKind};
 
 /// The server clock: the last reply's offset and the ticker's next query time.
 #[derive(Resource, Default)]

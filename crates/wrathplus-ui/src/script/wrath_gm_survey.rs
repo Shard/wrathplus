@@ -205,7 +205,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn the_survey_reads_questions_answers_and_submits_them() {
         let mut s = UiScript::new().unwrap();

@@ -500,7 +500,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     fn m(guid: u64, name: &str, online: bool, week_games: u32, rating: u32) -> ArenaMemberView {
         ArenaMemberView {
             guid,

@@ -14,9 +14,9 @@
 //! `0x4b31b0` makes (`ACTIONBAR_UPDATE_COOLDOWN`, `SPELL_UPDATE_COOLDOWN`); a natural expiry does
 //! not, since the stock `Cooldown.lua` frame hides itself at the end.
 
+use std::time::{Duration, Instant};
 #[cfg(test)]
 use wrathplus_protocol::types::ItemUseSpell;
-use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 

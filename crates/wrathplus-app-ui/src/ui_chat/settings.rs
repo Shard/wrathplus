@@ -57,8 +57,8 @@ use wrathplus_ui::script::{
 };
 
 use super::edit::zone_bit;
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::vm_memo::VmMemo;
+use crate::net::{ClientCommand, NetCommands};
 
 /// How long a dirty look sits before the save fires, as in `crate::cvars`.
 const SAVE_QUIET: std::time::Duration = std::time::Duration::from_secs(1);
@@ -952,7 +952,11 @@ mod tests {
         assert_eq!(w1.name, "General");
         assert_eq!(
             w1.messages,
-            vec!["SYSTEM".to_string(), "SAY".to_string(), "ACHIEVEMENT".to_string()],
+            vec![
+                "SYSTEM".to_string(),
+                "SAY".to_string(),
+                "ACHIEVEMENT".to_string()
+            ],
             "a Wrath group is kept, not dropped as unknown"
         );
         assert_eq!(
@@ -988,7 +992,10 @@ mod tests {
         assert!(w1.iter().any(|m| m == "BN_WHISPER"), "version 12");
         assert!(!w1.iter().any(|m| m == "EMOTE"), "version 7 is not newer");
         assert!(!w1.iter().any(|m| m == "TARGETICONS"), "not defaultOn");
-        assert!(got.looks[1].1.messages.is_empty(), "the combat-log groups are version 6 or 0");
+        assert!(
+            got.looks[1].1.messages.is_empty(),
+            "the combat-log groups are version 6 or 0"
+        );
     }
 
     #[test]

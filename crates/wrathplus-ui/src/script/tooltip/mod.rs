@@ -584,8 +584,8 @@ pub(super) fn append_line(
 }
 
 mod verbs;
-pub(in crate::script) use verbs::place;
 pub(super) use verbs::install;
+pub(in crate::script) use verbs::place;
 
 /// The full hide shared by `Hide`, a `Show` with no owner or no lines, and the end of a fade.
 pub(super) fn hide_tooltip(lua: &Lua, h: FrameHandle) {

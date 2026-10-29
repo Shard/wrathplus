@@ -35,9 +35,9 @@
 //! interpreted (`0x5c28af`, flags bit `0x800` clear), so the line goes through
 //! [`wrathplus_ui::markup`].
 
-use wrathplus_ui::markup::{self, TokenKind};
 use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
+use wrathplus_ui::markup::{self, TokenKind};
 
 use wrathplus_formats::GameTipsCatalog;
 

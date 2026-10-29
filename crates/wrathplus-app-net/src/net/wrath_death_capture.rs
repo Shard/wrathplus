@@ -2,9 +2,9 @@
 //! the world map's `GetDeathReleasePosition` (`crate::ui_native::wrath_death_capture`);
 //! pre-resurrect and corpse-map-position receipts stay here (AC answers the latter with zeros).
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{wrath_death::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_death::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeDeathPackets(pub(crate) VecDeque<Packet>);

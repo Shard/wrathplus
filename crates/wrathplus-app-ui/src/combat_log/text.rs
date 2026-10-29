@@ -15,18 +15,18 @@ use wrathplus_protocol::types::{
     SpellDamageLog, SpellEnergizeLog, SpellHealLog, SpellLogMiss, XpGain,
 };
 
+use crate::app_core::chat::ChatLog;
+use crate::app_core::state::CombatTextEvent;
 use crate::combat_text::{damage_color, miss_word, spell_text, CombatTextSpawn, DamageTextGates};
 use crate::names::NameCache;
-use crate::app_core::chat::ChatLog;
 use crate::ui_unit::UnitCombatFeedback;
-use crate::app_core::state::CombatTextEvent;
 
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfGuid;
 #[cfg(test)]
 use crate::combat_text::center::melee_center_text;
 pub(crate) use crate::combat_text::center::{classify_source, CenterText};
 use crate::net::{GuidIndex, NetCommands};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfGuid;
 
 /// Gate A: the recipient's entity, unless the recipient is us (`0x607140` and `0x6128b0` compare
 /// the anchor guid to the active player and return before submitting).
@@ -623,9 +623,9 @@ pub(super) fn level_up(l: LevelUpInfo, chat_log: &mut ChatLog) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_core::session::SelfPlayer;
     use crate::combat_text::COLOR_SPELL_GOLD;
     use crate::net::Guid;
-    use crate::app_core::session::SelfPlayer;
     use bevy::ecs::system::RunSystemOnce;
 
     fn words(

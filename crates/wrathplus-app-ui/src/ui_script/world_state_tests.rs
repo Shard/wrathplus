@@ -1,11 +1,11 @@
 //! The always-up world-state readout, stock `WorldStateFrame.lua`, fed as the client feeds it:
 //! rows pushed, then `UPDATE_WORLD_STATES`. Which rows exist is [`crate::world_state_ui`]'s.
 
-use wrathplus_ui::script::{UiScript, WorldStateUiView};
 #[cfg(test)]
 use wrathplus_ui::script::QuadContent;
 #[cfg(test)]
 use wrathplus_ui::script::ScriptValue;
+use wrathplus_ui::script::{UiScript, WorldStateUiView};
 
 use super::test_ui::load_ui as load_xml;
 

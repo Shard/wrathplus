@@ -22,9 +22,9 @@ mod pack;
 
 pub use engine::{UiFontAtlas, UiTextPlugin};
 
+pub use measurer::{editbox_advances, measure_request, AtlasMeasurer};
 use wrathplus_ui::script::Outline;
 use wrathplus_ui::widget::RegionHandle;
-pub use measurer::{editbox_advances, measure_request, AtlasMeasurer};
 
 pub use layout::{
     ellipsize_to_fit, layout_text_quads, layout_text_quads_links, line_advances, line_origin,

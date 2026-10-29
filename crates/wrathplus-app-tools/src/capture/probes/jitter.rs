@@ -17,9 +17,9 @@ use wrathplus_world::rig_palette::RigSkin;
 use wrathplus_world::view::WorldCamera;
 
 use super::ProbeClock;
+use crate::app_core::session::SelfPlayer;
 use crate::names::NameCache;
 use crate::net::{Guid, NetEntity};
-use crate::app_core::session::SelfPlayer;
 
 /// `WOW_JITTER`'s parsed knobs plus the two-frame history the differences are taken over.
 #[derive(Resource)]

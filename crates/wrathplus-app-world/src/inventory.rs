@@ -6,9 +6,9 @@
 use wrathplus_protocol::types::{BAG_PLAYER_INVENTORY, SLOT_PACK_FIRST};
 use wrathplus_protocol::ObjectFields;
 
+use crate::app_core::session::ObjectStore;
 use crate::items::Items;
 use crate::net::{NetCommands, Objects};
-use crate::app_core::session::ObjectStore;
 
 /// `wrathplus_ui`'s `EQUIPMENT_BAG`, the paper doll's pseudo-bag; a world module names it here
 /// without the Lua crate, and a `ui_items` test pins the two together.
@@ -103,12 +103,7 @@ impl StorageSlots {
 
 /// The item guid in a Lua-space bag slot; for [`EQUIPMENT_BAG`], `slot0` is the wire slot, as in
 /// [`wire_pos`].
-pub fn slot_guid(
-    store: &ObjectFields,
-    bag: i64,
-    slot0: u8,
-    objects: &Objects,
-) -> Option<u64> {
+pub fn slot_guid(store: &ObjectFields, bag: i64, slot0: u8, objects: &Objects) -> Option<u64> {
     match bag {
         0 => store.player_pack_slot(slot0).filter(|g| *g != 0),
         1..=4 => {
@@ -329,12 +324,7 @@ fn walk_inventory<T>(
 /// `0x622160` tests `OBJECT_FIELD_ENTRY` (`0x622166`) and adds `[+0x20]` (`0x622177`). A quest
 /// objective counts banked copies ([`InventoryScope::QUEST_ITEMS`]); an action-button or reagent
 /// count does not.
-pub fn count_of(
-    store: &ObjectFields,
-    objects: &Objects,
-    entry: u32,
-    scope: InventoryScope,
-) -> u32 {
+pub fn count_of(store: &ObjectFields, objects: &Objects, entry: u32, scope: InventoryScope) -> u32 {
     let mut total = 0u32;
     walk_inventory::<()>(store, objects, scope, |_, _, guid| {
         if let Some(fields) = objects.object(guid) {

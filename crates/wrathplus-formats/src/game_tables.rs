@@ -8,8 +8,8 @@ use crate::{
     Chain,
 };
 use anyhow::{bail, Context, Result};
-use wrathplus_dbc::{DbcParser, FieldType, Schema, SchemaField};
 use std::{collections::BTreeMap, io::Cursor};
+use wrathplus_dbc::{DbcParser, FieldType, Schema, SchemaField};
 
 pub const GAME_TABLE_MAX_LEVEL: u32 = 100;
 

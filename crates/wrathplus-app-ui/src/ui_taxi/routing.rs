@@ -4,12 +4,12 @@
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 
+use bevy::prelude::*;
 use wrathplus_formats::{
     load_taxi_nodes, load_taxi_paths, load_world_map_continent_catalog, TaxiNodes, TaxiPaths,
     WorldMapContinent, WorldMapContinentCatalog,
 };
 use wrathplus_protocol::types::{taxi_reply, TaxiMask};
-use bevy::prelude::*;
 
 use wrathplus_ui::script::{TaxiNodeType, TaxiUiNode};
 

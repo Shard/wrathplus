@@ -12,8 +12,14 @@ fn the_release_location_feeds_the_map_and_map_minus_one_clears_it() {
         body.extend(f.to_le_bytes());
     }
     dispatch(&mut app, &mut adapter, 0x378, &body);
-    assert_eq!(app.world().resource::<DeathRelease>().0, Some((1, 10.0, 20.0)));
-    assert!(captured(&app).is_empty(), "the location does not enter the capture");
+    assert_eq!(
+        app.world().resource::<DeathRelease>().0,
+        Some((1, 10.0, 20.0))
+    );
+    assert!(
+        captured(&app).is_empty(),
+        "the location does not enter the capture"
+    );
     let mut clear = (-1i32).to_le_bytes().to_vec();
     clear.extend([0u8; 12]);
     dispatch(&mut app, &mut adapter, 0x378, &clear);

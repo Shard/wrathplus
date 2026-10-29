@@ -217,7 +217,14 @@ fn encounters_read_map_difficulty_bit_name_and_icon_id() {
     let rows = parse_dungeon_encounters(&dbc(&[row], strings), "enUS").unwrap();
     let e = &rows[0];
     assert_eq!(
-        (e.id(), e.map_id(), e.difficulty(), e.bit(), e.name.as_str(), e.spell_icon()),
+        (
+            e.id(),
+            e.map_id(),
+            e.difficulty(),
+            e.bit(),
+            e.name.as_str(),
+            e.spell_icon()
+        ),
         (465, 533, 1, 12, "Patchwerk", 77)
     );
     assert_eq!(e.icon, None);

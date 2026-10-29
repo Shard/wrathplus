@@ -1,9 +1,9 @@
 //! The bridge's world feed: weather goes to the world crate as a [`WeatherMessage`], world states
 //! to the [`WorldStates`] table the UI's `$<n>w` tokens read.
 
+use bevy::prelude::*;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use wrathplus_world::weather::WeatherMessage;
-use bevy::prelude::*;
 
 use super::NetHandlerApp;
 use crate::app_core::state::WorldStates;

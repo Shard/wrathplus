@@ -15,10 +15,10 @@ use bevy::prelude::*;
 use wrathplus_protocol::types::Field;
 use wrathplus_ui::script::{RuneView, ScriptValue, UiScript, WrathRunes};
 
-use crate::net::wrath_runes::{NativeRunes, RUNES};
+use crate::app_core::schedule::UnitFeed;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::schedule::UnitFeed;
+use crate::net::wrath_runes::{NativeRunes, RUNES};
 
 pub struct UiRunesPlugin;
 

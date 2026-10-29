@@ -1,9 +1,9 @@
 //! Transport-only ordered native inspect replies. App owns any future reducer/UI feed.
 //! No inspected talents, glyphs or gear are applied to any frame.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_inspect::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_inspect::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeInspectPackets(pub VecDeque<Packet>);

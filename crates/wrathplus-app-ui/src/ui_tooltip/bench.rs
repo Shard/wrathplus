@@ -4,18 +4,18 @@
 
 use std::time::{Duration, Instant};
 
+use bevy::prelude::*;
 use wrathplus_protocol::types::Field;
 use wrathplus_protocol::ObjectFields;
 use wrathplus_ui::script::UiScript;
-use bevy::prelude::*;
 
 use super::feed_spell_tooltips;
-use crate::items::Items;
-use crate::net::{GuidIndex, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::PlayerActions;
 use crate::app_core::state::Spells;
+use crate::items::Items;
+use crate::net::{GuidIndex, NetCommands};
 
 /// The mage's family in `Spell.dbc`.
 const MAGE: u32 = 3;

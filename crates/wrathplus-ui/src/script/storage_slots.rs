@@ -33,9 +33,7 @@ impl Model {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{
-        BankBagSlots, ContainerSlot, ContainerState, InvSlotView, UiScript,
-    };
+    use super::super::{BankBagSlots, ContainerSlot, ContainerState, InvSlotView, UiScript};
     #[test]
     fn storage_boundaries_and_the_seventh_bank_bag() {
         let (bank_last, bag_first, bag_last, key_first, key_last) = (67, 68, 74, 87, 118);

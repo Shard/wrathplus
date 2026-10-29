@@ -2,9 +2,9 @@
 //! `SMSG_SEND_MAIL_RESULT` means what 1.12's does and feeds the shared `SendMailResult` through
 //! `wrath_exchange`; do not mutate mailbox state here.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_mail_mutations::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_mail_mutations::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeMailMutationPackets(pub(crate) VecDeque<Packet>);

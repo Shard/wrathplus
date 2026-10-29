@@ -42,7 +42,6 @@ fn script() -> UiScript {
     s
 }
 
-
 /// One frame of the host loop: the tick (where the flush relayouts), then the resolve.
 fn frame(s: &mut UiScript) {
     s.tick(0.016);

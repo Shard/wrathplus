@@ -1,7 +1,7 @@
 use super::*;
+use std::collections::HashMap;
 use wrathplus_formats::{SpellCastTime, SpellCastTimeCatalog, SpellRange};
 use wrathplus_protocol::types::Field;
-use std::collections::HashMap;
 
 /// Build 12340's `GlobalStrings.lua` values for the keys the cells fill.
 fn get(key: &str) -> Option<String> {

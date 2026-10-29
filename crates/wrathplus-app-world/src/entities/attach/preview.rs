@@ -5,11 +5,11 @@
 //! filter, the composited body, the cloak, and the helm, shoulders and held weapons as riders
 //! (the select build `0x472950` holds weapons in the hands, `0x47a0c0`).
 
+use bevy::prelude::*;
 use wrathplus_formats::CharSkinSlot;
 use wrathplus_protocol::{
     CharEnumItem, CHARACTER_FLAG_GHOST, CHARACTER_FLAG_HIDE_CLOAK, CHARACTER_FLAG_HIDE_HELM,
 };
-use bevy::prelude::*;
 
 use crate::portrait::{
     BoothTwins, DressUpBake, DressUpLook, DressUpPreview, GhostKit, GlueLook, GluePetBake,

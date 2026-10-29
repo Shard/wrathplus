@@ -60,10 +60,10 @@ pub(super) fn bind_gates(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_core::session::ObjectStore;
     use crate::creature_type::CreatureTypeSources;
     use crate::names::{CreatureRecord, NameCache};
     use crate::net::Reputations;
-    use crate::app_core::session::ObjectStore;
     use wrathplus_protocol::types::Field;
     use wrathplus_protocol::ObjectFields;
 

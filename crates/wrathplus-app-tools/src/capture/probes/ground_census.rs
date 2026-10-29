@@ -10,11 +10,13 @@
 //! The repeat form tells a transient sink during loading from one that stays. How to run it:
 //! `docs/CONTRIBUTING.md`, "Running it unattended".
 
+use bevy::prelude::*;
 use wrathplus_assets::coords::bevy_to_wow;
 use wrathplus_protocol::EntityKind;
-use bevy::prelude::*;
 
 use super::ProbeClock;
+use crate::app_core::session::Embodied;
+use crate::app_core::session::SelfPlayer;
 use crate::motion::ground_derived;
 use crate::motion::CreatureSwimming;
 use crate::motion::GroundClamped;
@@ -23,8 +25,6 @@ use crate::motion::Spline;
 use crate::names::NameCache;
 use crate::net::NetCommands;
 use crate::net::{Guid, NetEntity};
-use crate::app_core::session::Embodied;
-use crate::app_core::session::SelfPlayer;
 
 /// A drop past this (yd) counts as sunk: clear of the clamp's small corrections, under a storey.
 const SUNK_YD: f32 = 0.5;

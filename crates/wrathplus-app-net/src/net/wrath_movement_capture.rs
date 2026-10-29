@@ -1,9 +1,9 @@
 //! Ordered native movement notices without a shared event (`SMSG_DISMOUNT`; the mount state itself
 //! is the unit's descriptor). App owns any future reducer.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_movement_misc::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_movement_misc::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeMovementPackets(pub VecDeque<Packet>);

@@ -14,11 +14,11 @@ use wrathplus_protocol::EntityKind;
 use wrathplus_ui::script::UiScript;
 
 use super::probes::ProbeClock;
-use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
+use crate::app_core::interaction::ItemTextOpen;
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
-use crate::app_core::interaction::ItemTextOpen;
+use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
 use crate::ui_script::{UiCostWanted, UiFrameCost};
 
 /// A standing position beside the plaque.

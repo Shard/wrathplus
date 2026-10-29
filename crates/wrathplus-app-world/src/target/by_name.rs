@@ -25,10 +25,10 @@ use bevy::prelude::*;
 
 use wrathplus_protocol::guid;
 
-use crate::names::NameCache;
-use crate::net::{Guid, GuidIndex};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
+use crate::names::NameCache;
+use crate::net::{Guid, GuidIndex};
 
 use super::{scan, Selection};
 

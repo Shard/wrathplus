@@ -13,10 +13,10 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{ScriptValue, UiScript, UnitState};
 
+use crate::app_core::session::ObjectStore;
 use crate::creature_type::CreatureTypeSources;
 use crate::names::NameCache;
 use crate::net::{FieldEdges, GuidIndex, NetCommands};
-use crate::app_core::session::ObjectStore;
 use crate::ui_script::gate;
 
 use super::GroupState;

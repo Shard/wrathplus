@@ -23,16 +23,16 @@ use wrathplus_protocol::EntityKind;
 use wrathplus_ui::script::UiScript;
 
 use super::probes::ProbeClock;
-use crate::creature_anim::AnimDriver;
-use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
+use crate::app_core::loot::LootState;
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
+use crate::app_core::state::LootLatch;
+use crate::creature_anim::AnimDriver;
+use crate::loot::LootKneel;
+use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
 use crate::target::click::{resolve_go_action, GoAction};
 use crate::target::lock::GoLockInputs;
-use crate::loot::LootKneel;
-use crate::app_core::state::LootLatch;
-use crate::app_core::loot::LootState;
 
 /// The default object: the `Worn Wooden Chest` at AzerothCore `gameobject` 30112 (template 1765,
 /// `Lock.dbc` 43, `LockType 13 "Open Kneeling"`) on map 0. Ordinary world chests are spawn-pool

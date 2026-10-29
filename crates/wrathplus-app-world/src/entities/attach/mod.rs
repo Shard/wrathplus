@@ -3,15 +3,15 @@
 //! lights, ribbons, GameObject collision, or a debug cube for a display that names no model.
 
 use avian3d::prelude::RigidBody;
+use bevy::prelude::*;
 use wrathplus_assets::ModelAnimations;
 use wrathplus_protocol::EntityKind;
-use bevy::prelude::*;
 
 use bevy::animation::transition::AnimationTransitions;
 
+use crate::app_core::session::ObjectStore;
 use crate::creature_anim::AnimDriver;
 use crate::net::NetEntity;
-use crate::app_core::session::ObjectStore;
 use crate::player::CameraPivot;
 use crate::target::SelectionRadius;
 use wrathplus_world::interact::WorldObject;
@@ -954,9 +954,9 @@ fn display_label(handle: &ModelHandle) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wrathplus_assets::{ModelJoint, ModelSkeleton};
     use bevy::ecs::world::CommandQueue;
     use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
+    use wrathplus_assets::{ModelJoint, ModelSkeleton};
 
     /// The smallest rig `setup_skinned_instance` builds.
     fn one_bone(ibps: &mut Assets<SkinnedMeshInverseBindposes>) -> DisplayModel {

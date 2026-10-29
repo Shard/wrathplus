@@ -3,12 +3,12 @@
 //! contributing nodes (weight not 0, mask clear, channel keyed) fold in ascending node index by
 //! `acc = interpolate(acc, v, w / total)`, and an unkeyed property keeps its value.
 
-use wrathplus_assets::{ModelAnimations, ModelSkeleton, PoseSource};
 use bevy::animation::animatable::Animatable;
 use bevy::app::AnimationSystems;
 use bevy::math::Affine3A;
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
+use wrathplus_assets::{ModelAnimations, ModelSkeleton, PoseSource};
 
 use super::AnimParked;
 use crate::vis_chain::VisChainOnly;
@@ -317,11 +317,11 @@ pub fn plugin(app: &mut App) {
 mod tests {
     use std::time::Duration;
 
-    use wrathplus_assets::{bone_target_id, PoseBone, PoseClip, PoseTrack};
     use bevy::animation::animation_curves::{AnimatableCurve, AnimatableKeyframeCurve};
     use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle, AnimationNodeIndex};
     use bevy::animation::transition::AnimationTransitions;
     use bevy::animation::{animated_field, AnimatedBy, AnimationClip};
+    use wrathplus_assets::{bone_target_id, PoseBone, PoseClip, PoseTrack};
 
     use super::*;
 

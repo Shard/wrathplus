@@ -10,15 +10,15 @@ use wrathplus_formats::ChrClasses;
 use wrathplus_protocol::types::ObjectType;
 use wrathplus_ui::script::{ScriptValue, UiScript, UnitState, WornDisplay};
 
-use crate::creature_type::{creature_type_word, CreatureTypeSources};
-use crate::names::NameCache;
-use crate::net::{FieldChanged, FieldEdges, Guid, NetCommands, NetHandlerApp, Reputations};
+use crate::app_core::schedule::UiInput;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::Factions;
 use crate::app_core::state::Selection;
+use crate::creature_type::{creature_type_word, CreatureTypeSources};
+use crate::names::NameCache;
+use crate::net::{FieldChanged, FieldEdges, Guid, NetCommands, NetHandlerApp, Reputations};
 use crate::ui_script::gate;
-use crate::app_core::schedule::UiInput;
 
 pub(crate) mod held;
 
@@ -760,7 +760,8 @@ pub(crate) fn snapshot(
         power: store.0.unit_shown_power(power_type).unwrap_or(0),
         max_power: store.0.unit_shown_max_power(power_type).unwrap_or(0),
         powers: store.0.wrath_powers().map(|powers| {
-            powers.map(|(current, maximum)| wrathplus_ui::script::UnitPowerState { current, maximum })
+            powers
+                .map(|(current, maximum)| wrathplus_ui::script::UnitPowerState { current, maximum })
         }),
         // `UnitIsDead` (`0x517ac0`): health ≤ 0 or the dead-looking flag.
         dead: store.0.unit_reads_dead(),
@@ -913,7 +914,10 @@ fn drain_pvp_toggles(script: Option<NonSendMut<UiScript>>, commands: Res<NetComm
 fn drain_worn_display_toggles(
     script: Option<NonSendMut<UiScript>>,
     commands: Res<NetCommands>,
-    self_q: Query<&crate::app_core::session::ObjectStore, With<crate::app_core::session::SelfPlayer>>,
+    self_q: Query<
+        &crate::app_core::session::ObjectStore,
+        With<crate::app_core::session::SelfPlayer>,
+    >,
 ) {
     use wrathplus_protocol::wrath_appearance::Command as A;
     let Some(mut script) = script else {
@@ -1737,12 +1741,12 @@ mod tests {
     /// does not hold names no unit.
     mod group_pet_tokens {
         use super::*;
-        use crate::net::GuidIndex;
         use crate::app_core::group::GroupState;
         use crate::app_core::state::GROUPTYPE_RAID;
+        use crate::net::GuidIndex;
+        use bevy::ecs::system::RunSystemOnce;
         use wrathplus_protocol::types::{member_status, GroupMemberEntry, PartyMemberStatsInfo};
         use wrathplus_protocol::ObjectFields;
-        use bevy::ecs::system::RunSystemOnce;
 
         const ME: u64 = 0x10;
         const MY_PET: u64 = 0xF140_0000_0000_0010;
@@ -2122,13 +2126,13 @@ mod tests {
     /// the unit at the end of the chain and any break in it names nobody.
     mod target_chain_tokens {
         use super::*;
-        use crate::net::GuidIndex;
-        use crate::target::{Hovered, HoveredObject};
         use crate::app_core::group::GroupState;
         use crate::app_core::state::GROUPTYPE_RAID;
+        use crate::net::GuidIndex;
+        use crate::target::{Hovered, HoveredObject};
+        use bevy::ecs::system::RunSystemOnce;
         use wrathplus_protocol::types::{member_status, GroupMemberEntry};
         use wrathplus_protocol::ObjectFields;
-        use bevy::ecs::system::RunSystemOnce;
 
         const ME: u64 = 0x10;
         /// party1 and raid2, party2 and raid3, party3 and raid4.
@@ -2414,7 +2418,10 @@ mod tests {
             .init_resource::<crate::app_core::group::GroupState>()
             .insert_resource(NetCommands(tx))
             .add_plugins(crate::ui_aura::UiAuraPlugin)
-            .add_systems(Update, feed_unit_reach.after(crate::app_core::schedule::AuraEvents));
+            .add_systems(
+                Update,
+                feed_unit_reach.after(crate::app_core::schedule::AuraEvents),
+            );
         app.insert_non_send_resource(UiScript::new().unwrap());
 
         // We at the origin, party1 (`A`) 5 yards off with a pet 15 yards off, the mob 20 yards
@@ -2632,7 +2639,8 @@ mod tests {
     fn race_pvp_team_matches_the_shipped_tables() {
         let data = wrathplus_formats::wow_data_or_skip!();
         let profile = wrathplus_formats::DataProfile::from_env().expect("profile");
-        let mut chain = wrathplus_formats::Chain::open_profile(&data, &profile).expect("open chain");
+        let mut chain =
+            wrathplus_formats::Chain::open_profile(&data, &profile).expect("open chain");
         let want = wrathplus_formats::load_race_pvp_teams(&mut chain).expect("ChrRaces walk");
         // Build 12340 ships the eleven playable races among its rows; a truncated map would
         // pass by asserting nothing.
@@ -3075,8 +3083,8 @@ mod tests {
     /// The player-only refusal rides in the entry, so a boar in interact range is not inspectable.
     #[test]
     fn a_creature_target_enters_the_reach_map_at_its_real_distance() {
-        use wrathplus_protocol::types::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
+        use wrathplus_protocol::types::ObjectFields;
 
         /// `UNIT_FIELD_FLAGS` bit 1 (NON_ATTACKABLE), which `can_attack` refuses.
         const NON_ATTACKABLE: u32 = 1 << 1;

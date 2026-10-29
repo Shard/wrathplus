@@ -24,7 +24,10 @@ const GO_TYPE_FISHINGNODE: i32 = 17;
 pub fn resolve_loot_kneel(
     latch: Res<LootLatch>,
     index: Res<crate::net::GuidIndex>,
-    objects: Query<(&crate::net::NetEntity, &crate::app_core::session::ObjectStore)>,
+    objects: Query<(
+        &crate::net::NetEntity,
+        &crate::app_core::session::ObjectStore,
+    )>,
     mut kneel: ResMut<LootKneel>,
 ) {
     let allowed = latch

@@ -2,11 +2,11 @@
 
 use std::time::Duration;
 
-use wrathplus_assets::{AnimClip, ModelAnimations};
-use wrathplus_formats::AnimDataCatalog;
 use bevy::animation::transition::AnimationTransitions;
 use bevy::animation::RepeatAnimation;
 use bevy::prelude::*;
+use wrathplus_assets::{AnimClip, ModelAnimations};
+use wrathplus_formats::AnimDataCatalog;
 
 use super::super::{find_resolved, AnimDriver};
 use super::select::{self, jump_land_pick, Mode, Special};

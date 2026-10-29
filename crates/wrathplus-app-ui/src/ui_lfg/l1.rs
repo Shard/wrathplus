@@ -23,22 +23,22 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_lfg::{self, DungeonLock, Packet, PartyMemberLocks, PlayerInfo};
 use wrathplus_ui::script::{
     UiScript, WrathLfgItemRequest, WrathLfgLock, WrathLfgLockRequest, WrathLfgLockSnapshot,
     WrathLfgMemberLocks, WrathLfgPlayerLocks, WrathLfgPresentation, WrathLfgPreview,
     WrathLfgRewardItem,
 };
-use bevy::prelude::*;
 
-use crate::entities::ItemDisplays;
-use crate::items::Items;
-use crate::names::NameCache;
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfGuid;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::vm_memo::VmMemo;
+use crate::entities::ItemDisplays;
+use crate::items::Items;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, NetCommands};
 
 /// The interest queue's bound; the oldest interest drops, with no event, past it.
 pub(crate) const INTEREST_BOUND: usize = 256;
@@ -83,7 +83,10 @@ pub(super) fn register(app: &mut App) {
 }
 
 /// World entry (`0x55d440`) and exit (`0x55af20`): both blocks invalid, a new epoch.
-pub(super) fn reset_session(In(event): In<wrathplus_protocol::SessionEvent>, mut l1: ResMut<LfgL1>) {
+pub(super) fn reset_session(
+    In(event): In<wrathplus_protocol::SessionEvent>,
+    mut l1: ResMut<LfgL1>,
+) {
     use wrathplus_protocol::SessionEvent;
     if !matches!(
         event,
@@ -284,8 +287,8 @@ pub(super) fn feed(
 
     // The L2 verbs' sends (contract: no optimistic state from a send).
     for request in script.take_wrath_lfg_queue_requests() {
-        use wrathplus_ui::script::WrathLfgQueueRequest as Q;
         use wrath_lfg::commands::{Command as C, Join};
+        use wrathplus_ui::script::WrathLfgQueueRequest as Q;
         send(ClientCommand::LfgCommand(match request {
             Q::Join {
                 roles,

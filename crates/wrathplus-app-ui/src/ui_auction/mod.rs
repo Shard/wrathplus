@@ -15,16 +15,16 @@ use wrathplus_ui::script::{
     AuctionSubCategory, UiScript, BIDDER, LIST, OWNER,
 };
 
+use crate::app_core::errors::UiError;
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, NetCommands, Objects};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::ui_action::{show_messages, ui_error_text, MessageSink, Shown};
-use crate::app_core::errors::UiError;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
 mod sort;

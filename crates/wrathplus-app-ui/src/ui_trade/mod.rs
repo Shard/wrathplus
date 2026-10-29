@@ -2,21 +2,21 @@
 //! pushes it into the VM and fires the trade events, [`drain_trade`] sends the Lua intents, and
 //! [`answer_trade_request`] answers an incoming request.
 
-use wrathplus_protocol::types::{TradeItem, TradeStatusExtended, TRADE_SLOT_COUNT};
 use bevy::prelude::*;
+use wrathplus_protocol::types::{TradeItem, TradeStatusExtended, TRADE_SLOT_COUNT};
 
 use wrathplus_ui::script::{ScriptValue, TradeSideState, TradeSlotItem, TradeState, UiScript};
 
+use crate::app_core::group::GroupState;
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::app_core::state::Selection;
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, GuidIndex, NetCommands, Objects};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
-use crate::app_core::state::Selection;
-use crate::app_core::group::GroupState;
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
 use crate::ui_session::NpcSession;
 
 mod net;
@@ -336,7 +336,9 @@ impl Plugin for UiTradePlugin {
                     // The feed runs after `UnitFeed`, whose item templates it reads, and before
                     // the input pass, with the drain after it, so each lands the same frame. No
                     // range guard: vmangos cancels a trade on distance (`Player.cpp:6117`).
-                    feed_trade.after(crate::app_core::schedule::UnitFeed).in_set(UiFeed),
+                    feed_trade
+                        .after(crate::app_core::schedule::UnitFeed)
+                        .in_set(UiFeed),
                     // Ahead of the feed, so an accepted partner shows the frame the window opens.
                     answer_trade_request.before(feed_trade),
                     // The coinage-change reflex's trade half, after the world's fields land.
@@ -442,9 +444,10 @@ fn answer_trade_request(
         let _ = commands.0.send(ClientCommand::BusyTrade);
         trade.refuse_request();
         // `0x496720(0xbb, name)`: one `DisplayError`; catalog row `0xbb` makes it a chat line.
-        errors
-            .0
-            .push(crate::app_core::errors::UiError::s("ERR_TRADE_BLOCKED_S", name));
+        errors.0.push(crate::app_core::errors::UiError::s(
+            "ERR_TRADE_BLOCKED_S",
+            name,
+        ));
         return;
     }
 
@@ -618,7 +621,9 @@ fn feed_trade(
             continue;
         }
         match names.resolve(line.who, &commands).map(str::to_string) {
-            Some(name) => errors.0.push(crate::app_core::errors::UiError::s(line.key, name)),
+            Some(name) => errors
+                .0
+                .push(crate::app_core::errors::UiError::s(line.key, name)),
             // Not cached: `resolve` has asked, so park it and retry next frame.
             None => trade.owe_named_line(line),
         }
@@ -1113,7 +1118,9 @@ mod tests {
         app.update();
 
         assert_eq!(
-            app.world().resource::<crate::app_core::errors::UiErrorKeys>().0,
+            app.world()
+                .resource::<crate::app_core::errors::UiErrorKeys>()
+                .0,
             vec![crate::app_core::errors::UiError::s(
                 "ERR_INITIATE_TRADE_S",
                 "Grubbis".to_string()
@@ -1174,7 +1181,9 @@ mod tests {
             });
         app.update();
         assert_eq!(
-            app.world().resource::<crate::app_core::errors::UiErrorKeys>().0,
+            app.world()
+                .resource::<crate::app_core::errors::UiErrorKeys>()
+                .0,
             vec![crate::app_core::errors::UiError::s(
                 "ERR_PLAYER_BUSY_S",
                 "Grubbis".to_string()
@@ -1208,7 +1217,9 @@ mod tests {
         );
         app.update();
         assert_eq!(
-            app.world().resource::<crate::app_core::errors::UiErrorKeys>().0,
+            app.world()
+                .resource::<crate::app_core::errors::UiErrorKeys>()
+                .0,
             vec![crate::app_core::errors::UiError::s(
                 "ERR_INITIATE_TRADE_S",
                 "Skarrid".to_string()
@@ -1250,7 +1261,9 @@ mod tests {
 
         assert!(matches!(rx.try_recv(), Ok(ClientCommand::BusyTrade)));
         assert_eq!(
-            app.world().resource::<crate::app_core::errors::UiErrorKeys>().0,
+            app.world()
+                .resource::<crate::app_core::errors::UiErrorKeys>()
+                .0,
             vec![crate::app_core::errors::UiError::s(
                 "ERR_TRADE_BLOCKED_S",
                 "Grubbis".to_string()

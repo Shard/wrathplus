@@ -8,9 +8,9 @@ use std::collections::HashMap;
 
 use wrathplus_formats::ShapeshiftForm;
 
-use crate::names::NameCache;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::state::Spells;
+use crate::names::NameCache;
 
 /// What the resolver reads beside the unit's own fields: the creature template cache and the
 /// form table. A source that is absent resolves nothing at its stage.
@@ -240,9 +240,7 @@ mod tests {
             names: Some(&names),
             forms: Some(&forms),
         };
-        let word = |store: &ObjectStore| {
-            creature_type_word(sources.of(store)).map(str::to_string)
-        };
+        let word = |store: &ObjectStore| creature_type_word(sources.of(store)).map(str::to_string);
         assert_eq!(word(&store(0, 1, 1)).as_deref(), Some("Beast"), "cat form");
         assert_eq!(
             word(&store(0, 1, 0)).as_deref(),

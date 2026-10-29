@@ -17,15 +17,15 @@
 //! `duration × progress / 100` (`0x5f3ac5`), and the reverse blend of an interrupted swing.
 
 use avian3d::prelude::{Collider, ColliderDisabled};
-use wrathplus_assets::ModelAnimations;
 use bevy::animation::transition::AnimationTransitions;
 use bevy::animation::RepeatAnimation;
 use bevy::prelude::*;
 use std::time::Duration;
+use wrathplus_assets::ModelAnimations;
 
+use crate::app_core::session::ObjectStore;
 use crate::creature_anim::{advance_track, scan_events, AnimSoundEvent};
 use crate::net::GuidIndex;
-use crate::app_core::session::ObjectStore;
 use wrathplus_world::schedule::WorldStage;
 
 /// `GO_STATE_ACTIVE` (vmangos `GOState`): open, and passable.
@@ -893,26 +893,28 @@ mod tests {
             clips: authored
                 .iter()
                 .zip(&nodes)
-                .map(|(&(id, dur, frequency), &node)| wrathplus_assets::AnimClip {
-                    anim_id: id,
-                    seq_index: 0,
-                    node,
-                    // The crate's clips are bit-0-clear bands: the kernel loops them.
-                    looping: true,
-                    duration: dur,
-                    move_speed: 0.0,
-                    blend_time: 0.0,
-                    bounds_center: Vec3::ZERO,
-                    bounds_radius: 0.0,
-                    bounds_min: Vec3::ZERO,
-                    bounds_max: Vec3::ZERO,
-                    events: Vec::new().into(),
-                    arm_nodes: None,
-                    upper_node: None,
-                    frequency,
-                    replay: (0, 0),
-                    poses_bones: true,
-                })
+                .map(
+                    |(&(id, dur, frequency), &node)| wrathplus_assets::AnimClip {
+                        anim_id: id,
+                        seq_index: 0,
+                        node,
+                        // The crate's clips are bit-0-clear bands: the kernel loops them.
+                        looping: true,
+                        duration: dur,
+                        move_speed: 0.0,
+                        blend_time: 0.0,
+                        bounds_center: Vec3::ZERO,
+                        bounds_radius: 0.0,
+                        bounds_min: Vec3::ZERO,
+                        bounds_max: Vec3::ZERO,
+                        events: Vec::new().into(),
+                        arm_nodes: None,
+                        upper_node: None,
+                        frequency,
+                        replay: (0, 0),
+                        poses_bones: true,
+                    },
+                )
                 .collect(),
             hand_close: [None, None],
             playable_animation_lookup: Vec::new(),

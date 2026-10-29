@@ -20,7 +20,10 @@ fn parse_filter(filter: Option<&str>, default_helpful: bool) -> Filter {
         helpful: default_helpful,
         cancelable: None,
     };
-    for word in filter.unwrap_or("").split(|c: char| c == '|' || c.is_whitespace()) {
+    for word in filter
+        .unwrap_or("")
+        .split(|c: char| c == '|' || c.is_whitespace())
+    {
         match word.to_ascii_uppercase().as_str() {
             "HELPFUL" => parsed.helpful = true,
             "HARMFUL" => parsed.helpful = false,
@@ -164,9 +167,19 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "UnitAura",
         lua.create_function(
-            |lua, (token, which, rank_or_filter, filter): (Option<String>, Value, Option<String>, Option<String>)| {
+            |lua,
+             (token, which, rank_or_filter, filter): (
+                Option<String>,
+                Value,
+                Option<String>,
+                Option<String>,
+            )| {
                 // `UnitAura(unit, name, rank, filter)` by name, else `(unit, index, filter)`.
-                let filter = if matches!(which, Value::String(_)) { filter } else { rank_or_filter };
+                let filter = if matches!(which, Value::String(_)) {
+                    filter
+                } else {
+                    rank_or_filter
+                };
                 find(lua, token, which, filter, true)
             },
         )?,
@@ -175,8 +188,18 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
         g.set(
             name,
             lua.create_function(
-                move |lua, (token, which, rank_or_filter, filter): (Option<String>, Value, Option<String>, Option<String>)| {
-                    let filter = if matches!(which, Value::String(_)) { filter } else { rank_or_filter };
+                move |lua,
+                      (token, which, rank_or_filter, filter): (
+                    Option<String>,
+                    Value,
+                    Option<String>,
+                    Option<String>,
+                )| {
+                    let filter = if matches!(which, Value::String(_)) {
+                        filter
+                    } else {
+                        rank_or_filter
+                    };
                     let word = if helpful { "HELPFUL" } else { "HARMFUL" };
                     let filter = Some(format!("{} {word}", filter.unwrap_or_default()));
                     find(lua, token, which, filter, helpful)

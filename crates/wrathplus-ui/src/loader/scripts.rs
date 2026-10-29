@@ -30,7 +30,9 @@ impl Loader<'_> {
                     Ok(mlua::Value::Nil | mlua::Value::Boolean(false)) | Err(_)
                 ) {
                     let what = if el.tag.eq_ignore_ascii_case("AnimationGroup")
-                        || ANIMATION_TAGS.iter().any(|t| el.tag.eq_ignore_ascii_case(t))
+                        || ANIMATION_TAGS
+                            .iter()
+                            .any(|t| el.tag.eq_ignore_ascii_case(t))
                     {
                         el.tag.clone()
                     } else {
@@ -73,7 +75,9 @@ impl Loader<'_> {
                 };
                 if let Err(e) = wrapper.call_method::<()>("SetScript", (name.clone(), func.clone()))
                 {
-                    self.report.errors.push(format!("{dbg}: SetScript(\"{name}\"): {e}"));
+                    self.report
+                        .errors
+                        .push(format!("{dbg}: SetScript(\"{name}\"): {e}"));
                     continue;
                 }
                 // After each `SetScript` the XML walker enables the handler's input kind
@@ -189,7 +193,14 @@ impl Loader<'_> {
 }
 
 /// The XML element types that make an `Animation`.
-const ANIMATION_TAGS: [&str; 6] = ["Animation", "Alpha", "Path", "Rotation", "Scale", "Translation"];
+const ANIMATION_TAGS: [&str; 6] = [
+    "Animation",
+    "Alpha",
+    "Path",
+    "Rotation",
+    "Scale",
+    "Translation",
+];
 
 /// Build 12340's formals for script `name` on an element of XML type `tag`: each script lookup
 /// hands the compiler its `return function(<formals>) %s end`, else the default `self`

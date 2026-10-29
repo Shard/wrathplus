@@ -2,8 +2,8 @@
 //! [`super::wrath_world_objects_capture`]) makes a movie pending (`[0xbd0800]`, its id
 //! `[0xbd0804]`) for the feed (`crate::ui_native::wrath_movie`); a session boundary forgets it.
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 /// The pending server movie.
 #[derive(Resource, Default)]

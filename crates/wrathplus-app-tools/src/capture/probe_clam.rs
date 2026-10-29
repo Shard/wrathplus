@@ -23,14 +23,14 @@ use bevy::prelude::*;
 use wrathplus_ui::script::UiScript;
 
 use super::probes::ProbeClock;
-use crate::items::Items;
-use crate::net::{ChatKind, ClientCommand, NetCommands, Objects};
+use crate::app_core::loot::LootState;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::pending_item_ops::PendingItemOps;
 use crate::app_core::state::LootConfig;
 use crate::app_core::state::LootLatch;
-use crate::app_core::loot::LootState;
+use crate::items::Items;
+use crate::net::{ChatKind, ClientCommand, NetCommands, Objects};
+use crate::pending_item_ops::PendingItemOps;
 
 /// The default template, Small Barnacled Clam (entry 7973); its `item_loot_template` row (a Zesty
 /// Clam Meat) is what the window must show.

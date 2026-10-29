@@ -1,9 +1,9 @@
 //! Transport-only ordered native instance-control packets. App owns any future reducer/UI feed.
 //! No inferred instance state, UI feed or timers.
 use super::NetHandlerApp;
-use wrathplus_protocol::{wrath_instance_control::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_instance_control::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub struct NativeInstanceControlPackets(pub VecDeque<Packet>);

@@ -12,11 +12,11 @@ use wrathplus_formats::SpellCatalog;
 use wrathplus_ui::script::{AuraState, UiScript, UnitGuids};
 
 use super::{aura_list, other_unit_inputs, record_inputs, AuraInput};
-use crate::app_core::session::ObjectStore;
-use crate::ui_party::{PARTY_TOKENS, RAID_PET_TOKENS, RAID_TOKENS};
-use crate::app_core::raid_rows::raid_row_guids;
 use crate::app_core::group::GroupState;
+use crate::app_core::raid_rows::raid_row_guids;
+use crate::app_core::session::ObjectStore;
 use crate::app_core::state::PARTY_PET_TOKENS;
+use crate::ui_party::{PARTY_TOKENS, RAID_PET_TOKENS, RAID_TOKENS};
 
 /// The tokens `UNIT_AURA` fires for besides `"player"`, in firing order: [`EVENT_UNITS`], then the
 /// group's, each resolved by [`event_guid`].
@@ -390,18 +390,18 @@ impl UnitAuras {
 
 #[cfg(test)]
 mod tests {
+    use bevy::prelude::*;
     use wrathplus_protocol::types::Field;
     use wrathplus_protocol::types::{
         member_status, GroupMemberEntry, ObjectFields, PartyMemberStatsInfo,
     };
     use wrathplus_ui::script::UiScript;
-    use bevy::prelude::*;
 
-    use crate::app_core::state::ClientState;
-    use crate::net::{Guid, GuidIndex, NetCommands, Reputations};
+    use crate::app_core::group::GroupState;
     use crate::app_core::session::ObjectStore;
     use crate::app_core::session::SelfPlayer;
-    use crate::app_core::group::GroupState;
+    use crate::app_core::state::ClientState;
+    use crate::net::{Guid, GuidIndex, NetCommands, Reputations};
 
     #[test]
     fn unchanged_native_snapshot_rebuilds_when_visibility_changes() {
@@ -1172,7 +1172,9 @@ mod tests {
             let index = &app.world().resource::<GuidIndex>().0;
             (index[&MOB], index[&ADD])
         };
-        let mut selection = app.world_mut().resource_mut::<crate::app_core::state::Selection>();
+        let mut selection = app
+            .world_mut()
+            .resource_mut::<crate::app_core::state::Selection>();
         (selection.target, selection.guid) = (Some(mob), Some(MOB));
         let mut hovered = app.world_mut().resource_mut::<crate::target::Hovered>();
         (hovered.target, hovered.guid) = (Some(add), Some(ADD));

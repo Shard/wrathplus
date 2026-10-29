@@ -482,5 +482,4 @@ mod tests {
         s.set_pet_stats(false, PetStats::default());
         s.run("assert(GetUnitHealthModifier('pet') == 0)").unwrap();
     }
-
 }

@@ -1,11 +1,11 @@
 //! Dressing a unit's model parts: the per-batch spawn shared by the first build and the in-place
 //! re-dress ([`super::redress`]), so both dress a part by one law.
 
-use wrathplus_formats::CharSkinSlot;
 use bevy::camera::primitives::Aabb;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::mesh::MeshTag;
 use bevy::prelude::*;
+use wrathplus_formats::CharSkinSlot;
 
 use wrathplus_assets::materials::WowModelMaterial;
 use wrathplus_world::billboard::BillboardCard;

@@ -4,8 +4,8 @@
 //! buys `m_stableSlots + 1` itself (`NPCHandler.cpp:704-729`), so a row id is a slot number.
 
 use anyhow::{Context, Result};
-use wrathplus_dbc::{FieldType, Schema, SchemaField};
 use std::collections::HashMap;
+use wrathplus_dbc::{FieldType, Schema, SchemaField};
 
 use crate::dbc::{parse, u32_at};
 use crate::Chain;

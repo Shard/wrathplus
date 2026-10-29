@@ -26,12 +26,12 @@
 
 use std::time::Duration;
 
+use bevy::prelude::*;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 use wrathplus_formats::{CinematicCatalog, CinematicPath};
 use wrathplus_ui::script::UiScript;
 use wrathplus_world::schedule::WorldStage;
 use wrathplus_world::view::WorldCamera;
-use bevy::prelude::*;
 
 use crate::app_core::state::ClientState;
 use crate::loading_screen::LoadingScreen;

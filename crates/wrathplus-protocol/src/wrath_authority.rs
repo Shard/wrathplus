@@ -76,7 +76,10 @@ impl From<GroundPose> for OnFootPose {
 impl OnFootPose {
     pub fn from_movement(movement: &MovementInfo) -> Result<Self, AuthorityCodecError> {
         if movement.flags2 != 0
-            || movement.transport.as_ref().is_some_and(|t| t.time2.is_some())
+            || movement
+                .transport
+                .as_ref()
+                .is_some_and(|t| t.time2.is_some())
             || movement.spline_elevation.is_some()
         {
             return Err(AuthorityCodecError::UnsupportedGroundState);
@@ -97,12 +100,15 @@ impl OnFootPose {
                 horizontal_speed: jump.horizontal_speed,
             }),
             pitch: movement.pitch,
-            transport: movement.transport.as_ref().map(|t| wrath_ground::TransportTail {
-                guid: t.guid,
-                position: [t.position.x, t.position.y, t.position.z],
-                orientation: t.position.orientation,
-                time: t.time,
-            }),
+            transport: movement
+                .transport
+                .as_ref()
+                .map(|t| wrath_ground::TransportTail {
+                    guid: t.guid,
+                    position: [t.position.x, t.position.y, t.position.z],
+                    orientation: t.position.orientation,
+                    time: t.time,
+                }),
         };
         pose.validate()?;
         Ok(pose)
@@ -185,8 +191,7 @@ fn encode_on_foot_ack(
         if rooted {
             // A rooted swimmer, flier or passenger keeps SWIMMING / FLYING / ON_TRANSPORT (and their
             // tails) and its granted modes; nothing else may ride with ROOT.
-            if pose.flags & !HALT_KEEPS != 0 || pose.fall.is_some()
-            {
+            if pose.flags & !HALT_KEEPS != 0 || pose.fall.is_some() {
                 return Err(AuthorityCodecError::UnsupportedGroundState);
             }
             let flags = MOVEMENT_FLAG_ROOT | pose.flags;
@@ -1325,14 +1330,16 @@ mod tests {
         assert_eq!(halted.flags, MOVE_CAN_FLY | MOVE_FLYING);
         assert_eq!(halted.pitch, Some(0.4));
         let ack = encode_force_root_on_foot_ack(0x0500_0001, 3, halted, 9, true).unwrap();
-        let info = OutboundMovement::from_bytes(&movement(&ack)).unwrap().movement;
+        let info = OutboundMovement::from_bytes(&movement(&ack))
+            .unwrap()
+            .movement;
         assert_eq!(info.flags, MOVEMENT_FLAG_ROOT | MOVE_CAN_FLY | MOVE_FLYING);
         assert_eq!(info.pitch, Some(0.4));
         assert!(encode_force_root_on_foot_ack(0x0500_0001, 3, flier, 9, true).is_err());
 
         // Revoking the grant lands first (`0x6ef860` event 0x30), on either path.
-        let revoke = encode_mode_ack(0x0500_0001, 4, flier, 9, ModeOrderKind::CanFly, false)
-            .unwrap();
+        let revoke =
+            encode_mode_ack(0x0500_0001, 4, flier, 9, ModeOrderKind::CanFly, false).unwrap();
         let info = OutboundMovement::from_bytes(&movement(&revoke[..revoke.len() - 4]))
             .unwrap()
             .movement;
@@ -1364,7 +1371,9 @@ mod tests {
             vertical_speed: -7.0,
         };
         let body = encode_knock_back_ack(0x0500_0001, 6, flier, 9, &knock).unwrap();
-        let info = OutboundMovement::from_bytes(&movement(&body)).unwrap().movement;
+        let info = OutboundMovement::from_bytes(&movement(&body))
+            .unwrap()
+            .movement;
         assert_eq!(
             info.flags,
             MOVE_CAN_FLY | MOVE_FORWARD | crate::wrath_ground::MOVE_FALLING

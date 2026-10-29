@@ -4,12 +4,12 @@
 //! Ordered decrypted packet replay through the real registered app handlers.
 //! Synthetic bodies are built independently of the protocol update-object encoder.
 
-use crate::net::GuidIndex;
 use crate::app_core::session::ObjectStore;
+use crate::net::GuidIndex;
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_events::{WrathDispatch, WrathEventAdapter, SMSG_UPDATE_OBJECT};
 use wrathplus_protocol::wrath_world::WrathServerPacket;
 use wrathplus_protocol::{ObjectFields, SessionEvent};
-use bevy::prelude::*;
 
 struct Replay {
     app: App,

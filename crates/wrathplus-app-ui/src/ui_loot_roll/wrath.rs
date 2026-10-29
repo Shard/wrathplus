@@ -1,13 +1,13 @@
 //! Lossless native roll inbox; presentation drains its updates separately.
+pub(super) mod feed;
 #[path = "wrath_lifecycle.rs"]
 mod lifecycle;
-pub(super) mod feed;
 mod outcomes;
 
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{wrath_roll::Roll, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use wrathplus_protocol::wrath_items::RollMetadata;
+use wrathplus_protocol::{wrath_roll::Roll, SessionEvent, SessionEventKind};
 
 /// Native query outcomes are cached across rolls, with ordered receipts for pending starts.
 /// A negative response is explicit: presentation drops the pending roll (`0x6fb1f0`).
@@ -16,7 +16,6 @@ pub(super) struct NativeRollTemplates {
     pub metadata: std::collections::HashMap<u32, Option<RollMetadata>>,
     pub receipts: std::collections::VecDeque<(u32, Option<RollMetadata>)>,
 }
-
 
 #[derive(Resource, Default)]
 pub(super) struct NativeRolls {
@@ -53,14 +52,22 @@ impl NativeRolls {
 }
 
 pub(super) fn register(app: &mut App) {
-    app.add_systems(Startup, feed::load_limits.after(wrathplus_assets::AssetSet::Open))
-        .init_resource::<feed::Presentation>()
-        .add_systems(Update, feed::feed.in_set(crate::app_core::schedule::UiFeed).run_if(crate::app_core::ui_state::ingame_ui_up))
-        .init_resource::<NativeRolls>()
-        .init_resource::<NativeRollTemplates>()
-        .net_handler(SessionEventKind::WrathItemRollMetadata, on_template)
-        .net_handler(SessionEventKind::WrathLootRoll, on_roll)
-        .net_handler(SessionEventKind::Disconnected, on_reset);
+    app.add_systems(
+        Startup,
+        feed::load_limits.after(wrathplus_assets::AssetSet::Open),
+    )
+    .init_resource::<feed::Presentation>()
+    .add_systems(
+        Update,
+        feed::feed
+            .in_set(crate::app_core::schedule::UiFeed)
+            .run_if(crate::app_core::ui_state::ingame_ui_up),
+    )
+    .init_resource::<NativeRolls>()
+    .init_resource::<NativeRollTemplates>()
+    .net_handler(SessionEventKind::WrathItemRollMetadata, on_template)
+    .net_handler(SessionEventKind::WrathLootRoll, on_roll)
+    .net_handler(SessionEventKind::Disconnected, on_reset);
 }
 fn on_roll(In(event): In<SessionEvent>, mut rolls: ResMut<NativeRolls>) {
     if let SessionEvent::WrathLootRoll(roll) = event {
@@ -97,21 +104,40 @@ mod tests {
             required_disenchant_skill: -1,
             item_limit_category: 123,
         };
-        crate::net::handlers::dispatch(app.world_mut(), vec![
-            SessionEvent::WrathItemRollMetadata { entry: 42, metadata: Some(metadata.clone()) },
-            SessionEvent::WrathItemRollMetadata { entry: 42, metadata: None },
-            SessionEvent::WrathItemRollMetadata { entry: 43, metadata: Some(metadata.clone()) },
-        ]);
+        crate::net::handlers::dispatch(
+            app.world_mut(),
+            vec![
+                SessionEvent::WrathItemRollMetadata {
+                    entry: 42,
+                    metadata: Some(metadata.clone()),
+                },
+                SessionEvent::WrathItemRollMetadata {
+                    entry: 42,
+                    metadata: None,
+                },
+                SessionEvent::WrathItemRollMetadata {
+                    entry: 43,
+                    metadata: Some(metadata.clone()),
+                },
+            ],
+        );
         let mut templates = app.world_mut().resource_mut::<NativeRollTemplates>();
         assert_eq!(templates.metadata.get(&42), Some(&None));
         assert_eq!(templates.metadata.get(&43), Some(&Some(metadata.clone())));
-        assert_eq!(templates.receipts.pop_front(), Some((42, Some(metadata.clone()))));
+        assert_eq!(
+            templates.receipts.pop_front(),
+            Some((42, Some(metadata.clone())))
+        );
         assert_eq!(templates.receipts.pop_front(), Some((42, None)));
         assert_eq!(templates.receipts.pop_front(), Some((43, Some(metadata))));
         assert!(templates.receipts.is_empty());
-        crate::net::handlers::dispatch(app.world_mut(), vec![SessionEvent::Disconnected {
-            reason: "test".into(), end: wrathplus_protocol::SessionEnd::Lost,
-        }]);
+        crate::net::handlers::dispatch(
+            app.world_mut(),
+            vec![SessionEvent::Disconnected {
+                reason: "test".into(),
+                end: wrathplus_protocol::SessionEnd::Lost,
+            }],
+        );
         let templates = app.world().resource::<NativeRollTemplates>();
         assert!(templates.metadata.is_empty());
         assert!(templates.receipts.is_empty());

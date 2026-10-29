@@ -6,6 +6,8 @@ use avian3d::character_controller::move_and_slide::MoveHitData;
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
+mod surface_guard;
+
 use super::{
     move_trace, Player, CAPSULE_HEIGHT, FEATHER_TERMINAL_VELOCITY, FOOT_CONE_HEIGHT, GRAVITY,
     GROUND_COS, GROUND_PROBE, HOVER_CLIMB_RATE, HOVER_HEIGHT, JUMP_SPEED, LAND_PROBE, SKIN_WIDTH,
@@ -248,8 +250,19 @@ pub(super) fn step(
         player.arc_dirs_set = true;
     }
 
+    // A current walkable capsule contact may tolerate feet just below its authored face.
+    // Reconcile only that skin-sized discrepancy before a missed snap can spend a drop.
+    if !held && !anchored && on_walkable && !jumped && player.vel_y <= 0.0 {
+        if let Some(support) = surface_guard::support(world, center - half_h)
+            .filter(|s| Some(s.entity) == ground_entity)
+        {
+            center = support.feet + half_h;
+            ground_entity = Some(support.entity);
+        }
+    }
     let pre_move = center;
     let (mut climb, mut snap_probe) = (None, None);
+    let mut recovery = None;
     if !held && !anchored && grounded && !jumped {
         let g = grounded_step(
             world,
@@ -267,7 +280,23 @@ pub(super) fn step(
         // Only this mover has a fall to elect, so it spends the no-floor drop (`pos.z -= achieved`
         // at `0x636e52`) and a ledge's first fall frame starts lower. A walk frame that went
         // nowhere writes the `stup` report ([`super::step_probe`]).
-        let resolved = g.center - Vec3::Y * g.unsupported.unwrap_or(0.0);
+        // Deviation: sweep the reference's no-floor subtraction too; an overlapping capsule's
+        // missed down-probe is not permission to lower through a solid surface.
+        let mut resolved = if let Some(drop) = g.unsupported.filter(|_| dt > 0.0) {
+            airborne_step(
+                world,
+                capsule,
+                g.center,
+                Vec3::NEG_Y * (drop / dt),
+                time.delta(),
+            )
+        } else {
+            g.center
+        };
+        recovery = surface_guard::crossing(world, g.center - half_h, resolved - half_h);
+        if let Some(r) = recovery {
+            resolved = r.feet + half_h;
+        }
         super::step_probe::watch(
             world,
             capsule,
@@ -291,6 +320,17 @@ pub(super) fn step(
             player.horiz_vel + Vec3::Y * fall_mean_vy
         };
         center = airborne_step(world, capsule, center, velocity, time.delta());
+        if !held && !anchored {
+            recovery = surface_guard::crossing(world, pre_move - half_h, center - half_h);
+        }
+        player.steep_support = false;
+    }
+    if let Some(recovery) = recovery {
+        center = recovery.feet + half_h;
+        ground_entity = Some(recovery.entity);
+        player.vel_y = 0.0;
+        player.horiz_vel = Vec3::ZERO;
+        player.wedged = false;
         player.steep_support = false;
     }
     // The wedge rest: falling, yet achieving under [`WEDGE_STALL_RATIO`] of gravity's intent for
@@ -299,6 +339,7 @@ pub(super) fn step(
     if !held
         && !anchored
         && !grounded
+        && recovery.is_none()
         && !jumped
         && player.vel_y < -WEDGE_MIN_FALL
         && (pre_move.y - center.y) < -player.vel_y * dt * WEDGE_STALL_RATIO
@@ -321,7 +362,7 @@ pub(super) fn step(
         player.wedge_still = 0;
     }
     // The detecting frame is grounded, so the landing (`MSG_MOVE_FALL_LAND`) goes out this frame.
-    let mut grounded = grounded || player.wedged;
+    let mut grounded = grounded || player.wedged || recovery.is_some();
 
     // The water floor, after the slide: a body landing on water crosses more than [`LAND_PROBE`]
     // in a frame. Down is the reference's snap with its hover arm, `z − max(L − 1, 0)`
@@ -555,6 +596,11 @@ pub(crate) fn grounded_step(
         },
     );
     let mut slid = out.position;
+    let half_h = Vec3::Y * (CAPSULE_HEIGHT * 0.5);
+    let slide_recovery = surface_guard::crossing(world, start - half_h, slid - half_h);
+    if let Some(recovery) = slide_recovery {
+        slid = recovery.feet + half_h;
+    }
     // The step-down snap, the reference's step-vs-fall election (`0x6367b0`): it reaches
     // `travel · slope + slack` below, plus `H` on a steep support (`0x636dfc`) or a pop, plus the
     // hover offset (`0x633e35`), and settles only onto a walkable floor. A deeper drop is a fall,
@@ -582,9 +628,10 @@ pub(crate) fn grounded_step(
         (None, None) => None,
     };
     let snap = Some((reach, floor.map(|(d, n, _)| (d, n))));
-    let mut ground = None;
+    let mut ground = slide_recovery.map(|r| r.entity);
     let mut steep_support = false;
     let mut unsupported = None;
+    let before_snap = slid;
     // A ride's height is earned. The reference's cone rests on the edge it climbs, but our capsule
     // hangs clear of a vertical riser and the snap would find the floor it is leaving, so mid-ride
     // only a floor above the ride's start may end it.
@@ -618,6 +665,13 @@ pub(crate) fn grounded_step(
         // Measured here under the same cap, and spent only by a caller with a fall to elect; a
         // ride is exempt, since mid-ride the body hangs clear by design.
         unsupported = Some((reach - surface_offset).max(0.0).min(cone_reach));
+    }
+    // Check the actual vertical snap, not the walk's diagonal chord: a legal stair descent
+    // travels over the tread before lowering, while that chord could cut through the old tread.
+    if let Some(recovery) = surface_guard::crossing(world, before_snap - half_h, slid - half_h) {
+        slid = recovery.feet + half_h;
+        ground = Some(recovery.entity);
+        steep_support = false;
     }
     GroundedStep {
         center: slid,
@@ -894,7 +948,7 @@ mod tests {
 
     /// A headless world from a `(x, y)` polyline extruded across `z`, wound so every face's
     /// authored normal points up and back at the approaching body: faces are one-sided.
-    fn world_from_profile(profile: &[(f32, f32)]) -> App {
+    pub(super) fn world_from_profile(profile: &[(f32, f32)]) -> App {
         const W: f32 = 3.0;
         let mut app = App::new();
         // `WorldCollision` needs the mover's trace exclusions, which the world plugins insert.
@@ -908,6 +962,9 @@ mod tests {
             PhysicsPlugins::new(bevy::app::PostUpdate),
         ));
         app.init_asset::<Mesh>();
+        // Avian installs diagnostics in plugin finish, before physics can advance.
+        app.finish();
+        app.cleanup();
         let (mut verts, mut tris) = (Vec::new(), Vec::new());
         for w in profile.windows(2) {
             let (&(x0, y0), &(x1, y1)) = (&w[0], &w[1]);
@@ -931,7 +988,7 @@ mod tests {
         app
     }
 
-    fn player_capsule() -> Collider {
+    pub(super) fn player_capsule() -> Collider {
         Collider::capsule(CAPSULE_RADIUS, CAPSULE_HEIGHT - 2.0 * CAPSULE_RADIUS)
     }
 
@@ -1261,24 +1318,63 @@ mod tests {
             .run_system_once(move |world: wrathplus_world::collision::WorldCollision| {
                 let capsule = player_capsule();
                 let dt = std::time::Duration::from_secs_f32(TRAVEL_60FPS / 7.0);
-                let center = Vec3::new(0.0, CAPSULE_HEIGHT * 0.5 + 1.6, 0.0);
-                let g = grounded_step(
+                let mut player = Player {
+                    pos: Vec3::Y * 1.6,
+                    wedged: true,
+                    steep_support: true,
+                    ..Default::default()
+                };
+                let before = player.pos;
+                let mut time = Time::default();
+                time.advance_by(dt);
+                let out = step(
+                    &mut player,
+                    &time,
                     &world,
                     &capsule,
-                    center,
-                    Vec3::X * 7.0,
-                    dt,
-                    Support {
-                        steep: true,
-                        ..Support::default()
-                    },
+                    true,
+                    Vec3::X,
+                    7.0,
+                    false,
+                    false,
+                    None,
+                    None,
+                    2.5,
                 );
-                g.center.y - center.y
+                assert!(
+                    !player.wedged,
+                    "missing wedge retention must release the rest"
+                );
+                assert!(!player.steep_support);
+                assert!(
+                    out.ground.is_none(),
+                    "no collider may become a transport support"
+                );
+                let dy = player.pos.y - before.y;
+                let unsupported = player.pos;
+                time.advance_by(dt);
+                let out = step(
+                    &mut player,
+                    &time,
+                    &world,
+                    &capsule,
+                    true,
+                    Vec3::X,
+                    7.0,
+                    false,
+                    false,
+                    None,
+                    None,
+                    2.5,
+                );
+                assert!(!out.grounded && out.ground.is_none());
+                assert!(player.vel_y < 0.0 && player.pos.y < unsupported.y);
+                dy
             })
             .unwrap();
         let cone = TRAVEL_60FPS * STEP_SLOPE_RATIO + STEP_SNAP_SLACK;
         assert!(
-            -dy <= cone + 1.0e-3,
+            (-dy - cone).abs() < 1.0e-3,
             "a frame that found nothing may still spend only a cone's worth ({cone:.3}); it spent \
              {:.3}",
             -dy
@@ -1910,70 +2006,8 @@ mod tests {
 
     /// One step of `dt` and `n` steps of `dt/n` land on the same height, as the reference's closed
     /// form does.
-    #[test]
-    fn the_fall_step_is_frame_rate_independent() {
-        let total = 0.5_f32;
-        let drop = |steps: u32| {
-            let dt = total / steps as f32;
-            let (mut v, mut y) = (JUMP_SPEED, 0.0_f32);
-            for _ in 0..steps {
-                let (end, mean) = fall_step(v, dt, TERMINAL_VELOCITY);
-                y += mean * dt;
-                v = end;
-            }
-            y
-        };
-        let analytic = JUMP_SPEED * total - 0.5 * GRAVITY * total * total;
-        for steps in [1_u32, 2, 8, 30, 120] {
-            let got = drop(steps);
-            assert!(
-                (got - analytic).abs() < 1.0e-4,
-                "{steps} steps must reproduce the closed form {analytic}, got {got}"
-            );
-        }
-    }
-
-    /// The jump apex is `v₀²/2g` = 1.640 yd at any frame rate.
-    #[test]
-    fn the_jump_apex_is_the_analytic_one_at_any_frame_rate() {
-        let apex = JUMP_SPEED * JUMP_SPEED / (2.0 * GRAVITY);
-        for fps in [30.0_f32, 60.0, 144.0] {
-            let dt = 1.0 / fps;
-            let (mut v, mut y, mut high) = (JUMP_SPEED, 0.0_f32, 0.0_f32);
-            while v > -1.0 {
-                let (end, mean) = fall_step(v, dt, TERMINAL_VELOCITY);
-                y += mean * dt;
-                high = high.max(y);
-                v = end;
-            }
-            // The apex falls between frames: a step's worth of sampling, not drift.
-            assert!(
-                (high - apex).abs() < 0.5 * GRAVITY * dt * dt + 1.0e-4,
-                "at {fps} fps the apex should be ~{apex}, got {high}"
-            );
-        }
-    }
-
-    /// A step reaching terminal partway is two regimes; below terminal the clamp changes nothing.
-    #[test]
-    fn the_terminal_clamp_is_exact_on_the_step_that_reaches_it() {
-        let dt = 1.0 / 60.0;
-        let (end, mean) = fall_step(0.0, dt, TERMINAL_VELOCITY);
-        assert!((end - -GRAVITY * dt).abs() < 1.0e-6);
-        assert!((mean - -0.5 * GRAVITY * dt).abs() < 1.0e-6);
-        // Straddling terminal: reach it at `t_c`, coast the rest.
-        let v0 = -TERMINAL_VELOCITY + 0.5 * GRAVITY * dt;
-        let (end, mean) = fall_step(v0, dt, TERMINAL_VELOCITY);
-        assert_eq!(end, -TERMINAL_VELOCITY, "the step ends at terminal");
-        let t_c = (v0 + TERMINAL_VELOCITY) / GRAVITY;
-        let want = (0.5 * (v0 - TERMINAL_VELOCITY) * t_c - TERMINAL_VELOCITY * (dt - t_c)) / dt;
-        assert!(
-            (mean - want).abs() < 1.0e-6,
-            "piecewise, not a clamped mean"
-        );
-        let (end, mean) = fall_step(-TERMINAL_VELOCITY, dt, TERMINAL_VELOCITY);
-        assert_eq!((end, mean), (-TERMINAL_VELOCITY, -TERMINAL_VELOCITY));
-    }
+    #[path = "fall_math.rs"]
+    mod fall_math;
 
     /// Every knockback apply plants FORWARD (`0x6179c0`, at `0x617a18`) whatever its speed, and air
     /// control opens only while the nibble is clear (`0x7c6afc`), so a vertical toss never steers.
@@ -2355,121 +2389,6 @@ mod tests {
         );
     }
 
-    /// An Elwynn hillside out of flat ground, a 55° face (`ny = +0.574`, read at WoW
-    /// `(-9236.8, -341.9, 101.6)`), too steep to stand on anywhere.
-    fn world_with_steep_hillside() -> App {
-        const P: [(f32, f32); 3] = [(-3.0, 0.0), (0.0, 0.0), (2.5, 3.570)];
-        world_from_profile(&P)
-    }
-
-    /// One airborne frame's readings: `(feet height, vertical velocity, fraction of the descent
-    /// gravity intended that the frame actually achieved)`.
-    type AirRow = (f32, f32, f32);
-
-    /// Jump from `start_feet`, flying the bare arc through [`airborne_step`] at a run along `dir`.
-    fn jump_into(mut world: App, start_feet: Vec3, dir: Vec3, frames: usize) -> Vec<AirRow> {
-        world
-            .world_mut()
-            .run_system_once(move |world: wrathplus_world::collision::WorldCollision| {
-                let capsule = player_capsule();
-                let dt = std::time::Duration::from_secs_f32(TRAVEL_60FPS / 7.0);
-                let secs = dt.as_secs_f32();
-                let mut center = start_feet + Vec3::Y * (CAPSULE_HEIGHT * 0.5);
-                let mut vel_y = JUMP_SPEED;
-                (0..frames)
-                    .map(|_| {
-                        vel_y = (vel_y - GRAVITY * secs).max(-TERMINAL_VELOCITY);
-                        let before = center.y;
-                        center = airborne_step(
-                            &world,
-                            &capsule,
-                            center,
-                            dir * 7.0 + Vec3::Y * vel_y,
-                            dt,
-                        );
-                        let intent = vel_y * secs;
-                        let achieved = center.y - before;
-                        // Only a descent has a stall to measure; a rise reports 1.0.
-                        let frac = if intent < 0.0 { achieved / intent } else { 1.0 };
-                        (center.y - CAPSULE_HEIGHT * 0.5, vel_y, frac)
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap()
-    }
-
-    #[test]
-    fn a_jump_into_a_steep_hillside_banks_no_height() {
-        let arc = jump_into(
-            world_with_steep_hillside(),
-            Vec3::new(-0.6, 0.0, 0.0),
-            Vec3::X,
-            150,
-        );
-        let peak = arc.iter().map(|r| r.0).fold(f32::MIN, f32::max);
-        let end = arc.last().unwrap().0;
-        assert!(
-            peak > 1.0,
-            "the jump must actually leave the ground: {peak:.3}"
-        );
-        assert!(
-            end < 0.05,
-            "the arc must end back at the foot of the slope, not banked part-way up it: \
-             ended at {end:.3} (peak {peak:.3})"
-        );
-        // Nor may the descent stall into a wedge rest, which would stand the body up part-way.
-        let (mut run, mut worst_run) = (0u8, 0u8);
-        for r in arc.iter().filter(|r| r.0 > 0.2) {
-            run = if r.1 < -WEDGE_MIN_FALL && r.2 < WEDGE_STALL_RATIO {
-                run + 1
-            } else {
-                0
-            };
-            worst_run = worst_run.max(run);
-        }
-        assert!(
-            worst_run < WEDGE_STILL_FRAMES,
-            "the descent must never stall long enough to read as a wedge rest: \
-             {worst_run} consecutive stalled frames"
-        );
-    }
-
-    #[test]
-    fn a_steep_face_never_cancels_a_fall() {
-        // A plane clip turns a run into the hill into lift (`v'.y - v.y = -(v·n)·n.y`), which all
-        // but cancels a fall against a 55° face.
-        let arc = jump_into(
-            world_with_steep_hillside(),
-            Vec3::new(-0.6, 0.0, 0.0),
-            Vec3::X,
-            150,
-        );
-        // Only frames clear of the flat ground, which the bare arc has no ground probe to stand on.
-        let worst = arc
-            .iter()
-            .filter(|r| r.1 < -WEDGE_MIN_FALL && r.0 > 0.2)
-            .map(|r| r.2)
-            .fold(f32::MAX, f32::min);
-        assert!(
-            worst > 0.98,
-            "a falling frame against the face keeps ALL of its descent — the reference's response \
-             is horizontal only: worst was {worst:.2} of intent"
-        );
-    }
-
-    #[test]
-    fn walkable_and_overhanging_faces_are_untouched() {
-        let push = Vec3::new(7.0, 0.0, 0.0);
-        assert!(steep_contact_shear(face(40.0), push).is_none());
-        // An overhang keeps the plain ceiling clip.
-        assert!(steep_contact_shear(Vec3::new(-0.5, -0.7, 0.0).normalize(), push).is_none());
-        assert!(steep_contact_shear(face(60.0), -push).is_none());
-    }
-
-    #[test]
-    fn a_vertical_wall_takes_the_whole_push_and_no_more() {
-        let v = Vec3::new(7.0, -4.0, 0.0);
-        let out = steep_contact_shear(face(90.0), v).expect("must strip");
-        assert!(out.x.abs() < 1e-6 && (out.y - v.y).abs() < 1e-6);
-    }
+    #[path = "airborne.rs"]
+    mod airborne;
 }

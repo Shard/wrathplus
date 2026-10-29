@@ -6,10 +6,10 @@
 //! the selection ring, because an effect meant for ground level should sit on it.
 
 use avian3d::prelude::Collider;
-use wrathplus_assets::coords::wow_to_bevy;
-use wrathplus_formats::GroundQuad;
 use bevy::math::Affine3A;
 use bevy::prelude::*;
+use wrathplus_assets::coords::wow_to_bevy;
+use wrathplus_formats::GroundQuad;
 
 use crate::collision::GroundDecalSurface;
 use crate::decal::{project_decal, DecalFrame};

@@ -13,12 +13,14 @@
 use std::collections::HashMap;
 
 use avian3d::prelude::*;
-use wrathplus_assets::coords::{placement_rotation, wmo_doodad_local, wow_to_bevy};
-use wrathplus_formats::{CollisionMesh, DataProfile};
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
+use wrathplus_assets::coords::{placement_rotation, wmo_doodad_local, wow_to_bevy};
+use wrathplus_formats::{CollisionMesh, DataProfile};
 
 use super::{mover, Player, AIR_NUDGE_SPEED, CAPSULE_HEIGHT, CAPSULE_RADIUS};
+
+mod terrain_fall;
 
 /// A run, yards per second.
 const RUN: f32 = 7.0;
@@ -61,6 +63,9 @@ fn scene(map: &str, points: &[[f32; 3]]) -> Option<App> {
         PhysicsPlugins::new(bevy::app::PostUpdate),
     ));
     app.init_asset::<Mesh>();
+    // Finish Avian's diagnostics setup before advancing the headless physics schedule.
+    app.finish();
+    app.cleanup();
 
     let mut hulls: HashMap<String, Option<CollisionMesh>> = HashMap::new();
     let mut hull = |chain: &mut wrathplus_formats::Chain, path: &str| {
@@ -175,7 +180,9 @@ fn scene(map: &str, points: &[[f32; 3]]) -> Option<App> {
             Transform::default(),
         ));
     }
-    app.update(); // one frame builds Position/Rotation and the spatial-query trees
+    // The first update seats transforms; physics first steps on the second update.
+    app.update();
+    app.update();
     Some(app)
 }
 
@@ -469,3 +476,5 @@ fn probe_hits() {
         )
         .unwrap();
 }
+
+mod terrain_support;

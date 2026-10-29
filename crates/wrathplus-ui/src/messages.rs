@@ -84,10 +84,17 @@ mod tests {
         // An arena team event is a chat line; the bracket refusal is the red one.
         assert_eq!(kind_of("ERR_ARENA_TEAM_JOIN_SS"), MsgKind::Chat);
         assert_eq!(kind_of("ERR_ARENA_NO_TEAM_II"), MsgKind::Error);
-        assert_eq!(by_key("ERR_ARENA_TEAM_CREATE_S").unwrap().sound, Some("LEVELUP"));
+        assert_eq!(
+            by_key("ERR_ARENA_TEAM_CREATE_S").unwrap().sound,
+            Some("LEVELUP")
+        );
         assert_eq!(by_key("ERR_INVITED_TO_GROUP_SS").unwrap().id, 0x41);
         assert_eq!(by_key("ERR_NAME_NO_NAME").unwrap().id, 0x257);
-        for gone in ["ERR_INVALID_PETNAME", "ERR_INVITED_TO_GUILD_SS", "ERR_GUILD_ENTER_NAME"] {
+        for gone in [
+            "ERR_INVALID_PETNAME",
+            "ERR_INVITED_TO_GUILD_SS",
+            "ERR_GUILD_ENTER_NAME",
+        ] {
             assert!(by_key(gone).is_none(), "{gone} is a 1.12 row");
         }
     }

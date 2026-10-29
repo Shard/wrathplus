@@ -1,9 +1,9 @@
 //! Installed effective Wrath archive metadata; no player completion state required.
+use std::path::Path;
 use wrathplus_formats::{
     achievements::{load_achievement_categories, load_achievement_criteria, load_achievements},
     Chain,
 };
-use std::path::Path;
 
 #[test]
 fn installed_wrath_achievement_metadata() {

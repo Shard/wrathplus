@@ -17,14 +17,14 @@
 //! nothing, so no stale or zero guid reaches the server. The reference never clears the guid or
 //! zone, only the deadline (`0x49014a`), so its `ConfirmSummon()` sends whatever is left.
 
-use wrathplus_ui::script::{SummonConfirmUiState, UiScript};
 use bevy::prelude::*;
+use wrathplus_ui::script::{SummonConfirmUiState, UiScript};
 
+use crate::app_core::schedule::UiFeed;
+use crate::app_core::schedule::UiInput;
 use crate::area::AreaTableRes;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, NetCommands};
-use crate::app_core::schedule::UiFeed;
-use crate::app_core::schedule::UiInput;
 
 /// The latched question, the reference's four globals: written by [`net::request`], read by
 /// [`feed_summon`] and [`drain_summon`].
@@ -180,10 +180,10 @@ pub(crate) mod net {
     use super::SummonState;
     use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
-    use crate::net::NetHandlerApp;
-    use crate::net::GuidIndex;
     use crate::app_core::session::ObjectStore;
     use crate::app_core::session::SelfGuid;
+    use crate::net::GuidIndex;
+    use crate::net::NetHandlerApp;
 
     pub(super) fn register(app: &mut App) {
         app.net_handler(SessionEventKind::SummonRequest, on_request);

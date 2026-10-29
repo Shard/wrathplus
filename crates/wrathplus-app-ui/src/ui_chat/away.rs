@@ -143,7 +143,10 @@ pub(crate) struct AfkMirrorMemo(Option<u32>);
 /// moved (`0x5ee9ba test al,0xe`); writing on any delta would let an unrelated bit, such as
 /// resting, clear an optimistic AFK a round trip early.
 pub(crate) fn reconcile_afk_mirror(
-    self_q: Query<&crate::app_core::session::ObjectStore, With<crate::app_core::session::SelfPlayer>>,
+    self_q: Query<
+        &crate::app_core::session::ObjectStore,
+        With<crate::app_core::session::SelfPlayer>,
+    >,
     mut mirror: ResMut<AfkMirror>,
     mut memo: ResMut<AfkMirrorMemo>,
 ) {

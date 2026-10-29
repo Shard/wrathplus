@@ -4,8 +4,8 @@
 //! split (`docs/APP-CRATE-SPLIT-PLAN.md`, step 0 residue); `crate::net` re-exports each from its
 //! old path and keeps the systems that write them.
 
-use wrathplus_protocol::ObjectFields;
 use bevy::prelude::*;
+use wrathplus_protocol::ObjectFields;
 
 /// This process has no IO thread (`net::NetPlugin::connect` false); `crate::preflight` announces
 /// it.

@@ -11,8 +11,21 @@ fn built_client_has_one_capture_owner_and_connected_reset() {
         .resource::<crate::net::handlers::NetHandlers>()
         .census();
     let owners = &census[&SessionEventKind::WrathMailMutation];
-    assert_eq!(owners.len(), 1, "{owners:?}");
-    assert!(owners[0].contains("wrath_mail_capture::receive"));
+    assert_eq!(owners.len(), 2, "{owners:?}");
+    assert_eq!(
+        owners
+            .iter()
+            .filter(|name| name.contains("wrath_mail_capture::receive"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        owners
+            .iter()
+            .filter(|name| name.contains("ui_mail::net::on_show_mailbox"))
+            .count(),
+        1
+    );
     assert!(census[&SessionEventKind::Connected]
         .iter()
         .any(|name| name.contains("wrath_mail_capture::clear")));

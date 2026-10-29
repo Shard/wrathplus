@@ -26,10 +26,10 @@ use wrathplus_protocol::EntityKind;
 use wrathplus_ui::script::{UiScript, LIST, OWNER};
 
 use super::probes::ProbeClock;
-use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
+use crate::app_core::player::Player;
 use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
-use crate::app_core::player::Player;
+use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity};
 use crate::ui_auction::AuctionOpen;
 
 /// Auctioneer Fitch's spawn (AzerothCore `creature` guid 79705, map 0), the `.go xyz` target; the

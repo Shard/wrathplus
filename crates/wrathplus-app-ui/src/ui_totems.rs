@@ -12,9 +12,9 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{TotemState, TotemView, UiScript};
 
-use crate::net::{GuidIndex, NetHandlerApp};
 use crate::app_core::state::PlayerActions;
 use crate::app_core::state::Spells;
+use crate::net::{GuidIndex, NetHandlerApp};
 use crate::ui_companions::SummonSlots;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
 

@@ -2,8 +2,8 @@
 //! reference values behind each. A booth draws with the world's own materials, cloned with only
 //! the light storage swapped ([`material_variant`]), so it never inherits the time of day.
 
-use wrathplus_world::lighting::LightBlob;
 use std::collections::HashMap;
+use wrathplus_world::lighting::LightBlob;
 
 use bevy::prelude::*;
 

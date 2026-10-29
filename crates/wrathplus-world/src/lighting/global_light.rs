@@ -4,12 +4,12 @@
 //! packs the resolved light each frame and [`upload_light`] writes it in place. Material assets
 //! are never mutated after creation, since Bevy rebuilds the bind group of a mutated material.
 
-use wrathplus_formats::LiquidKind;
 use bevy::prelude::*;
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::render::render_resource::{Buffer, BufferDescriptor, BufferUsages};
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::{Render, RenderApp, RenderSystems};
+use wrathplus_formats::LiquidKind;
 
 use super::prop_probes::MAX_PROP_PROBES;
 use super::{sh, WowLighting};

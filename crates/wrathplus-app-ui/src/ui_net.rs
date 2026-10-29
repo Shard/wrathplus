@@ -10,8 +10,8 @@ use wrathplus_ui::script::UiScript;
 
 use wrathplus_assets::LockRecover;
 
-use crate::net::PingShared;
 use crate::app_core::schedule::UiFeed;
+use crate::net::PingShared;
 
 pub struct UiNetPlugin;
 

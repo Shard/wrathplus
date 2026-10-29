@@ -15,14 +15,14 @@
 //! (`SkillHandler.cpp:52`), which the 1.12 client takes as its Accept and answers, looping; this
 //! drops a zero-guid question, because it means there is nothing to ask.
 
-use wrathplus_ui::script::{ScriptValue, UiScript};
 use bevy::prelude::*;
+use wrathplus_ui::script::{ScriptValue, UiScript};
 
-use crate::net::{ClientCommand, NetCommands};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfPlayer;
 use crate::app_core::schedule::UiFeed;
 use crate::app_core::schedule::UiInput;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfPlayer;
+use crate::net::{ClientCommand, NetCommands};
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
 /// The pending respec question; everything the dialog reads rides the event's argument.
@@ -154,8 +154,8 @@ fn drain_talent_wipe(
 
 /// The talent-wipe question's packet handler.
 mod net {
-    use wrathplus_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
+    use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
     use super::TalentWipeState;
     use crate::net::NetHandlerApp;

@@ -449,8 +449,8 @@ fn resolves_creature_models_from_dbcs() {
     let data = wrathplus_formats::wow_data_or_skip!();
 
     let mut chain = open_chain(&data).expect("open vanilla patch chain");
-    let catalog =
-        wrathplus_formats::load_creature_catalog(&mut chain).expect("load creature display catalog");
+    let catalog = wrathplus_formats::load_creature_catalog(&mut chain)
+        .expect("load creature display catalog");
     assert!(
         catalog.len() > 1000,
         "vanilla has thousands of creature displays, got {}",

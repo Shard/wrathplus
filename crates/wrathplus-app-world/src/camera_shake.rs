@@ -28,13 +28,15 @@ use bevy::prelude::*;
 
 use wrathplus_formats::{CameraShake, CameraShakeCatalog, SpellShakeGroup};
 
-use crate::creature_anim::{footfall_culls, footfall_side, AnimSoundEvent, MovementState, SpellKitShake};
 use crate::app_core::movement::move_flags;
+use crate::app_core::session::Embodied;
+use crate::app_core::session::ObjectStore;
+use crate::creature_anim::{
+    footfall_culls, footfall_side, AnimSoundEvent, MovementState, SpellKitShake,
+};
 use crate::entities::Creatures;
 use crate::motion::Spline;
 use crate::net::NetEntity;
-use crate::app_core::session::Embodied;
-use crate::app_core::session::ObjectStore;
 use crate::player::ViewSubject;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 use wrathplus_protocol::EntityKind;

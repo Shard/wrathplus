@@ -88,11 +88,7 @@ pub enum Reply {
     /// `SMSG_SET_PLAYER_DECLINED_NAMES_RESULT`: 0 success.
     DeclinedNames { result: u32, guid: u64 },
     /// `SMSG_REALM_SPLIT`: the echoed word, the split state, the split date.
-    RealmSplit {
-        raw: u32,
-        state: u32,
-        date: String,
-    },
+    RealmSplit { raw: u32, state: u32, date: String },
 }
 
 impl Reply {
@@ -116,7 +112,14 @@ fn cstring(text: &str, body: &mut Vec<u8>) {
 pub fn encode(command: &Command) -> (u32, Vec<u8>, u16) {
     let mut b = Vec::new();
     let appearance = |a: &Appearance, b: &mut Vec<u8>| {
-        b.extend([a.gender, a.skin, a.hair_color, a.hair_style, a.facial_hair, a.face]);
+        b.extend([
+            a.gender,
+            a.skin,
+            a.hair_color,
+            a.hair_style,
+            a.facial_hair,
+            a.face,
+        ]);
     };
     match command {
         Command::Rename { guid, name } => {

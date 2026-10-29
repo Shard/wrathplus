@@ -21,9 +21,9 @@ use bevy::prelude::*;
 
 use wrathplus_formats::{impact_slot, WeaponImpactCatalog};
 
+use crate::app_core::session::Embodied;
 use crate::creature_anim::{AnimSoundEvent, SwingImpact, SwingMessage, Wielded};
 use crate::net::NetEntity;
-use crate::app_core::session::Embodied;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
 use wrathplus_protocol::EntityKind;
 use wrathplus_world::schedule::WorldStage;
@@ -727,8 +727,8 @@ mod tests {
         };
         let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
         let subs = wrathplus_formats::load_item_sub_classes(&mut chain).expect("ItemSubClass.dbc");
-        let swings =
-            wrathplus_formats::load_weapon_swing_catalog(&mut chain).expect("WeaponSwingSounds2.dbc");
+        let swings = wrathplus_formats::load_weapon_swing_catalog(&mut chain)
+            .expect("WeaponSwingSounds2.dbc");
 
         let kit = |item: Option<(u8, u8)>, crit: bool| {
             let w = swing_weight(

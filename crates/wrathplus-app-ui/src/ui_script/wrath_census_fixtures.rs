@@ -17,7 +17,9 @@ fn slot(item_id: u32, name: &str) -> ContainerSlot {
         count: 1,
         quality: Some(2),
         item_id,
-        link: Some(format!("|cff1eff00|Hitem:{item_id}:0:0:0:0:0:0:0:80|h[{name}]|h|r")),
+        link: Some(format!(
+            "|cff1eff00|Hitem:{item_id}:0:0:0:0:0:0:0:80|h[{name}]|h|r"
+        )),
         durability: Some((40, 50)),
         ..Default::default()
     }
@@ -77,22 +79,22 @@ pub(super) fn seed(s: &mut UiScript) {
 
     // Mail: build 12340's inbox, a letter with one attachment.
     let header = MailInboxRow {
-            package_icon: Some(r"Interface\Icons\INV_Letter_15".into()),
-            sender: Some("Benchtwo".into()),
-            subject: "Hello".into(),
-            money: 100,
-            days_left: 29.5,
-            item_count: 1,
-            can_reply: true,
-            body: Some("Body".into()),
-            has_body: true,
-            text_created: true,
-            item_id: 6948,
-            item_name: Some("Hearthstone".into()),
-            item_texture: Some(r"Interface\Icons\INV_Misc_Rune_01".into()),
-            item_quality: Some(1),
-            can_delete: true,
-            ..Default::default()
+        package_icon: Some(r"Interface\Icons\INV_Letter_15".into()),
+        sender: Some("Benchtwo".into()),
+        subject: "Hello".into(),
+        money: 100,
+        days_left: 29.5,
+        item_count: 1,
+        can_reply: true,
+        body: Some("Body".into()),
+        has_body: true,
+        text_created: true,
+        item_id: 6948,
+        item_name: Some("Hearthstone".into()),
+        item_texture: Some(r"Interface\Icons\INV_Misc_Rune_01".into()),
+        item_quality: Some(1),
+        can_delete: true,
+        ..Default::default()
     };
     s.set_wrath_mail(Some(WrathMailInbox {
         total_count: 1,
@@ -437,13 +439,20 @@ pub(super) fn seed(s: &mut UiScript) {
     );
     s.set_wrath_lfg_lock_snapshot(std::sync::Arc::new(WrathLfgLockSnapshot {
         player: Some(WrathLfgPlayerLocks {
-            locks: vec![WrathLfgLock { entry: 0x0100_0001, reason: 2 }],
+            locks: vec![WrathLfgLock {
+                entry: 0x0100_0001,
+                reason: 2,
+            }],
             // The reward preview sits on the random row, the rows `GetLFGDungeonRewardInfo` reads.
             previews: vec![WrathLfgPreview {
                 entry: 0x0600_0002,
                 money_base: 100,
                 xp_base: 1000,
-                items: vec![WrathLfgRewardItem { item: 6948, display: 1, count: 1 }],
+                items: vec![WrathLfgRewardItem {
+                    item: 6948,
+                    display: 1,
+                    count: 1,
+                }],
                 ..Default::default()
             }],
         }),
@@ -474,7 +483,11 @@ pub(super) fn seed(s: &mut UiScript) {
             strangers: 2,
             money_base: 100,
             xp_base: 1000,
-            items: vec![WrathLfgCompletionItem { item: 6948, display: 1, count: 1 }],
+            items: vec![WrathLfgCompletionItem {
+                item: 6948,
+                display: 1,
+                count: 1,
+            }],
             ..Default::default()
         }),
         queue: Some(WrathLfgQueueStatus {
@@ -516,7 +529,9 @@ pub(super) fn seed(s: &mut UiScript) {
                     item_id: 49426,
                     count: 2,
                     texture: Some(r"Interface\Icons\INV_Misc_Frostemblem_01".into()),
-                    link: Some("|cffa335ee|Hitem:49426:0:0:0:0:0:0:0:80|h[Emblem of Frost]|h|r".into()),
+                    link: Some(
+                        "|cffa335ee|Hitem:49426:0:0:0:0:0:0:0:80|h[Emblem of Frost]|h|r".into(),
+                    ),
                 }],
                 rating_ok: true,
             }),
@@ -666,22 +681,24 @@ pub(super) fn seed(s: &mut UiScript) {
         facial_customization: "BEARD".into(),
         ..Default::default()
     }));
-    let refund = |bag: i32| (
-        false,
-        bag,
-        1,
-        ItemRefundView {
-            money: 100,
-            honor: 10,
-            arena: 0,
-            seconds_remaining: 3600,
-            items: vec![ItemRefundCost {
-                texture: Some(r"Interface\Icons\INV_Misc_Frostemblem_01".into()),
-                count: 2,
-                link: None,
-            }],
-        },
-    );
+    let refund = |bag: i32| {
+        (
+            false,
+            bag,
+            1,
+            ItemRefundView {
+                money: 100,
+                honor: 10,
+                arena: 0,
+                seconds_remaining: 3600,
+                items: vec![ItemRefundCost {
+                    texture: Some(r"Interface\Icons\INV_Misc_Frostemblem_01".into()),
+                    count: 2,
+                    link: None,
+                }],
+            },
+        )
+    };
     s.set_item_refunds(vec![refund(0), refund(1)]);
     s.set_wrath_item_gems(vec![
         (0, 1, [Some(40111), None, None]),
@@ -845,7 +862,10 @@ fn vehicles(s: &mut UiScript) {
                 using: true,
                 controlling: true,
                 seat: Some((0x0000_0800, 1)),
-                seats: vec![seat(0, Some((me, "Benchone"))), seat(1, Some((ME + 1, "Benchtwo")))],
+                seats: vec![
+                    seat(0, Some((me, "Benchone"))),
+                    seat(1, Some((ME + 1, "Benchtwo"))),
+                ],
             },
         )]),
         has_mover: true,
@@ -953,7 +973,8 @@ fn inspect_arena(s: &mut UiScript) {
             ..Default::default()
         }),
     );
-    s.run("SetBinding('W', 'MOVEFORWARD') SetBinding('UP', 'MOVEFORWARD')").unwrap();
+    s.run("SetBinding('W', 'MOVEFORWARD') SetBinding('UP', 'MOVEFORWARD')")
+        .unwrap();
     s.set_wrath_mail_latest_senders(vec!["Arthas".into(), "Jaina".into(), "Thrall".into()]);
 
     // A native loot roll whose template has landed.

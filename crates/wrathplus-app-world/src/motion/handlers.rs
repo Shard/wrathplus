@@ -2,10 +2,10 @@
 //! relayed `MSG_MOVE_*` stream, `SMSG_MONSTER_MOVE` and the observer modes. Each runs on the same
 //! event right after `crate::net::objects`' handler, whose spawn and store it reads, so a later
 //! handler in the same drain sees the pose this one applied.
-use wrathplus_assets::coords::bevy_to_wow;
-use wrathplus_protocol::{MonsterMoveFacing, SessionEvent, SessionEventKind, SplineMode};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use wrathplus_assets::coords::bevy_to_wow;
+use wrathplus_protocol::{MonsterMoveFacing, SessionEvent, SessionEventKind, SplineMode};
 
 use super::{
     apply_move, arrival_snap, create_spline, monster_move_spline, resolve_facing,
@@ -13,8 +13,8 @@ use super::{
     PendingMove, RelayMove, RelayOutcome, RemoteMotion, Spline, SplineStopped, UnitMoveModes,
     ROOT_APPLY_WIPE,
 };
-use crate::net::{GuidIndex, NetHandlerApp};
 use crate::app_core::session::SelfGuid;
+use crate::net::{GuidIndex, NetHandlerApp};
 // The tests' fixtures, which they name through `super::*`.
 #[cfg(test)]
 use {crate::net::NetEntity, wrathplus_protocol::EntityKind};
@@ -544,8 +544,8 @@ mod tests {
     /// The observer movement-mode family, on a bare `World` with one indexed unit.
     mod spline_modes {
         use super::*;
-        use wrathplus_protocol::SplineMode;
         use bevy::ecs::system::RunSystemOnce;
+        use wrathplus_protocol::SplineMode;
 
         const MOB: u64 = 0x0000_0000_0000_00F0;
 

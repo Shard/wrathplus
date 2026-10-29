@@ -9,11 +9,11 @@ use bevy::prelude::*;
 mod parse;
 pub(super) use parse::{parse_line, ParsedChat};
 
-use crate::creature_anim::MovementState;
 use crate::app_core::movement::move_flags;
-use crate::net::{ClientCommand, NetCommands};
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::Selection;
+use crate::creature_anim::MovementState;
+use crate::net::{ClientCommand, NetCommands};
 
 /// The target half of `GetSlashCmdTarget` (`ChatFrame.lua:650-658`): a bare command falls back
 /// to the selection only when it is a player. A streamed player's name is always cached.
@@ -62,7 +62,10 @@ pub(super) struct ChatProbes<'w, 's> {
         'w,
         's,
         &'static GlobalTransform,
-        (With<wrathplus_world::view::WorldCamera>, Without<SelfPlayer>),
+        (
+            With<wrathplus_world::view::WorldCamera>,
+            Without<SelfPlayer>,
+        ),
     >,
     clock: Option<Res<'w, wrathplus_world::lighting::GameClock>>,
     world: wrathplus_world::world_point::WorldPoint<'w, 's>,
@@ -263,7 +266,8 @@ pub(super) fn drain_chat_input(
                 };
                 let (_, rot, eye_bevy) = cam.to_scale_rotation_translation();
                 let eye = wrathplus_assets::coords::bevy_to_wow(eye_bevy);
-                let look = wrathplus_assets::coords::bevy_to_wow(eye_bevy + rot * Vec3::NEG_Z * 50.0);
+                let look =
+                    wrathplus_assets::coords::bevy_to_wow(eye_bevy + rot * Vec3::NEG_Z * 50.0);
                 let minute = clock.as_deref().map(|c| c.minute).unwrap_or(720);
                 let snippet = format!(
                     "eye: [{:.1}, {:.1}, {:.1}], look: [{:.1}, {:.1}, {:.1}], minute: {minute}",
@@ -363,8 +367,9 @@ pub(super) fn drain_chat_input(
                     .and_then(|e| kinds.get(e).ok())
                     .is_some_and(|n| n.kind == wrathplus_protocol::EntityKind::Player);
                 let mut lines = Vec::new();
-                let describe = |label: &str, s: Option<&crate::app_core::session::ObjectStore>| match s {
-                    Some(s) => format!(
+                let describe =
+                    |label: &str, s: Option<&crate::app_core::session::ObjectStore>| match s {
+                        Some(s) => format!(
                         "reaction: {label} flags 0x{:08x} (player-controlled {}) faction_tpl {:?} \
                          duel_team {} duel_arbiter 0x{:016x}",
                         s.0.unit_flags(),
@@ -373,8 +378,8 @@ pub(super) fn drain_chat_input(
                         s.0.player_duel_team(),
                         s.0.player_duel_arbiter(),
                     ),
-                    None => format!("reaction: {label} — no ObjectStore"),
-                };
+                        None => format!("reaction: {label} — no ObjectStore"),
+                    };
                 lines.push(format!(
                     "reaction: subject {} guid {} · self store present {}",
                     name.as_deref().unwrap_or("<current target>"),
@@ -722,7 +727,9 @@ pub(super) fn drain_chat_input(
                         chat_out
                             .ui_errors
                             .0
-                            .push(crate::app_core::errors::UiError::key("ERR_NOEMOTEWHILERUNNING"));
+                            .push(crate::app_core::errors::UiError::key(
+                                "ERR_NOEMOTEWHILERUNNING",
+                            ));
                         continue;
                     }
                 }
@@ -1091,7 +1098,9 @@ pub(super) fn emote_send_eligible(
     // `0x4000` "requires standing still" (client `0x47dbab`), against the live movement word's
     // `0x20ff` at `0x47dbb3` (direction, turn and pitch bits and FALLING), which is
     // [`crate::creature_anim::move_flags::INTEGRATED`]. It only reports; `DoEmote` decides.
-    if emote_flags & 0x4000 != 0 && move_flags & crate::app_core::movement::move_flags::INTEGRATED != 0 {
+    if emote_flags & 0x4000 != 0
+        && move_flags & crate::app_core::movement::move_flags::INTEGRATED != 0
+    {
         return EmoteGate::Moving;
     }
     EmoteGate::Send
@@ -1122,7 +1131,12 @@ pub(super) fn emote_gate(
 /// `PLAYER_FLAGS_DND` (`0x4`) off our live descriptor. Live, not mirrored, as in the reference
 /// (`0x49f3f0`): AFK keeps an optimistic global and DND nothing, so a second `/dnd` before the
 /// server's update re-marks where a second `/afk` clears.
-fn is_dnd(self_q: &Query<&crate::app_core::session::ObjectStore, With<crate::app_core::session::SelfPlayer>>) -> bool {
+fn is_dnd(
+    self_q: &Query<
+        &crate::app_core::session::ObjectStore,
+        With<crate::app_core::session::SelfPlayer>,
+    >,
+) -> bool {
     self_q
         .iter()
         .next()
@@ -1147,7 +1161,10 @@ pub(super) fn drain_addon_chat_sends(
     mut mirror: ResMut<super::away::AfkMirror>,
     cvars: Res<crate::cvars::Cvars>,
     // Our descriptor, for the DND arm's live `PLAYER_FLAGS & 0x4`.
-    self_q: Query<&crate::app_core::session::ObjectStore, With<crate::app_core::session::SelfPlayer>>,
+    self_q: Query<
+        &crate::app_core::session::ObjectStore,
+        With<crate::app_core::session::SelfPlayer>,
+    >,
     // The joined slots a `CHANNEL` target's number names.
     channels: Res<super::edit::ChannelState>,
 ) {

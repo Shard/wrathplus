@@ -18,100 +18,100 @@
 #[global_allocator]
 static ALLOC: assert_no_alloc::AllocDisabler = assert_no_alloc::AllocDisabler;
 
-pub use wrathplus_app_tools::addon_harness;
 pub use wrathplus_app_core::app_core;
 pub use wrathplus_app_core::area;
-pub use wrathplus_app_world::area_poi;
+pub use wrathplus_app_core::chr_classes;
+pub use wrathplus_app_core::crash;
+pub use wrathplus_app_core::cvars;
 pub use wrathplus_app_net::area_trigger;
-#[cfg(feature = "dev")]
-pub use wrathplus_app_world::asset_churn;
-pub use wrathplus_app_world::aura_visual;
-pub use wrathplus_app_ui::bindings;
-pub use wrathplus_app_world::blob_shadow;
-pub use wrathplus_app_world::bowstring;
-pub use wrathplus_app_world::camera_shake;
+pub use wrathplus_app_net::creature_type;
+pub use wrathplus_app_tools::addon_harness;
 #[cfg(feature = "dev")]
 pub use wrathplus_app_tools::capture;
-pub use wrathplus_app_ui::char_create;
-pub use wrathplus_app_ui::char_select;
-pub use wrathplus_app_world::chat_bubble;
-pub use wrathplus_app_core::chr_classes;
-pub use wrathplus_app_world::cinematic;
-pub use wrathplus_app_ui::combat_log;
-pub use wrathplus_app_world::combat_text;
-pub use wrathplus_app_ui::console;
-pub use wrathplus_app_core::crash;
-pub use wrathplus_app_world::creature_anim;
-pub use wrathplus_app_net::creature_type;
-pub use wrathplus_app_world::cursor;
-pub use wrathplus_app_core::cvars;
-pub use wrathplus_app_world::death;
 #[cfg(feature = "dev")]
 pub use wrathplus_app_tools::debug_panel;
 /// The dev/player seam: the instrument groups and the boundary rule. Always compiled; what it holds
 /// is not.
 pub use wrathplus_app_tools::dev;
+pub use wrathplus_app_ui::bindings;
+pub use wrathplus_app_ui::char_create;
+pub use wrathplus_app_ui::char_select;
+pub use wrathplus_app_ui::combat_log;
+pub use wrathplus_app_ui::console;
+pub use wrathplus_app_ui::experience_ui;
+pub use wrathplus_app_world::area_poi;
+#[cfg(feature = "dev")]
+pub use wrathplus_app_world::asset_churn;
+pub use wrathplus_app_world::aura_visual;
+pub use wrathplus_app_world::blob_shadow;
+pub use wrathplus_app_world::bowstring;
+pub use wrathplus_app_world::camera_shake;
+pub use wrathplus_app_world::chat_bubble;
+pub use wrathplus_app_world::cinematic;
+pub use wrathplus_app_world::combat_text;
+pub use wrathplus_app_world::creature_anim;
+pub use wrathplus_app_world::cursor;
+pub use wrathplus_app_world::death;
 pub use wrathplus_app_world::doodad_events;
 pub use wrathplus_app_world::entities;
 pub use wrathplus_app_world::experience;
 pub use wrathplus_app_world::experience_ao;
-pub use wrathplus_app_ui::experience_ui;
 pub use wrathplus_app_world::fishing_line;
 pub use wrathplus_app_world::footprints;
 mod game_plugins;
-pub use wrathplus_app_ui::glue;
 pub use wrathplus_app_core::glue_strings;
-pub use wrathplus_app_world::go_anim;
-pub use wrathplus_app_net::go_templates;
-pub use wrathplus_app_world::guild;
-#[cfg(feature = "dev")]
-pub use wrathplus_app_tools::hover_log;
-pub use wrathplus_app_world::inventory;
-pub use wrathplus_app_net::items;
 pub use wrathplus_app_core::launch_plan;
-pub use wrathplus_app_world::loading_screen;
 pub use wrathplus_app_core::local_state;
-pub use wrathplus_app_ui::login;
-pub use wrathplus_app_world::loot;
-pub use wrathplus_app_world::minimap;
-pub use wrathplus_app_world::motion;
-pub use wrathplus_app_world::nameplates;
+pub use wrathplus_app_core::pending_item_ops;
+pub use wrathplus_app_core::query_cache;
+pub use wrathplus_app_core::run_mode;
+pub use wrathplus_app_net::go_templates;
+pub use wrathplus_app_net::items;
 pub use wrathplus_app_net::names;
 pub use wrathplus_app_net::net;
-pub use wrathplus_app_ui::npc_text;
-pub use wrathplus_app_world::overlay;
-pub use wrathplus_app_core::pending_item_ops;
+pub use wrathplus_app_net::realmlist;
+#[cfg(feature = "dev")]
+pub use wrathplus_app_tools::hover_log;
 /// Ships in part (the FPS journal and the clocks it reads); the rest is `dev`.
 pub use wrathplus_app_tools::perf;
-pub use wrathplus_app_world::pipe_warm;
-pub use wrathplus_app_world::player;
-pub use wrathplus_app_world::poi_marker;
-pub use wrathplus_app_world::portrait;
 #[cfg(feature = "dev")]
 pub use wrathplus_app_tools::preflight;
 #[cfg(feature = "dev")]
 pub use wrathplus_app_tools::probe_shield;
-pub use wrathplus_app_core::query_cache;
+pub use wrathplus_app_ui::glue;
+pub use wrathplus_app_ui::login;
+pub use wrathplus_app_ui::npc_text;
+pub use wrathplus_app_ui::realm_select;
+pub use wrathplus_app_ui::script_calls;
+pub use wrathplus_app_world::go_anim;
+pub use wrathplus_app_world::guild;
+pub use wrathplus_app_world::inventory;
+pub use wrathplus_app_world::loading_screen;
+pub use wrathplus_app_world::loot;
+pub use wrathplus_app_world::minimap;
+pub use wrathplus_app_world::motion;
+pub use wrathplus_app_world::nameplates;
+pub use wrathplus_app_world::overlay;
+pub use wrathplus_app_world::pipe_warm;
+pub use wrathplus_app_world::player;
+pub use wrathplus_app_world::poi_marker;
+pub use wrathplus_app_world::portrait;
 pub use wrathplus_app_world::quest_markers;
 pub use wrathplus_app_world::raid_marks;
 pub use wrathplus_app_world::ranged_flex;
-pub use wrathplus_app_ui::realm_select;
-pub use wrathplus_app_net::realmlist;
-pub use wrathplus_app_core::run_mode;
 pub use wrathplus_app_world::screen_fade;
 pub use wrathplus_app_world::screenshot;
-pub use wrathplus_app_ui::script_calls;
 pub use wrathplus_app_world::shaders;
 
-pub use wrathplus_app_world::game_tip;
-pub use wrathplus_app_net::name_persist;
-pub use wrathplus_app_world::opaque2d;
-pub use wrathplus_app_ui::shipped_cvars;
-#[cfg(feature = "dev")]
-pub use wrathplus_app_tools::showcase_capture;
 /// Where "the client is going down" is observed, in `Last`; every system that persists state on the
 /// way out registers through it.
 pub use wrathplus_app_core::shutdown;
+pub use wrathplus_app_net::name_persist;
+#[cfg(feature = "dev")]
+pub use wrathplus_app_tools::showcase_capture;
+pub use wrathplus_app_ui::shipped_cvars;
+pub use wrathplus_app_world::game_tip;
+pub use wrathplus_app_world::opaque2d;
 pub use wrathplus_app_world::smart_rect;
 pub use wrathplus_app_world::sound;
 /// The two talent spell-modifier tables (`SMSG_SET_FLAT_/PCT_SPELL_MODIFIER`) and the read that
@@ -125,7 +125,6 @@ pub(crate) mod test_support;
 pub use wrathplus_app_core::text_filter;
 pub use wrathplus_app_core::text_reshape;
 pub use wrathplus_app_ui::textinput;
-pub use wrathplus_app_world::transport;
 pub use wrathplus_app_ui::tutorial;
 pub use wrathplus_app_ui::ui_achievements;
 pub use wrathplus_app_ui::ui_action;
@@ -148,9 +147,11 @@ pub use wrathplus_app_ui::ui_guild_bank;
 pub use wrathplus_app_ui::ui_lfg;
 pub use wrathplus_app_ui::ui_native;
 pub use wrathplus_app_ui::ui_native_chat;
+pub use wrathplus_app_world::transport;
 // The native pet-name and WHO capture FIFOs live in `net` (split step 0 residue); the old paths stay.
 use net::{wrath_pet_name_capture as ui_native_pet_name, wrath_who_capture as ui_native_who};
 pub use wrathplus_app_core::quest_reputation;
+pub use wrathplus_app_core::wrath_vehicle_seats;
 pub use wrathplus_app_ui::quest_rewards;
 pub use wrathplus_app_ui::ui_companions;
 pub use wrathplus_app_ui::ui_death;
@@ -207,7 +208,6 @@ pub use wrathplus_app_ui::ui_tabard;
 pub use wrathplus_app_ui::ui_talent;
 pub use wrathplus_app_ui::ui_talent_wipe;
 pub use wrathplus_app_ui::ui_taxi;
-pub use wrathplus_app_world::ui_text;
 pub use wrathplus_app_ui::ui_tooltip;
 pub use wrathplus_app_ui::ui_totems;
 pub use wrathplus_app_ui::ui_trade;
@@ -217,32 +217,32 @@ pub use wrathplus_app_ui::ui_unit;
 pub use wrathplus_app_ui::ui_unit_popup;
 pub use wrathplus_app_ui::ui_vehicle;
 pub use wrathplus_app_ui::ui_world_map;
+pub use wrathplus_app_ui::world_state_ui;
+pub use wrathplus_app_ui::wrathplus_pack;
+pub use wrathplus_app_world::ui_text;
 pub use wrathplus_app_world::video;
 pub use wrathplus_app_world::vplates;
 pub use wrathplus_app_world::weapon_trail;
 pub use wrathplus_app_world::world_backdrop;
 pub use wrathplus_app_world::world_state;
-pub use wrathplus_app_ui::world_state_ui;
-pub use wrathplus_app_ui::wrathplus_pack;
-pub use wrathplus_app_core::wrath_vehicle_seats;
 
 use bevy::prelude::*;
 
 // A launcher stamps the build id at compile time and hands it to [`run`] or [`run_with`];
 // re-exported so the `benilla` shim needs no bevy dependency of its own.
+pub use bevy::app::AppExit;
 pub use wrathplus_world::build_id::BuildId;
 /// The world viewer's entry point, the engine with no game attached, called by the
 /// `wrathplus-worldview` shim.
 pub use wrathplus_world::worldview::run as run_worldview;
-pub use bevy::app::AppExit;
 // A crate on top of benilla reads objects and interacts through these, with no protocol dependency.
-pub use wrathplus_protocol::{types::ObjectType, ObjectFields};
 pub use net::Objects;
 pub use target::Interact;
 /// The session interface load, for the integration tests' kit (`tests/common`), which cannot
 /// reach this crate's `#[cfg(test)]` loaders. Not an API.
 #[doc(hidden)]
 pub use ui_script::load_default_ui;
+pub use wrathplus_protocol::{types::ObjectType, ObjectFields};
 
 /// Builds and runs the client app. `build` is the launcher's compile-time git stamp, passed in as
 /// data so the sha lives in the shim's fingerprint and a commit does not recompile this crate.

@@ -229,7 +229,12 @@ pub fn apply_template(lua: &mlua::Lua, wrapper: &Table, kind: &str, template: &s
 /// made, their third argument when it names a template rather than a font object: the region's
 /// XML pass, as a `<Layer>` child with that `inherits=` gets it (layout, font, visual,
 /// animations). Returns the warnings, then the errors.
-pub fn apply_region_template(lua: &mlua::Lua, wrapper: &Table, texture: bool, template: &str) -> Vec<String> {
+pub fn apply_region_template(
+    lua: &mlua::Lua,
+    wrapper: &Table,
+    texture: bool,
+    template: &str,
+) -> Vec<String> {
     let no_files = |_: &str| -> Option<Vec<u8>> { None };
     let mut loader = Loader {
         lua,
@@ -254,13 +259,25 @@ pub fn apply_region_template(lua: &mlua::Lua, wrapper: &Table, texture: bool, te
     let region = loader.expand(&framexml::inherits_node(kind, template));
     if region.attr_bool("hidden") {
         if let Err(e) = wrapper.call_method::<()>("Hide", ()) {
-            loader.report.errors.push(format!("{dbg}: region Hide: {e}"));
+            loader
+                .report
+                .errors
+                .push(format!("{dbg}: region Hide: {e}"));
         }
     }
-    if let Some(a) = region.attr("alpha").and_then(|v| v.trim().parse::<f32>().ok()) {
+    if let Some(a) = region
+        .attr("alpha")
+        .and_then(|v| v.trim().parse::<f32>().ok())
+    {
         loader.call_region(wrapper, "SetAlpha", a, &dbg);
     }
-    loader.apply_region_layout(&region, wrapper, &parent_name, &dbg, regions::FontAttrs::Own);
+    loader.apply_region_layout(
+        &region,
+        wrapper,
+        &parent_name,
+        &dbg,
+        regions::FontAttrs::Own,
+    );
     if !texture {
         loader.apply_fontstring_font(&region, wrapper, &dbg);
     }

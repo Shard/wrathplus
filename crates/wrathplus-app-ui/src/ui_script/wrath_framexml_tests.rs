@@ -41,7 +41,8 @@ fn scan_calls(
             // `function Name(`, and `function <expr>:Name(` / `function <expr>.Name(`: a FrameXML
             // definition, the expression walked back over identifiers, dots and colons.
             let head = if before == b':' || before == b'.' {
-                src[..start].trim_end_matches(|c: char| c.is_ascii_alphanumeric() || "_.:".contains(c))
+                src[..start]
+                    .trim_end_matches(|c: char| c.is_ascii_alphanumeric() || "_.:".contains(c))
             } else {
                 &src[..start]
             };
@@ -52,7 +53,10 @@ fn scan_calls(
             // is also a Wow.exe string stays counted through the shadow guard.
             if (before == b'.' || before == b':')
                 && name.as_bytes()[0].is_ascii_uppercase()
-                && src[i..].trim_start().strip_prefix('=').is_some_and(|r| !r.starts_with('='))
+                && src[i..]
+                    .trim_start()
+                    .strip_prefix('=')
+                    .is_some_and(|r| !r.starts_with('='))
             {
                 defined.insert(name.to_string());
             }
@@ -61,7 +65,11 @@ fn scan_calls(
                     defined.insert(name.to_string());
                 } else if before == b':' {
                     *methods.entry(name.to_string()).or_default() += 1;
-                } else if before != b'.' && before != b'"' && before != b'\'' && !locals.contains(name) {
+                } else if before != b'.'
+                    && before != b'"'
+                    && before != b'\''
+                    && !locals.contains(name)
+                {
                     *calls.entry(name.to_string()).or_default() += 1;
                 }
             }
@@ -87,8 +95,15 @@ fn census_treats_frame_xml_defined_methods_as_defined() {
     for n in ["SetSelection", "Baz", "Qux", "SetDisplayValue"] {
         assert!(defined.contains(n), "{n}");
     }
-    assert!(!defined.contains("IsCompared"), "a comparison is no assignment");
-    assert_eq!(methods.get("GetName"), Some(&1), "an engine method call still counts");
+    assert!(
+        !defined.contains("IsCompared"),
+        "a comparison is no assignment"
+    );
+    assert_eq!(
+        methods.get("GetName"),
+        Some(&1),
+        "an engine method call still counts"
+    );
 }
 
 /// A `local` binding hides only its own chunk's calls: the same name called as a global in
@@ -106,7 +121,11 @@ fn census_skips_a_chunks_locals_but_counts_the_same_name_elsewhere() {
     assert!(!calls.contains_key("OnCancel"), "the chunk's local");
     assert_eq!(calls.get("SendMail"), Some(&1));
     scan_calls(&other, &mut defined, &mut methods, &mut calls);
-    assert_eq!(calls.get("OnCancel"), Some(&1), "a global call in another chunk");
+    assert_eq!(
+        calls.get("OnCancel"),
+        Some(&1),
+        "a global call in another chunk"
+    );
 }
 
 /// Every distinct failure, error and warning, with a count, printed for triage.
@@ -117,8 +136,14 @@ fn census(script: &mut UiScript, failures: &[String]) -> usize {
         None => seen.push((line, 1)),
     };
     failures.iter().for_each(|f| note(format!("FAIL  {f}")));
-    script.take_errors().into_iter().for_each(|e| note(format!("ERROR {e}")));
-    script.warnings().into_iter().for_each(|w| note(format!("WARN  {w}")));
+    script
+        .take_errors()
+        .into_iter()
+        .for_each(|e| note(format!("ERROR {e}")));
+    script
+        .warnings()
+        .into_iter()
+        .for_each(|w| note(format!("WARN  {w}")));
     for (line, n) in &seen {
         eprintln!("[{n:>3}] {line}");
     }
@@ -161,12 +186,18 @@ fn stock_session(data: &std::path::Path) -> (UiScript, Vec<String>) {
     );
     // A live Wrath account (expansion 2) on the installed locale.
     script.set_wrath_session(Some(2), vec!["enUS".into()]);
-    script.set_screen_resolutions(vec![], Some(wrathplus_ui::script::ScreenResolution {
-        width: 1600, height: 1000,
-    }));
+    script.set_screen_resolutions(
+        vec![],
+        Some(wrathplus_ui::script::ScreenResolution {
+            width: 1600,
+            height: 1000,
+        }),
+    );
     script.set_player_record(wrathplus_ui::script::PlayerRecord {
-        name: "Benchone".into(), race: Some(("Human".into(), "Human".into())),
-        class: Some(("Warrior".into(), "WARRIOR".into())), sex: 2,
+        name: "Benchone".into(),
+        race: Some(("Human".into(), "Human".into())),
+        class: Some(("Warrior".into(), "WARRIOR".into())),
+        sex: 2,
     });
     script.set_unit("player", Some(stock_player(1)));
     eprintln!(
@@ -189,7 +220,10 @@ fn stock_session(data: &std::path::Path) -> (UiScript, Vec<String>) {
     let _ = script.run("LoadAddOn('Blizzard_TimeManager')");
     let started = std::time::Instant::now();
     script.tick(0.1);
-    eprintln!("first tick: {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
+    eprintln!(
+        "first tick: {:.0} ms",
+        started.elapsed().as_secs_f64() * 1000.0
+    );
     (script, failures)
 }
 
@@ -204,10 +238,14 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
         eprintln!("CYCLE {w}");
     }
     let hard = census(&mut script, &failures);
-    let toc = super::reference_ui::read(r"Interface\AddOns\Blizzard_CombatLog\Blizzard_CombatLog.toc");
+    let toc =
+        super::reference_ui::read(r"Interface\AddOns\Blizzard_CombatLog\Blizzard_CombatLog.toc");
     eprintln!(
         "Blizzard_CombatLog toc: {:?}",
-        toc.map(|b| String::from_utf8_lossy(&b).chars().take(300).collect::<String>())
+        toc.map(|b| String::from_utf8_lossy(&b)
+            .chars()
+            .take(300)
+            .collect::<String>())
     );
     let combat_log = script
         .eval::<String>("local ok, why = LoadAddOn('Blizzard_CombatLog') return tostring(ok) .. ' ' .. tostring(why) .. ' ' .. tostring(GetNumAddOns())")
@@ -225,7 +263,10 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
                  return tostring(name) .. ' ' .. tostring(ok) .. ' ' .. tostring(why)"
             ))
             .unwrap_or_else(|e| panic!("installed addon {i}/{addon_count} load raised: {e}"));
-        eprintln!("LOAD {:>8.1} ms  {row}", started.elapsed().as_secs_f64() * 1000.0);
+        eprintln!(
+            "LOAD {:>8.1} ms  {row}",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
         if row.split(' ').nth(1) != Some("1") {
             not_loaded.push(row);
         }
@@ -245,7 +286,10 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
     assert_eq!(hard, 0, "hard failures (FAIL/ERROR lines above)");
     assert_eq!(missing, 0, "missing surface names (listed above)");
     assert_eq!(shadow_guarded, 0, "shadow-guarded names (listed above)");
-    assert!(not_loaded.is_empty(), "installed addons that did not load: {not_loaded:?}");
+    assert!(
+        not_loaded.is_empty(),
+        "installed addons that did not load: {not_loaded:?}"
+    );
 }
 
 /// FrameXML-called names build 12340's `Wow.exe` itself lacks, so the native client would raise on
@@ -429,14 +473,35 @@ fn shadow_guard_keeps_an_unanswered_engine_name_counted() {
 /// Stock XML attributes the loader deliberately does not read, each with its reason. Any other
 /// attribute the loader never asks for fails the census; a row the loader now reads is stale.
 const ACCEPTED_ATTRS: &[(&str, &str)] = &[
-    ("xmlns", "the XML namespace declaration, not a widget attribute"),
-    ("xsi:schemaLocation", "the schema hint, not a widget attribute"),
+    (
+        "xmlns",
+        "the XML namespace declaration, not a widget attribute",
+    ),
+    (
+        "xsi:schemaLocation",
+        "the schema hint, not a widget attribute",
+    ),
     ("xmlns:xsi", "the schema namespace, not a widget attribute"),
-    ("protected", "the secure-frame flag; the UI is trusted, nothing is protected"),
-    ("dontSavePosition", "the layout-cache opt-out; no layout cache is kept"),
-    ("nonBlocking", "an asynchronous texture-load hint with no visible effect"),
-    ("bytes", "a FontString's text buffer size; text is not truncated to it (labelled)"),
-    ("monochrome", "a Font's monochrome raster flag; glyphs are not drawn monochrome (labelled)"),
+    (
+        "protected",
+        "the secure-frame flag; the UI is trusted, nothing is protected",
+    ),
+    (
+        "dontSavePosition",
+        "the layout-cache opt-out; no layout cache is kept",
+    ),
+    (
+        "nonBlocking",
+        "an asynchronous texture-load hint with no visible effect",
+    ),
+    (
+        "bytes",
+        "a FontString's text buffer size; text is not truncated to it (labelled)",
+    ),
+    (
+        "monochrome",
+        "a Font's monochrome raster flag; glyphs are not drawn monochrome (labelled)",
+    ),
 ];
 
 /// Every attribute the stock XML uses that the loader never asked for, less [`ACCEPTED_ATTRS`]:
@@ -463,14 +528,20 @@ fn unhandled_attributes(xml_texts: &[String]) {
         }
     }
     for text in xml_texts {
-        let Ok(doc) = wrathplus_ui::framexml::parse(text) else { continue };
+        let Ok(doc) = wrathplus_ui::framexml::parse(text) else {
+            continue;
+        };
         for item in &doc.items {
             if let TopLevel::Font(e) | TopLevel::Template(e) | TopLevel::Instance(e) = item {
                 walk(e, &queried, &mut found);
             }
         }
     }
-    let accepted = |n: &str| ACCEPTED_ATTRS.iter().any(|(a, _)| a.eq_ignore_ascii_case(n));
+    let accepted = |n: &str| {
+        ACCEPTED_ATTRS
+            .iter()
+            .any(|(a, _)| a.eq_ignore_ascii_case(n))
+    };
     let mut failing = Vec::new();
     for (name, (n, tags)) in &found {
         let tags: Vec<&str> = tags.iter().map(String::as_str).collect();
@@ -486,8 +557,14 @@ fn unhandled_attributes(xml_texts: &[String]) {
         .map(|(a, _)| *a)
         .filter(|a| !a.contains(':') && *a != "xmlns" && queried.contains(&a.to_ascii_lowercase()))
         .collect();
-    assert!(stale.is_empty(), "ACCEPTED_ATTRS rows the loader now reads: {stale:?}");
-    assert!(failing.is_empty(), "stock XML attributes the loader never reads: {failing:?}");
+    assert!(
+        stale.is_empty(),
+        "ACCEPTED_ATTRS rows the loader now reads: {stale:?}"
+    );
+    assert!(
+        failing.is_empty(),
+        "stock XML attributes the loader never reads: {failing:?}"
+    );
 }
 
 /// The `Blizzard_*` addons whose sources the census scans beside FrameXML.toc's files: every
@@ -499,26 +576,52 @@ const CENSUS_ADDONS: [&str; 24] = super::addons::WRATH_BLIZZARD_ADDONS;
 /// Returns the arity audit's inputs and the missing and shadow-guarded counts.
 fn missing_surface(
     script: &UiScript,
-) -> (census_arity::Wants, std::collections::HashSet<String>, usize, usize) {
+) -> (
+    census_arity::Wants,
+    std::collections::HashSet<String>,
+    usize,
+    usize,
+) {
     let core = super::reference_ui::core().expect("FrameXML.toc");
     let mut sources = Vec::new();
     // Each scanned file's origin, FrameXML or its addon, for the per-addon breakdown.
     let mut origins: Vec<&str> = Vec::new();
     let mut paths: Vec<String> = Vec::new();
-    let mut queue: Vec<(String, &str)> = core.toc.files.iter().map(|f| (f.clone(), "FrameXML")).collect();
+    let mut queue: Vec<(String, &str)> = core
+        .toc
+        .files
+        .iter()
+        .map(|f| (f.clone(), "FrameXML"))
+        .collect();
     if let Some(dir) = std::env::var_os("AZB_FRAMEXML_DUMP") {
         for table in [
-            "Languages", "ItemBagFamily", "TaxiNodes", "GMTicketCategory", "EmotesTextData",
-            "GroundEffectDoodad", "GroundEffectTexture", "SpellVisualKit", "SpellVisual",
+            "Languages",
+            "ItemBagFamily",
+            "TaxiNodes",
+            "GMTicketCategory",
+            "EmotesTextData",
+            "GroundEffectDoodad",
+            "GroundEffectTexture",
+            "SpellVisualKit",
+            "SpellVisual",
         ] {
             if let Some(bytes) = super::reference_ui::read(&format!(r"DBFilesClient\{table}.dbc")) {
-                let _ = std::fs::write(std::path::Path::new(&dir).join(format!("{table}.dbc")), bytes);
+                let _ = std::fs::write(
+                    std::path::Path::new(&dir).join(format!("{table}.dbc")),
+                    bytes,
+                );
             }
         }
         for (path, file) in [
             (r"Creature\Kobold\Kobold.m2", "Kobold.m2"),
-            (r"World\Generic\Orc\Passive Doodads\Braziers\SmallBrazierPurple01.m2", "Brazier.m2"),
-            (r"World\Azeroth\Elwynn\PassiveDoodads\Campfire\ElwynnCampfire.m2", "Campfire.m2"),
+            (
+                r"World\Generic\Orc\Passive Doodads\Braziers\SmallBrazierPurple01.m2",
+                "Brazier.m2",
+            ),
+            (
+                r"World\Azeroth\Elwynn\PassiveDoodads\Campfire\ElwynnCampfire.m2",
+                "Campfire.m2",
+            ),
         ] {
             if let Some(bytes) = super::reference_ui::read(path) {
                 let _ = std::fs::write(std::path::Path::new(&dir).join(file), bytes);
@@ -539,7 +642,9 @@ fn missing_surface(
         if !seen.insert(path.to_ascii_lowercase()) {
             continue;
         }
-        let Some(bytes) = super::reference_ui::read(&path) else { continue };
+        let Some(bytes) = super::reference_ui::read(&path) else {
+            continue;
+        };
         let text = String::from_utf8_lossy(&bytes).into_owned();
         if let Some(dir) = std::env::var_os("AZB_FRAMEXML_DUMP") {
             let leaf = path.rsplit('\\').next().unwrap_or(&path);
@@ -625,10 +730,15 @@ fn missing_surface(
         let mut i = 0;
         while i < bytes.len() {
             if bytes[i].is_ascii_uppercase()
-                && (i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || b"_.:\"'".contains(&bytes[i - 1])))
+                && (i == 0
+                    || !(bytes[i - 1].is_ascii_alphanumeric() || b"_.:\"'".contains(&bytes[i - 1])))
             {
                 let start = i;
-                while i < bytes.len() && (bytes[i].is_ascii_uppercase() || bytes[i].is_ascii_digit() || bytes[i] == b'_') {
+                while i < bytes.len()
+                    && (bytes[i].is_ascii_uppercase()
+                        || bytes[i].is_ascii_digit()
+                        || bytes[i] == b'_')
+                {
                     i += 1;
                 }
                 if i < bytes.len() && (bytes[i].is_ascii_lowercase() || bytes[i] == b'(') {
@@ -649,7 +759,11 @@ fn missing_surface(
             }
         }
     }
-    let unassigned: Vec<String> = constants.keys().filter(|n| !assigned.contains(*n)).cloned().collect();
+    let unassigned: Vec<String> = constants
+        .keys()
+        .filter(|n| !assigned.contains(*n))
+        .cloned()
+        .collect();
     let absent_constants: Vec<String> = script
         .lua()
         .load("local out = {} for _, n in ipairs(...) do if _G[n] == nil then out[#out+1] = n end end return out")
@@ -658,7 +772,11 @@ fn missing_surface(
     for name in absent_constants {
         eprintln!("CONST {name} {}", constants[&name]);
     }
-    let names: Vec<String> = calls.keys().filter(|n| !defined.contains(*n)).cloned().collect();
+    let names: Vec<String> = calls
+        .keys()
+        .filter(|n| !defined.contains(*n))
+        .cloned()
+        .collect();
     // The names only a FrameXML definition suppresses, for the Wow.exe shadow guard.
     let mut suppressed: Vec<(&str, String, usize)> = Vec::new();
     for (name, n) in &methods {
@@ -751,7 +869,11 @@ fn missing_surface(
     lines.extend(shadowed);
     eprintln!("native-absent: {} names", NATIVE_ABSENT.len());
     for (name, evidence) in NATIVE_ABSENT {
-        let n = calls.get(*name).or_else(|| methods.get(*name)).copied().unwrap_or(0);
+        let n = calls
+            .get(*name)
+            .or_else(|| methods.get(*name))
+            .copied()
+            .unwrap_or(0);
         eprintln!("NATIVE-ABSENT {name} {n}: {evidence}");
     }
     unhandled_attributes(&xml_texts);
@@ -764,7 +886,10 @@ fn missing_surface(
         for line in &lines {
             let name = line.split(' ').nth(1).unwrap_or("");
             if m.contains_key(name) || c.contains_key(name) {
-                by_origin.entry(origin).or_default().insert(name.to_string());
+                by_origin
+                    .entry(origin)
+                    .or_default()
+                    .insert(name.to_string());
             }
         }
     }

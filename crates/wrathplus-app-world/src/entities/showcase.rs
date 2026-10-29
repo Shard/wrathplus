@@ -1,8 +1,8 @@
 //! Narrow offline visual cache seam. No network entity, object store or material mutation.
 use super::{Creatures, DisplayModel, ModelHandle};
-use wrathplus_assets::materials::WowModelMaterial;
 use bevy::asset::{LoadState, RecursiveDependencyLoadState, VisitAssetDependencies};
 use bevy::prelude::*;
+use wrathplus_assets::materials::WowModelMaterial;
 
 /// Visual-only installed CreatureDisplayInfo id, never a server creature entry or GUID.
 #[derive(Clone, Debug, serde::Deserialize, PartialEq)]

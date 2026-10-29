@@ -10,9 +10,9 @@ use super::{
 };
 use crate::ui_chat::event::ChatEventScript;
 use crate::{names::NameCache, net::NetCommands};
+use bevy::prelude::*;
 use wrathplus_protocol::wrath_chat::Message;
 use wrathplus_ui::script::{ScriptValue as V, UiScript};
-use bevy::prelude::*;
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeChatFeed {

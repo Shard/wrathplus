@@ -9,9 +9,7 @@ use crate::script::region::region_wrapper;
 use crate::script::{script_kind, Model, RegionData, REG_SCRIPTS};
 use crate::widget::RegionKind;
 
-use super::{
-    decode_id, draw_layer_from_str, frame_handle_of, publish_global,
-};
+use super::{decode_id, draw_layer_from_str, frame_handle_of, publish_global};
 
 /// Populate `m`'s event, script and region-creation methods.
 pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
@@ -319,7 +317,9 @@ fn apply_region_inherits(lua: &Lua, wrapper: &Table, from: &str) -> mlua::Result
     if is_template {
         let texture = wrapper.call_method::<String>("GetObjectType", ())? == "Texture";
         for line in crate::loader::apply_region_template(lua, wrapper, texture, from) {
-            lua.app_data_mut::<Model>().expect("model").record_warning(line);
+            lua.app_data_mut::<Model>()
+                .expect("model")
+                .record_warning(line);
         }
         return Ok(());
     }

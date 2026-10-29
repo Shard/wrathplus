@@ -293,4 +293,3 @@ fn arg_name(i: usize) -> Cow<'static, str> {
         None => Cow::Owned(format!("arg{i}")),
     }
 }
-

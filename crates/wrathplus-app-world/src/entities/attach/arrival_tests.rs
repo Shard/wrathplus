@@ -319,9 +319,10 @@ fn a_healed_rig_rebuilds_its_body_in_the_same_frame() {
         .resource_mut::<SkinComposites>()
         .done
         .clear();
-    app.world_mut()
-        .entity_mut(player)
-        .insert((crate::net::Guid(7), wrathplus_world::rig_palette::RigStarved));
+    app.world_mut().entity_mut(player).insert((
+        crate::net::Guid(7),
+        wrathplus_world::rig_palette::RigStarved,
+    ));
     app.world_mut()
         .run_system_once(super::super::live_display::heal_rig_starved)
         .expect("the heal runs");

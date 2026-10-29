@@ -73,12 +73,17 @@ fn any_up_registers_every_buttons_release() {
     .unwrap();
     s.resolve();
     s.mouse_button(50.0, 50.0, "LeftButton", true);
-    assert_eq!(s.eval::<i64>("return #clicks").unwrap(), 0, "a press is not a click");
+    assert_eq!(
+        s.eval::<i64>("return #clicks").unwrap(),
+        0,
+        "a press is not a click"
+    );
     s.mouse_button(50.0, 50.0, "LeftButton", false);
     s.mouse_button(50.0, 50.0, "RightButton", true);
     s.mouse_button(50.0, 50.0, "RightButton", false);
     assert_eq!(
-        s.eval::<String>("return table.concat(clicks, ',')").unwrap(),
+        s.eval::<String>("return table.concat(clicks, ',')")
+            .unwrap(),
         "LeftButton,RightButton"
     );
 }

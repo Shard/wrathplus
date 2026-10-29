@@ -3,20 +3,20 @@
 //! catalog row gives the text, the surface and the sound. [`member_deactivated`] is the
 //! object layer's hook on a roster member's stream-out, fed by `net`'s [`MemberDeactivated`].
 
-use wrathplus_protocol::types::{GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo};
 use bevy::prelude::*;
+use wrathplus_protocol::types::{GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo};
 
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
 
 use super::{GroupState, GROUPTYPE_RAID};
-use crate::names::NameCache;
-use crate::net::{ClientCommand, GuidIndex, MemberDeactivated, NetCommands, NetHandlerApp};
-use crate::app_core::session::ObjectStore;
-use crate::app_core::session::SelfGuid;
-use crate::sound::MessageSounds;
 use crate::app_core::errors::UiError;
 use crate::app_core::errors::UiErrorKeys;
+use crate::app_core::session::ObjectStore;
+use crate::app_core::session::SelfGuid;
 use crate::app_core::state::QuestGiver;
+use crate::names::NameCache;
+use crate::net::{ClientCommand, GuidIndex, MemberDeactivated, NetCommands, NetHandlerApp};
+use crate::sound::MessageSounds;
 
 /// The join chime, played by name (`0x840404` through `0x458030`).
 const INVITE_ACCEPT_SOUND: &str = "igPlayerInviteAccept";

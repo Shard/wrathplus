@@ -333,7 +333,8 @@ fn spawn_slot(
                 commands.entity(root).insert(bb);
             }
             // A full palette table gives no rig: the static mesh and the wearer's slot instead.
-            let rig = wrathplus_world::rig_palette::RigSkin::allocate(palettes, joints, ibp.clone())?;
+            let rig =
+                wrathplus_world::rig_palette::RigSkin::allocate(palettes, joints, ibp.clone())?;
             let slot = rig.slot;
             commands.entity(root).insert(rig);
             debug!(

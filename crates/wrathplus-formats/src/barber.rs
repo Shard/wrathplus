@@ -3,8 +3,8 @@
 //! level, ordinal rows). Cost arithmetic and the race/sex filter belong to callers.
 
 use anyhow::{bail, Context, Result};
-use wrathplus_dbc::{DbcParser, FieldType, Schema, SchemaField};
 use std::io::Cursor;
+use wrathplus_dbc::{DbcParser, FieldType, Schema, SchemaField};
 
 use crate::dbc::{f32_at, parse, str_at, u32_at};
 use crate::Chain;
@@ -180,7 +180,13 @@ mod tests {
         assert_eq!(found.len(), 1);
         let s = found[0];
         assert_eq!(
-            (s.id, s.name.as_str(), s.description.as_str(), s.cost_modifier, s.data),
+            (
+                s.id,
+                s.name.as_str(),
+                s.description.as_str(),
+                s.cost_modifier,
+                s.data
+            ),
             (7, "Braids", "", 0.75, 4)
         );
         assert_eq!(rows.for_look(barber_kind::HAIR, 1, 1).count(), 0);

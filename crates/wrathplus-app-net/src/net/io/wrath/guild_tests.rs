@@ -42,16 +42,35 @@ fn core_guild_routes_encode_native_bodies_and_fail_closed_on_nuls() {
         (ClientCommand::GuildMotd { motd: "".into() }, 0x91, vec![0]),
         (ClientCommand::GuildLeave, 0x8d, vec![]),
         (ClientCommand::GuildDisband, 0x8f, vec![]),
-        (ClientCommand::GuildLeader { name: "Bob".into() }, 0x90, b"Bob\0".to_vec()),
-        (ClientCommand::GuildAddRank { name: "Alt".into() }, 0x232, b"Alt\0".to_vec()),
+        (
+            ClientCommand::GuildLeader { name: "Bob".into() },
+            0x90,
+            b"Bob\0".to_vec(),
+        ),
+        (
+            ClientCommand::GuildAddRank { name: "Alt".into() },
+            0x232,
+            b"Alt\0".to_vec(),
+        ),
         (ClientCommand::GuildDelRank, 0x233, vec![]),
         (
-            ClientCommand::GuildSetOfficerNote { name: "Bob".into(), note: "x".into() },
+            ClientCommand::GuildSetOfficerNote {
+                name: "Bob".into(),
+                note: "x".into(),
+            },
             0x235,
             b"Bob\0x\0".to_vec(),
         ),
-        (ClientCommand::GuildInfoText { text: "hi".into() }, 0x2fc, b"hi\0".to_vec()),
-        (ClientCommand::TabardVendorActivate { npc: 9 }, 0x1f2, 9u64.to_le_bytes().to_vec()),
+        (
+            ClientCommand::GuildInfoText { text: "hi".into() },
+            0x2fc,
+            b"hi\0".to_vec(),
+        ),
+        (
+            ClientCommand::TabardVendorActivate { npc: 9 },
+            0x1f2,
+            9u64.to_le_bytes().to_vec(),
+        ),
         (ClientCommand::GuildEventLogQuery, 0x3ff, vec![]),
         (
             ClientCommand::NativeGuildRank(wrathplus_protocol::wrath_guild_rank::SaveRank {
@@ -59,13 +78,24 @@ fn core_guild_routes_encode_native_bodies_and_fail_closed_on_nuls() {
                 flags: 2,
                 name: b"R".to_vec(),
                 money_limit: 3,
-                tabs: std::array::from_fn(|i| wrathplus_protocol::wrath_guild_rank::TabPermission {
-                    rights: i as u32,
-                    item_limit: 0,
+                tabs: std::array::from_fn(|i| {
+                    wrathplus_protocol::wrath_guild_rank::TabPermission {
+                        rights: i as u32,
+                        item_limit: 0,
+                    }
                 }),
             }),
             0x231,
-            [1u32.to_le_bytes().to_vec(), 2u32.to_le_bytes().to_vec(), b"R\0".to_vec(), 3u32.to_le_bytes().to_vec(), (0..6u32).flat_map(|i| [i.to_le_bytes(), 0u32.to_le_bytes()].concat()).collect()].concat(),
+            [
+                1u32.to_le_bytes().to_vec(),
+                2u32.to_le_bytes().to_vec(),
+                b"R\0".to_vec(),
+                3u32.to_le_bytes().to_vec(),
+                (0..6u32)
+                    .flat_map(|i| [i.to_le_bytes(), 0u32.to_le_bytes()].concat())
+                    .collect(),
+            ]
+            .concat(),
         ),
     ] {
         assert_eq!(route(&command), WrathRoute::NativeGuild);

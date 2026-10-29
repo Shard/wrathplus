@@ -141,7 +141,9 @@ mod tests {
             .iter()
             .map(|a| match a {
                 crate::app_core::errors::FillArg::S(s) => s.as_str(),
-                crate::app_core::errors::FillArg::D(_) => unreachable!("guild lines push no integers"),
+                crate::app_core::errors::FillArg::D(_) => {
+                    unreachable!("guild lines push no integers")
+                }
             })
             .collect()
     }

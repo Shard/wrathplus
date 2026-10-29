@@ -2,9 +2,9 @@
 //! member, applied in wire order. The UI's engine-free Lua snapshot is
 //! `crate::ui_native::wrath_threat`'s.
 
+use bevy::prelude::*;
 use wrathplus_protocol::{SessionEvent, SessionEventKind};
 use wrathplus_ui::script::ThreatTable;
-use bevy::prelude::*;
 
 use crate::net::NetHandlerApp;
 

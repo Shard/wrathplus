@@ -181,7 +181,10 @@ fn strict_framing_counts_strings_and_event_guids() {
 
 #[test]
 fn emblem_tabard_and_event_log_replies_decode_strictly() {
-    assert_eq!(decode(0x1f1, &3u32.to_le_bytes()).unwrap(), Packet::EmblemResult { error: 3 });
+    assert_eq!(
+        decode(0x1f1, &3u32.to_le_bytes()).unwrap(),
+        Packet::EmblemResult { error: 3 }
+    );
     assert_eq!(
         decode(0x1f2, &7u64.to_le_bytes()).unwrap(),
         Packet::TabardVendor { vendor: 7 }
@@ -206,9 +209,27 @@ fn emblem_tabard_and_event_log_replies_decode_strictly() {
     assert_eq!(
         entries,
         [
-            EventLogEntry { kind: 6, player: 1, other: None, rank: None, seconds_ago: 10 },
-            EventLogEntry { kind: 4, player: 2, other: Some(3), rank: Some(5), seconds_ago: 20 },
-            EventLogEntry { kind: 1, player: 4, other: Some(5), rank: None, seconds_ago: 30 },
+            EventLogEntry {
+                kind: 6,
+                player: 1,
+                other: None,
+                rank: None,
+                seconds_ago: 10
+            },
+            EventLogEntry {
+                kind: 4,
+                player: 2,
+                other: Some(3),
+                rank: Some(5),
+                seconds_ago: 20
+            },
+            EventLogEntry {
+                kind: 1,
+                player: 4,
+                other: Some(5),
+                rank: None,
+                seconds_ago: 30
+            },
         ]
     );
     for end in 0..log.len() {
@@ -227,8 +248,13 @@ fn replies_map_onto_the_shared_guild_events() {
         members: 5,
         accounts: 3,
     };
-    let [E::GuildInfo(info)] = &session_events(info)[..] else { panic!() };
-    assert_eq!((info.created_day, info.created_month, info.created_year), (17, 10, 2009));
+    let [E::GuildInfo(info)] = &session_events(info)[..] else {
+        panic!()
+    };
+    assert_eq!(
+        (info.created_day, info.created_month, info.created_year),
+        (17, 10, 2009)
+    );
     assert!(matches!(
         &session_events(Packet::EmblemResult { error: 0 })[..],
         [E::SaveGuildEmblemResult(0)]
@@ -237,13 +263,32 @@ fn replies_map_onto_the_shared_guild_events() {
         &session_events(Packet::TabardVendor { vendor: 9 })[..],
         [E::TabardVendorActivate(9)]
     ));
-    let event = Packet::Event { event: 12, params: vec![b"Bob".to_vec()], guid: Some(5) };
-    let [E::GuildEvent(notice)] = &session_events(event)[..] else { panic!() };
-    assert_eq!((notice.event, notice.params[0].as_str(), notice.guid), (12, "Bob", Some(5)));
-    let Packet::Roster { .. } = decode(0x8a, &roster()).unwrap() else { panic!() };
+    let event = Packet::Event {
+        event: 12,
+        params: vec![b"Bob".to_vec()],
+        guid: Some(5),
+    };
+    let [E::GuildEvent(notice)] = &session_events(event)[..] else {
+        panic!()
+    };
+    assert_eq!(
+        (notice.event, notice.params[0].as_str(), notice.guid),
+        (12, "Bob", Some(5))
+    );
+    let Packet::Roster { .. } = decode(0x8a, &roster()).unwrap() else {
+        panic!()
+    };
     let events = session_events(decode(0x8a, &roster()).unwrap());
-    let [E::GuildRoster(shared), E::WrathGuild { .. }] = &events[..] else { panic!() };
+    let [E::GuildRoster(shared), E::WrathGuild { .. }] = &events[..] else {
+        panic!()
+    };
     assert_eq!(shared.members.len(), 2);
-    assert_eq!(shared.members[1].last_online_days, 0.0, "online members carry no time");
-    assert!(shared.members[0].last_online_days.is_nan(), "the raw bits survive as the float");
+    assert_eq!(
+        shared.members[1].last_online_days, 0.0,
+        "online members carry no time"
+    );
+    assert!(
+        shared.members[0].last_online_days.is_nan(),
+        "the raw bits survive as the float"
+    );
 }

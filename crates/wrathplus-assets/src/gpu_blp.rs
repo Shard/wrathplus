@@ -6,10 +6,10 @@
 
 use std::sync::OnceLock;
 
-use wrathplus_formats::{BlpMipChain, BlpTexels};
 use bevy::image::{CompressedImageFormatSupport, CompressedImageFormats};
 use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
+use wrathplus_formats::{BlpMipChain, BlpTexels};
 
 static BC_SUPPORTED: OnceLock<bool> = OnceLock::new();
 

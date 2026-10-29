@@ -1,9 +1,9 @@
 //! Sole lossless stable capture owner. App Migration owns future state/feeds/drains;
 //! this FIFO does not infer permissions, emit UI events, or initiate queries.
 use crate::net::NetHandlerApp;
-use wrathplus_protocol::{wrath_stable::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
+use wrathplus_protocol::{wrath_stable::Packet, SessionEvent, SessionEventKind};
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeStablePackets(pub(crate) VecDeque<Packet>);

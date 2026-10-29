@@ -17,10 +17,10 @@
 
 use bevy::prelude::*;
 
+use crate::app_core::group::GroupState;
 use crate::entities::{overhead_anchor, BoneAttach, OverheadFallback};
 use crate::nameplates::{height_scale, Nameplates};
 use crate::net::GuidIndex;
-use crate::app_core::group::GroupState;
 use crate::vplates::VPlates;
 use wrathplus_world::view::WorldCamera;
 

@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use super::wrath_achievements::{WrathAchievement, WrathAchievementMetadata};
-use super::{ScriptValue, UiScript, binding_abi::number_arg};
+use super::{binding_abi::number_arg, ScriptValue, UiScript};
 use mlua::{Lua, MultiValue, Value};
 
 const FLAG_STATISTIC: u32 = 0x1;

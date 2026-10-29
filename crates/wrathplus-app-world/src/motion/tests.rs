@@ -3,8 +3,8 @@
 
 use std::time::{Duration, Instant};
 
-use wrathplus_protocol::{JumpInfo, MonsterMoveFacing, MoveSpeeds, SplineInterpolation};
 use bevy::prelude::Quat;
+use wrathplus_protocol::{JumpInfo, MonsterMoveFacing, MoveSpeeds, SplineInterpolation};
 
 use wrathplus_protocol::RelayVerb;
 
