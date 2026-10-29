@@ -2,9 +2,9 @@
 //! ([`UiScript::set_stable`], every wire row resolved to strings) and the Lua's clicks queue verbs
 //! the app drains.
 //!
-//! The window shows slots 0..=2: 0 is the current pet, 1 and 2 the stable slots a hunter buys
-//! (`NUM_PET_STABLE_SLOTS` 2, two `StableSlotPrices.dbc` rows, vmangos `MAX_PET_STABLES` 2). The
-//! wire's 1-based slot arrives rebased ([`wrathplus_protocol::types::StabledPet::slot`]). Slot 0
+//! Wrath shows slots 0..=4: 0 is the current pet and 1..=4 are purchasable stable slots
+//! (AzerothCore `PetDefines.h`: `MAX_PET_STABLES = 4`). `NPCHandler.cpp::SendStablePet` marks
+//! current and inactive rows with flags 1 and 2; the app resolves them into these slots. Slot 0
 //! can hold a row with no pet out: a dismissed or distant pet still comes from the server's
 //! character-pet cache, and the stock window falls back to `GetStablePetInfo(0)` when
 //! `UnitExists("pet")` is false (`PetStable.lua:138`).
@@ -17,8 +17,8 @@ use mlua::{Lua, MultiValue, Value};
 
 use super::Model;
 
-/// The current pet plus the `NUM_PET_STABLE_SLOTS` (2) stable slots (`PetStable.lua:1`).
-pub const NUM_STABLE_SLOTS: usize = 3;
+/// The current pet plus four purchasable slots (Wrath `PetDefines.h`: `MAX_PET_STABLES = 4`).
+pub const NUM_STABLE_SLOTS: usize = 5;
 
 /// One stable window row, every wire field resolved to what the Lua renders. An empty slot is
 /// `None` in [`StableState::slots`]; an unbought one lies past [`StableState::num_stable_slots`].
@@ -43,13 +43,13 @@ pub struct StablePetSlot {
 /// The open stable's snapshot, pushed whole; `None` when no stable is open.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StableState {
-    /// Stable slots bought, 0..=2 (the wire's `numStableSlots`), not occupied: it enables buttons
+    /// Stable slots bought, 0..=4 (the wire's `numStableSlots`), not occupied: it enables buttons
     /// `1..=n` and prices the next slot.
     pub num_stable_slots: u32,
     /// The next slot's price in copper (`StableSlotPrices.dbc` row `num_stable_slots + 1`), 0 past
     /// the table, where the stock window has hidden the purchase row.
     pub next_slot_cost: u32,
-    /// The three window slots; index 0 is the current pet.
+    /// The five window slots; index 0 is the current pet.
     pub slots: [Option<StablePetSlot>; NUM_STABLE_SLOTS],
     /// A live pet is out: the client's pet-guid test (`[0xb714a0]|[0xb714a4]`), which forks a
     /// stabled pet's drop between swap and unstable. Not `slots[0].is_some()`: a dismissed or
@@ -58,7 +58,7 @@ pub struct StableState {
 }
 
 impl StableState {
-    /// `GetNumStablePets()`: how many of the three slots hold a pet.
+    /// `GetNumStablePets()`: how many of the five slots hold a pet.
     fn num_pets(&self) -> u32 {
         self.slots.iter().filter(|s| s.is_some()).count() as u32
     }
@@ -124,7 +124,7 @@ impl super::UiScript {
     }
 
     /// `GetSelectedStablePet()`'s answer, translated from the held pet number: 0 the summoned
-    /// pet, 1..=2 a stable slot, -1 nothing.
+    /// pet, 1..=4 a stable slot, -1 nothing.
     pub fn stable_selection(&mut self) -> i32 {
         let model = self.model_mut();
         selected_slot(&model.stable)
@@ -248,7 +248,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetNumStableSlots() → slots bought, 0..=2.
+    // GetNumStableSlots() → slots bought, 0..=4.
     g.set(
         "GetNumStableSlots",
         lua.create_function(|lua, ()| {
@@ -263,7 +263,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetNumStablePets() → how many of the three slots hold a pet.
+    // GetNumStablePets() → how many of the five slots hold a pet.
     g.set(
         "GetNumStablePets",
         lua.create_function(|lua, ()| {
@@ -418,8 +418,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|_, _model: Value| Ok(()))?,
     )?;
 
-    // BuyStableSlot(): the client's silent gates, in order: an open stable, fewer than 2 slots
-    // (`0x4cb0c4`), a price row and affordability (`0x4cb122`).
+    // BuyStableSlot(): an open stable, fewer than four purchased slots (Wrath
+    // `MAX_PET_STABLES`), a price row and affordability.
     g.set(
         "BuyStableSlot",
         lua.create_function(|lua, ()| {
@@ -427,7 +427,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             // Affordability reads `model.money`, the purse `GetMoney()` answers.
             let money = model.money;
             let allowed = model.stable.state.as_ref().is_some_and(|s| {
-                s.num_stable_slots as usize != NUM_STABLE_SLOTS - 1
+                (s.num_stable_slots as usize) < NUM_STABLE_SLOTS - 1
                     && s.next_slot_cost != 0
                     && u64::from(s.next_slot_cost) <= money
             });
@@ -452,282 +452,5 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::script::UiScript;
-
-    fn pet(number: u32, name: &str, level: u32) -> StablePetSlot {
-        StablePetSlot {
-            pet_number: number,
-            icon: Some("Interface\\Icons\\Ability_Hunter_Pet_Wolf".into()),
-            name: name.into(),
-            level,
-            family: Some("Wolf".into()),
-            loyalty: Some("(Loyalty Level 6) Best Friend".into()),
-            diet: vec!["Meat".into(), "Fish".into()],
-        }
-    }
-
-    fn state(slots: [Option<StablePetSlot>; NUM_STABLE_SLOTS]) -> StableState {
-        StableState {
-            num_stable_slots: 1,
-            next_slot_cost: 50_000,
-            slots,
-            has_live_pet: true,
-        }
-    }
-
-    /// A hunter with a pet out and one stabled, one slot bought.
-    fn open(s: &mut UiScript) {
-        s.set_stable(Some(state([
-            Some(pet(7, "Rex", 41)),
-            Some(pet(8, "Bruiser", 38)),
-            None,
-        ])));
-    }
-
-    #[test]
-    fn the_read_surface_answers_the_reference_calls() {
-        let mut s = UiScript::new().unwrap();
-        assert_eq!(s.eval::<i64>("return GetNumStableSlots()").unwrap(), 0);
-        assert_eq!(s.eval::<i64>("return GetNumStablePets()").unwrap(), 0);
-        assert_eq!(s.eval::<i64>("return GetNextStableSlotCost()").unwrap(), 0);
-        assert_eq!(s.eval::<i64>("return GetSelectedStablePet()").unwrap(), -1);
-
-        open(&mut s);
-        assert_eq!(s.eval::<i64>("return GetNumStableSlots()").unwrap(), 1);
-        assert_eq!(s.eval::<i64>("return GetNumStablePets()").unwrap(), 2);
-        assert_eq!(
-            s.eval::<i64>("return GetNextStableSlotCost()").unwrap(),
-            50_000
-        );
-
-        // `PetStable.lua:77`'s five-value destructuring.
-        assert_eq!(
-            s.eval::<(String, String, i64, String, String)>(
-                "local i, n, l, f, loy = GetStablePetInfo(1) return i, n, l, f, loy"
-            )
-            .unwrap(),
-            (
-                "Interface\\Icons\\Ability_Hunter_Pet_Wolf".into(),
-                "Bruiser".into(),
-                38,
-                "Wolf".into(),
-                "(Loyalty Level 6) Best Friend".into()
-            )
-        );
-
-        assert_eq!(
-            s.eval::<(String, String)>("return GetStablePetFoodTypes(1)")
-                .unwrap(),
-            ("Meat".into(), "Fish".into())
-        );
-        assert!(s
-            .eval::<bool>("return GetStablePetFoodTypes(2) == nil")
-            .unwrap());
-    }
-
-    #[test]
-    fn a_missing_pet_still_answers_five_values() {
-        let mut s = UiScript::new().unwrap();
-        open(&mut s);
-        for call in ["GetStablePetInfo(2)", "GetStablePetInfo(9)"] {
-            assert_eq!(s.arity(call).unwrap(), 5, "{call} arity");
-            // Still falsy for the stock window's `if ( GetStablePetInfo(i) )`.
-            assert!(s.eval::<bool>(&format!("return not {call}")).unwrap());
-            assert_eq!(
-                s.eval::<i64>(&format!("local _, _, l = {call} return l"))
-                    .unwrap(),
-                0,
-                "{call} level is 0, not nil"
-            );
-        }
-    }
-
-    #[test]
-    fn every_plain_click_returns_truthy() {
-        let mut s = UiScript::new().unwrap();
-        open(&mut s);
-        for call in [
-            "ClickStablePet(1)",
-            "ClickStablePet(1)",
-            "ClickStablePet(0)",
-            "ClickStablePet(2)",
-        ] {
-            assert!(
-                s.eval::<bool>(&format!("return {call} and true or false"))
-                    .unwrap(),
-                "{call}"
-            );
-        }
-        assert!(
-            s.take_stable_intents().is_empty(),
-            "selecting sends nothing"
-        );
-    }
-
-    #[test]
-    fn the_selection_translates_back_to_slot_indices() {
-        let mut s = UiScript::new().unwrap();
-        open(&mut s);
-        s.eval::<()>("ClickStablePet(0)").unwrap();
-        assert_eq!(s.eval::<i64>("return GetSelectedStablePet()").unwrap(), 0);
-        s.eval::<()>("ClickStablePet(1)").unwrap();
-        assert_eq!(s.eval::<i64>("return GetSelectedStablePet()").unwrap(), 1);
-        s.eval::<()>("ClickStablePet(2)").unwrap();
-        assert_eq!(
-            s.eval::<i64>("return GetSelectedStablePet()").unwrap(),
-            -1,
-            "an empty slot selects nothing, not itself"
-        );
-    }
-
-    #[test]
-    fn a_list_clears_the_selection_and_a_stale_pet_degrades() {
-        let mut s = UiScript::new().unwrap();
-        open(&mut s);
-        s.eval::<()>("ClickStablePet(1)").unwrap();
-        assert_eq!(s.stable_selection(), 1);
-
-        // Every list clears it (`0x4cadf8`).
-        open(&mut s);
-        assert_eq!(s.stable_selection(), -1, "a list clears the selection");
-    }
-
-    #[test]
-    fn every_drop_returns_falsy_even_when_it_sends() {
-        let mut s = UiScript::new().unwrap();
-        open(&mut s);
-        // A drop that sends.
-        assert!(s
-            .eval::<bool>("PickupStablePet(1) return ClickStablePet(0) == nil")
-            .unwrap());
-        assert_eq!(s.take_stable_intents(), vec![StableIntent::Swap(8)]);
-
-        // A drop that sends nothing.
-        assert!(s
-            .eval::<bool>("PickupStablePet(1) return ClickStablePet(1) == nil")
-            .unwrap());
-        assert!(s.take_stable_intents().is_empty());
-    }
-
-    #[test]
-    fn dropping_onto_an_occupied_slot_swaps() {
-        let mut s = UiScript::new().unwrap();
-        open(&mut s);
-        s.eval::<()>("PickupStablePet(0) ClickStablePet(1)")
-            .unwrap();
-        assert_eq!(s.take_stable_intents(), vec![StableIntent::Swap(8)]);
-    }
-
-    #[test]
-    fn an_unpurchased_slot_takes_the_drop_and_sends_nothing() {
-        let mut s = UiScript::new().unwrap();
-        // Slot 1 bought and empty, slot 2 unbought.
-        s.set_stable(Some(state([Some(pet(7, "Rex", 41)), None, None])));
-        s.eval::<()>("PickupStablePet(0) ClickStablePet(1)")
-            .unwrap();
-        assert_eq!(s.take_stable_intents(), vec![StableIntent::Stable]);
-
-        s.eval::<()>("PickupStablePet(0) ClickStablePet(2)")
-            .unwrap();
-        assert!(s.take_stable_intents().is_empty(), "slot 2 is not bought");
-        // The drop completed: the cursor is empty, so the next click selects.
-        assert!(s.eval::<bool>("return ClickStablePet(1) and true").unwrap());
-        assert!(s.take_stable_intents().is_empty());
-    }
-
-    #[test]
-    fn the_fork_follows_the_live_pet_not_the_row() {
-        let mut s = UiScript::new().unwrap();
-        open(&mut s);
-        s.eval::<()>("PickupStablePet(1) ClickStablePet(0)")
-            .unwrap();
-        assert_eq!(s.take_stable_intents(), vec![StableIntent::Swap(8)]);
-
-        // The same list, but the pet is dismissed: the row survives, the guid does not.
-        let mut dismissed = state([Some(pet(7, "Rex", 41)), Some(pet(8, "Bruiser", 38)), None]);
-        dismissed.has_live_pet = false;
-        s.set_stable(Some(dismissed));
-        s.eval::<()>("PickupStablePet(1) ClickStablePet(0)")
-            .unwrap();
-        assert_eq!(
-            s.take_stable_intents(),
-            vec![StableIntent::Unstable(8)],
-            "a row without a live guid unstables"
-        );
-    }
-
-    #[test]
-    fn stable_to_stable_is_a_no_op_and_empty_slots_do_not_grab() {
-        let mut s = UiScript::new().unwrap();
-        s.set_stable(Some(StableState {
-            num_stable_slots: 2,
-            slots: [None, Some(pet(8, "Bruiser", 38)), None],
-            ..state([None, None, None])
-        }));
-        s.eval::<()>("PickupStablePet(1) ClickStablePet(2)")
-            .unwrap();
-        assert!(s.take_stable_intents().is_empty());
-
-        // An empty slot never arms a grab, so the following click is a select.
-        s.eval::<()>("PickupStablePet(2)").unwrap();
-        assert!(s.eval::<bool>("return ClickStablePet(0) and true").unwrap());
-        assert!(s.take_stable_intents().is_empty());
-    }
-
-    #[test]
-    fn buy_stable_slot_gates_locally_and_silently() {
-        let mut s = UiScript::new().unwrap();
-        s.set_money(1_000_000);
-        open(&mut s);
-        s.eval::<()>("BuyStableSlot()").unwrap();
-        assert_eq!(s.take_stable_intents(), vec![StableIntent::BuySlot]);
-
-        // Too poor.
-        s.set_money(10);
-        s.set_stable(Some(state([None, None, None])));
-        s.eval::<()>("BuyStableSlot()").unwrap();
-        assert!(s.take_stable_intents().is_empty(), "unaffordable is silent");
-
-        // Both slots owned, with money restored so only the cap refuses.
-        s.set_money(1_000_000);
-        let mut full = state([None, None, None]);
-        full.num_stable_slots = 2;
-        s.set_stable(Some(full));
-        s.eval::<()>("BuyStableSlot()").unwrap();
-        assert!(s.take_stable_intents().is_empty(), "the cap is silent");
-    }
-
-    #[test]
-    fn the_unstable_binding_gates_where_the_drag_path_does_not() {
-        let mut s = UiScript::new().unwrap();
-        open(&mut s); // has_live_pet = true
-        s.eval::<()>("UnstablePet(1)").unwrap();
-        assert!(s.take_stable_intents().is_empty(), "a pet is out — silent");
-
-        let mut dismissed = state([None, Some(pet(8, "Bruiser", 38)), None]);
-        dismissed.has_live_pet = false;
-        s.set_stable(Some(dismissed));
-        s.eval::<()>("UnstablePet(0)").unwrap();
-        assert!(s.take_stable_intents().is_empty(), "index 0 is rejected");
-        s.eval::<()>("UnstablePet(1)").unwrap();
-        assert_eq!(s.take_stable_intents(), vec![StableIntent::Unstable(8)]);
-    }
-
-    #[test]
-    fn close_drains_and_leaves_the_cursor_alone() {
-        let mut s = UiScript::new().unwrap();
-        open(&mut s);
-        assert!(!s.take_stable_close());
-        s.eval::<()>("ClosePetStables()").unwrap();
-        assert!(s.take_stable_close());
-        assert!(!s.take_stable_close(), "drain clears");
-    }
-
-    #[test]
-    fn the_paperdoll_setter_is_callable() {
-        let s = UiScript::new().unwrap();
-        s.eval::<()>("SetPetStablePaperdoll(nil)").unwrap();
-    }
-}
+#[path = "stable_tests.rs"]
+mod tests;

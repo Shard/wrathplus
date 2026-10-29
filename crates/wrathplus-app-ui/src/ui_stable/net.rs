@@ -50,7 +50,7 @@ fn on_result(
 
 /// `MSG_LIST_STABLED_PETS`, sent unprompted for the gossip stable option, which opens the window,
 /// and in answer to a refresh.
-fn list_stabled_pets(
+pub(super) fn list_stabled_pets(
     npc: u64,
     num_stable_slots: u8,
     pets: Vec<StabledPet>,
@@ -76,7 +76,7 @@ fn list_stabled_pets(
 /// shows `ERR_NOT_ENOUGH_MONEY` (`DisplayError(0x25)`), 8 and 9 re-request the list, as no success
 /// carries one, 10 counts a bought slot and re-requests, and 0, 2-7 and 12 up show nothing. 11
 /// fires `PET_STABLE_UPDATE` in the reference and nothing here: vmangos never sends it.
-fn stable_result(
+pub(super) fn stable_result(
     result: u8,
     stable_open: &mut StableOpen,
     errors: &mut StableErrors,
