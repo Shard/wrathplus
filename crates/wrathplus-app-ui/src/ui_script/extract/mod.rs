@@ -224,6 +224,7 @@ pub(super) struct GateInputs {
     spans: Vec<u32>,
     /// The stitch's ping-pong buffer: last frame's emptied allocation.
     held: Vec<UiQuad>,
+    xp_diagnostics: super::xp_diagnostics::Diagnostics,
 }
 
 /// How this frame's entry list lines up with last frame's.
@@ -691,6 +692,13 @@ pub(super) fn paint_script(
         && booths.images.0 == prev.portraits
         && extracted == prev.extracted;
     if settled {
+        prev.xp_diagnostics.observe(
+            &script,
+            &extracted,
+            &prev.spans,
+            &quads.quads,
+            "clean-skipped",
+        );
         drop(extract_span);
         let us_cmp = lap();
         if cost_on {
@@ -893,6 +901,8 @@ pub(super) fn paint_script(
         if dirtied {
             quads.dirty = true;
         }
+        prev.xp_diagnostics
+            .observe(&script, &extracted, &prev.spans, &quads.quads, "splice");
         prev.extracted = extracted;
         if splice_verify_enabled() {
             verify_splice(
@@ -1039,6 +1049,8 @@ pub(super) fn paint_script(
         quads.quads = out;
         quads.dirty = true;
     }
+    prev.xp_diagnostics
+        .observe(&script, &prev.extracted, &prev.spans, &quads.quads, "full");
     if cost_on {
         let us_diff = lap();
         let solves = script.layout_solves() - solves_before.unwrap_or(0);

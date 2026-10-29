@@ -27,6 +27,7 @@ mod wrath_addons;
 #[cfg(test)]
 mod wrath_framexml_tests;
 mod wrath_native;
+mod xp_diagnostics;
 
 /// The stock FrameXML this client runs off the player's own patch chain; its header is the rule.
 mod reference_ui;

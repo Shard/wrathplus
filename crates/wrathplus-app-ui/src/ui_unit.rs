@@ -1598,7 +1598,7 @@ fn combo_edge(last: Option<(u8, u64)>, now: (u8, u64)) -> Option<bool> {
 pub(crate) fn add_unit_feed(app: &mut App) {
     app.init_resource::<UnitFeedState>()
         .add_message::<crate::net::FieldChanged>()
-        .add_systems(Update, feed_units);
+        .add_systems(Update, feed_units.in_set(UnitFeed));
 }
 
 #[cfg(test)]

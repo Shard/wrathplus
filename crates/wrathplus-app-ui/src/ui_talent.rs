@@ -1,8 +1,8 @@
 //! The talent window feed: the class's pages from `Talent.dbc` and `TalentTab.dbc`, the known
 //! spells and `PLAYER_CHARACTER_POINTS1/2`, `LearnTalent` clicks as `CMSG_LEARN_TALENT` and
 //! `LearnPreviewTalents` as `CMSG_LEARN_PREVIEW_TALENTS`. A
-//! talent's rank is its highest known rank spell (learning grants every lower rank, vmangos
-//! `Player::LearnTalent`); an unlearned one wears rank 1's name and icon.
+//! talent's rank and unspent points follow the active `SMSG_TALENTS_INFO` group once received,
+//! falling back to known spells before it arrives; an unlearned one wears rank 1's name and icon.
 //!
 //! The red requirement lines are the three keys `0x52b390` emits, in its order:
 //! `TOOLTIP_TALENT_TIER_POINTS` (`0x854a40`), `TOOLTIP_TALENT_PREREQ[_P1]` (`0x854a5c`) and
@@ -25,6 +25,7 @@ use crate::app_core::session::ObjectStore;
 use crate::app_core::session::SelfPlayer;
 use crate::app_core::state::PlayerActions;
 use crate::app_core::state::Spells;
+use crate::net::wrath_notices::WrathProgress;
 use crate::net::{ClientCommand, NetCommands};
 use crate::ui_script::gate;
 use wrathplus_assets::{AssetSet, LockRecover, WorldAssets};
@@ -75,10 +76,12 @@ struct FeedMemory {
     points: Option<(u32, u32)>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn feed_talents(
     script: Option<NonSendMut<UiScript>>,
     talents: Option<Res<Talents>>,
     actions: Res<PlayerActions>,
+    progress: Option<Res<WrathProgress>>,
     spells: Option<Res<Spells>>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     changed_self: Query<(), (With<SelfPlayer>, Changed<ObjectStore>)>,
@@ -92,6 +95,7 @@ fn feed_talents(
     // counts as a change) and the self descriptor.
     let self_changed = !changed_self.is_empty();
     let actions_changed = actions.is_changed();
+    let progress_changed = progress.as_ref().is_some_and(|r| r.is_changed());
     let talents_changed = talents.as_ref().is_some_and(|r| r.is_changed());
     let spells_changed = spells.as_ref().is_some_and(|r| r.is_changed());
     gate::trace(
@@ -100,12 +104,18 @@ fn feed_talents(
             ("vm_reset", vm_reset),
             ("self", self_changed),
             ("actions", actions_changed),
+            ("progress", progress_changed),
             ("talents", talents_changed),
             ("spells", spells_changed),
         ],
     );
     let gate = gate::Gate::new(
-        vm_reset || self_changed || actions_changed || talents_changed || spells_changed,
+        vm_reset
+            || self_changed
+            || actions_changed
+            || progress_changed
+            || talents_changed
+            || spells_changed,
     );
     if gate.skip() {
         return;
@@ -119,7 +129,10 @@ fn feed_talents(
     let race = store.0.unit_race().unwrap_or(0);
     let class = store.0.unit_class().unwrap_or(0);
     let points = (
-        store.0.player_talent_points().unwrap_or(0),
+        player_talent_state(progress.as_deref()).map_or_else(
+            || store.0.player_talent_points().unwrap_or(0),
+            |(unspent, _)| unspent,
+        ),
         store.0.player_free_professions().unwrap_or(0),
     );
     // Scoped: the `GlobalStrings.lua` lookup borrows the VM, which the push needs mutably.
@@ -132,9 +145,10 @@ fn feed_talents(
                 .ok()
                 .filter(|t| !t.is_empty())
         };
-        build_pages(
+        build_pages_by(
             &talents.catalog,
-            &actions.spells,
+            &|t| player_rank(t, &actions.spells, progress.as_deref()),
+            &|spell| actions.spells.contains(&spell),
             &spells.catalog,
             race,
             class,
@@ -151,6 +165,8 @@ fn feed_talents(
         );
         script.set_talents(fresh.clone());
         memory.pushed = fresh;
+        // Build-12340 PlayerTalentFrame repaints on this event, after its getters are updated.
+        script.fire_event("PLAYER_TALENT_UPDATE", vec![]);
         // The talent and profession point deltas, as the reference's `SignalEvent2` sends them:
         // `ChatFrame.lua:1326` tests `arg2 > 0` unguarded, so an argless fire raises.
         // `memory.points` still holds the previous pair here.
@@ -174,6 +190,25 @@ fn feed_talents(
     if memory.points != Some(points) {
         gate.audit("feed_talents", "the points memo");
         memory.points = Some(points);
+    }
+}
+
+/// AzerothCore's BuildPlayerTalentsInfoData supplies the active spec and unspent points.
+fn player_talent_state(
+    progress: Option<&WrathProgress>,
+) -> Option<(u32, &wrathplus_protocol::events::TalentGroup)> {
+    let (unspent, active, groups) = progress?.talents.get(&false)?;
+    Some((*unspent, groups.get(usize::from(*active))?))
+}
+
+fn player_rank(t: &Talent, known: &BTreeSet<u32>, progress: Option<&WrathProgress>) -> u32 {
+    match player_talent_state(progress) {
+        Some((_, group)) => group
+            .talents
+            .iter()
+            .find(|&&(id, _)| id == t.id)
+            .map_or(0, |&(_, rank)| (u32::from(rank) + 1).min(t.max_rank())),
+        None => rank_of(t, known),
     }
 }
 
@@ -334,10 +369,12 @@ pub(crate) fn build_tab_pages(
 
 /// Drains `LearnTalent(tab, index)` clicks into `CMSG_LEARN_TALENT` for the current rank count,
 /// the 0-based next rank, which vmangos learns up to.
+#[allow(clippy::too_many_arguments)]
 fn drain_talent_learns(
     script: Option<NonSendMut<UiScript>>,
     talents: Option<Res<Talents>>,
     actions: Res<PlayerActions>,
+    progress: Option<Res<WrathProgress>>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<NetCommands>,
     pet: (
@@ -390,7 +427,7 @@ fn drain_talent_learns(
         else {
             continue;
         };
-        let rank = rank_of(t, &actions.spells);
+        let rank = player_rank(t, &actions.spells, progress.as_deref());
         // Not at max is the client's only send gate (`LearnTalent` `0x4f36a0`); points and
         // prereqs are the server's to enforce.
         if rank >= t.max_rank() {
@@ -487,3 +524,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "ui_talent_refresh_tests.rs"]
+mod refresh_tests;
