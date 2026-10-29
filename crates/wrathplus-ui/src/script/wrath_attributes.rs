@@ -76,6 +76,37 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 mod tests {
     use crate::script::UiScript;
 
+    /// Modified lookup is ordered by specificity; false is a value, and nil removes a row.
+    #[test]
+    fn modified_attributes_preserve_false_and_fall_back_after_removal() {
+        let script = UiScript::new().unwrap();
+        script
+            .run(
+                r#"
+                local f, other = CreateFrame('Frame'), CreateFrame('Frame')
+                f:SetAttribute('type', 'plain')
+                f:SetAttribute('*type*', 'both')
+                f:SetAttribute('shift-type*', 'prefix')
+                f:SetAttribute('*type1', 'suffix')
+                f:SetAttribute('shift-type1', false)
+                local function get() return f:GetAttribute('SHIFT-', 'TYPE', '1') end
+                assert(get() == false, 'false must not fall through')
+                f:SetAttribute('SHIFT-TYPE1', nil)
+                assert(get() == 'suffix', 'wildcard prefix precedes wildcard suffix')
+                f:SetAttribute('*TYPE1', nil)
+                assert(get() == 'prefix')
+                f:SetAttribute('SHIFT-TYPE*', nil)
+                assert(get() == 'both')
+                f:SetAttribute('*TYPE*', nil)
+                assert(get() == 'plain')
+                f:SetAttribute('TYPE', nil)
+                assert(get() == nil)
+                assert(other:GetAttribute('type') == nil, 'no cross-frame fallback')
+                "#,
+            )
+            .unwrap();
+    }
+
     #[test]
     fn attributes_store_per_frame_and_fire_on_attribute_changed() {
         let script = UiScript::new().unwrap();

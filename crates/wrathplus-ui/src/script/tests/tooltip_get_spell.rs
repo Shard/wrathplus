@@ -3,6 +3,49 @@
 use super::common::script;
 use crate::script::*;
 
+/// A delayed view must retain the recorded identity, but cannot resurrect a cleared spell.
+#[test]
+fn get_spell_survives_a_delayed_view_but_not_content_replacement() {
+    let mut s = script();
+    s.set_spell_catalog([SpellInfoView {
+        spell_id: 133,
+        name: "Fireball".into(),
+        ..Default::default()
+    }]);
+    s.run(
+        r#"
+        TT = CreateFrame('GameTooltip', 'DelayedSpellTip')
+        TT:SetSpellByID(133)
+        assert(select(3, TT:GetSpell()) == 133)
+        "#,
+    )
+    .unwrap();
+    assert_eq!(s.take_spell_tooltip_asks(), vec![133]);
+    s.set_spell_tooltip(
+        133,
+        SpellTooltipView {
+            name: "Fireball".into(),
+            description: "Resolved description".into(),
+            ..Default::default()
+        },
+    );
+    s.run(
+        r#"
+        assert(select(3, TT:GetSpell()) == 133, 'view answer retains spell identity')
+        TT:SetText('Unrelated content')
+        assert(select('#', TT:GetSpell()) == 0, 'text replacement clears the identity')
+        "#,
+    )
+    .unwrap();
+    s.set_spell_tooltip(133, SpellTooltipView::default());
+    assert_eq!(
+        s.eval::<usize>("return select('#', TT:GetSpell())")
+            .unwrap(),
+        0
+    );
+    assert!(s.take_errors().is_empty());
+}
+
 #[test]
 fn get_spell_answers_the_shown_spell_from_the_catalog() {
     let mut s = script();

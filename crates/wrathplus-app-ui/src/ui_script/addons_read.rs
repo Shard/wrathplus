@@ -69,6 +69,11 @@ mod tests {
         );
         assert!(read_under(&root, "../SECRET.TXT").is_none());
         assert!(read_under(&root, "PROBE/../../Secret.txt").is_none());
+        assert!(read_under(&root, r"PROBE\..\..\Secret.txt").is_none());
+        assert!(read_under(&root, "PROBE/..\\..\\Secret.txt").is_none());
+        assert!(read_under(&root, tmp.join("secret.txt").to_str().unwrap()).is_none());
+        assert!(read_under(&root, "PROBE/sub").is_none(), "not a file");
+        assert!(read_under(&root, "PROBE/missing.lua").is_none());
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
