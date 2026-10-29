@@ -5,12 +5,12 @@
 use std::time::{Duration, Instant};
 
 use avian3d::prelude::{Collider, CollisionLayers, RigidBody};
-use wrathplus_assets::coords::wow_to_bevy;
-use wrathplus_formats::CollisionMesh;
 use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
+use wrathplus_assets::coords::wow_to_bevy;
+use wrathplus_formats::CollisionMesh;
 
 /// Wall clock per frame for attaching finished colliders (one costs ~0.004 ms plus ~1.8e-5 ms per
 /// triangle); the rest wait, and the streamer loads far enough ahead that none is reachable yet.
@@ -285,6 +285,81 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use wrathplus_formats::{ChunkMesh, CHUNK_SIZE};
+
+    #[test]
+    fn elwynn_login_pin_has_walkable_inn_floor() {
+        const PIN: [f32; 3] = [-9469.03, 18.08872, 56.893948];
+        let data = wrathplus_formats::wow_data_or_skip!();
+        let mut chain = wrathplus_formats::open_chain(&data).expect("open chain");
+        let (tx, ty) = wrathplus_formats::world_to_tile(PIN[0], PIN[1]);
+        let tile =
+            wrathplus_formats::load_tile_mesh(&mut chain, "Azeroth", tx, ty).expect("login tile");
+        // Goldshire Inn stands over an authored ADT hole; its WMO, not terrain, supports login.
+        assert!(wrathplus_formats::terrain_height_at(&tile.chunks, PIN).is_none());
+        let inn = tile
+            .wmos
+            .iter()
+            .find(|w| w.model.to_ascii_lowercase().ends_with("goldshireinn.wmo"))
+            .expect("inn placement");
+        let hull =
+            wrathplus_formats::load_wmo_collision_tris(&mut chain, &inn.model).expect("inn hull");
+        let transform = Transform::from_translation(wow_to_bevy(inn.position))
+            .with_rotation(wrathplus_assets::coords::placement_rotation(inn.rotation));
+        let (inn_vertices, inn_triangles) =
+            placement_collider_data(Some(&hull), &transform).expect("inn collider");
+        let mut app = App::new();
+        app.init_resource::<crate::collision::MoverTraceExclusions>();
+        app.add_plugins((
+            MinimalPlugins,
+            bevy::transform::TransformPlugin,
+            bevy::asset::AssetPlugin::default(),
+            bevy::scene::ScenePlugin,
+            PhysicsPlugins::new(bevy::app::PostUpdate),
+        ));
+        app.init_asset::<Mesh>();
+        let (vertices, triangles) = terrain_collider_data(&tile.chunks).expect("terrain mesh");
+        app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::trimesh(vertices, triangles),
+            Transform::default(),
+        ));
+        app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::trimesh(inn_vertices, inn_triangles),
+            crate::collision::walk_layers(),
+            Transform::default(),
+        ));
+        app.update();
+        let hit = app
+            .world_mut()
+            .run_system_once(move |world: crate::collision::WorldCollision| {
+                let height = 2.027_777_7;
+                let radius = 1.0 / 3.0;
+                let capsule = Collider::capsule(radius, height - 2.0 * radius);
+                let center = wow_to_bevy(PIN) + Vec3::Y * (height * 0.5);
+                assert!(
+                    world
+                        .cast_mover(&capsule, center, Vec3::NEG_Y * 3.0, 0.01)
+                        .is_none(),
+                    "saved pose is below the flat floor's backface band"
+                );
+                let feet = wow_to_bevy(PIN);
+                let floor = world
+                    .ray_body(feet + Vec3::Y * 0.25, Dir3::NEG_Y, 0.25)
+                    .expect("nearby inn floor");
+                let lift = 0.25 - floor.distance;
+                assert!(
+                    (0.06..0.08).contains(&lift),
+                    "measured floor overlap {lift}"
+                );
+                world.cast_mover(&capsule, center + Vec3::Y * lift, Vec3::NEG_Y * 3.0, 0.01)
+            })
+            .unwrap();
+        assert!(
+            hit.is_some(),
+            "seated login body must see the installed inn floor"
+        );
+    }
 
     /// One flat MCNK at `(ix, iy)` with only what the wall builder reads. The tile's NW corner is
     /// the WoW origin: rows step −x and columns −y, as `adt_to_tile_mesh` lays them out.

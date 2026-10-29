@@ -136,15 +136,31 @@ pub(crate) fn cancel_auto_repeat_local(
     commands: &mut Commands,
     net: &crate::net::NetCommands,
 ) {
-    if auto_repeat.0.is_none() {
+    let Some(spell_id) = auto_repeat.0.take() else {
         // The reference's `[0xceac30] == 0` early-out: nothing running, nothing sent.
         return;
-    }
-    auto_repeat.0 = None;
+    };
     if let Some(e) = entity {
         commands
             .entity(e)
             .remove::<(AutoRepeatArmed, RangedHold, NockedAmmo, NockLatch)>();
+        // Cancel the running spell's visual too (`0x807560`, reap keyed by spell at `0x614150`).
+        // Inspect at command application: an earlier START may still have its insert queued.
+        commands.queue(move |world: &mut World| {
+            let hold = world.get::<CastHold>(e).copied();
+            if hold.is_some_and(|h| h.spell_id == spell_id) {
+                world.entity_mut(e).remove::<CastHold>();
+            }
+            // Sound holds are entity-keyed; never stop another spell's current hold sound.
+            if hold.is_none_or(|h| h.spell_id == spell_id) {
+                world.write_message(SpellKitSound::StopHold { entity: e });
+            }
+            world.write_message(SpellKitFx::Reap {
+                entity: e,
+                spell_id,
+                class: spell_visual::FxClass::Hold,
+            });
+        });
     }
     let _ = net.0.send(crate::net::ClientCommand::CancelAutoRepeat);
 }

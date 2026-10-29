@@ -365,7 +365,16 @@ fn deliver_native(
         let name = notice.channel;
         match notice.kind {
             NotifyKind::YouJoined { channel_id, .. } => {
+                // AC UpdateLocalChannels sends the new constant-channel join without an old-name
+                // leave. Reuse its confirmed ChannelID's slot before the stock YOU_CHANGED event.
+                if channels.number_of(&name).is_none() {
+                    if let Some(old) = ledger.replacement_name(channel_id).map(str::to_owned) {
+                        channels.rename_slot(&old, &name);
+                        script.set_joined_channels(channels.names());
+                    }
+                }
                 deliver(script, windows, channels, event);
+                script.set_joined_channels(channels.names());
                 ledger.joined(&name, channel_id, channels.number_of(&name));
             }
             NotifyKind::YouLeft { is_constant, .. } => {

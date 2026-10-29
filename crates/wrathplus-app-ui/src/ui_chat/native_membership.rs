@@ -20,6 +20,14 @@ pub(super) struct NativeMembership {
 }
 
 impl NativeMembership {
+    /// Constant channels retain their identity across zone-name replacements.
+    pub fn replacement_name(&self, channel_id: u32) -> Option<&str> {
+        self.rows
+            .iter()
+            .find(|row| channel_id != 0 && row.channel_id == channel_id && row.custom_state == 0)
+            .map(|row| row.name.as_str())
+    }
+
     /// Confirmation cannot allocate a missing slot. The caller resolves the actual slot
     /// after the existing chat lifecycle; no catalog or guessed slot identities are used.
     pub fn joined(&mut self, name: &str, channel_id: u32, slot: Option<u32>) {
@@ -125,6 +133,23 @@ mod tests {
                 custom_state: 0,
             }
         );
+    }
+
+    #[test]
+    fn replacement_identity_excludes_custom_and_explicit_pending_leave() {
+        let mut ledger = NativeMembership::default();
+        ledger.joined("Custom", 0, Some(2));
+        ledger.joined("General - Ironforge", 1, Some(1));
+        assert_eq!(ledger.replacement_name(0), None);
+        assert_eq!(ledger.replacement_name(22), None);
+        assert_eq!(ledger.replacement_name(1), Some("General - Ironforge"));
+        ledger.left("General - Ironforge", 1);
+        assert_eq!(ledger.replacement_name(1), Some("General - Ironforge"));
+        ledger.joined("General - Dun Morogh", 1, Some(1));
+        assert!(!ledger.retains("General - Ironforge"));
+        assert_eq!(ledger.snapshot(|_| Some(1)).len(), 2);
+        ledger.explicit_leave("General - Dun Morogh");
+        assert_eq!(ledger.replacement_name(1), None);
     }
 
     #[test]

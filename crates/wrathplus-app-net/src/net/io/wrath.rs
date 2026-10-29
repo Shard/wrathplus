@@ -1327,6 +1327,9 @@ impl MovementAuthorityHandle {
             return Ok(UnsetAckResult::Stale);
         }
         let expected = PendingAuthorityOrder::ForceRoot { order, rooted };
+        if state.waits_for_teleport(expected) {
+            return Ok(UnsetAckResult::PendingTeleport);
+        }
         if !state.drives_or_parked(order.mover_guid)
             || state.pending_orders.front() != Some(&expected)
         {
@@ -1380,6 +1383,9 @@ impl MovementAuthorityHandle {
             return Ok(UnsetAckResult::Stale);
         }
         let expected = PendingAuthorityOrder::UnsetCanFly(order);
+        if state.waits_for_teleport(expected) {
+            return Ok(UnsetAckResult::PendingTeleport);
+        }
         if !state.drives_or_parked(order.mover_guid)
             || state.pending_orders.front() != Some(&expected)
         {
@@ -1439,6 +1445,9 @@ impl MovementAuthorityHandle {
         }
         let expected = PendingAuthorityOrder::Mover(order);
         let guid = order.mover_guid();
+        if state.waits_for_teleport(expected) {
+            return Ok(UnsetAckResult::PendingTeleport);
+        }
         if !state.drives_or_parked(guid)
             || state.pending_orders.front() != Some(&expected)
             || matches!(order, MoverOrder::TeleportNear { .. })
@@ -1555,10 +1564,27 @@ impl MovementAuthorityHandle {
     }
 }
 
+impl MovementAuthorityState {
+    /// Near teleports (MSG_MOVE_TELEPORT) wait for the controller snap; subsequent ACKs must
+    /// retain receipt order and use the destination pose, not overtake the teleport ACK.
+    fn waits_for_teleport(&self, expected: PendingAuthorityOrder) -> bool {
+        matches!(
+            self.pending_orders.front(),
+            Some(PendingAuthorityOrder::Mover(
+                MoverOrder::TeleportNear { .. }
+            ))
+        ) && !matches!(
+            expected,
+            PendingAuthorityOrder::Mover(MoverOrder::TeleportNear { .. })
+        ) && self.pending_orders.get(1) == Some(&expected)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UnsetAckResult {
     Sent,
     PendingSelfPose,
+    PendingTeleport,
     Stale,
 }
 
@@ -1992,24 +2018,11 @@ fn writer_loop(
                                 &mut pre_self_timeout,
                             ),
                             WrathWriterCommand::PoseReady => {
-                                let mut result = Ok(());
-                                while let Some(pending) = pending_authority.pop_front() {
-                                    match send_pending_authority(active, pending) {
-                                        Ok(UnsetAckResult::Sent | UnsetAckResult::Stale) => {}
-                                        Ok(UnsetAckResult::PendingSelfPose) => {
-                                            pending_authority.push_front(pending);
-                                            break;
-                                        }
-                                        Err(error) => {
-                                            result = Err(error);
-                                            break;
-                                        }
-                                    }
-                                }
-                                if pending_authority.is_empty() {
-                                    pre_self_timeout = crossbeam_channel::never();
-                                }
-                                result
+                                drain_authority_queue(
+                                    &mut pending_authority,
+                                    &mut pre_self_timeout,
+                                    |pending| send_pending_authority(active, pending),
+                                )
                             }
                         },
                         _ => continue,
@@ -2399,7 +2412,11 @@ fn writer_loop(
                         match authority.send_teleport_ack(guid, counter, timestamp, |body| {
                             active.writer.send_raw(u32::from(wrath_authority::MSG_MOVE_TELEPORT_ACK), body)
                         }) {
-                            Ok(true) => Ok(()),
+                            Ok(true) => drain_authority_queue(
+                                &mut pending_authority,
+                                &mut pre_self_timeout,
+                                |pending| send_pending_authority(active, pending),
+                            ),
                             Ok(false) => {
                                 bevy::log::warn!("net(wrath): teleport ACK {counter} for {guid:#x} is not the pending head order; not sent");
                                 continue;
@@ -3296,7 +3313,7 @@ fn expire_pre_self_orders(
     let _ = control.send(WrathWriterControl::Fatal {
         epoch,
         reason: format!(
-            "Wrath self pose did not arrive within {} ms with {pending} pending movement order(s)",
+            "Wrath self pose did not arrive or teleport snap remained pending within {} ms with {pending} pending movement order(s)",
             PRE_SELF_ORDER_TIMEOUT.as_millis()
         ),
     });
@@ -3479,7 +3496,7 @@ fn queue_or_send_authority(
     queue: &mut std::collections::VecDeque<PendingAuthorityOrder>,
     timeout: &mut Receiver<Instant>,
 ) -> Result<()> {
-    // Once one pre-self order is waiting, preserve receipt order without probing later orders.
+    // Once a pose or teleport snap is waiting, preserve receipt order without probing later orders.
     if !queue.is_empty() {
         if queue.len() == MAX_PENDING_PRE_SELF_ORDERS {
             bail!("too many Wrath movement orders before self pose");
@@ -3488,11 +3505,31 @@ fn queue_or_send_authority(
         return Ok(());
     }
     match send_pending_authority(active, pending)? {
-        UnsetAckResult::PendingSelfPose => {
+        UnsetAckResult::PendingSelfPose | UnsetAckResult::PendingTeleport => {
             *timeout = crossbeam_channel::after(PRE_SELF_ORDER_TIMEOUT);
             queue.push_back(pending);
         }
         UnsetAckResult::Sent | UnsetAckResult::Stale => {}
+    }
+    Ok(())
+}
+
+/// Retry only the queued head after a self pose or controller teleport ACK makes progress.
+fn drain_authority_queue(
+    queue: &mut std::collections::VecDeque<PendingAuthorityOrder>,
+    timeout: &mut Receiver<Instant>,
+    mut send: impl FnMut(PendingAuthorityOrder) -> Result<UnsetAckResult>,
+) -> Result<()> {
+    while let Some(&pending) = queue.front() {
+        match send(pending)? {
+            UnsetAckResult::Sent | UnsetAckResult::Stale => {
+                queue.pop_front();
+            }
+            UnsetAckResult::PendingSelfPose | UnsetAckResult::PendingTeleport => break,
+        }
+    }
+    if queue.is_empty() {
+        *timeout = crossbeam_channel::never();
     }
     Ok(())
 }
@@ -5574,3 +5611,6 @@ mod observer_teleport_tests {
         assert!(!wrath_authority::is_mover_order(0x00c5));
     }
 }
+
+#[cfg(test)]
+mod release_spirit_tests;

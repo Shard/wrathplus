@@ -21,6 +21,8 @@ use wrathplus_protocol::ObjectFields;
 mod wrath_death;
 #[cfg(test)]
 mod wrath_oneshot;
+#[cfg(test)]
+mod repeat_cancel;
 
 /// A held non-weapon keeps Special1H(57): the substitution (`0x5fe3cc`) keys on an empty hand.
 fn holding_a_non_weapon() -> Wielded {

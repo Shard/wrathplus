@@ -5,10 +5,10 @@ use bevy::prelude::*;
 
 use wrathplus_ui::script::{ScriptValue, UiScript, UnitState};
 
+use crate::app_core::session::ObjectStore;
 use crate::creature_type::CreatureTypeSources;
 use crate::names::NameCache;
 use crate::net::NetCommands;
-use crate::app_core::session::ObjectStore;
 use crate::ui_script::gate;
 use crate::ui_unit::{fire_transitions, snapshot};
 
@@ -173,7 +173,9 @@ fn watch_name_timestamp(
     if !was_renamed(previous, (pet_guid, now)) {
         return;
     }
-    if let Some(pet_number) = wrathplus_protocol::guid::pet_number(pet_guid) {
+    // AzerothCore names pets by CharmInfo::GetPetNumber, not the GUID entry bits.
+    let pet_number = store.0.unit_pet_number();
+    if pet_number != 0 {
         debug!("ui_pet: pet {pet_guid:#x} was renamed (stamp → {now:?}) — re-asking its name");
         names.forget_pet(pet_number);
     }

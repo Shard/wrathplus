@@ -15,13 +15,13 @@ use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorOptions, PrimaryWindow};
 
-use crate::creature_anim::MovementState;
+use crate::app_core::anim::BodyTwist;
 use crate::app_core::movement::move_flags;
 use crate::app_core::movement::wrap_pi;
-use crate::app_core::anim::BodyTwist;
-use crate::net::{ClientCommand, NetCommands, TeleportMessage, WorldportMessage};
 use crate::app_core::session::Embodied;
 use crate::app_core::ui_flags::InspectMode;
+use crate::creature_anim::MovementState;
+use crate::net::{ClientCommand, NetCommands, TeleportMessage, WorldportMessage};
 use wrathplus_assets::coords::wow_to_bevy;
 use wrathplus_assets::AssetSet;
 use wrathplus_world::interact::{WorldClick, WorldRightClick};
@@ -98,9 +98,8 @@ use state::{
     WEDGE_STALL_RATIO, WEDGE_STILL_FRAMES,
 };
 pub(crate) use state::{
-    Player, PlayerCapsule, CAPSULE_HEIGHT, CAPSULE_RADIUS,
-    FEATHER_TERMINAL_VELOCITY, GRAVITY, HOVER_CLIMB_RATE, HOVER_HEIGHT, SETTLE_TIMEOUT,
-    STEP_UP_HEIGHT, TERMINAL_VELOCITY,
+    Player, PlayerCapsule, CAPSULE_HEIGHT, CAPSULE_RADIUS, FEATHER_TERMINAL_VELOCITY, GRAVITY,
+    HOVER_CLIMB_RATE, HOVER_HEIGHT, SETTLE_TIMEOUT, STEP_UP_HEIGHT, TERMINAL_VELOCITY,
 };
 #[cfg(test)]
 pub(crate) use swim::swim_enter_depth;
@@ -134,7 +133,6 @@ pub fn self_controlled(unit_flags: u32) -> bool {
     const NOT_SELF_CONTROLLED: u32 = 0x0000_0004 | 0x0040_0000 | 0x0080_0000;
     unit_flags & NOT_SELF_CONTROLLED == 0
 }
-
 
 /// `UNIT_FLAG_TAXI_FLIGHT`, bit 20 of `UNIT_FIELD_FLAGS` (vmangos `UnitDefines.h:565`), read by the
 /// client as `shr reg,0x14; test rl,1` at 20 sites with no shared gate, among them
@@ -244,7 +242,12 @@ impl Plugin for PlayerPlugin {
         )
         .add_systems(
             Update,
-            world_focus::release_post_snap_hold.after(wrathplus_world::schedule::WorldStage::Stream),
+            (
+                world_focus::seat_post_snap_floor,
+                world_focus::release_post_snap_hold,
+            )
+                .chain()
+                .after(wrathplus_world::schedule::WorldStage::Stream),
         );
         app.add_observer(camera::on_cvar);
         app.add_observer(camera_dynamics::on_cvar);

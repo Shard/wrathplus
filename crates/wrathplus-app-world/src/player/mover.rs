@@ -71,6 +71,28 @@ pub(super) fn capped_step(time: &Time) -> (Time, u32) {
     (capped, (delta - MAX_STEP).as_millis() as u32)
 }
 
+/// A server snap may put the feet slightly below a streamed WMO floor (Goldshire Inn's
+/// saved pose is 0.069 yd below it). Correct only that shallow overlap during the load hold;
+/// ordinary movement keeps its one-sided, no-depenetration contract, including walking off seats.
+/// Deviation: a bounded post-load floor seat compensates for server/client collision mismatch.
+pub(super) fn seat_streamed_floor(
+    player: &mut Player,
+    world: &wrathplus_world::collision::WorldCollision<'_, '_>,
+) {
+    const REACH: f32 = 0.25;
+    let origin = player.pos + Vec3::Y * REACH;
+    let Some(hit) = world.ray_body(origin, Dir3::NEG_Y, REACH) else {
+        return;
+    };
+    if hit.normal.y < GROUND_COS {
+        return;
+    }
+    let lift = REACH - hit.distance;
+    if lift > 0.0 {
+        player.pos.y += lift;
+    }
+}
+
 /// Advance the player mover one frame, writing its position and velocities.
 pub(super) fn step(
     player: &mut Player,
@@ -858,9 +880,9 @@ pub(crate) fn step_up(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_core::movement::CAPSULE_RADIUS;
     use crate::player::state::STEP_UP_ADVANCE;
     use crate::player::AIR_NUDGE_SPEED;
-    use crate::app_core::movement::CAPSULE_RADIUS;
     use bevy::ecs::system::RunSystemOnce;
 
     /// A Stormwind Trade District kerb: a 0.28 yd sidewalk behind a ~61° bevel, profiled from a
@@ -911,6 +933,29 @@ mod tests {
 
     fn player_capsule() -> Collider {
         Collider::capsule(CAPSULE_RADIUS, CAPSULE_HEIGHT - 2.0 * CAPSULE_RADIUS)
+    }
+
+    #[test]
+    fn load_hold_seats_a_shallow_floor_overlap_without_general_depenetration() {
+        for (feet, held, expected) in [
+            (-0.069, true, 0.0),
+            (-0.069, false, -0.069),
+            (-0.5, true, -0.5),
+            (0.5, true, 0.5),
+        ] {
+            let mut app = world_from_profile(&[(-3.0, 0.0), (3.0, 0.0)]);
+            app.insert_resource(Player {
+                active: true,
+                pos: Vec3::Y * feet,
+                settling: held,
+                ..Player::default()
+            });
+            app.world_mut()
+                .run_system_once(super::super::world_focus::seat_post_snap_floor)
+                .unwrap();
+            let y = app.world().resource::<Player>().pos.y;
+            assert!((y - expected).abs() < 0.001, "feet={feet} held={held}: {y}");
+        }
     }
 
     /// Walk into the kerb until it stops the body, then run one step-up attempt at `advance`.

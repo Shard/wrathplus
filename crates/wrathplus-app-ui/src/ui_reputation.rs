@@ -36,7 +36,10 @@ impl Plugin for UiReputationPlugin {
         app.add_systems(
             Update,
             (
-                feed_reputation.in_set(UiFeed),
+                // Stock UPDATE_FACTION reads UnitLevel/UnitXPMax and may hide the XP bar
+                // while its range is still zero (ReputationFrame.lua:323-413). Publish the
+                // unit/XP snapshot first; PLAYER_XP_UPDATE alone does not undo that hide.
+                feed_reputation.in_set(UiFeed).after(crate::ui_unit::UnitFeed),
                 drain_reputation_sends.after(UiInput),
             ),
         );

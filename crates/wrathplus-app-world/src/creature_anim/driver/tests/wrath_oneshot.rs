@@ -9,7 +9,7 @@ use bevy::animation::RepeatAnimation;
 const SWORD: u16 = 18;
 const SPAN: f32 = 1.0;
 
-fn fixture(replay: (u32, u32)) -> (App, Entity) {
+pub(super) fn fixture(replay: (u32, u32)) -> (App, Entity) {
     fixture_with_clock(replay, SPAN)
 }
 
