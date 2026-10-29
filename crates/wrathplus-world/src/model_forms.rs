@@ -147,7 +147,8 @@ impl ModelForms {
     ) {
         let e = self.entries.entry(key).or_default();
         e.want |= kinds;
-        build_entry(e, kinds, submeshes, meshes, usize::MAX, &mut 0);
+        // Uncapped in vertices too: a skinned form cut off by the frame budget reads as absent.
+        build_entry(e, kinds, submeshes, meshes, usize::MAX, usize::MAX, &mut 0);
     }
 
     /// Drop one model's entry (its asset left the store).
@@ -161,19 +162,20 @@ impl ModelForms {
     }
 }
 
-/// Advance one entry's builds within `budget` submeshes and [`VERT_BUDGET`]; returns the count.
+/// Advance one entry's builds within `budget` submeshes and `vert_cap` vertices; returns the count.
 fn build_entry(
     e: &mut Entry,
     kinds: u8,
     submeshes: &[ModelSubmesh],
     meshes: &mut Assets<Mesh>,
     budget: usize,
+    vert_cap: usize,
     verts: &mut usize,
 ) -> usize {
     let mut built = 0usize;
     if kinds & WANT_STATIC != 0 && e.done & WANT_STATIC == 0 {
         while e.stat.len() < submeshes.len() {
-            if built >= budget || *verts >= VERT_BUDGET {
+            if built >= budget || *verts >= vert_cap {
                 return built;
             }
             let geo = &submeshes[e.stat.len()].geometry;
@@ -187,7 +189,7 @@ fn build_entry(
     }
     if kinds & WANT_SKINNED != 0 && e.done & WANT_SKINNED == 0 {
         while e.skin.len() < submeshes.len() {
-            if built >= budget || *verts >= VERT_BUDGET {
+            if built >= budget || *verts >= vert_cap {
                 return built;
             }
             let geo = &submeshes[e.skin.len()].geometry;
@@ -265,7 +267,15 @@ pub(crate) fn furnish_model_forms(
             continue;
         };
         let want = e.want;
-        built += build_entry(e, want, submeshes, &mut meshes, cap - built, &mut verts);
+        built += build_entry(
+            e,
+            want,
+            submeshes,
+            &mut meshes,
+            cap - built,
+            VERT_BUDGET,
+            &mut verts,
+        );
         e.priority = i32::MAX; // re-asserted by next frame's require() calls
     }
     activity.model_meshes_built += built as u32;
@@ -274,6 +284,66 @@ pub(crate) fn furnish_model_forms(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    /// One rigged triangle-soup batch of `verts` vertices, every vertex on joint 0.
+    fn batch(verts: usize) -> ModelSubmesh {
+        let geometry = wrathplus_formats::RenderSubmesh {
+            positions: vec![[0.0; 3]; verts],
+            normals: vec![[0.0, 0.0, 1.0]; verts],
+            uvs: vec![[0.0; 2]; verts],
+            indices: (0..verts as u32).collect(),
+            joints: vec![[0; 4]; verts],
+            weights: vec![[1.0, 0.0, 0.0, 0.0]; verts],
+            ..Default::default()
+        };
+        ModelSubmesh {
+            geometry: std::sync::Arc::new(geometry),
+            texture: None,
+            texture2: None,
+            skin_slot: None,
+            geoset_id: 0,
+            char_slot: None,
+            blend: wrathplus_formats::ModelBlend::Opaque,
+            two_sided: false,
+            interior: false,
+            emissive: false,
+            icon_slot: false,
+            sidn: None,
+            window: false,
+            additive: false,
+            env_map: false,
+            no_depth_write: false,
+            no_depth_test: false,
+            fog_policy: wrathplus_formats::FogPolicy::Scene,
+            light_sphere: Vec4::ZERO,
+            billboard: None,
+            alpha_anim: None,
+            uv_anim: None,
+            uv_seq: None,
+            uv_rot_seq: None,
+            uv_scale_seq: None,
+            rgb_anim: None,
+            rgb_seq: None,
+            wmo_batch: None,
+            ground_quad: None,
+        }
+    }
+
+    /// The one-off lane builds both forms whole, past the per-frame vertex budget.
+    #[test]
+    fn ensure_now_builds_both_forms_past_the_frame_vertex_budget() {
+        let submeshes: Vec<ModelSubmesh> = (0..64).map(|_| batch(198)).collect();
+        const { assert!(64 * 198 > VERT_BUDGET / 2) }; // the fixture crosses the budget
+        let mut meshes = Assets::<Mesh>::default();
+        let mut forms = ModelForms::default();
+        let key = ModelKey::M2(AssetId::<M2Model>::default());
+        forms.ensure_now_rigged(key, &submeshes, &mut meshes);
+        let built = forms.slices(key);
+        assert_eq!(built.stat.len(), 64);
+        assert_eq!(built.skin.map(<[_]>::len), Some(64), "skinned form missing");
+    }
+
     /// The measured Stormwind crossing burst, ~3200 meshes, lands inside the fog margin at 60 Hz.
     #[test]
     fn a_city_crossing_furnishes_in_under_a_second() {

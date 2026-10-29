@@ -666,7 +666,8 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
     // The depth-prime twin (`M2UseZFill`) masks colour writes, so only the discards above shape its
     // depth. No early return: naga's MSL backend miscompiles the dead tail ("redefinition of
     // '_tmp'").
-    let faded_alpha = base_color.a * obj_fade;
+    // A Mod2x stage can reach alpha 2; saturated as 3.3.5a's 8-bit framebuffer saturates it.
+    let faded_alpha = clamp(base_color.a * obj_fade, 0.0, 1.0);
     let base = alpha_discard(pbr_input.material, base_color);
 
     // --- Lighting --------------------------------------------------------------------------------
