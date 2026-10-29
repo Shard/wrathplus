@@ -31,6 +31,8 @@ impl Plugin for StockCreatePlugin {
                 OnEnter(ClientState::CharCreate),
                 enter_stock_create.run_if(super::glue::stock_glue_active),
             )
+            // Glue-only, not UiFeed: stock_glue_up excludes InWorld, and this VM persists across
+            // glue screens until world entry replaces it. WorldStage::Net already precedes us.
             // Before input: the select screen's Create click shows `CharacterCreate` inside its own
             // Lua call (`SetGlueScreen`), so `CharacterCreate_OnShow` must find the catalog seeded.
             .add_systems(
@@ -229,7 +231,9 @@ fn seed_stock_create(
 }
 
 /// A create still in flight off the create screen (the session dropped back to the login) gets no
-/// answer: its status dialog closes and nothing waits on it.
+/// answer: its status dialog closes and nothing waits on it. `stock_glue_up` excludes InWorld;
+/// this spends no world-entry edge and targets only the persistent glue VM, never the frameless
+/// boot/entry VM. Gating on `ingame_ui_up` would prevent the abandoned glue dialog from closing.
 fn drop_stale_create(
     script: Option<NonSendMut<UiScript>>,
     state: Res<State<ClientState>>,
