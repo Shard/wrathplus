@@ -35,7 +35,8 @@ impl Plugin for UiPetTalentTreePlugin {
             (feed_pet_talent_tree, feed_pet_talents)
                 .in_set(UnitFeed)
                 .after(crate::ui_pet::pet_stop_on_old_target_clear)
-                .after(crate::ui_stable::feed_stable),
+                // PET_STABLE_SHOW handlers synchronously read IsAtStableMaster.
+                .before(crate::ui_stable::feed_stable),
         );
     }
 }

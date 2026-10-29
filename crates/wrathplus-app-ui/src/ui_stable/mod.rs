@@ -37,7 +37,10 @@ impl Plugin for UiStablePlugin {
                 (
                     // Range-close first so the clear fires `PET_STABLE_CLOSED` the same frame.
                     close_npc_session_out_of_range::<StableOpen>.before(feed_stable),
-                    feed_stable.in_set(UiFeed),
+                    feed_stable
+                        .in_set(UiFeed)
+                        // SHOW repaints synchronously and reads HasPetUI/isHunterPet.
+                        .after(crate::ui_pet_stats::PetSnapshot),
                     drain_stable.after(UiInput).before(StableBoothFeed),
                     // After the VM ticks: the selection is written by a click during `UiInput`
                     // and by `PetStable_Update`'s re-pick (`PetStable.lua:48-63`) inside the
@@ -77,10 +80,13 @@ pub struct StableOpen {
     /// (`0x4cac9b`), and `PET_STABLE_UPDATE`/`_PAPERDOLL` only from its creature-cache callbacks
     /// (`0x4cb3bf`, `0x4cba5f`).
     pub(crate) fresh_list: bool,
+    /// Native lists have no loyalty field; never resolve a Vanilla loyalty label for them.
+    pub(crate) native: bool,
 }
 
 impl StableOpen {
     pub(crate) fn open(&mut self, npc: u64, num_stable_slots: u8, pets: Vec<StabledPet>) {
+        self.native = false;
         self.npc = Some(npc);
         self.num_stable_slots = num_stable_slots;
         self.pets = pets;
@@ -88,6 +94,7 @@ impl StableOpen {
     }
 
     pub(crate) fn clear(&mut self) {
+        self.native = false;
         self.npc = None;
         self.num_stable_slots = 0;
         self.pets.clear();
@@ -167,7 +174,17 @@ fn snapshot(
     for wire in &open.pets {
         // Seat rows by their slot, not position: a petless hunter's list has no slot-0 row.
         match slots.get_mut(usize::from(wire.slot)) {
-            Some(seat) => *seat = Some(resolve_pet(wire, names, families, stats, commands)),
+            Some(seat) => {
+                let mut pet = resolve_pet(
+                    wire, names, families, stats.filter(|_| !open.native), commands,
+                );
+                if open.native {
+                    // Wrath PetStable.lua formats the fifth return as a talent string.
+                    // No loyalty travels on this wire; an unknown talent is empty, not nil.
+                    pet.loyalty = Some(String::new());
+                }
+                *seat = Some(pet);
+            },
             None => debug!(
                 "ui_stable: pet {} arrived in slot {} — past the {NUM_STABLE_SLOTS} the window has, dropped",
                 wire.pet_number, wire.slot

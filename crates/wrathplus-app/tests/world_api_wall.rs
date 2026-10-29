@@ -10,6 +10,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 mod app_sources;
+mod world_api_sources;
+
+use world_api_sources::test_module_files;
 
 /// The engine's module set when the world lives inside `wrathplus-app`: an engine module missing
 /// here hides its leaks. Unused once `crates/wrathplus-world` exists, which the scan checks.
@@ -544,53 +547,6 @@ fn measure_back() -> BTreeMap<String, BTreeSet<String>> {
         let text = std::fs::read_to_string(&file).unwrap();
         for (path, _) in paths_in(&text, false, false) {
             out.entry(path).or_default().insert(rel.clone());
-        }
-    }
-    out
-}
-
-/// Every source file that is a test module in its own file: declared `#[cfg(test)] mod x;`,
-/// with its body in `x.rs` or `x/mod.rs` beside its parent. Its names do not count.
-fn test_module_files(src: &Path) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    for file in rs_files(src) {
-        let text = std::fs::read_to_string(&file).unwrap();
-        // `a.rs`'s `mod b;` is `a/b.rs`; so is `a/mod.rs`'s.
-        let dir = match file.file_name().and_then(|n| n.to_str()) {
-            Some("mod.rs") | Some("lib.rs") | Some("main.rs") => {
-                file.parent().unwrap().to_path_buf()
-            }
-            _ => file.with_extension(""),
-        };
-        let mut armed = false;
-        for line in text.lines() {
-            let t = line.trim();
-            if t == "#[cfg(test)]" {
-                armed = true;
-                continue;
-            }
-            if armed {
-                if let Some(name) = t
-                    .strip_suffix(';')
-                    .and_then(|d| d.rsplit_once("mod "))
-                    .map(|(_, n)| n)
-                {
-                    for cand in [
-                        dir.join(format!("{name}.rs")),
-                        dir.join(name).join("mod.rs"),
-                    ] {
-                        if cand.is_file() {
-                            out.insert(
-                                cand.strip_prefix(src)
-                                    .unwrap()
-                                    .to_string_lossy()
-                                    .to_string(),
-                            );
-                        }
-                    }
-                }
-                armed = false;
-            }
         }
     }
     out

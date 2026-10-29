@@ -289,6 +289,10 @@ impl PluginGroup for GamePlugins {
 mod client_tests;
 
 #[cfg(test)]
+#[path = "game_plugins/schedule_source.rs"]
+mod schedule_source;
+
+#[cfg(test)]
 pub(crate) mod schedule_tests {
     use std::any::TypeId;
     use std::collections::{BTreeMap, HashMap, HashSet};
@@ -1036,7 +1040,12 @@ pub(crate) mod schedule_tests {
 
     /// Why a VM holder in `Update` ordered before the tick may stay out of
     /// [`crate::ui_script::UiFeed`], keyed by a suffix of the system's full name, with the reason.
-    const OUTSIDE_THE_FEED_PHASE: &[(&str, &str)] = &[];
+    const OUTSIDE_THE_FEED_PHASE: &[(&str, &str)] = &[
+        ("::ui_script::glue_create::seed_stock_create",
+         "stock_glue_up only; seeds the persistent glue VM before CharacterCreate_OnShow, after WorldStage::Net; not an in-world packet feed"),
+        ("::ui_script::glue_create::drop_stale_create",
+         "stock_glue_up only; closes an abandoned glue create dialog before input, after WorldStage::Net; never publishes to the entry VM"),
+    ];
 
     /// The VM ticks once a frame (`extract::tick_script`, in `UiInput`): a push the tick must see
     /// rides `UiFeed`, chained after the net drain and before the tick; a drain of what it produced
@@ -1185,6 +1194,8 @@ pub(crate) mod schedule_tests {
         ("ui_death.rs", "feed_death", Because::MemoLatched,
          "`feed.vm: VmMemo<DeathAnnounced>`: a fresh memo makes the first snapshot an edge and re-announces a held offer, confirm and corpse range"),
         ("ui_script/glue/host.rs", "stock_glue", Because::Deliberate, "argued at the fn"),
+        ("ui_script/glue_create.rs", "drop_stale_create", Because::Deliberate,
+         "stock_glue_up only: clears an abandoned create and closes its dialog on the persistent glue VM; ingame_ui_up is never true here (argued at the fn)"),
         ("ui_script/glue_create.rs", "drive_stock_create", Because::Deliberate,
          "the stock glue's create screen: its VM is the glue VM that persists from CharSelect, and it runs only while that VM hosts CharCreate (`stock_create_up`); the in-game interface is never up here"),
         ("screenshot.rs", "ask_for_captures", Because::FilledByVm,
@@ -1241,8 +1252,6 @@ pub(crate) mod schedule_tests {
          "a verdict answers our own push and a confirm follows a party member's escort accept, both held until the name resolves (the confirm is another player's act: coincidence-only residual)"),
         ("ui_script/extract/mod.rs", "paint_script", Because::Deliberate,
          "per-frame paint and cost state, not a queue"),
-        ("ui_social/feed.rs", "feed_social", Because::MemoLatched,
-         "the login-burst lists are re-announced to a new VM by `fed.seeded` (`VmMemo<FedSocial>`); the show flag is Lua's; a status line waits on the name resolve"),
         ("ui_stable/mod.rs", "feed_stable", Because::PlayerRoundTrip,
          "both packets follow a stable master's gossip and a click in its window"),
         ("ui_summon.rs", "feed_summon", Because::PlayerRoundTrip,
@@ -1260,17 +1269,6 @@ pub(crate) mod schedule_tests {
         ("ui_trainer/mod.rs", "feed_trainer", Because::PlayerRoundTrip,
          "a refusal answers a Train click and a list answers a trainer gossip click; the edges ride `VmMemo`s"),
     ];
-
-    /// `ui_chat/feed.rs` → `ui_chat::feed`; `target/mod.rs` → `target`; `lib.rs` → ``.
-    fn module_of(rel: &str) -> String {
-        let no_ext = rel.trim_end_matches(".rs");
-        let no_mod = no_ext.trim_end_matches("/mod");
-        if no_mod == "lib" {
-            String::new()
-        } else {
-            no_mod.replace('/', "::")
-        }
-    }
 
     /// A consumer (a system taking `NonSend[Mut]<UiScript>` whose body has a [`CONSUMES`] marker)
     /// passes if the schedule shows `ingame_ui_up` on it or a set above it, if it is a `fire_event`
@@ -1293,7 +1291,7 @@ pub(crate) mod schedule_tests {
                 }
                 let takes = f.body.contains("mem::take(") || f.body.contains(".drain(");
                 let memo = f.params.contains("VmMemo<");
-                consumers.push((rel.clone(), f.name.to_string(), takes, memo));
+                consumers.push((rel.clone(), f.name.to_string(), takes, memo, file.clone()));
             }
         }
         let mut app = headless_client();
@@ -1317,21 +1315,8 @@ pub(crate) mod schedule_tests {
         let mut offenders = Vec::new();
         let mut stale: Vec<String> = Vec::new();
         consumers.sort();
-        for (rel, name, takes, memo) in &consumers {
-            let module = module_of(rel);
-            let full = if module.is_empty() {
-                format!("wrathplus_app::{name}")
-            } else {
-                format!("wrathplus_app::{module}::{name}")
-            };
-            let info = by_name.get(full.as_str()).copied().or_else(|| {
-                let suffix = format!("::{name}");
-                let mut hits = by_name.iter().filter(|(k, _)| k.ends_with(&suffix));
-                match (hits.next(), hits.next()) {
-                    (Some((_, v)), None) => Some(*v),
-                    _ => None,
-                }
-            });
+        for (rel, name, takes, memo, file) in &consumers {
+            let info = super::schedule_source::lookup(&by_name, file, rel, name);
             let exempt = EXEMPT.iter().find(|(p, f, _, _)| p == rel && f == name);
             let is_gated =
                 info.is_some_and(|i| i.conditions.iter().any(|c| c.ends_with("::ingame_ui_up")));
@@ -1371,7 +1356,7 @@ pub(crate) mod schedule_tests {
         for (p, f, _, _) in EXEMPT {
             if !consumers
                 .iter()
-                .any(|(rel, name, _, _)| rel == p && name == f)
+                .any(|(rel, name, _, _, _)| rel == p && name == f)
             {
                 stale.push(format!(
                     "{p}: `{f}` is not a one-shot consumer holding the VM — drop its EXEMPT row"
