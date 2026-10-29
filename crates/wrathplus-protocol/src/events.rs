@@ -24,8 +24,6 @@ pub use support::{
 };
 
 /// One decoded world-stream event; its fieldless twin [`SessionEventKind`] keys the handler table.
-// Preserve the existing enum layout; expanding every variant exceeds the file's LoC budget.
-#[rustfmt::skip]
 #[derive(Debug, Clone, strum::EnumDiscriminants)]
 #[strum_discriminants(
     name(SessionEventKind),

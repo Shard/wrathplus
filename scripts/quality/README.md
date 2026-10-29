@@ -4,6 +4,10 @@
 `scripts/gates.sh`, `scripts/check.sh` and CI. CRAP, machete and typos stay opt-in until the
 activation plan's later steps.
 
+The Rust 1.98.1 formatting normalization migrated existing LoC allowances by exactly each
+file's formatter-only line delta; it did not absorb pre-existing growth. Future allowances
+continue to ratchet down, not up.
+
 Nothing here installs a hook, modifies Rust, or rewrites a baseline automatically. Ratchets join
 the existing `scripts/gates.sh` chain (fmt/clippy/test/doc-links/etc.), not a parallel gate system;
 CI mirrors its bare-runner checks. Keep CRAP on demand/pre-merge and out of the fast hook.

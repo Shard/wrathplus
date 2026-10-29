@@ -30,7 +30,10 @@ def run_rustdoc() -> str:
         capture_output=True,
         text=True,
     )
-    return out.stderr + out.stdout
+    text = out.stderr + out.stdout
+    if out.returncode:
+        raise RuntimeError(f"cargo doc failed ({out.returncode}):\n{text}")
+    return text
 
 
 def declared_names() -> set[str]:

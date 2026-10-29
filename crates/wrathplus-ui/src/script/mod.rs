@@ -446,7 +446,7 @@ use mlua::Lua;
 
 use crate::layout::Rect;
 use crate::order::ZTarget;
-use crate::widget::{FrameHandle, FrameKind, KindState};
+use crate::widget::{FrameHandle, KindState};
 
 // Registry keys, the only roots of Lua-side state (the `LUAI_MAXCSTACK` discipline).
 const REG_FRAME_META: &str = "__benilla_frame_meta";
