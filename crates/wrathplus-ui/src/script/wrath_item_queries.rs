@@ -75,13 +75,6 @@ pub(super) fn item_count(model: &Model, id: u32, flags: u32) -> u32 {
         .fold(0u32, |n, (_, count, _)| n.wrapping_add(count))
 }
 
-/// `GetItemCooldown`'s use spell (`0x809063`): the template's first trigger-0 spell slot.
-fn has_use_spell(t: &super::ItemTemplateView) -> bool {
-    t.item_spells
-        .iter()
-        .any(|&(trigger, id, _, _)| trigger == 0 && id != 0)
-}
-
 /// IsEquippedItemType's match (`0x51c7a0`): an `INVTYPE_*` token or its global string selects an
 /// `InventoryType` (callback `0x5176f0`); any other text is an item class name or either subclass
 /// name (`0x517740`, `+0x2c` and `+0x28`), all without case. Labelled: `0x517740`'s fourth table
@@ -144,25 +137,31 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
     // GetItemCooldown(item) (`0x510fc0`) → start, duration, enable, always three: 0, 0, 0 for an
     // uncached template (asked for: `0x809046` passes the request callback) or one with no use
-    // spell; else the use spell's record from the cooldown manager (`0x807980`), which answers
-    // 0, 0, 1 when none runs. Labelled: read from a carried copy's cooldown, the bags' snapshot
-    // (as `GetContainerItemCooldown`), so a worn or uncarried item reads 0, 0, 1; the
-    // enchant-granted use spell of an equipped copy (`0x5a86b0`) is not read.
+    // spell; else the use spell's record from the cooldown manager (`0x807980`), keyed on the
+    // spell and the item, which answers 0, 0, 1 when none runs; worn or carried, held or not. The
+    // host's query reads that list. Labelled: without a host, a carried copy's cooldown answers
+    // (the bags' snapshot, as `GetContainerItemCooldown`), so a worn or uncarried item reads 0, 0,
+    // 1; the enchant-granted use spell of an equipped copy (`0x5a86b0`) is not read.
     g.set(
         "GetItemCooldown",
         lua.create_function(|lua, item: Value| {
-            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            let now = model.now;
-            let id = super::item_arg::item_id_arg(lua, &model, &item);
-            let Some(t) = model.item_templates.get(&id) else {
-                if (id as i32) > 0 {
+            let ask = {
+                let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+                let id = super::item_arg::item_id_arg(lua, &model, &item);
+                if (id as i32) > 0 && !model.item_templates.contains_key(&id) {
                     model.item_stat_asks.insert(id);
                 }
+                super::query_verbs::item_ask(&model, id)
+            };
+            let Some(ask) = ask else {
                 return Ok((0.0, 0.0, 0));
             };
-            if !has_use_spell(t) {
-                return Ok((0.0, 0.0, 0));
+            let now = super::clock::now(lua);
+            if let Some(cooldown) = super::query::ask(lua, |q| q.item_cooldown(ask)) {
+                return Ok(super::query::cooldown_triple(now, cooldown));
             }
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let (id, now) = (ask.entry, model.now);
             let held = |&(bag, slot): &(i64, u32)| {
                 model
                     .containers

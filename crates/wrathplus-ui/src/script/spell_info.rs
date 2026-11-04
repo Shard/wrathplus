@@ -169,9 +169,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // GetSpellCooldown(spell [, book]) (`0x540e80`) -> start, duration, enable in `GetTime`
     // seconds, as `GetActionCooldown`: enable 0 for an on-hold cooldown; an expired or empty one
     // answers the reference's no-cooldown `(0, 0, 1)`, so a re-feed cannot replay the finish
-    // flash. A lone id picks its book by scanning the player's, then the pet's (`0x540ec7`).
-    // Labelled: the reference asks the cooldown manager (`0x809000`) for any spell; here only a
-    // book slot carries one, so an id outside both books reads cold.
+    // flash. A lone id picks its book by scanning the player's, then the pet's (`0x540ec7`). A
+    // book slot answers from its pushed cooldown; any other id asks the cooldown manager
+    // (`0x809000`) through the host's query. Labelled: without a host such an id reads cold, and
+    // an id on the pet bar but in neither book (`0x5d3560`) reads the player's list.
     lua.globals().set(
         "GetSpellCooldown",
         lua.create_function(|lua, args: MultiValue| {
@@ -181,29 +182,32 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 return Ok(MultiValue::new());
             };
             let now = crate::script::clock::now(lua);
-            let model = lua.app_data_ref::<Model>().expect("model");
-            let slots = |pet: bool| match pet {
-                true => &model.pet_book.slots,
-                false => &model.spellbook.slots,
+            let booked = {
+                let model = lua.app_data_ref::<Model>().expect("model");
+                let slots = |pet: bool| match pet {
+                    true => &model.pet_book.slots,
+                    false => &model.spellbook.slots,
+                };
+                [pet, !pet]
+                    .into_iter()
+                    .filter(|_| spell_id != 0)
+                    .find_map(|pet| slots(pet).iter().rev().find(|s| s.spell_id == spell_id))
+                    .map(|s| {
+                        s.cooldown
+                            .map_or((0.0, 0.0, true), |(start_ms, duration_ms, on)| {
+                                (
+                                    start_ms as f64 / 1000.0,
+                                    f64::from(duration_ms) / 1000.0,
+                                    on,
+                                )
+                            })
+                    })
             };
-            let cooldown = [pet, !pet]
-                .into_iter()
-                .filter(|_| spell_id != 0)
-                .find_map(|pet| slots(pet).iter().rev().find(|s| s.spell_id == spell_id))
-                .and_then(|s| s.cooldown);
-            let triple = match cooldown {
-                Some((start_ms, duration_ms, enabled)) => {
-                    let (start, duration) =
-                        (start_ms as f64 / 1000.0, f64::from(duration_ms) / 1000.0);
-                    if start + duration > now || !enabled {
-                        (start, duration, i32::from(enabled))
-                    } else {
-                        (0.0, 0.0, 1)
-                    }
-                }
-                None => (0.0, 0.0, 1),
-            };
-            triple.into_lua_multi(lua)
+            let asked = || super::query::ask(lua, |q| q.spell_cooldown(spell_id));
+            let cooldown = booked
+                .or_else(|| asked().filter(|_| spell_id != 0))
+                .unwrap_or((0.0, 0.0, true));
+            super::query::cooldown_triple(now, cooldown).into_lua_multi(lua)
         })?,
     )?;
     // `IsCurrentSpell(spell[, book])` (`0x541500` → `0x806030`): the spell is being cast, queued,

@@ -63,16 +63,23 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
     // SpellHasRange (`0x541af0`): `0x801650` for the player, or the pet for the pet book, with no
     // target, then 1 if either bound is nonzero (`0x541be2`); no unit answers nil (`0x541bba`).
-    // Labelled: the row's range, no range spell mod (op 5), so a mod that lends range to a
-    // rangeless spell is not seen.
+    // The host's query applies the range spell mod (op 5); without a host the row's static range
+    // answers, so a mod that lends range to a rangeless spell is not seen.
     set_slot_verb(lua, "SpellHasRange", |lua, id, book| {
-        let model = lua.app_data_ref::<Model>().expect("model app_data");
-        let unit = match is_pet_book(book) {
-            true => model.unit_guids.pet,
-            false => model.unit_guids.player,
+        let (spell, row_range) = {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let unit = match is_pet_book(book) {
+                true => model.unit_guids.pet,
+                false => model.unit_guids.player,
+            };
+            let (spell, row) = slot_row(&model, id, book);
+            (spell, unit != 0 && row.is_some_and(|row| row.has_range))
         };
-        let row = slot_row(&model, id, book).1;
-        Ok(flag(unit != 0 && row.is_some_and(|row| row.has_range)))
+        let pet = is_pet_book(book);
+        let asked = (spell != 0)
+            .then(|| super::query::ask(lua, |q| q.spell_has_range(spell, pet)))
+            .flatten();
+        Ok(flag(asked.unwrap_or(row_range)))
     })?;
 
     // IsAutoRepeatSpell (`0x5415d0`): a player-book spell (`0x541631`) that is the auto-repeat
@@ -245,6 +252,12 @@ mod tests {
             assert(u == 1 and m == nil)
             u, m = IsUsableSpell(40, 'spell')
             assert(u == nil and m == nil and select('#', IsUsableSpell('Nope')) == 0)
+            -- The host's range has the spell mods: Heal's row has no range, a mod lends one.
+            assert(SpellHasRange('Heal') == 1 and SpellHasRange('Attack') == nil)
+            -- A spell in neither book asks the cooldown manager; a book spell reads its slot.
+            local start, duration, enable = GetSpellCooldown(9999)
+            assert(start == 100 and duration == 30 and enable == 1)
+            assert(select(2, GetSpellCooldown('Heal')) == 0)
         "#,
         )
         .unwrap();
@@ -261,6 +274,13 @@ mod tests {
                 8 => Some(pet),
                 _ => None,
             }
+        }
+        fn spell_has_range(&self, spell: u32, _pet: bool) -> Option<bool> {
+            Some(spell == 2050)
+        }
+        fn spell_cooldown(&self, spell: u32) -> Option<(f64, f64, bool)> {
+            assert_eq!(spell, 9999, "only an id outside the books is asked");
+            Some((100.0, 30.0, true))
         }
         /// Heal is short of mana; Growl, from the pet book, is usable.
         fn spell_usable(&self, spell: u32, pet: bool) -> Option<(bool, bool)> {

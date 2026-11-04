@@ -27,6 +27,19 @@ fn unit_arg(lua: &Lua, model: &Model, args: &MultiValue, at: usize) -> Option<u6
     }
 }
 
+/// What an item verb asks about item `entry`: its use spell, the template's first trigger-0 spell
+/// (`0x510ef0` → `0x706b90`, as `0x80ac10` scans `+0x100`/`+0x114`); `None` with no template or
+/// none. Labelled: the equipped copy's enchant use spell (`0x5a86b0`) is not read.
+pub(super) fn item_ask(model: &Model, entry: u32) -> Option<super::ItemAsk> {
+    let spells = &model.item_templates.get(&entry)?.item_spells;
+    let &(_, spell, _, _) = spells.iter().find(|s| s.0 == 0 && s.1 != 0)?;
+    Some(super::ItemAsk {
+        entry,
+        spell,
+        category: 0,
+    })
+}
+
 /// A number, as the reference pushes `fld1`/`fldz` (`0x541d91`, `0x541daa`): 0 is truthy in Lua.
 fn number(b: bool) -> Value {
     Value::Integer(i64::from(b))

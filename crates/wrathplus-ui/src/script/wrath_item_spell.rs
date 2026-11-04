@@ -37,10 +37,23 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     set_use_flag(lua, "IsHelpfulItem", |_, row| row.helpful)?;
     set_use_flag(lua, "IsHarmfulItem", |_, row| row.harmful)?;
     // ItemHasRange (`0x51c870`): `0x801650` for the player with no target, a nonzero bound
-    // (`0x51c93b`); no player is nil. Labelled as SpellHasRange: no range mod.
-    set_use_flag(lua, "ItemHasRange", |model, row| {
-        model.unit_guids.player != 0 && row.has_range
-    })?;
+    // (`0x51c93b`); no player is nil. As SpellHasRange: the host's query applies the range mod,
+    // the row's static range answers without one.
+    lua.globals().set(
+        "ItemHasRange",
+        lua.create_function(|lua, item: Value| {
+            let (spell, row_range) = {
+                let model = lua.app_data_ref::<Model>().expect("model");
+                let id = super::item_arg::item_id_arg(lua, &model, &item);
+                let Some(row) = use_spell(&model, id) else {
+                    return Ok(Value::Nil);
+                };
+                (row.spell_id, model.unit_guids.player != 0 && row.has_range)
+            };
+            let asked = super::query::ask(lua, |q| q.spell_has_range(spell, false));
+            Ok(flag(asked.unwrap_or(row_range)))
+        })?,
+    )?;
     // IsConsumableItem (`0x5173e0`), template only: ammo or a thrown weapon (InventoryType 24,
     // 25, `0x51745b`), else a trigger-0 spell slot whose row exists (`0x5174a1`) with negative
     // charges or a reagent (`0x5174c8`); a miss is nil.
@@ -195,5 +208,33 @@ mod tests {
         s.model_mut().unit_guids.player = 1;
         s.run("assert(ItemHasRange('item:102') == 1 and ItemHasRange(103) == nil)")
             .unwrap();
+
+        // With the host's query: the range carries the spell mods, and the cooldown is the
+        // manager's record for the use spell and the item, carried or not.
+        s.set_game_query(Box::new(Fake));
+        s.run(
+            r#"
+            assert(ItemHasRange(102) == nil and ItemHasRange(103) == 1)
+            local start, duration, enable = GetItemCooldown(102)
+            assert(start == 5 and duration == 10 and enable == 1)
+            -- No template, or no use spell: 0, 0, 0 without asking.
+            assert(select(3, GetItemCooldown(999)) == 0 and select(3, GetItemCooldown(105)) == 0)
+        "#,
+        )
+        .unwrap();
+    }
+
+    /// Spell 20 (item 102) has no range under the mods, spell 30 has one; item 102's use spell
+    /// is cooling.
+    struct Fake;
+    impl crate::script::GameQuery for Fake {
+        fn spell_has_range(&self, spell: u32, pet: bool) -> Option<bool> {
+            assert!(!pet);
+            Some(spell == 30)
+        }
+        fn item_cooldown(&self, item: crate::script::ItemAsk) -> Option<(f64, f64, bool)> {
+            assert_eq!((item.entry, item.spell), (102, 20));
+            Some((5.0, 10.0, true))
+        }
     }
 }

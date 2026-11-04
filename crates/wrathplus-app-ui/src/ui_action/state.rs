@@ -628,6 +628,8 @@ mod tests {
             let walk = wrathplus_ui::script::GameQuery::spell_usable(link, FIREBALL, false);
             assert_eq!(walk, Some((u.is_some(), oom.is_some())));
             assert_eq!(walk, Some((false, true)));
+            let has_range = wrathplus_ui::script::GameQuery::spell_has_range(link, FIREBALL, false);
+            assert_eq!(has_range, Some(true), "ActionHasRange's answer");
             bar.unwrap()
         };
 

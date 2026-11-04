@@ -12,7 +12,7 @@ use bevy::prelude::*;
 use wrathplus_assets::LockRecover;
 use wrathplus_formats::RangeUnit;
 use wrathplus_protocol::types::ObjectType;
-use wrathplus_ui::script::{GameQuery, UiScript};
+use wrathplus_ui::script::{GameQuery, ItemAsk, UiScript};
 
 use crate::app_core::cooldowns::Cooldowns;
 use crate::app_core::session::{ObjectStore, SelfPlayer};
@@ -44,6 +44,18 @@ impl GameQuery for GameQueryLink {
     fn spell_usable(&self, spell: u32, pet: bool) -> Option<(bool, bool)> {
         self.frame().spell_usable(spell, pet)
     }
+
+    fn spell_has_range(&self, spell: u32, pet: bool) -> Option<bool> {
+        self.frame().spell_has_range(spell, pet)
+    }
+
+    fn spell_cooldown(&self, spell: u32) -> Option<(f64, f64, bool)> {
+        self.frame().cooldown(spell, 0)
+    }
+
+    fn item_cooldown(&self, item: ItemAsk) -> Option<(f64, f64, bool)> {
+        self.frame().cooldown(item.spell, item.entry)
+    }
 }
 
 /// One frame's inputs. With no player or no spells it answers nothing, the no-provider path.
@@ -69,6 +81,8 @@ struct Me {
     combo_banked: u8,
     carried: HashMap<u32, u32>,
     worn: WornSlots,
+    /// The frame's `(Instant, GetTime)` pair every cooldown push maps through.
+    clock: (Instant, f64),
 }
 
 #[derive(Clone, Copy)]
@@ -112,6 +126,40 @@ impl FrameQuery {
         Some(usable::spell_usable(spell, d, spells, &self.walk(me)))
     }
 
+    /// `SpellHasRange`'s `0x801650` with no target from the player, or the pet for the pet book
+    /// ([`range_check::has_range`], the bar's `ActionHasRange`, the range mod applied); false with
+    /// no pet (`0x541bba`).
+    pub fn spell_has_range(&self, spell: u32, pet: bool) -> Option<bool> {
+        let (me, spells) = (self.me.as_ref()?, self.spells.as_deref()?);
+        let d = spells.catalog.get(spell)?;
+        let caster = match pet {
+            true => match self.units.get(&me.pet) {
+                Some(row) => row.range,
+                None => return Some(false),
+            },
+            false => me.range,
+        };
+        let row = spells.ranges.get(d.range_index);
+        Some(range_check::has_range(&self.mods, d, row, caster))
+    }
+
+    /// The cooldown manager's record (`0x807980`) for `spell` keyed with `item` (0 for a spell),
+    /// as `GetTime` seconds: `GetCooldownInfo`'s longest remainder, as the bar and the book push
+    /// it, or `(0, 0, true)` when none runs.
+    pub fn cooldown(&self, spell: u32, item: u32) -> Option<(f64, f64, bool)> {
+        let (me, spells) = (self.me.as_ref()?, self.spells.as_deref()?);
+        let (anchor, ui_now) = me.clock;
+        let info = me
+            .cooldowns
+            .info(spell, item, spells.catalog.get(spell), anchor);
+        Some(
+            info.ui_triple(anchor, ui_now)
+                .map_or((0.0, 0.0, true), |(start, dur, on)| {
+                    (start as f64 / 1000.0, f64::from(dur) / 1000.0, on)
+                }),
+        )
+    }
+
     fn walk<'a>(&'a self, me: &'a Me) -> usable::UsableCtx<'a> {
         usable::UsableCtx {
             store: &me.store,
@@ -136,6 +184,7 @@ pub(crate) struct WalkInputs<'w, 's> {
     factions: Option<Res<'w, Factions>>,
     reputations: Res<'w, Reputations>,
     relations: crate::target::RelationInputs<'w, 's>,
+    clock: Res<'w, crate::app_core::ui_flags::UiClock>,
 }
 
 impl WalkInputs<'_, '_> {
@@ -163,6 +212,7 @@ impl WalkInputs<'_, '_> {
                 objects,
                 items,
             }),
+            clock: (self.clock.anchor, self.clock.ui_now),
         }
     }
 }

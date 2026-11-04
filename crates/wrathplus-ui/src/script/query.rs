@@ -33,6 +33,39 @@ pub trait GameQuery {
         let _ = (spell, pet);
         None
     }
+
+    /// `SpellHasRange`'s `0x801650` with no target, the range spell mod applied, for the player
+    /// (or the pet, `pet`); `None` keeps the VM's static row.
+    fn spell_has_range(&self, spell: u32, pet: bool) -> Option<bool> {
+        let _ = (spell, pet);
+        None
+    }
+
+    /// The cooldown manager's record for `spell` (`0x807980`, item 0) as `(start, duration,
+    /// enable)` in `GetTime` seconds, `(0, 0, true)` when none runs; `None` keeps the VM's path.
+    fn spell_cooldown(&self, spell: u32) -> Option<(f64, f64, bool)> {
+        let _ = spell;
+        None
+    }
+
+    /// The same for an item's use spell, keyed on the spell and the item (`0x807980`).
+    fn item_cooldown(&self, item: ItemAsk) -> Option<(f64, f64, bool)> {
+        let _ = item;
+        None
+    }
+}
+
+/// A cooldown as the verbs push it at `now`: a lapsed one reads the no-cooldown `(0, 0, 1)`, so
+/// a re-feed cannot replay the finish flash; an on-hold one keeps its start with enable 0.
+pub(super) fn cooldown_triple(
+    now: f64,
+    (start, duration, enabled): (f64, f64, bool),
+) -> (f64, f64, i32) {
+    if start + duration > now || !enabled {
+        (start, duration, i32::from(enabled))
+    } else {
+        (0.0, 0.0, 1)
+    }
 }
 
 /// The installed provider, its own app-data slot beside the model.
