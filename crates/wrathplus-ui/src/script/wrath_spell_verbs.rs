@@ -219,6 +219,8 @@ mod tests {
         s.model_mut().unit_guids.target = 7;
         s.model_mut().unit_guids.focus = 8;
         s.run("assert(IsSpellInRange('Heal') == nil)").unwrap();
+        s.run("local u, m = IsUsableSpell('Heal'); assert(u == nil and m == nil)")
+            .unwrap();
         s.set_game_query(Box::new(Fake));
         s.run(
             r#"
@@ -236,6 +238,13 @@ mod tests {
             assert(IsSpellInRange(40, 'spell') == nil)
             -- A name that resolves to no slot answers nothing.
             assert(select('#', IsSpellInRange('Nope')) == 0)
+            -- IsUsableSpell: two values, each 1 or nil; the pet book asks for the pet.
+            local u, m = IsUsableSpell('Heal')
+            assert(u == nil and m == 1 and select('#', IsUsableSpell('Heal')) == 2)
+            u, m = IsUsableSpell('Growl')
+            assert(u == 1 and m == nil)
+            u, m = IsUsableSpell(40, 'spell')
+            assert(u == nil and m == nil and select('#', IsUsableSpell('Nope')) == 0)
         "#,
         )
         .unwrap();
@@ -250,6 +259,14 @@ mod tests {
             match unit {
                 7 => Some(!pet),
                 8 => Some(pet),
+                _ => None,
+            }
+        }
+        /// Heal is short of mana; Growl, from the pet book, is usable.
+        fn spell_usable(&self, spell: u32, pet: bool) -> Option<(bool, bool)> {
+            match (spell, pet) {
+                (2050, false) => Some((false, true)),
+                (2649, true) => Some((true, false)),
                 _ => None,
             }
         }

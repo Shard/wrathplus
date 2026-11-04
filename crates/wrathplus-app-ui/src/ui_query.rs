@@ -7,15 +7,20 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use wrathplus_assets::LockRecover;
 use wrathplus_formats::RangeUnit;
 use wrathplus_protocol::types::ObjectType;
 use wrathplus_ui::script::{GameQuery, UiScript};
 
+use crate::app_core::cooldowns::Cooldowns;
 use crate::app_core::session::{ObjectStore, SelfPlayer};
-use crate::app_core::state::Spells;
-use crate::net::GuidIndex;
+use crate::app_core::state::{Factions, Selection, Spells};
+use crate::items::Items;
+use crate::net::wrath_combo_points::{banked, NativeComboPoints};
+use crate::net::{GuidIndex, Objects, Reputations};
+use crate::spell::usable::{self, TargetFacts, WornCached, WornSlots};
 use crate::spell::{range_check, RangeUnits, SpellModifiers};
 
 pub use crate::app_core::schedule::GameQueryBuild;
@@ -35,6 +40,10 @@ impl GameQuery for GameQueryLink {
     fn spell_in_range(&self, spell: u32, pet: bool, unit: u64) -> Option<bool> {
         self.frame().spell_in_range(spell, pet, unit)
     }
+
+    fn spell_usable(&self, spell: u32, pet: bool) -> Option<(bool, bool)> {
+        self.frame().spell_usable(spell, pet)
+    }
 }
 
 /// One frame's inputs. With no player or no spells it answers nothing, the no-provider path.
@@ -47,11 +56,19 @@ pub struct FrameQuery {
     units: HashMap<u64, UnitRow>,
 }
 
-/// Our own player: the caster `RangeUnits::caster` reads, and the `"pet"` unit.
+/// Our own player: the caster `RangeUnits::caster` reads, the `"pet"` unit, and the usable
+/// walk's inputs as the action bar reads them this frame.
 struct Me {
     pos: Vec3,
     range: RangeUnit,
     pet: u64,
+    store: ObjectStore,
+    /// The current target's facts; none when we target ourselves, as the bar reads it.
+    target: Option<TargetFacts>,
+    cooldowns: Cooldowns,
+    combo_banked: u8,
+    carried: HashMap<u32, u32>,
+    worn: WornSlots,
 }
 
 #[derive(Clone, Copy)]
@@ -81,7 +98,76 @@ impl FrameQuery {
         let d2 = caster.pos.distance_squared(target.pos);
         range_check::in_range(&self.mods, d, row, caster.range, Some(target.range), d2)
     }
+
+    /// `IsUsableSpell`: the action bar's walk ([`usable::spell_usable`]) on this frame's inputs,
+    /// so it equals `IsUsableAction` for the same spell. Labelled: that walk is the 1.12
+    /// `0x6e3d60` port, not 12340's `0x80b5d0`/`0x8017e0` (runes, health costs), and a pet-book
+    /// spell runs the player's walk where 12340 runs the pet's.
+    pub fn spell_usable(&self, spell: u32, pet: bool) -> Option<(bool, bool)> {
+        let (me, spells) = (self.me.as_ref()?, self.spells.as_deref()?);
+        if pet && me.pet == 0 {
+            return None;
+        }
+        let d = spells.catalog.get(spell)?;
+        Some(usable::spell_usable(spell, d, spells, &self.walk(me)))
+    }
+
+    fn walk<'a>(&'a self, me: &'a Me) -> usable::UsableCtx<'a> {
+        usable::UsableCtx {
+            store: &me.store,
+            target: me.target,
+            cooldowns: &me.cooldowns,
+            spell_mods: &self.mods,
+            combo_banked: me.combo_banked,
+            carried: &me.carried,
+            worn: &me.worn,
+        }
+    }
 }
+
+/// What the usable walk reads, as `feed_action_state` reads it.
+#[derive(SystemParam)]
+pub(crate) struct WalkInputs<'w, 's> {
+    objects: Objects<'w, 's>,
+    items: Res<'w, Items>,
+    cooldowns: Res<'w, Cooldowns>,
+    combo: Res<'w, NativeComboPoints>,
+    selection: Res<'w, Selection>,
+    factions: Option<Res<'w, Factions>>,
+    reputations: Res<'w, Reputations>,
+    relations: crate::target::RelationInputs<'w, 's>,
+}
+
+impl WalkInputs<'_, '_> {
+    fn me(&self, store: &ObjectStore, bodies: &Bodies, pos: Vec3, range: RangeUnit) -> Me {
+        let objects = &self.objects;
+        let target = (self.selection.guid.and_then(|g| objects.entity(g)))
+            .and_then(|e| bodies.get(e).ok())
+            .filter(|(_, _, ours)| !ours)
+            .map(|(t, _, _)| {
+                let (f, r) = (self.factions.as_deref(), &*self.reputations);
+                TargetFacts::of(t, store, f, r, self.relations.context())
+            });
+        let items = &self.items;
+        Me {
+            pos,
+            range,
+            pet: store.0.unit_pet_guid().unwrap_or(0),
+            store: store.clone(),
+            target,
+            cooldowns: self.cooldowns.clone(),
+            combo_banked: banked(&self.combo).0,
+            carried: crate::inventory::carried_counts(&store.0, objects),
+            worn: WornSlots::copy(&WornCached {
+                store,
+                objects,
+                items,
+            }),
+        }
+    }
+}
+
+type Bodies<'w, 's> = Query<'w, 's, (&'static ObjectStore, &'static Transform, Has<SelfPlayer>)>;
 
 /// The builder's memory: the spare snapshot it fills next (the one the VM let go of last frame),
 /// the shared catalogs re-wrapped only on change, and the trace clock.
@@ -102,7 +188,8 @@ pub(crate) fn build_game_query(
     range_units: RangeUnits,
     me: Query<(&ObjectStore, &Transform), With<SelfPlayer>>,
     index: Option<Res<GuidIndex>>,
-    bodies: Query<(&ObjectStore, &Transform)>,
+    bodies: Bodies,
+    walk: WalkInputs,
     mut memo: Local<BuildMemo>,
 ) {
     let started = Instant::now();
@@ -123,14 +210,11 @@ pub(crate) fn build_game_query(
     let frame = Arc::get_mut(&mut memo.spare).expect("unshared");
     frame.spells = shared_spells;
     frame.mods = shared_mods.unwrap_or_default();
-    frame.me = me.iter().next().map(|(store, t)| Me {
-        pos: t.translation,
-        range: range_units.caster(),
-        pet: store.0.unit_pet_guid().unwrap_or(0),
-    });
+    let caster = range_units.caster();
+    frame.me = (me.iter().next()).map(|(s, t)| walk.me(s, &bodies, t.translation, caster));
     frame.units.clear();
     for (&guid, &e) in index.iter().flat_map(|i| i.0.iter()) {
-        let Ok((store, t)) = bodies.get(e) else {
+        let Ok((store, t, _)) = bodies.get(e) else {
             continue;
         };
         // Units and players: a game object, corpse or dynamic object is never a spell's unit.
@@ -175,6 +259,8 @@ pub(crate) fn build(app: &mut App) {
             Update,
             GameQueryBuild
                 .after(wrathplus_world::schedule::WorldStage::Net)
+                // The relation inputs' vehicle state, derived from this frame's packets.
+                .after(crate::net::wrath_vehicle::derive_vehicle_state)
                 .before(UiFeed),
         )
         .add_systems(Update, build_game_query.in_set(GameQueryBuild));

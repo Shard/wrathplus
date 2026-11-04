@@ -1,10 +1,11 @@
 //! The spell and item verbs that read live game state, answered in the call through the host's
-//! [`GameQuery`](super::GameQuery): IsSpellInRange.
+//! [`GameQuery`](super::GameQuery): IsSpellInRange and IsUsableSpell.
 
 use mlua::{Lua, MultiValue, Value};
 
+use super::binding_abi::flag;
 use super::query::ask;
-use super::spell_arg::spell_arg_typed;
+use super::spell_arg::{set_slot_verb, spell_arg_typed};
 use super::spellbook::{book_slot, is_pet_book};
 use super::Model;
 
@@ -56,5 +57,21 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(MultiValue::from_iter([answer.map_or(Value::Nil, number)]))
         })?,
     )?;
+    // IsUsableSpell(spell) (`0x541680`): the shared resolver (no values on a miss), then two
+    // values: 1, nil when the cast legs (`0x80b5d0`) and the power check (`0x8017e0`) pass; nil, 1
+    // when only the power falls short (`0x541783`); nil, nil when the slot is empty, its row or
+    // its caster is missing (`0x54170f`, `0x54174f`), or a cast leg fails.
+    set_slot_verb(lua, "IsUsableSpell", |lua, id, book| {
+        let spell = {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            book_slot(&model, id, book).map_or(0, |s| s.spell_id)
+        };
+        let pet = is_pet_book(book);
+        let pair = (spell != 0)
+            .then(|| ask(lua, |q| q.spell_usable(spell, pet)))
+            .flatten();
+        let (usable, no_mana) = pair.unwrap_or((false, false));
+        Ok((flag(usable), flag(no_mana)))
+    })?;
     Ok(())
 }

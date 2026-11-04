@@ -25,6 +25,14 @@ pub trait GameQuery {
         let _ = (spell, pet, unit);
         None
     }
+
+    /// `IsUsableSpell`'s pair for `spell` (the pet's for `pet`): `0x80b5d0`'s cast legs, then
+    /// `0x8017e0`'s power check, as `(usable, not_enough_mana)`; `None` without the caster or the
+    /// spell's row.
+    fn spell_usable(&self, spell: u32, pet: bool) -> Option<(bool, bool)> {
+        let _ = (spell, pet);
+        None
+    }
 }
 
 /// The installed provider, its own app-data slot beside the model.

@@ -535,6 +535,7 @@ mod tests {
             );
             let fireball = SpellDisplay {
                 range_index: 4,
+                mana_cost: 600,
                 ..Default::default()
             };
             let row = wrathplus_formats::SpellRange {
@@ -621,6 +622,12 @@ mod tests {
             let asked =
                 wrathplus_ui::script::GameQuery::spell_in_range(link, FIREBALL, false, SELECTED);
             assert_eq!(asked.map_or(-1, i64::from), *bar.as_ref().unwrap());
+            // `IsUsableSpell` runs the bar's walk on the same inputs: 600 mana of 500 is nil, 1.
+            let (u, oom) =
+                (script.eval::<(Option<i64>, Option<i64>)>("return IsUsableAction(1)")).unwrap();
+            let walk = wrathplus_ui::script::GameQuery::spell_usable(link, FIREBALL, false);
+            assert_eq!(walk, Some((u.is_some(), oom.is_some())));
+            assert_eq!(walk, Some((false, true)));
             bar.unwrap()
         };
 
