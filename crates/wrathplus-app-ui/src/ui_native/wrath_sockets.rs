@@ -54,6 +54,7 @@ pub(crate) fn register(app: &mut App) {
                     .after(super::wrath_equipment_sets::feed_equipment_sets)
                     .after(crate::ui_guild_bank::feed_guild_bank),
                 feed_item_gems,
+                feed_gem_enchants,
             )
                 .in_set(crate::app_core::schedule::UiFeed)
                 .run_if(crate::app_core::ui_state::ingame_ui_up),
@@ -105,6 +106,20 @@ fn feed_item_gems(
     if reset || last.as_ref() != Some(&rows) {
         *last = Some(rows.clone());
         script.set_wrath_item_gems(rows);
+    }
+}
+
+/// `GetItemGem`'s enchant-to-gem table (`SpellItemEnchantment` `+0x44`), once per VM.
+fn feed_gem_enchants(
+    script: Option<NonSendMut<UiScript>>,
+    gems: Option<Res<Gems>>,
+    mut seeded: Local<crate::app_core::vm_memo::VmMemo<bool>>,
+) {
+    let (Some(mut script), Some(gems)) = (script, gems) else {
+        return;
+    };
+    if seeded.claim(&script) {
+        script.set_gem_enchants(gems.0.enchant_gems().collect());
     }
 }
 

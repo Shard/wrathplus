@@ -37,6 +37,11 @@ impl GemCatalog {
         self.gems.get(&enchant_id).copied()
     }
 
+    /// Every socket enchant with its gem item, `(enchant id, gem item)`, in no order.
+    pub fn enchant_gems(&self) -> impl Iterator<Item = (u32, u32)> + '_ {
+        self.gems.iter().map(|(&enchant, &gem)| (enchant, gem))
+    }
+
     /// A gem's colour mask by its template's `GemProperties` id.
     pub fn color(&self, gem_properties: u32) -> Option<u32> {
         self.colors.get(&gem_properties).copied()
