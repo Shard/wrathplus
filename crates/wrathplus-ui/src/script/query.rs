@@ -13,6 +13,19 @@ pub struct ItemAsk {
     pub spell: u32,
 }
 
+/// The local player's movement and descriptor state the no-argument verbs read, one frame's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PlayerState {
+    /// `IsMounted` (`0x6125a0`): the mount display id (`[player+0x9c0]`) above 0, signed.
+    pub mounted: bool,
+    /// `IsStealthed` (`0x612638`): `UNIT_FIELD_BYTES_1` byte 2 bit `0x2`.
+    pub stealthed: bool,
+    /// `IsSwimming` (`0x6124c2`): the movement word's SWIMMING.
+    pub swimming: bool,
+    /// `IsFlying` (`0x61255b`): the movement word's FLYING.
+    pub flying: bool,
+}
+
 /// The host's game state as the VM sees it. An implementation reads only its own data: it never
 /// re-enters Lua, never touches the model, and never fails. Every default is `None`, which is
 /// "no player": the verbs then answer the reference's no-player shape, or keep the pushed path
@@ -58,6 +71,29 @@ pub trait GameQuery {
     /// The same for an item's use spell, keyed on the spell and the item (`0x807980`).
     fn item_cooldown(&self, item: ItemAsk) -> Option<(f64, f64, bool)> {
         let _ = item;
+        None
+    }
+
+    /// The local player's [`PlayerState`]; `None` without the player object (nil).
+    fn player_state(&self) -> Option<PlayerState> {
+        None
+    }
+
+    /// `IsFlyableArea` (`0x612260`): the area's flags (`0x51a1d0`), then on map 571 with a player
+    /// the Cold Weather Flying test (`0x7261b0`).
+    fn flyable_area(&self) -> Option<bool> {
+        None
+    }
+
+    /// `GetUnitSpeed`'s cached current speed (`[[unit+0xd8]+0x8c]`, yd/s) of the unit `unit`.
+    fn unit_speed(&self, unit: u64) -> Option<f32> {
+        let _ = unit;
+        None
+    }
+
+    /// `UnitIsPVPSanctuary`'s `UNIT_FIELD_BYTES_2` byte 1 bit `0x08` of the unit `unit`.
+    fn unit_sanctuary(&self, unit: u64) -> Option<bool> {
+        let _ = unit;
         None
     }
 }

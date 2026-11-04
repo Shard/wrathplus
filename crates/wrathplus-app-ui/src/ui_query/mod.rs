@@ -12,7 +12,7 @@ use bevy::prelude::*;
 use wrathplus_assets::LockRecover;
 use wrathplus_formats::RangeUnit;
 use wrathplus_protocol::types::ObjectType;
-use wrathplus_ui::script::{GameQuery, ItemAsk, UiScript};
+use wrathplus_ui::script::{GameQuery, ItemAsk, PlayerState, UiScript};
 
 use crate::app_core::cooldowns::Cooldowns;
 use crate::app_core::session::{ObjectStore, SelfPlayer};
@@ -60,6 +60,22 @@ impl GameQuery for GameQueryLink {
     fn item_cooldown(&self, item: ItemAsk) -> Option<(f64, f64, bool)> {
         self.frame().cooldown(item.spell, item.entry)
     }
+
+    fn player_state(&self) -> Option<PlayerState> {
+        self.frame().player_state()
+    }
+
+    fn flyable_area(&self) -> Option<bool> {
+        self.frame().flyable_area()
+    }
+
+    fn unit_speed(&self, unit: u64) -> Option<f32> {
+        self.frame().unit_speed(unit)
+    }
+
+    fn unit_sanctuary(&self, unit: u64) -> Option<bool> {
+        self.frame().unit_sanctuary(unit)
+    }
 }
 
 /// One frame's inputs. With no player or no spells it answers nothing, the no-provider path.
@@ -70,6 +86,7 @@ pub struct FrameQuery {
     me: Option<Me>,
     /// Every streamed unit and player, ours included, by guid.
     units: HashMap<u64, UnitRow>,
+    area: player::AreaFacts,
 }
 
 /// Our own player: the caster `RangeUnits::caster` reads, the `"pet"` unit, and the usable
@@ -92,12 +109,18 @@ struct Me {
     worn: WornSlots,
     /// The frame's `(Instant, GetTime)` pair every cooldown push maps through.
     clock: (Instant, f64),
+    /// Cold Weather Flying is in the book (`0x7261eb`).
+    cold_weather: bool,
 }
 
 #[derive(Clone, Copy)]
 struct UnitRow {
     pos: Vec3,
     range: RangeUnit,
+    /// `GetUnitSpeed`'s speed ([`player::held_speed`] for ours).
+    speed: f32,
+    /// `UNIT_FIELD_BYTES_2` byte 1 bit `0x08` (`0x60cf6d`).
+    sanctuary: bool,
 }
 
 impl FrameQuery {
@@ -113,6 +136,8 @@ impl FrameQuery {
             false => UnitRow {
                 pos: me.pos,
                 range: me.range,
+                speed: 0.0,
+                sanctuary: false,
             },
         };
         let d = spells.catalog.get(spell)?;
@@ -217,6 +242,7 @@ pub(crate) struct WalkInputs<'w, 's> {
     reputations: Res<'w, Reputations>,
     relations: crate::target::RelationInputs<'w, 's>,
     clock: Res<'w, crate::app_core::ui_flags::UiClock>,
+    actions: Option<Res<'w, crate::app_core::state::PlayerActions>>,
 }
 
 impl WalkInputs<'_, '_> {
@@ -258,6 +284,31 @@ impl WalkInputs<'_, '_> {
                 items,
             }),
             clock: (self.clock.anchor, self.clock.ui_now),
+            cold_weather: (self.actions.as_ref())
+                .is_some_and(|a| a.spells.contains(&player::COLD_WEATHER_FLYING)),
+        }
+    }
+}
+
+/// What `IsFlyableArea` reads of the world: the area the resolver names, its row, the map.
+#[derive(SystemParam)]
+pub(crate) struct AreaInputs<'w, 's> {
+    /// The area under us through the world's read-only accessor (the world-API wall); a world
+    /// without it reads no area.
+    here: Option<wrathplus_world::world_point::WorldPoint<'w, 's>>,
+    areas: Option<Res<'w, crate::area::AreaTableRes>>,
+    map: Option<Res<'w, wrathplus_world::world_map::CurrentMap>>,
+}
+
+impl AreaInputs<'_, '_> {
+    fn facts(&self) -> player::AreaFacts {
+        let leaf = self.here.as_ref().and_then(|w| w.area());
+        let row = leaf
+            .zip(self.areas.as_ref())
+            .and_then(|(id, t)| t.0.get(id));
+        player::AreaFacts {
+            flags: row.map(|r| r.flags),
+            map: self.map.as_ref().map_or(0, |m| m.0),
         }
     }
 }
@@ -272,6 +323,8 @@ pub(crate) struct BuildMemo {
     spells: Option<Arc<Spells>>,
     mods: Option<Arc<SpellModifiers>>,
     last_trace: Option<Instant>,
+    /// Our `GetUnitSpeed` speed, held through a fall.
+    held_speed: f32,
 }
 
 /// Fill the frame's snapshot and swap it into the link.
@@ -281,10 +334,11 @@ pub(crate) fn build_game_query(
     spells: Option<Res<Spells>>,
     mods: Option<Res<SpellModifiers>>,
     range_units: RangeUnits,
-    me: Query<(&ObjectStore, &Transform), With<SelfPlayer>>,
+    me: Query<(Entity, &ObjectStore, &Transform), With<SelfPlayer>>,
     index: Option<Res<GuidIndex>>,
     bodies: Bodies,
     walk: WalkInputs,
+    world: AreaInputs,
     mut memo: Local<BuildMemo>,
 ) {
     let started = Instant::now();
@@ -298,6 +352,7 @@ pub(crate) fn build_game_query(
     if let Some(m) = mods.filter(|m| m.is_changed() || memo.mods.is_none()) {
         memo.mods = Some(Arc::new(m.clone()));
     }
+    let memo = &mut *memo; // disjoint borrows of its fields
     if Arc::get_mut(&mut memo.spare).is_none() {
         memo.spare = Arc::default(); // a caller still holds last frame's: start a fresh one
     }
@@ -306,7 +361,9 @@ pub(crate) fn build_game_query(
     frame.spells = shared_spells;
     frame.mods = shared_mods.unwrap_or_default();
     let caster = range_units.caster();
-    frame.me = (me.iter().next()).map(|(s, t)| walk.me(s, &bodies, t.translation, caster));
+    let me = me.iter().next();
+    frame.me = me.map(|(_, s, t)| walk.me(s, &bodies, t.translation, caster));
+    frame.area = world.facts();
     frame.units.clear();
     for (&guid, &e) in index.iter().flat_map(|i| i.0.iter()) {
         let Ok((store, t, _)) = bodies.get(e) else {
@@ -321,8 +378,18 @@ pub(crate) fn build_game_query(
             continue;
         }
         if let Some(range) = range_units.unit(e) {
-            let pos = t.translation;
-            frame.units.insert(guid, UnitRow { pos, range });
+            let speed = match me.is_some_and(|(m, ..)| m == e) {
+                true => player::held_speed(&mut memo.held_speed, &range.motion),
+                false => range.motion.speed,
+            };
+            let (pos, sanctuary) = (t.translation, store.0.unit_is_in_sanctuary());
+            let row = UnitRow {
+                pos,
+                range,
+                speed,
+                sanctuary,
+            };
+            frame.units.insert(guid, row);
         }
     }
     let rows = frame.units.len();
@@ -360,6 +427,8 @@ pub(crate) fn build(app: &mut App) {
         )
         .add_systems(Update, build_game_query.in_set(GameQueryBuild));
 }
+
+mod player;
 
 #[cfg(test)]
 mod bench;

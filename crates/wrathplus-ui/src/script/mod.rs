@@ -142,6 +142,7 @@ mod messageframe;
 mod minimap;
 pub mod nameplate;
 mod player_facing;
+mod player_state;
 mod query;
 mod query_verbs;
 mod wrath_input_verbs;
@@ -408,7 +409,7 @@ pub use model::{FontProbe, TextureProbe, TextureSizeProbe, WorldLocProjector};
 pub use party::{PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo};
 pub use pet::{PetActionView, PetStats};
 pub use pvp::{HonorState, InspectHonorData};
-pub use query::{GameQuery, ItemAsk};
+pub use query::{GameQuery, ItemAsk, PlayerState};
 pub use quest::{
     QuestAction, QuestGreetingInfo, QuestItemView, QuestPanel, QuestRewardSpell, QuestSelect,
     QuestState,
@@ -795,6 +796,7 @@ impl UiScript {
             wrath_spellbook::install(&lua)?;
             wrath_spell_verbs::install(&lua)?;
             query_verbs::install(&lua)?;
+            player_state::install(&lua)?;
             wrath_skills::install(&lua)?;
             wrath_kb::install(&lua)?;
             wrath_options::install(&lua)?;
