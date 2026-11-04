@@ -29,8 +29,24 @@ pub struct SpellInfoView {
     /// The icon is a weapon's (`0x540b5a`): Attack (`Effect[0]` 78, `0x5a84d0`) or a ranged
     /// auto-repeat (`Attributes & 2` and `AttributesEx2 & 0x20`, `0x5a85e0`).
     pub weapon_icon: bool,
+    /// `Effect[0]` is ATTACK (78), IsAttackSpell's test (`0x5414ac`).
+    pub is_attack: bool,
+    /// The classifier `0x7fe1b0` answers helpful (1) or harmful (2).
+    pub helpful: bool,
+    pub harmful: bool,
+    /// `0x801650` with no target gives a nonzero bound: SpellHasRange (`0x541be2`).
+    pub has_range: bool,
+    /// The reagents with a nonzero id and a positive count, `(item, count)` (`0x7ffa72`).
+    pub reagents: Vec<(u32, u32)>,
     /// Optional trade link, the second GetSpellLink return used by SpellBookFrame.lua:372.
     pub trade_skill_link: Option<String>,
+}
+
+/// What the app pushes each frame for IsCurrentSpell and IsAutoRepeatSpell.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct CurrentSpells {
+    pub(crate) spells: Vec<u32>,
+    pub(crate) auto_repeat: Option<u32>,
 }
 
 impl super::UiScript {
@@ -39,9 +55,13 @@ impl super::UiScript {
         self.model_mut().spell_catalog = rows.into_iter().map(|row| (row.spell_id, row)).collect();
     }
 
-    /// The spells `IsCurrentSpell` answers true for this frame.
-    pub fn set_current_spells(&mut self, spells: Vec<u32>) {
-        self.model_mut().current_spells = spells;
+    /// The spells `IsCurrentSpell` answers true for this frame, and the running auto-repeat
+    /// spell `IsAutoRepeatSpell` answers for.
+    pub fn set_current_spells(&mut self, spells: Vec<u32>, auto_repeat: Option<u32>) {
+        self.model_mut().current_spells = CurrentSpells {
+            spells,
+            auto_repeat,
+        };
     }
 }
 
@@ -199,7 +219,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 return Ok(MultiValue::new());
             };
             let model = lua.app_data_ref::<Model>().expect("model");
-            let current = spell_id != 0 && model.current_spells.contains(&spell_id);
+            let current = spell_id != 0 && model.current_spells.spells.contains(&spell_id);
             flag(current).into_lua_multi(lua)
         })?,
     )?;
@@ -322,7 +342,7 @@ mod tests {
             assert(link == '|cff71d5ff|Hspell:999|h[Passive]|h|r' and trade == 'trade:999')
             assert(GetSpellLink(500) == nil)
         "#).unwrap();
-        s.set_current_spells(vec![134]);
+        s.set_current_spells(vec![134], None);
         s.run("assert(IsCurrentSpell(133.5) == 1 and IsCurrentSpell(133.9, nil) == nil)")
             .unwrap();
     }

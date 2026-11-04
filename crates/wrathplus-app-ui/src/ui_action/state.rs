@@ -378,7 +378,7 @@ pub(super) fn feed_action_state(
         script.set_action_state(action, new.copied());
     }
     memory.pushed = fresh;
-    script.set_current_spells(current_spells);
+    script.set_current_spells(current_spells, auto_repeat.0);
 
     // The events in the reference's flush order, the `ACTIONBAR_*` one first.
     if gen_changed {

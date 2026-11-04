@@ -268,6 +268,7 @@ mod wrath_raid_units;
 mod wrath_runes;
 mod wrath_secure;
 mod wrath_skills;
+mod wrath_spell_verbs;
 mod wrath_spellbook;
 mod wrath_totems;
 mod wrath_vehicle;
@@ -788,6 +789,7 @@ impl UiScript {
             battlefield_score::install_wrath(&lua)?;
             wrath_merchant::install(&lua)?;
             wrath_spellbook::install(&lua)?;
+            wrath_spell_verbs::install(&lua)?;
             wrath_skills::install(&lua)?;
             wrath_kb::install(&lua)?;
             wrath_options::install(&lua)?;

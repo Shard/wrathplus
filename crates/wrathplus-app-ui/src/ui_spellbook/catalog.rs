@@ -41,6 +41,8 @@ fn catalog_row(id: u32, def: &SpellDisplay, spells: &Spells) -> SpellInfoView {
     } else {
         row.map_or((0.0, 0.0), |r| (r.min, r.max))
     };
+    // SpellHasRange's `0x801650` (`0x541bce`): a melee row's reach sum is at least 5, so nonzero.
+    let has_range = row.is_some_and(|r| r.is_melee()) || min != 0.0 || max != 0.0;
     SpellInfoView {
         spell_id: id,
         name: def.name.clone(),
@@ -61,6 +63,14 @@ fn catalog_row(id: u32, def: &SpellDisplay, spells: &Spells) -> SpellInfoView {
         max_range: f64::from(max),
         passive: def.passive,
         weapon_icon: def.is_melee_auto_attack() || def.ranged_icon_substitution(),
+        is_attack: def.is_melee_auto_attack(),
+        helpful: def.is_helpful(),
+        harmful: def.is_harmful(),
+        has_range,
+        reagents: (def.reagents.iter())
+            .filter(|&&(id, count)| id != 0 && (count as i32) > 0)
+            .copied()
+            .collect(),
         trade_skill_link: None,
     }
 }
@@ -133,6 +143,15 @@ mod tests {
                 player: 1,
                 ..Default::default()
             });
+            let slot = |spell_id, name: &str| wrathplus_ui::script::SpellSlotView {
+                spell_id,
+                name: name.into(),
+                ..Default::default()
+            };
+            script.set_spellbook(wrathplus_ui::script::SpellBookState {
+                tabs: Vec::new(),
+                slots: vec![slot(78, "Strike"), slot(2050, "Heal")],
+            });
             script
                 .run(
                     r#"
@@ -147,6 +166,10 @@ mod tests {
                 assert(min == 0 and max == 0)
                 -- A helpful spell reads the friendly pair.
                 assert(select(9, GetSpellInfo(2050)) == 40 and select(8, GetSpellInfo(2050)) == 0)
+                -- The predicates' fields: the classifier and SpellHasRange's melee and row legs.
+                assert(IsHelpfulSpell('Heal') == 1 and IsHarmfulSpell('Heal') == nil)
+                assert(SpellHasRange('Strike') == 1 and SpellHasRange('Heal') == 1)
+                assert(IsAttackSpell('Strike') == nil and IsConsumableSpell('Strike') == nil)
             "#,
                 )
                 .unwrap();
