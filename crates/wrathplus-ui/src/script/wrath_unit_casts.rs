@@ -5,9 +5,10 @@
 //! `+0xa80`/`+0xa84`/`+0xa88`, all `GetTickCount` ms) and answers only while now < end. App
 //! resolves names, icons and flags from its spell catalog and stamps start/end on this VM's
 //! `GetTime()` clock times 1000, republishing on every edge and to each new VM, before it fires
-//! the `UNIT_SPELLCAST_*` event (native order: slot first, then event). Labelled: the
-//! tradeskill-target displayName override and `notInterruptible` (`0x71ab20`) are unresolved;
-//! the flag shape (1 or nil) of isTradeSkill and notInterruptible is the 3.3.5 predicate convention.
+//! the `UNIT_SPELLCAST_*` event (native order: slot first, then event). isTradeSkill and
+//! notInterruptible are Lua booleans (`lua_pushboolean`, `0x84e4d0`). Labelled: the open-lock
+//! displayName override (the game object's cached strings through `0x70ba70`/`0x70ba90`) and
+//! `notInterruptible` (`0x71ab20`, bit 8 of `+0xa34` that `0x7262e0` derives at cast start).
 
 use std::collections::HashMap;
 
@@ -24,7 +25,7 @@ pub struct WrathUnitCast {
     pub icon: String,
     /// Cast: the spell attribute's `0x4`, which blanks displayName.
     pub hide_display_name: bool,
-    /// Channel: attributesEx `0x20000000`, which shows the name to other units' bars.
+    /// Channel: attributesEx `0x20000000`, which keeps the name on the player's own bar.
     pub channel_shows_name: bool,
     pub trade_skill: bool,
     /// castID, the cast count byte `+0xa5c`; 0 for channels.
@@ -51,10 +52,6 @@ impl super::UiScript {
     ) {
         self.model_mut().wrath_unit_casts = State { casts, channels };
     }
-}
-
-fn flag(on: bool) -> Value {
-    super::binding_abi::flag(on)
 }
 
 /// The live entry for `token` in `pick`'s table, with the token's lower-cased form.
@@ -85,7 +82,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // castID, notInterruptible; nothing when the unit casts nothing or the cast has ended.
     g.set(
         "UnitCastingInfo",
-        lua.create_function(|lua, token: String| {
+        lua.create_function(|lua, token: Value| {
+            let usage = r#"Usage: UnitCastingInfo("unit")"#;
+            let token = super::binding_abi::string_arg(lua, token, usage)?;
             let Some(c) = live(lua, &token, |s| &s.casts)? else {
                 return Ok(MultiValue::new());
             };
@@ -101,23 +100,25 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 text(lua, &c.icon)?,
                 Value::Number(f64::from(c.start_ms)),
                 Value::Number(f64::from(c.end_ms)),
-                flag(c.trade_skill),
+                Value::Boolean(c.trade_skill),
                 Value::Integer(i64::from(c.cast_count)),
-                flag(c.not_interruptible),
+                Value::Boolean(c.not_interruptible),
             ]))
         })?,
     )?;
 
     // UnitChannelInfo(unit) → name, rank, displayName, icon, startTime, endTime, isTradeSkill,
-    // notInterruptible. displayName is the localized CHANNELING for a unit other than "player"
-    // whose spell lacks attributesEx 0x20000000, else the name.
+    // notInterruptible. displayName is the localized CHANNELING when the token is "player" whole
+    // (`0x612148`) and the spell lacks attributesEx 0x20000000 (`0x612151`), else the name.
     g.set(
         "UnitChannelInfo",
-        lua.create_function(|lua, token: String| {
+        lua.create_function(|lua, token: Value| {
+            let usage = r#"Usage: UnitChannelInfo("unit")"#;
+            let token = super::binding_abi::string_arg(lua, token, usage)?;
             let Some(c) = live(lua, &token, |s| &s.channels)? else {
                 return Ok(MultiValue::new());
             };
-            let display = if !token.eq_ignore_ascii_case("player") && !c.channel_shows_name {
+            let display = if token.eq_ignore_ascii_case("player") && !c.channel_shows_name {
                 match lua.globals().get::<Value>("CHANNELING")? {
                     v @ Value::String(_) => v,
                     _ => text(lua, "CHANNELING")?,
@@ -132,8 +133,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 text(lua, &c.icon)?,
                 Value::Number(f64::from(c.start_ms)),
                 Value::Number(f64::from(c.end_ms)),
-                flag(c.trade_skill),
-                flag(c.not_interruptible),
+                Value::Boolean(c.trade_skill),
+                Value::Boolean(c.not_interruptible),
             ]))
         })?,
     )?;
@@ -143,6 +144,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+
+    use mlua::Value;
 
     use super::WrathUnitCast;
     use crate::script::UiScript;
@@ -184,18 +187,10 @@ mod tests {
             HashMap::new(),
         );
         assert_eq!(
-            s.eval::<(
-                String,
-                String,
-                String,
-                String,
-                f64,
-                f64,
-                Option<i64>,
-                i64,
-                Option<i64>
-            )>("return UnitCastingInfo('player')")
-                .unwrap(),
+            s.eval::<(String, String, String, String, f64, f64, Value, i64, Value)>(
+                "return UnitCastingInfo('player')"
+            )
+            .unwrap(),
             (
                 "Fireball".into(),
                 "Rank 1".into(),
@@ -203,19 +198,23 @@ mod tests {
                 "Interface\\Icons\\Spell_Fire_FlameBolt".into(),
                 99_000.0,
                 101_500.0,
-                None,
+                Value::Boolean(false),
                 7,
-                None
+                Value::Boolean(false)
             )
         );
         assert_eq!(
-            s.eval::<(String, Option<i64>)>(
+            s.eval::<(String, Value)>(
                 "local _, _, d, _, _, _, t = UnitCastingInfo('target') return d, t"
             )
             .unwrap(),
-            (String::new(), Some(1)),
-            "attr 0x4 blanks displayName; trade skill is 1"
+            (String::new(), Value::Boolean(true)),
+            "attr 0x4 blanks displayName; trade skill is true (0x84e4d0)"
         );
+        for call in ["UnitCastingInfo()", "UnitChannelInfo({})"] {
+            let err = s.eval::<()>(call).unwrap_err().to_string();
+            assert!(err.contains("Usage: Unit"), "{call}: {err}");
+        }
         assert_eq!(
             s.eval::<i64>("return select('#', UnitCastingInfo('focus'))")
                 .unwrap(),
@@ -252,18 +251,18 @@ mod tests {
             8
         );
         assert_eq!(
-            s.eval::<String>("return select(3, UnitChannelInfo('player'))")
-                .unwrap(),
-            "Drain Life"
-        );
-        assert_eq!(
-            s.eval::<String>("return select(3, UnitChannelInfo('target'))")
+            s.eval::<String>("return select(3, UnitChannelInfo('PLAYER'))")
                 .unwrap(),
             "Channeling"
         );
-        s.set_wrath_unit_casts(HashMap::new(), HashMap::from([(11, shows)]));
         assert_eq!(
             s.eval::<String>("return select(3, UnitChannelInfo('target'))")
+                .unwrap(),
+            "Arcane Missiles"
+        );
+        s.set_wrath_unit_casts(HashMap::new(), HashMap::from([(10, shows)]));
+        assert_eq!(
+            s.eval::<String>("return select(3, UnitChannelInfo('player'))")
                 .unwrap(),
             "Mind Flay"
         );
