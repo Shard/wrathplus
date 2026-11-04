@@ -77,21 +77,8 @@ impl HeldUnits<'_> {
             self.factions,
             self.self_store,
         );
-        // The template's type flags (`UnitLevel`'s boss bit) and family word; no player has one.
-        let rec = wrathplus_protocol::guid::entry(guid).and_then(|e| self.names.creature_record(e));
-        if let Some(rec) = rec.filter(|_| !s.is_player) {
-            s.creature_type_flags = rec.type_flags;
-            let word = self.families.and_then(|f| f.name(rec.pet_family));
-            s.creature_family = word.map(Into::into);
-        }
+        super::template::fill(&mut s, guid, self.names, self.families);
         s
-    }
-}
-
-impl super::SnapshotTables<'_> {
-    /// `CreatureFamily.dbc`, which [`HeldUnits::state`] names a template's family with.
-    pub(crate) fn families(&self) -> Option<&wrathplus_formats::CreatureFamilies> {
-        self.families.as_deref().map(|t| &t.families)
     }
 }
 

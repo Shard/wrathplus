@@ -21,6 +21,7 @@ use crate::net::{FieldChanged, FieldEdges, Guid, NetCommands, NetHandlerApp, Rep
 use crate::ui_script::gate;
 
 pub(crate) mod held;
+pub(crate) mod template;
 
 pub(crate) use crate::app_core::schedule::UnitFeed;
 

@@ -207,6 +207,7 @@ fn drive_mouseover_tooltip(
             rx.factions.as_deref(),
             self_store,
         );
+        crate::ui_unit::template::fill(&mut s, guid, &names, tables.snapshot.families());
         if let (Some((_, difficulty)), Some(learned)) = (s.skinnable.as_mut(), &tables.learned) {
             *difficulty = crate::ui_action::gather_difficulty(
                 store,

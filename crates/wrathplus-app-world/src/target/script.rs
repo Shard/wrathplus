@@ -12,7 +12,7 @@ use super::scan;
 /// Everything the selection calls read and write.
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct ScriptSelect<'w, 's> {
-    /// The app's unit-token resolver. The VM's own reads the same grammar
+    /// The app's unit-token resolver, the base and `target`-hop subset of the VM's
     /// ([`wrathplus_ui::script::parse_unit_token`]), so `TargetUnit("party1target")` and
     /// `CheckInteractDistance("party1target", …)` name the same unit.
     tokens: crate::target::unit_tokens::UnitTokens<'w, 's>,

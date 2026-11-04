@@ -220,6 +220,26 @@ fn the_resolver_answers_a_guid_the_sentinel_or_false() {
     ] {
         assert_eq!(m.resolve_token(t), want, "{t}");
     }
+    // `vehicle` (`0x60ac85`): the player's vehicle while seated on it (link state 3), whose
+    // target a hop follows.
+    let mut seated = model(guids());
+    let seat = crate::script::VehicleSeatView {
+        vehicle: PET,
+        occupant: Some(ME),
+        ..Default::default()
+    };
+    let view = crate::script::UnitVehicleView {
+        seated: true,
+        seats: vec![seat],
+        ..Default::default()
+    };
+    seated.wrath_vehicles.units.insert(ME, view);
+    assert_eq!(seated.unit_guid("vehicle"), Some(PET));
+    assert_eq!(
+        seated.resolve_token("vehicletarget"),
+        ok(NOBODY),
+        "PET targets nobody"
+    );
     let solo = model(UnitGuids {
         player: 0,
         pet: PET,
