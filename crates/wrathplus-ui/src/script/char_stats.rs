@@ -121,6 +121,8 @@ pub struct UnitCombatStats {
     pub defense_skill: (i32, i32),
     /// Whether a wand is equipped (`HasWandEquipped`).
     pub has_wand: bool,
+    /// `UNIT_FIELD_MAXHEALTHMODIFIER`, which `GetUnitMaxHealthModifier` answers plus 1.0.
+    pub max_health_modifier: f32,
 }
 
 impl Default for UnitCombatStats {
@@ -162,6 +164,7 @@ impl Default for UnitCombatStats {
             ranged_weapon_skill: (0, 0),
             defense_skill: (0, 0),
             has_wand: false,
+            max_health_modifier: 0.0,
         }
     }
 }
@@ -547,8 +550,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
 
     // UnitResistance(unit, 0..=6) → (base, resistance, positive, negative), school 0 armor: the
-    // player's through `0x4f54d0`, `base = raw - pos - neg` before the clamp, `resistance =
-    // max(raw, 0)`; any other unit's is `(res, res, 0, 0)` (`0x6101a0`).
+    // player's through `0x4f54d0`, `(raw - pos - neg, max(raw, 0), pos, neg)`; others' `(res, res, 0, 0)`.
     g.set(
         "UnitResistance",
         lua.create_function(|lua, (token, school): (Value, Value)| {
@@ -566,7 +568,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     s.resistance_neg[idx],
                 );
                 if !own {
-                    // Any other unit: the clamped field twice, no split.
                     let res = i64::from(raw.max(0));
                     return (res, res, 0, 0);
                 }
@@ -942,6 +943,7 @@ mod tests {
             ranged_weapon_skill: (18, 0),
             defense_skill: (55, 4),
             has_wand: false,
+            max_health_modifier: 0.0,
         }
     }
 
