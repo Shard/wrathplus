@@ -251,34 +251,32 @@ pub struct NetEntity {
 #[derive(Component, Clone, Copy)]
 pub struct UnitSpeeds(pub MoveSpeeds);
 
-/// A mover's speed from its move flags (`CMovement::GetCurrentSpeed 0x7c4c90`). The order is the
-/// fact: no direction bit is 0 (`0x7c4c99`); swimming first (`0x7c4cd9`); then walk mode as
-/// `min(walk, run)` even backward (`0x7c4d11`); then run, backward as `min(run_back, run)`
-/// (`0x7c4d1d`). Each min is x87 `fcompp`, ties and NaN taking the forward field.
+/// A mover's speed from its move flags (`CMovement::GetCurrentSpeed 0x987570`). The order is the
+/// fact: no direction, ascend or descend bit (`0xc0000f`) is 0 (`0x987576`); flying first
+/// (`0x9875bc`), then swimming (`0x9875f0`); then walk mode as `min(walk, run)` even backward
+/// (`0x987624`); then run, backward as `min(run_back, run)`. Each min is x87 `fcomp`, ties and NaN
+/// taking the forward field.
 ///
 /// No zero-`walk` fallback: the ctor's zeroed speeds (`0x7c48e8`) are never observable, since
 /// the post-create apply `0x5fad50` applies our own speed block as it does a remote one.
 pub fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
     use crate::app_core::movement::move_flags as f;
-    // A swimmer or flier on its ascend or descend key moves without a direction bit.
-    let vertical =
-        flags & (f::SWIMMING | f::FLYING) != 0 && flags & (f::ASCENDING | f::DESCENDING) != 0;
-    if flags & f::ANY_MOVE == 0 && !vertical {
+    // The ascend and descend keys count alone, on any mover.
+    if flags & (f::ANY_MOVE | f::ASCENDING | f::DESCENDING) == 0 {
         return 0.0;
+    }
+    if flags & f::FLYING != 0 {
+        return if flags & f::BACKWARD != 0 {
+            s.flight_back.min(s.flight)
+        } else {
+            s.flight
+        };
     }
     if flags & f::SWIMMING != 0 {
         return if flags & f::BACKWARD != 0 {
             s.swim_back.min(s.swim)
         } else {
             s.swim
-        };
-    }
-    // Build 12340's flight arm, shaped as the swim arm.
-    if flags & f::FLYING != 0 {
-        return if flags & f::BACKWARD != 0 {
-            s.flight_back.min(s.flight)
-        } else {
-            s.flight
         };
     }
     if flags & f::WALK_MODE != 0 {
@@ -2658,11 +2656,13 @@ mod tests {
         assert_eq!(current_speed(&s, f::STRAFE_LEFT | f::WALK_MODE), 2.5);
     }
 
-    /// `0x7c4cd9` precedes `0x7c4d11`.
+    /// The flight arm (`0x9875bc`) precedes the swim arm (`0x9875f0`), which precedes the walk.
     #[test]
     fn swimming_is_tested_first_so_there_is_no_swim_walk() {
         use crate::app_core::movement::move_flags as f;
         let s = vanilla();
+        let both = f::FLYING | f::SWIMMING | f::BACKWARD;
+        assert_eq!(current_speed(&s, both), 4.5);
         assert_eq!(
             current_speed(&s, f::FORWARD | f::SWIMMING | f::WALK_MODE),
             s.swim
@@ -2709,6 +2709,8 @@ mod tests {
             "a mode is not a motion"
         );
         assert_eq!(current_speed(&s, f::TURN_LEFT | f::ROOT | f::SWIMMING), 0.0);
+        // A vertical bit alone moves (`0xc0000f`), swimming or not.
+        assert_eq!(current_speed(&s, f::ASCENDING), 7.0);
 
         let unfilled = MoveSpeeds {
             run: 7.0,
