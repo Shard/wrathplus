@@ -45,6 +45,9 @@ pub struct AddOnInfo {
     /// The last-saved `enabled`, which `ResetDisabledAddOns` reverts to; set by `register_addons`.
     pub saved_enabled: bool,
     pub loaded: bool,
+    /// Every file ran: `[rec+0x19]`, set just before `ADDON_LOADED` fires (`0x5f8442`), where
+    /// `loaded` (`[rec+0x18]`) is set before the dependencies load (`0x5f810f`).
+    pub finished: bool,
     /// `## Interface`'s leading integer, 0 when absent: what the version gate compares.
     pub interface: u32,
     /// Left out of the Lua index: `[rec+0x29]`, set by `0x51da70` for a `SMSG_ADDON_INFO` status of
@@ -175,16 +178,17 @@ fn version_check(model: &Model) -> bool {
         .is_none_or(|s| s.value != "0")
 }
 
-/// [`can_load`] in the in-game flavour (`dl=1`). A loaded addon is loadable before the gate
-/// runs, as in `0x48e390`, so disabling it mid-session does not mark it unloadable.
+/// [`can_load`] in the in-game flavour (`dl = 1`, no demand check). A finished addon is loadable
+/// before the gate runs (`0x51134a` reads `[rec+0x19]`), so disabling it mid-session does not
+/// mark it unloadable.
 fn verdict(model: &Model, i: usize) -> Verdict {
-    if model.addons[i].loaded {
+    if model.addons[i].finished {
         return Verdict::Loadable;
     }
     super::addon_gate::can_load_for_interface(
         &gate_rows(model),
         i,
-        true,
+        false,
         version_check(model),
         super::addon_gate::CLIENT_INTERFACE,
     )
@@ -264,10 +268,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, key: Value| {
             let model = lua.app_data_ref::<Model>().expect("model");
             let key = addon_key(lua, &model, &key, USAGE_LOADED)?;
-            // `0x51e6f0` answers the record's loaded byte `[rec+0x18]`; an unknown name pushes nil
-            // (`0x48e95b`).
-            Ok(flag(
-                row_of(&model, &key).is_some_and(|i| model.addons[i].loaded),
+            // Two values (`0x511c0d`): `[rec+0x18]` then `[rec+0x19]`, loaded then finished; an
+            // unknown name is `nil, nil`.
+            let row = row_of(&model, &key).map(|i| &model.addons[i]);
+            Ok((
+                flag(row.is_some_and(|a| a.loaded)),
+                flag(row.is_some_and(|a| a.finished)),
             ))
         })?,
     )?;
@@ -408,10 +414,14 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             }
             match result {
                 Ok(()) => Ok(MultiValue::from_vec(vec![Value::Integer(1), Value::Nil])),
-                Err(reason) => Ok(MultiValue::from_vec(vec![
-                    Value::Nil,
-                    lua_str(lua, &reason)?,
-                ])),
+                // A failure re-runs the gate for its reason, else `UNKNOWN_ERROR` (`0x528a70`).
+                Err(reason) => {
+                    let token = verdict(&lua.app_data_ref::<Model>().expect("model"), i).token();
+                    Ok(MultiValue::from_vec(vec![
+                        Value::Nil,
+                        lua_str(lua, token.as_deref().unwrap_or(&reason))?,
+                    ]))
+                }
             }
         })?,
     )?;
@@ -469,7 +479,8 @@ fn load_addon(lua: &Lua, i: usize) -> Result<(), String> {
         model.addons[i].loaded = true;
     }
 
-    // Past the gate, a dependency that fails to load maps to its `DEP_` reason.
+    // Past the gate, a dependency that fails to load clears `loaded` again (`0x5f83d8`) and leaves
+    // the reason to the caller's re-run of the gate.
     for dep in &deps {
         let d = {
             let model = lua.app_data_ref::<Model>().expect("model");
@@ -479,22 +490,11 @@ fn load_addon(lua: &Lua, i: usize) -> Result<(), String> {
                 .position(|a| a.name.eq_ignore_ascii_case(dep))
         };
         match d {
-            None => return Err("DEP_MISSING".into()),
-            Some(d) => {
-                let loaded = {
-                    let model = lua.app_data_ref::<Model>().expect("model");
-                    model.addons[d].loaded
-                };
-                if !loaded {
-                    load_addon(lua, d).map_err(|r| {
-                        if r.starts_with("DEP_") {
-                            // `DEP_` applies once at any depth (`0x51e8ce`, `0x51e8cf`).
-                            r
-                        } else {
-                            format!("DEP_{r}")
-                        }
-                    })?;
-                }
+            Some(d) if load_addon(lua, d).is_ok() => {}
+            _ => {
+                let mut model = lua.app_data_mut::<Model>().expect("model");
+                model.addons[i].loaded = false;
+                return Err("UNKNOWN_ERROR".into());
             }
         }
     }
@@ -514,7 +514,8 @@ fn load_addon(lua: &Lua, i: usize) -> Result<(), String> {
     // `Bindings.xml` loads between the files and the saved variables.
     load_bindings(lua, &name, &read);
     load_saved_variables(lua, i);
-    // `ADDON_LOADED` closes the addon's load (`0x51f5ad`).
+    lua.app_data_mut::<Model>().expect("model").addons[i].finished = true;
+    // `ADDON_LOADED` closes the addon's load (`0x5f8446`).
     super::event::fire_global(lua, "ADDON_LOADED", &[super::ScriptValue::Str(name)]);
     Ok(())
 }
@@ -807,6 +808,7 @@ impl super::UiScript {
             .find(|a| a.name.eq_ignore_ascii_case(name))
         {
             a.loaded = true;
+            a.finished = true;
         }
     }
 
