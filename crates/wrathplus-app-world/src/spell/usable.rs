@@ -20,11 +20,11 @@ use wrathplus_formats::{
 
 use crate::app_core::cooldowns::Cooldowns;
 use crate::app_core::session::ObjectStore;
-use crate::app_core::state::Factions;
 use crate::items::Items;
-use crate::net::{NetCommands, Objects, Reputations};
+use crate::net::{NetCommands, Objects};
 use crate::spell::{SpellModifiers, OP_COST};
-use crate::target::{can_assist, can_attack};
+
+pub use super::usable_inputs::{TargetFacts, WornAsking, WornCached, WornLookup, WornSlots};
 
 use crate::app_core::state::Spells;
 
@@ -36,22 +36,21 @@ use crate::app_core::state::UNIT_FLAG_IN_COMBAT;
 const IMPLICIT_TARGET_ENEMY: u32 = 6;
 const IMPLICIT_TARGET_FRIEND: u32 = 21;
 
-/// Everything the walk reads besides the spell. `target_store` is the current target's (leg 10
-/// reads the current-target global `0xb4e2d8`, not an explicit cast target).
+/// Everything the walk reads besides the spell, as data: the action bar fills it live, the Lua
+/// query from its snapshot. `target` is the current target's (leg 10 reads the current-target
+/// global `0xb4e2d8`, not an explicit cast target).
 pub struct UsableCtx<'a> {
     pub store: &'a ObjectStore,
-    pub target_store: Option<&'a ObjectStore>,
-    pub factions: Option<&'a Factions>,
-    pub reputations: &'a Reputations,
+    pub target: Option<TargetFacts>,
     pub cooldowns: &'a Cooldowns,
     /// The talent spell-modifier tables leg 12's cost goes through.
     pub spell_mods: &'a SpellModifiers,
-    /// Build 12340's combo points, which no descriptor carries.
-    pub combo: &'a crate::net::wrath_combo_points::NativeComboPoints,
+    /// Build 12340's banked combo points, which no descriptor carries.
+    pub combo_banked: u8,
     /// Every carried entry's count for the frame ([`crate::inventory::carried_counts`]).
     pub carried: &'a std::collections::HashMap<u32, u32>,
-    /// `CanAttack`/`CanAssist`'s creature metadata and controller lookup.
-    pub relations: crate::target::RelationContext<'a>,
+    /// The equipment slots leg 4 searches.
+    pub worn: &'a dyn WornLookup,
 }
 
 /// The search covers equipment indices `0..=22` (`0x5f0c50`'s `cmp ebx,0x17; jl`): the 19 worn
@@ -118,34 +117,14 @@ pub(crate) fn equipped_item_fits_cached(
     objects: &Objects,
     items: &Items,
 ) -> bool {
-    if !needs_equipped_item(d) {
-        return true;
-    }
-    let mut mask = hand_mask(d);
-    if let Some(hidden) = crate::items::disarmed_equipment_slot_cached(store, objects, items) {
-        mask &= !(1u32 << hidden);
-    }
-    equipped_slots_match(
-        store,
-        mask,
-        d.equipped_item_class as u32,
-        d.equipped_item_subclass_mask,
-        |guid| worn_item_cached(guid, objects, items),
+    worn_item_fits(
+        d,
+        &WornCached {
+            store,
+            objects,
+            items,
+        },
     )
-}
-
-/// The worn item `guid` names from the cached records alone: `None` while its object or its
-/// template has not streamed.
-fn worn_item_cached(guid: u64, objects: &Objects, items: &Items) -> Option<WornItem> {
-    let obj = objects.object(guid)?;
-    let t = items.template_cached(obj.object_entry()?)?;
-    Some(WornItem {
-        class: t.class,
-        subclass: t.subclass,
-        flags: t.flags,
-        durability: obj.item_durability(),
-        max_durability: obj.item_max_durability(),
-    })
 }
 
 /// What the equipped-item search learns of one equipment slot, and all it can: the feed compares
@@ -169,7 +148,7 @@ pub enum SlotItem {
 }
 
 impl SlotItem {
-    fn of(guid: u64, worn: impl FnOnce(u64) -> Option<WornItem>) -> SlotItem {
+    pub(super) fn of(guid: u64, worn: impl FnOnce(u64) -> Option<WornItem>) -> SlotItem {
         if guid == 0 {
             return SlotItem::Empty;
         }
@@ -210,9 +189,12 @@ pub fn slot_item_cached(
     objects: &Objects,
     items: &Items,
 ) -> SlotItem {
-    SlotItem::of(store.0.player_inv_slot(slot).unwrap_or(0), |guid| {
-        worn_item_cached(guid, objects, items)
-    })
+    WornCached {
+        store,
+        objects,
+        items,
+    }
+    .slot(slot)
 }
 
 /// The equipped-item refusal, keyed on `AttributesEx3` alone: the main- or off-hand-only reason,
@@ -238,62 +220,61 @@ pub fn equipped_item_fits(
     items: &Items,
     commands: &NetCommands,
 ) -> bool {
-    // The short-circuits to "fits" (`0x6e40e0` at `6e4103`..`6e4130`): a caster that is not the
-    // active player (always ours here), and those of [`needs_equipped_item`].
+    worn_item_fits(
+        d,
+        &WornAsking {
+            store,
+            objects,
+            items,
+            commands,
+        },
+    )
+}
+
+/// Leg 4's search over `worn`. The short-circuits to "fits" (`0x6e40e0` at `6e4103`..`6e4130`):
+/// a caster that is not the active player (always ours here), and those of
+/// [`needs_equipped_item`]; the disarm ladder then strips the one hidden hand from the mask
+/// (`0x5f0c69`/`0x5f0c91`). A slot whose template has not landed counts as a match.
+pub fn worn_item_fits(d: &SpellDisplay, worn: &dyn WornLookup) -> bool {
     if !needs_equipped_item(d) {
         return true;
     }
-    let class = d.equipped_item_class as u32;
     let mut mask = hand_mask(d);
-    // The disarm ladder strips the one hidden hand from the mask (`0x5f0c69`/`0x5f0c91`).
-    if let Some(hidden) = crate::items::disarmed_equipment_slot(store, objects, items, commands) {
+    if let Some(hidden) = worn.disarmed() {
         mask &= !(1u32 << hidden);
     }
-    equipped_slots_match(store, mask, class, d.equipped_item_subclass_mask, |guid| {
-        let (entry, durability, max_durability) = objects.object(guid).and_then(|o| {
-            Some((
-                o.object_entry()?,
-                o.item_durability(),
-                o.item_max_durability(),
-            ))
-        })?;
-        let t = items.template(entry, guid, commands)?;
-        Some(WornItem {
-            class: t.class,
-            subclass: t.subclass,
-            flags: t.flags,
-            durability,
-            max_durability,
+    (0..EQUIPMENT_SLOTS)
+        .filter(|slot| mask & (1u32 << slot) != 0)
+        .any(|slot| {
+            worn.slot(slot)
+                .fits(d.equipped_item_class as u32, d.equipped_item_subclass_mask)
         })
-    })
 }
 
 /// One worn item, as the equipped-item search reads it.
 pub(crate) struct WornItem {
-    pub(crate) class: u32,
-    pub(crate) subclass: u32,
+    class: u32,
+    subclass: u32,
     /// The template flags.
-    pub(crate) flags: u32,
+    flags: u32,
     /// The instance durability pair (`[item+0x114]+0xa0`/`+0xa4`), not the template's.
-    pub(crate) durability: Option<u32>,
-    pub(crate) max_durability: Option<u32>,
+    durability: Option<u32>,
+    max_durability: Option<u32>,
 }
 
-/// The search body over a caller-supplied resolver; `None` from it (template not landed) counts
-/// as a match.
-fn equipped_slots_match(
-    store: &ObjectStore,
-    mask: u32,
-    class: u32,
-    subclass_mask: u32,
-    mut worn: impl FnMut(u64) -> Option<WornItem>,
-) -> bool {
-    (0..EQUIPMENT_SLOTS)
-        .filter(|slot| mask & (1u32 << slot) != 0)
-        .any(|slot| {
-            let guid = store.0.player_inv_slot(slot).unwrap_or(0);
-            SlotItem::of(guid, &mut worn).fits(class, subclass_mask)
-        })
+impl WornItem {
+    pub(super) fn new(
+        t: &wrathplus_protocol::types::ItemInfo,
+        o: &wrathplus_protocol::ObjectFields,
+    ) -> Self {
+        WornItem {
+            class: t.class,
+            subclass: t.subclass,
+            flags: t.flags,
+            durability: o.item_durability(),
+            max_durability: o.item_max_durability(),
+        }
+    }
 }
 
 /// The item arm of the usable compute (`0x4e5050`), gate by gate:
@@ -318,9 +299,6 @@ pub fn item_usable(
     held: bool,
     ctx: &UsableCtx,
     spells: Option<&Spells>,
-    objects: &Objects,
-    items: &Items,
-    commands: &NetCommands,
 ) -> (bool, bool) {
     if !held {
         return (false, false);
@@ -343,7 +321,7 @@ pub fn item_usable(
     let (Some(d), Some(spells)) = (d, spells) else {
         return (false, false);
     };
-    spell_usable(spell_id, d, spells, ctx, objects, items, commands)
+    spell_usable(spell_id, d, spells, ctx)
 }
 
 /// The walk; returns the `IsUsableAction` pair `(usable, not_enough_mana)`.
@@ -352,9 +330,6 @@ pub fn spell_usable(
     d: &SpellDisplay,
     spells: &Spells,
     ctx: &UsableCtx,
-    objects: &Objects,
-    items: &Items,
-    commands: &NetCommands,
 ) -> (bool, bool) {
     // Early-out (`0x6e3d99`): a tradeskill "spell" is always usable.
     if d.effects[0] == SPELL_EFFECT_TRADE_SKILL {
@@ -378,14 +353,14 @@ pub fn spell_usable(
         }
     }
     // Leg 4 (`0x6e40e0`): some worn item matches the class and subclass mask.
-    if !equipped_item_fits(d, ctx.store, objects, items, commands) {
+    if !worn_item_fits(d, ctx.worn) {
         return (false, false);
     }
     // Leg 5 (`0x6e3e7a`..`0x6e3eb2`): a finishing move (`AttributesEx & 0x500000`, one any-of
     // test) fails while the caster's combo-point byte (`PLAYER_FIELD_BYTES` byte 1) is 0. It reads
     // no target, so a point banked on another mob leaves the button lit and the server refuses the
     // cast. No class gate, unlike Lua `GetComboPoints 0x51a190`: a warrior's Overpower greys here.
-    if d.needs_combo_points() && crate::net::wrath_combo_points::banked(ctx.combo).0 == 0 {
+    if d.needs_combo_points() && ctx.combo_banked == 0 {
         return (false, false);
     }
     // Leg 6 (`0x612480`): the form's `SpellShapeshiftForm.dbc` stance flag decides whether it
@@ -416,37 +391,17 @@ pub fn spell_usable(
     // Legs 10/10b (`0x6e3f58`): no current target is unusable; then the aura-state bit; then the
     // relation fork.
     if d.target_aura_state != 0 {
-        let Some(target) = ctx.target_store else {
+        let Some(target) = ctx.target else {
             return (false, false);
         };
-        if target.0.unit_aura_state() & (1 << (d.target_aura_state - 1)) == 0 {
+        if target.aura_state & (1 << (d.target_aura_state - 1)) == 0 {
             return (false, false);
         }
         match d.implicit_target_a1 {
             // `CanAttack 0x606980`.
-            IMPLICIT_TARGET_ENEMY
-                if !can_attack(
-                    Some(target),
-                    ctx.factions,
-                    ctx.reputations,
-                    Some(ctx.store),
-                    ctx.relations,
-                ) =>
-            {
-                return (false, false);
-            }
+            IMPLICIT_TARGET_ENEMY if !target.can_attack => return (false, false),
             // `CanAssist 0x6066f0`.
-            IMPLICIT_TARGET_FRIEND
-                if !can_assist(
-                    Some(target),
-                    ctx.factions,
-                    ctx.reputations,
-                    Some(ctx.store),
-                    ctx.relations,
-                ) =>
-            {
-                return (false, false);
-            }
+            IMPLICIT_TARGET_FRIEND if !target.can_assist => return (false, false),
             _ => {}
         }
     }
@@ -764,32 +719,8 @@ mod tests {
         assert!(fits(0, true));
     }
 
-    fn ctx<'a>(
-        store: &'a ObjectStore,
-        cooldowns: &'a Cooldowns,
-        reputations: &'a Reputations,
-        carried: &'a std::collections::HashMap<u32, u32>,
-        spell_mods: &'a SpellModifiers,
-    ) -> UsableCtx<'a> {
-        UsableCtx {
-            store,
-            target_store: None,
-            factions: None,
-            reputations,
-            cooldowns,
-            carried,
-            spell_mods,
-            combo: &crate::net::wrath_combo_points::NativeComboPoints {
-                points: 0,
-                target: 0,
-            },
-            relations: crate::target::RelationContext::none(),
-        }
-    }
-
     fn walk(d: &SpellDisplay, store: &ObjectStore) -> (bool, bool) {
         let cooldowns = Cooldowns::default();
-        let reputations = Reputations(Vec::new());
         let spells = Spells::empty_for_tests();
         let items = Items::default();
         let (tx, _rx) = crossbeam_channel::unbounded();
@@ -798,15 +729,22 @@ mod tests {
         let objects = objs.get();
         let carried = crate::inventory::carried_counts(&store.0, &objects);
         let spell_mods = SpellModifiers::default();
-        spell_usable(
-            1,
-            d,
-            &spells,
-            &ctx(store, &cooldowns, &reputations, &carried, &spell_mods),
-            &objects,
-            &items,
-            &commands,
-        )
+        let worn = WornAsking {
+            store,
+            objects: &objects,
+            items: &items,
+            commands: &commands,
+        };
+        let ctx = UsableCtx {
+            store,
+            target: None,
+            cooldowns: &cooldowns,
+            carried: &carried,
+            spell_mods: &spell_mods,
+            combo_banked: 0,
+            worn: &worn,
+        };
+        spell_usable(1, d, &spells, &ctx)
     }
 
     /// Bloodrage (2687) takes 20% of base health, even when gear raises max health.
@@ -1031,7 +969,7 @@ mod tests {
     fn target_aura_state_reads_the_current_target() {
         let me = player(&[]);
         let cooldowns = Cooldowns::default();
-        let reputations = Reputations(Vec::new());
+        let reputations = crate::net::Reputations(Vec::new());
         let spells = Spells::empty_for_tests();
         let items = Items::default();
         let (tx, _rx) = crossbeam_channel::unbounded();
@@ -1053,25 +991,24 @@ mod tests {
         let mut objs = crate::items::TestObjects::new();
         let objects = objs.get();
         let carried = crate::inventory::carried_counts(&me.0, &objects);
+        let worn = WornAsking {
+            store: &me,
+            objects: &objects,
+            items: &items,
+            commands: &commands,
+        };
         for (target, expect) in [(&healthy, false), (&low, true)] {
+            let none = crate::target::RelationContext::none();
             let ctx = UsableCtx {
                 store: &me,
-                target_store: Some(target),
-                factions: None,
-                reputations: &reputations,
+                target: Some(TargetFacts::of(target, &me, None, &reputations, none)),
                 cooldowns: &cooldowns,
                 carried: &carried,
                 spell_mods: &SpellModifiers::default(),
-                combo: &crate::net::wrath_combo_points::NativeComboPoints {
-                    points: 0,
-                    target: 0,
-                },
-                relations: crate::target::RelationContext::none(),
+                combo_banked: 0,
+                worn: &worn,
             };
-            assert_eq!(
-                spell_usable(5308, &execute, &spells, &ctx, &objects, &items, &commands),
-                (expect, false)
-            );
+            assert_eq!(spell_usable(5308, &execute, &spells, &ctx), (expect, false));
         }
     }
 }

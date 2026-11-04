@@ -173,6 +173,32 @@ pub(super) fn feed_action_state(
         (Some(a), Some((_, t))) => Some(a.distance_squared(t.translation)),
         _ => None,
     };
+    // The usable walk's inputs, once a frame: legs 10/10b's target facts and leg 4's slots, which
+    // ask for a missing template as the walk reaches it.
+    let walk_inputs = me.map(|(store, _, _, _)| {
+        let facts = target.map(|(t, _)| {
+            let (f, r) = (factions.as_deref(), &*reputations);
+            usable::TargetFacts::of(t, store, f, r, relations.context())
+        });
+        let worn = usable::WornAsking {
+            store,
+            objects: &objects,
+            items: &items,
+            commands: &commands,
+        };
+        (store, facts, worn)
+    });
+    let ctx = walk_inputs
+        .as_ref()
+        .map(|(store, target, worn)| usable::UsableCtx {
+            store,
+            target: *target,
+            cooldowns: &cooldowns,
+            carried: &carried,
+            spell_mods,
+            combo_banked: crate::net::wrath_combo_points::banked(combo).0,
+            worn,
+        });
 
     let mut fresh: HashMap<u32, ActionState> = HashMap::new();
     for (&slot, button) in &actions.buttons {
@@ -222,27 +248,8 @@ pub(super) fn feed_action_state(
                 };
                 st.auto_repeat = auto_repeat.0 == Some(button.action);
                 // The usable walk (`0x6e3d60`); only its power gate sets `notEnoughMana`.
-                if let (Some((store, _, _, _)), Some(sp)) = (me, spells.as_deref()) {
-                    let ctx = usable::UsableCtx {
-                        store,
-                        target_store: target.map(|(s, _)| s),
-                        factions: factions.as_deref(),
-                        reputations: &reputations,
-                        cooldowns: &cooldowns,
-                        carried: &carried,
-                        spell_mods,
-                        combo,
-                        relations: relations.context(),
-                    };
-                    let (u, oom) = usable::spell_usable(
-                        button.action,
-                        d,
-                        sp,
-                        &ctx,
-                        &objects,
-                        &items,
-                        &commands,
-                    );
+                if let (Some(ctx), Some(sp)) = (&ctx, spells.as_deref()) {
+                    let (u, oom) = usable::spell_usable(button.action, d, sp, ctx);
                     st.usable = u;
                     st.not_enough_mana = oom;
                 } else {
@@ -288,27 +295,13 @@ pub(super) fn feed_action_state(
                 // `0x4e5050`'s item arm runs the count, `IsItemOnCooldown` and the on-use spell
                 // through the same `0x6e3d60` walk. With no player the reference answers (0, 0)
                 // (`0x4e5080`), the default state.
-                if let Some((store, _, _, _)) = me {
-                    let ctx = usable::UsableCtx {
-                        store,
-                        target_store: target.map(|(s, _)| s),
-                        factions: factions.as_deref(),
-                        reputations: &reputations,
-                        cooldowns: &cooldowns,
-                        carried: &carried,
-                        spell_mods,
-                        combo,
-                        relations: relations.context(),
-                    };
+                if let Some(ctx) = &ctx {
                     let (u, oom) = usable::item_usable(
                         button.action,
                         use_spell.as_ref(),
                         count > 0 || st.equipped,
-                        &ctx,
+                        ctx,
                         spells.as_deref(),
-                        &objects,
-                        &items,
-                        &commands,
                     );
                     st.usable = u;
                     st.not_enough_mana = oom;

@@ -31,6 +31,7 @@ pub mod secure_toggle;
 pub mod targeting;
 pub(crate) mod unit_cast;
 pub mod usable;
+mod usable_inputs;
 pub(crate) mod validator;
 
 // The one cast path: every caster takes [`CastLadder`] and commits through [`CastCommit`];

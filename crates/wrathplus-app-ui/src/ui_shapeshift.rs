@@ -277,6 +277,19 @@ fn feed_shapeshift_bar(
     let carried = store
         .map(|s| crate::inventory::carried_counts(&s.0, &objects))
         .unwrap_or_default();
+    let walk_inputs = store.map(|s| {
+        let facts = target_store.map(|t| {
+            let (f, r) = (factions.as_deref(), &*reputations);
+            usable::TargetFacts::of(t, s, f, r, relations.context())
+        });
+        let worn = usable::WornAsking {
+            store: s,
+            objects: &objects,
+            items: &items,
+            commands: &commands,
+        };
+        (s, facts, worn)
+    });
     let fresh: Vec<ShapeshiftFormView> = rows
         .into_iter()
         .map(|(id, d)| {
@@ -284,19 +297,17 @@ fn feed_shapeshift_bar(
             // `isCastable`: true for the active form, else the `0x6e3d60` walk the action bar's
             // `IsUsableAction` runs.
             let castable = active
-                || store.is_none_or(|s| {
+                || walk_inputs.as_ref().is_none_or(|(s, target, worn)| {
                     let ctx = usable::UsableCtx {
                         store: s,
-                        target_store,
-                        factions: factions.as_deref(),
-                        reputations: &reputations,
+                        target: *target,
                         cooldowns: &cooldowns,
                         carried: &carried,
                         spell_mods: &spell_mods,
-                        combo: &combo,
-                        relations: relations.context(),
+                        combo_banked: crate::net::wrath_combo_points::banked(&combo).0,
+                        worn,
                     };
-                    usable::spell_usable(id, d, &spells, &ctx, &objects, &items, &commands).0
+                    usable::spell_usable(id, d, &spells, &ctx).0
                 });
             let texture = form_texture(d, active);
             let cooldown = cooldowns
