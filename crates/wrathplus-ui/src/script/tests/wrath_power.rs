@@ -127,7 +127,10 @@ fn wrath_power_readers_use_all_resources_and_native_integer_scaling() {
             .unwrap(),
         (0, "".into())
     );
-    assert!(script.run("UnitPowerType('player',2)").is_err());
+    // 12340 answers `0, ""` for an index with no vehicle power-display row (`0x60f327`).
+    let indexed = script.eval::<(u8, String)>("return UnitPowerType('player', 2)");
+    assert_eq!(indexed.unwrap(), (0, "".into()));
+    assert!(script.run("UnitPowerType()").is_err(), "the Usage gate");
 }
 
 #[test]
@@ -137,6 +140,7 @@ fn wrath_power_reads_zero_before_the_snapshot() {
         "player",
         Some(UnitState {
             exists: true,
+            has_object: true,
             power: 100,
             ..Default::default()
         }),

@@ -57,7 +57,9 @@ fn exp_bar_harness() -> UiScript {
     ] {
         super::test_ui::load_ui(&mut s, file);
     }
-    // A level 60 player's XP (3.3.5 caps at 80), then world entry.
+    // A level 60 player's XP (3.3.5 caps at 80), then world entry; `UnitXP` reads it for a token
+    // naming us (`0x60a5d0`).
+    s.set_unit("player", Some(stock_player(60)));
     s.set_player_xp(0, 494_900);
     enter_world(&mut s);
     // The stock default, detailed tips on (`UIOptionsFrame.lua:100`); no options file loads here.
@@ -319,6 +321,7 @@ fn the_max_level_rail_replaces_the_xp_bar_at_80() {
         "player",
         Some(UnitState {
             exists: true,
+            guid: 1,
             level: 79,
             ..UnitState::default()
         }),

@@ -59,11 +59,11 @@ fn load_page(s: &mut UiScript) {
     }
 }
 
-/// A player with both halves of race and class: `UnitRace`/`UnitClass` answer nil without the
-/// pair, and `PaperDollFrame_SetLevel` formats them unguarded (PaperDollFrame.lua:101).
+/// A player with a guid and race and class pairs, unguarded in PaperDollFrame.lua:101.
 fn player(level: u32) -> UnitState {
     UnitState {
         exists: true,
+        guid: 0x0100_0000_0000_0001,
         level,
         race: Some("Human".into()),
         race_file: Some("Human".into()),

@@ -115,13 +115,22 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(guid.and_then(|g| model.wrath_ready_check.statuses.get(&g).copied()))
         })?,
     )?;
+    // DoReadyCheck (`0x5740b0` → `0x5732b0`): silent unless we lead, or in a raid lead or assist
+    // (`0x572740`); a check already running is ERR_READY_CHECK_IN_PROGRESS (`0x1f4`, a UI error),
+    // read here as the running flag where the reference compares `GetTime` with its deadline
+    // (`[0xbeb61c]`); else `MSG_RAID_READY_CHECK` (`0x322`).
     lua.globals().set(
         "DoReadyCheck",
         lua.create_function(|lua, ()| {
-            lua.app_data_mut::<Model>()
-                .expect("model")
-                .party_requests
-                .push(PartyRequest::ReadyCheckStart);
+            let mut m = lua.app_data_mut::<Model>().expect("model");
+            if !super::wrath_surface::wrath_group_verbs::may_ready_check(&m) {
+                return Ok(());
+            }
+            if m.wrath_ready_check.active {
+                m.ui_errors.push("ERR_READY_CHECK_IN_PROGRESS");
+                return Ok(());
+            }
+            m.party_requests.push(PartyRequest::ReadyCheckStart);
             Ok(())
         })?,
     )?;
@@ -144,6 +153,7 @@ mod tests {
                 RaidMemberInfo {
                     guid: 7,
                     name: "Assistant".into(),
+                    rank: 1,
                     ..Default::default()
                 },
                 RaidMemberInfo {

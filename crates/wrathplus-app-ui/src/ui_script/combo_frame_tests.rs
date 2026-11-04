@@ -45,6 +45,13 @@ fn play_as(s: &mut UiScript, class_id: u32, target: u64) {
         class_id,
         ..Default::default()
     });
+    // `GetComboPoints` (`0x611670`) answers only for a unit that is us.
+    let me = UnitState {
+        exists: true,
+        guid: 1,
+        ..Default::default()
+    };
+    s.set_unit("player", Some(me));
     s.set_unit(
         "target",
         Some(UnitState {
@@ -163,7 +170,7 @@ fn a_warriors_overpower_point_lights_no_dot() {
     s.set_combo_points(1, MOB_A);
     combo_event(&mut s);
     assert!(!shown(&mut s), "a warrior's banked point shows no dots");
-    let points: i64 = s.eval("return GetComboPoints()").unwrap();
+    let points: i64 = s.eval(r#"return GetComboPoints("player")"#).unwrap();
     assert_eq!(points, 0, "and the binding itself reports zero");
 
     play_as(&mut s, 11, MOB_A);
@@ -186,7 +193,7 @@ fn re_targeting_empties_the_dots_without_the_count_moving() {
     play_as(&mut s, 4, MOB_B);
     s.fire_event("PLAYER_TARGET_CHANGED", vec![]);
     assert!(!shown(&mut s), "points banked elsewhere ⇒ no dots");
-    let points: i64 = s.eval("return GetComboPoints()").unwrap();
+    let points: i64 = s.eval(r#"return GetComboPoints("player")"#).unwrap();
     assert_eq!(points, 0, "the binding hides them, the wire still has them");
 
     play_as(&mut s, 4, MOB_A);

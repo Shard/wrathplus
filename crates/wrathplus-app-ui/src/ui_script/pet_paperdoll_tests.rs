@@ -43,6 +43,8 @@ fn player_unit() -> UnitState {
 fn pet_unit() -> UnitState {
     UnitState {
         exists: true,
+        // `UnitCreatureFamily` reads the unit the token names (`0x611820`), so the pet has a guid.
+        guid: 0xF140_0000_0000_0077,
         name: Some("Snarl".into()),
         health: 900,
         max_health: 1000,

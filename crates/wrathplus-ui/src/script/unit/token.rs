@@ -77,6 +77,16 @@ impl Model {
         }
     }
 
+    /// The active player's guid (`0x4d3790`): the guid table's, else the player push's, else the
+    /// party push's.
+    pub(crate) fn local_guid(&self) -> u64 {
+        let pushed = self.pushed_unit("player").map_or(0, |u| u.guid);
+        [self.unit_guids.player, pushed, self.party.own_guid]
+            .into_iter()
+            .find(|&g| g != 0)
+            .unwrap_or(0)
+    }
+
     /// The guid `token` names when an object can hold it; `None` for nobody.
     pub(crate) fn unit_guid(&self, token: &str) -> Option<u64> {
         self.resolve_token(token).unit()
