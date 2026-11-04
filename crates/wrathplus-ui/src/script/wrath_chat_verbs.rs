@@ -327,23 +327,25 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         );
         none()
     })?;
-    // Enable/DisableSpellAutocast(spell) (`0x541140`/`0x5411a0`): the pet action slot holding the
-    // named spell has its autocast set, through the existing toggle when it differs.
+    // Enable/DisableSpellAutocast(spell [, book]) (`0x541140`/`0x5411a0`): the shared resolver; a
+    // pet-book slot (`0x54116c`) sets its spell's autocast (`0x5d5e10`), through the existing
+    // toggle on the pet action holding it when the state differs. No values.
     for (global, on) in [
         ("EnableSpellAutocast", true),
         ("DisableSpellAutocast", false),
     ] {
-        set(lua, global, move |lua, args| {
-            let Some(spell) = text(lua, &arg(&args, 0))? else {
-                return none();
-            };
+        super::spell_arg::set_slot_verb(lua, global, move |lua, id, book| {
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            if let Some(index) = super::pet::slot_index_by_name(&model, &spell)
+            let spell = super::spellbook::book_slot(&model, id, book)
+                .filter(|_| super::spellbook::is_pet_book(book))
+                .map(|s| s.spell_id);
+            if let Some(index) = spell
+                .and_then(|spell| super::pet::slot_index_by_spell(&model, spell))
                 .filter(|i| super::pet::autocast_state(&model, *i) == Some(!on))
             {
                 model.pet_autocast_toggles.push(index);
             }
-            none()
+            Ok(())
         })?;
     }
     // UseItemByName(nameOrId [, target]) (`0x51cd00`): the first bag slot holding the item is
