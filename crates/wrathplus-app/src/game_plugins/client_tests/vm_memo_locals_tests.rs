@@ -52,6 +52,8 @@ const EXEMPT: &[(&str, &str)] = &[
     ("ui_script/extract/mod.rs", "last_dpi"),
     // Pushed unconditionally every frame; there is nothing remembered to go stale.
     ("ui_script/mod.rs", "smoothed"),
+    // GetFramerate's frame-time ring: engine state in the reference (`0xcd76b0`), kept across reloads.
+    ("ui_script/mod.rs", "ring"),
     // A fact about the chat roster (a defense channel joined); its push has its own `VmMemo`.
     ("world_state_ui.rs", "defense_channel"),
     // The cursor systems on both platforms track OS cursor state, which outlives the VM.
