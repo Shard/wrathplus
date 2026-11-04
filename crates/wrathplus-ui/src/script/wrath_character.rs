@@ -182,16 +182,20 @@ fn add_texture(lua: &Lua, this: &Table, file: Option<String>, rect: [f32; 4]) ->
     texture.call_method::<()>("Show", ())
 }
 
-/// The pet stat getters' unit leg: only our pet resolves; other units answer 0, as the
-/// reference's gate (`0x4cee50` or a pet number) is untraced for them.
-fn pet_modifier(lua: &Lua, unit: Option<String>, pick: fn(&super::PetStats) -> f32) -> f64 {
+/// The pet getters (`0x6127f0`, `0x612900`): `isstring` or the Usage, then any token naming our pet
+/// (`0x60c1f0`). Labelled: other units read 0; the gate (`0x4cee50` or a pet number) is untraced.
+fn pet_modifier(lua: &Lua, unit: Value, usage: &'static str, pick: PetPick) -> mlua::Result<f64> {
+    let unit = super::binding_abi::string_arg(lua, unit, usage)?;
     let model = lua.app_data_ref::<Model>().expect("model");
-    if unit.is_some_and(|u| u.eq_ignore_ascii_case("pet")) && model.pet_bar.has_ui {
+    let pet = model.stat_unit(&unit) == super::stat_unit::StatUnit::Pet && model.pet_bar.has_ui;
+    Ok(if pet {
         f64::from(pick(&model.pet_bar.stats))
     } else {
         0.0
-    }
+    })
 }
+
+type PetPick = fn(&super::PetStats) -> f32;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
@@ -238,14 +242,16 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
     g.set(
         "GetUnitHealthModifier",
-        lua.create_function(|lua, unit: Option<String>| {
-            Ok(pet_modifier(lua, unit, |s| s.health_modifier))
+        lua.create_function(|lua, unit: Value| {
+            let usage = r#"Usage: GetUnitHealthModifier("unit")"#;
+            pet_modifier(lua, unit, usage, |s| s.health_modifier)
         })?,
     )?;
     g.set(
         "GetUnitPowerModifier",
-        lua.create_function(|lua, unit: Option<String>| {
-            Ok(pet_modifier(lua, unit, |s| s.power_modifier))
+        lua.create_function(|lua, unit: Value| {
+            let usage = r#"Usage: GetUnitPowerModifier("unit")"#;
+            pet_modifier(lua, unit, usage, |s| s.power_modifier)
         })?,
     )?;
     let tooltips: Table = lua.named_registry_value(REG_TOOLTIP_METHODS)?;
@@ -476,9 +482,16 @@ mod tests {
         s.run(
             "assert(GetPetSpellBonusDamage() == 321) \
              assert(GetUnitHealthModifier('pet') == 1.5 and GetUnitPowerModifier('PET') == 0.75) \
-             assert(GetUnitHealthModifier('player') == 0 and GetUnitPowerModifier() == 0)",
+             assert(GetUnitHealthModifier('player') == 0)",
         )
         .unwrap();
+        // A non-string raises the Usage (`0xa237f4`); a pet number is a token naming nobody.
+        let err = s.run("GetUnitPowerModifier()").unwrap_err().to_string();
+        assert!(
+            err.contains(r#"Usage: GetUnitPowerModifier("unit")"#),
+            "{err}"
+        );
+        s.run("assert(GetUnitHealthModifier(12) == 0)").unwrap();
         s.set_pet_stats(false, PetStats::default());
         s.run("assert(GetUnitHealthModifier('pet') == 0)").unwrap();
     }
