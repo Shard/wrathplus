@@ -178,7 +178,7 @@ pub fn apply_template(lua: &mlua::Lua, wrapper: &Table, kind: &str, template: &s
         let model = loader.model();
         let templates = model.framexml_templates.borrow();
         // Looked up as `framexml::expand` looks it up (exact, then case-folded); keep them in step.
-        for name in [template].into_iter().filter(|s| !s.is_empty()) {
+        for name in template.split(',').filter(|s| !s.is_empty()) {
             let Some(el) = templates.get(name).or_else(|| {
                 templates
                     .iter()
