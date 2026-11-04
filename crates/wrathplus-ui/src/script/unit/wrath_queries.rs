@@ -181,16 +181,26 @@ fn selection_color(unit: Option<&super::UnitState>) -> (f64, f64, f64) {
 
 pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
-    for (name, usage, bit) in [
-        ("UnitIsAFK", "Usage: UnitIsAFK(\"unit\")", PLAYER_FLAGS_AFK),
-        ("UnitIsDND", "Usage: UnitIsDND(\"unit\")", PLAYER_FLAGS_DND),
+    // `UnitIsAFK` (`0x60cc30`) is nil for a player we can attack (`0x60cccd`), DND never. Labelled:
+    // AFK's local override (`[0xbcefec]`) and both record bits.
+    for (name, bit, atk) in [
+        ("UnitIsAFK", PLAYER_FLAGS_AFK, true),
+        ("UnitIsDND", PLAYER_FLAGS_DND, false),
     ] {
+        let usage = if atk {
+            r#"Usage: UnitIsAFK("unit")"#
+        } else {
+            r#"Usage: UnitIsDND("unit")"#
+        };
         g.set(
             name,
             lua.create_function(move |lua, token: Value| {
                 let token = unit_arg(lua, token, usage)?;
                 let hit = with_unit(lua, &token, false, |u| {
-                    u.has_object && u.is_player && u.player_flags & bit != 0
+                    u.has_object
+                        && u.is_player
+                        && !(atk && u.can_attack)
+                        && u.player_flags & bit != 0
                 })?;
                 Ok(flag(hit))
             })?,

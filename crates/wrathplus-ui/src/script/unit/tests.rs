@@ -1757,10 +1757,27 @@ fn unit_on_taxi_is_one_or_nil_and_raises_the_reference_usage() {
     assert!(!s
         .eval::<bool>(r#"return UnitOnTaxi("player") == true"#)
         .unwrap());
-    // Only the player's ride is tracked: any other token is nil.
+    // Any held unit answers its own flag (`0x60f350`), not just the player.
     assert!(s
         .eval::<bool>(r#"return UnitOnTaxi("target") == nil"#)
         .unwrap());
+    let flying = UnitState {
+        exists: true,
+        has_object: true,
+        flags: 0x0010_0000,
+        ..Default::default()
+    };
+    s.set_unit("target", Some(flying));
+    assert_eq!(s.eval::<i64>(r#"return UnitOnTaxi("target")"#).unwrap(), 1);
+    // `SetPortraitTexture` (`0x6113e0`) answers a Lua boolean: false after the default icon.
+    let portrait = |token: &str| {
+        s.eval::<mlua::Value>(&format!(
+            "return SetPortraitTexture(CreateFrame('Frame'):CreateTexture(), '{token}')"
+        ))
+        .unwrap()
+    };
+    assert_eq!(portrait("target"), mlua::Value::Boolean(true));
+    assert_eq!(portrait("focus"), mlua::Value::Boolean(false));
 
     let err = s.eval::<mlua::Value>("return UnitOnTaxi()").unwrap_err();
     assert!(

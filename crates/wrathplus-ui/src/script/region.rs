@@ -129,9 +129,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     lua.globals().set(
         "SetPortraitTexture",
         lua.create_function(|lua, (region, unit): (Table, Value)| {
-            // A non-string unit raises this exact error (`0x519fb4`, `0x8513b8`), which stock
-            // `Blizzard_InspectUI.lua:49` hits on a re-open; a token that resolves to nothing only
-            // blanks the portrait.
+            // A non-string unit raises this exact error, which stock `Blizzard_InspectUI.lua:49`
+            // hits on a re-open; a token that resolves to nothing only blanks the portrait.
             let unit = crate::script::binding_abi::string_arg(
                 lua,
                 unit,
@@ -139,15 +138,16 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             )?;
             let rh = region_handle_of(lua, &region)?;
             let mut model = lua.app_data_mut::<Model>().expect("model");
+            // `0x6113e0`'s boolean: true when a unit (held, or a member's record) gave it.
+            let found = model.unit(&unit).is_some_and(|u| u.exists);
             let data = model.region_data.entry(rh).or_default();
-            // Lowercased: the reference resolves the token case-insensitively (`0x519ef0` →
-            // `0x515970`), stock `MerchantFrame.lua:68` passes `"NPC"`, and the app's bakes are
-            // keyed lowercase.
+            // Lowercased: the resolver folds case, stock `MerchantFrame.lua:68` passes `"NPC"`,
+            // and the app's bakes are keyed lowercase.
             data.portrait_unit = Some(unit.to_ascii_lowercase());
             data.texture = None;
             data.fill = None;
             data.circular = true;
-            Ok(())
+            Ok(found)
         })?,
     )?;
 
