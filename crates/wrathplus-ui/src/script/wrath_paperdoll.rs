@@ -16,7 +16,6 @@ pub struct WrathStatConversions {
     pub spell_crit_from_intellect: f64,
     pub health_from_spirit: f64,
     pub mana_from_spirit: f64,
-    pub defense_chance: f32,
 }
 
 /// Percentages and mana/second are already resolved by the server. School arrays use
@@ -76,9 +75,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         ("GetSpellPenetration", |s| s.spell_penetration as f64),
         ("GetArmorPenetration", |s| {
             s.conversions.armor_penetration as f64
-        }),
-        ("GetDodgeBlockParryChanceFromDefense", |s| {
-            s.conversions.defense_chance as f64
         }),
     ] {
         lua.globals().set(
@@ -185,6 +181,10 @@ mod tests {
     #[test]
     fn snapshot_preserves_school_rating_indexes_and_multi_return_shapes() {
         let mut s = UiScript::new().unwrap();
+        // 12340 has no such global (the name is not in the exe).
+        assert!(s
+            .eval::<bool>("return GetDodgeBlockParryChanceFromDefense == nil")
+            .unwrap());
         let mut stats = WrathPaperDollStats {
             dodge: 5.5,
             parry: 6.5,
