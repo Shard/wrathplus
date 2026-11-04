@@ -126,8 +126,6 @@ fn conversions(f: &ObjectFields, tables: &WrathGameTables) -> WrathStatConversio
         // `GetUnitManaRegenRateFromSpirit` adds `0x9e1134`, 0.001f, past its gate (`0x612a64`).
         mana_from_spirit: mana_from_spirit + f64::from(0.001f32),
         rating_bonus,
-        // Native CR_ARMOR_PENETRATION is 24 (Lua 25).
-        armor_penetration: rating_bonus[24],
     }
 }
 
@@ -177,14 +175,14 @@ fn snapshot(f: &ObjectFields) -> WrathPaperDollStats {
                 .unwrap_or(0.0)
         }),
         spell_damage: std::array::from_fn(|i| {
-            // Positive and negative school bonuses are signed descriptor values.
+            // `GetSpellBonusDamage` (`0x60e310`): the signed sum, unclamped.
             let pos = f
                 .get_at(Field::PlayerModDamageDonePos, i as u16)
                 .unwrap_or(0) as i32;
             let neg = f
                 .get_at(Field::PlayerModDamageDoneNeg, i as u16)
                 .unwrap_or(0) as i32;
-            pos.saturating_add(neg).max(0)
+            pos.wrapping_add(neg)
         }),
         spell_healing: word(Field::PlayerModHealingDonePos),
         spell_penetration: (word(Field::PlayerModTargetResistance) as i32).saturating_neg(),
@@ -234,6 +232,7 @@ mod tests {
             (Field::PlayerDodgePercentage, 0, 4.25f32.to_bits()),
             (Field::PlayerModDamageDonePos, 2, 100),
             (Field::PlayerModDamageDoneNeg, 2, (-20i32) as u32),
+            (Field::PlayerModDamageDoneNeg, 3, (-30i32) as u32),
             (Field::PlayerModTargetResistance, 0, (-35i32) as u32),
             (Field::PlayerExpertise, 0, 12),
             (Field::PlayerOffhandExpertise, 0, 9),
@@ -256,7 +255,7 @@ mod tests {
         assert_eq!(stats.spell_crit[6], 12.5);
         assert_eq!(stats.melee_crit, 8.25);
         assert_eq!(stats.dodge, 4.25);
-        assert_eq!(stats.spell_damage[2], 80);
+        assert_eq!(stats.spell_damage[2..4], [80, -30], "signed, unclamped");
         assert_eq!(stats.spell_penetration, 35);
         assert_eq!(stats.expertise, [12, 9]);
         assert_eq!(stats.shield_block, 234);
