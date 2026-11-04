@@ -240,6 +240,7 @@ mod wrath_talent_preview;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
 pub use wrath_tutorial::WrathTutorialRequest;
 mod wrath_achievement_progress;
+mod wrath_item_queries;
 mod wrath_item_services;
 mod wrath_item_spell;
 mod wrath_items;
@@ -794,6 +795,7 @@ impl UiScript {
             wrath_sockets::install(&lua)?;
             wrath_bag_portrait::install(&lua)?;
             wrath_item_spell::install(&lua)?;
+            wrath_item_queries::install(&lua)?;
             wrath_currency::install(&lua)?;
             wrath_equipment::install(&lua)?;
             wrath_modifiers::install(&lua)?;

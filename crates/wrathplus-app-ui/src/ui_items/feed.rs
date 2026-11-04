@@ -252,6 +252,7 @@ fn template_view(
         sell_price: t.sell_price,
         item_set: t.item_set,
         random_property: t.random_property,
+        bag_family: t.bag_family,
         // Filled by the caller from the native socket and scaling metadata.
         socket_colors: [0; 3],
         heirloom: None,
