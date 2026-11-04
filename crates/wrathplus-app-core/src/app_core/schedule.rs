@@ -25,6 +25,12 @@ pub struct ChatDrain;
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct InWorldGated;
 
+/// The Lua query snapshot's builder (`ui_query`): after
+/// [`wrathplus_world::schedule::WorldStage::Net`] and before [`UiFeed`], so every feed, the tick
+/// and the input pass ask this frame's packets; a writer of what it reads in between runs before.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GameQueryBuild;
+
 /// The wire drain, `net::apply_net_updates` alone: what a core system that reads this frame's
 /// packets orders after.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]

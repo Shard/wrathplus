@@ -24,6 +24,7 @@ mod mods;
 mod native_control;
 pub mod native_failure;
 pub(crate) mod net;
+pub mod range_check;
 mod range_units;
 pub mod reagents;
 pub mod secure_toggle;
@@ -105,9 +106,11 @@ impl Plugin for SpellPlugin {
                     inflight::local_self_cancel
                         .in_set(UnitFeed)
                         .in_set(LocalCancel),
+                    // Before the Lua query snapshot copies the tables.
                     mods::track_class_family
                         .after(WorldStage::Net)
-                        .before(UnitFeed),
+                        .before(UnitFeed)
+                        .before(crate::app_core::schedule::GameQueryBuild),
                     (
                         targeting::publish_picks_self,
                         targeting::publish_corpse_pick,

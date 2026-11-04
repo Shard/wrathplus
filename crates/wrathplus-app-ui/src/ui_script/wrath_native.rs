@@ -18,6 +18,7 @@ use crate::ui_script::{
 };
 
 pub(super) fn build(app: &mut App) {
+    crate::ui_query::build(app);
     app.insert_resource(super::UiScaleCvar(super::default_ui_scale()))
         .init_resource::<UiFrameCost>()
         .init_resource::<crate::bindings::WheelNotches>()

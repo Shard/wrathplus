@@ -74,6 +74,7 @@ pub mod ui_pet_doll;
 pub mod ui_pet_stats;
 pub mod ui_pet_talent_tree;
 pub mod ui_petition;
+pub mod ui_query;
 pub mod ui_quest;
 pub mod ui_quest_log;
 pub mod ui_quest_share;

@@ -41,6 +41,7 @@ pub(super) fn new_vm(world: &mut World) -> Option<UiScript> {
     };
     seed_vm_clock(world, &mut script);
     crate::ui_spellbook::seed_spell_catalog(world, &mut script);
+    crate::ui_query::seed(world, &mut script);
     crate::ui_achievements::seed(world, &mut script);
     seed_class_names(world, &mut script);
     seed_link_catalogs(world, &mut script);

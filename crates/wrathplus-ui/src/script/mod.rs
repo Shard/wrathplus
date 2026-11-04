@@ -142,6 +142,8 @@ mod messageframe;
 mod minimap;
 pub mod nameplate;
 mod player_facing;
+mod query;
+mod query_verbs;
 mod wrath_input_verbs;
 pub use nameplate::{PlateCast, PlateGeometry, PlateState};
 mod model;
@@ -406,6 +408,7 @@ pub use model::{FontProbe, TextureProbe, TextureSizeProbe, WorldLocProjector};
 pub use party::{PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo};
 pub use pet::{PetActionView, PetStats};
 pub use pvp::{HonorState, InspectHonorData};
+pub use query::{GameQuery, ItemAsk};
 pub use quest::{
     QuestAction, QuestGreetingInfo, QuestItemView, QuestPanel, QuestRewardSpell, QuestSelect,
     QuestState,
@@ -670,6 +673,7 @@ impl UiScript {
             stdlib::install_wrath_budget_guards(&lua, instruction_budget.clone())?;
         }
         lua.set_app_data(Model::new());
+        lua.set_app_data(query::QueryHost::default());
         // Before anything can fire a handler and while no app-data borrow is held, as the
         // profiler's slot requires.
         handler_prof::install(&lua);
@@ -790,6 +794,7 @@ impl UiScript {
             wrath_merchant::install(&lua)?;
             wrath_spellbook::install(&lua)?;
             wrath_spell_verbs::install(&lua)?;
+            query_verbs::install(&lua)?;
             wrath_skills::install(&lua)?;
             wrath_kb::install(&lua)?;
             wrath_options::install(&lua)?;

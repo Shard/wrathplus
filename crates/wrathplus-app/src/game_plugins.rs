@@ -725,6 +725,7 @@ pub(crate) mod schedule_tests {
     ///   orders against the target chain. Such a gesture and a script call in one frame take
     ///   either order;
     /// - the range compare's readers (`ui_action::state::feed_action_state`,
+    ///   `ui_query::build_game_query`,
     ///   `ui_tooltip::spell_feed::feed_spell_tooltips`, the targeting push in `ui_cast`,
     ///   the targeting cursor and the object-click commit) against the writers of `Player` and
     ///   `RemoteMotion` (`camera_saved::load_camera_pose`, `world_focus`'s focus publish and settle
@@ -1094,6 +1095,11 @@ pub(crate) mod schedule_tests {
         let before_tick = reach(tick, &pred);
         let after_tick = reach(tick, &succ);
         let after_drain = reach(drain, &succ);
+        // The Lua query snapshot lands after the drain and before every feed and the tick.
+        let query = one("::ui_query::build_game_query");
+        let fed = reach(query, &succ);
+        assert!(after_drain.contains(&query) && fed.contains(&tick));
+        assert!(fed.contains(&one("::state::feed_action_state")));
         let mut holders: Vec<SystemKey> = c.holds_vm.iter().copied().collect();
         holders.sort_by(|a, b| c.name(*a).cmp(c.name(*b)));
         let (mut feed, mut post, mut argued) = (0, 0, 0);

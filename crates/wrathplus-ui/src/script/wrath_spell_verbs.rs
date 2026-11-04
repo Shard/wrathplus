@@ -213,5 +213,45 @@ mod tests {
         .unwrap();
         s.model_mut().unit_guids.pet = 2;
         s.run("assert(SpellHasRange('Growl') == 1)").unwrap();
+
+        // IsSpellInRange asks the provider for the slot's spell, its book and the unit; with
+        // none installed every ask is nil.
+        s.model_mut().unit_guids.target = 7;
+        s.model_mut().unit_guids.focus = 8;
+        s.run("assert(IsSpellInRange('Heal') == nil)").unwrap();
+        s.set_game_query(Box::new(Fake));
+        s.run(
+            r#"
+            -- No unit argument is the current target; a 0 is a number, so truthy.
+            assert(IsSpellInRange('Heal') == 1 and IsSpellInRange('Heal', '') == 1)
+            local out = IsSpellInRange('Heal', 'focus')
+            assert(out == 0 and type(out) == 'number')
+            -- A slot and book put the token at argument 3; the pet book asks for the pet.
+            assert(IsSpellInRange(2, 'spell', 'focus') == 0)
+            assert(IsSpellInRange(2, 'spell') == 1)
+            assert(IsSpellInRange('Growl', 'target') == 0)
+            -- Nobody in the slot, a token that does not parse, an empty slot: nil.
+            assert(IsSpellInRange('Heal', 'party1') == nil)
+            assert(IsSpellInRange('Heal', 'bogus') == nil)
+            assert(IsSpellInRange(40, 'spell') == nil)
+            -- A name that resolves to no slot answers nothing.
+            assert(select('#', IsSpellInRange('Nope')) == 0)
+        "#,
+        )
+        .unwrap();
+    }
+
+    /// Unit 7 in range of a player spell, 8 out of it, the pet's the other way round; the spell
+    /// must be Heal's or Growl's.
+    struct Fake;
+    impl crate::script::GameQuery for Fake {
+        fn spell_in_range(&self, spell: u32, pet: bool, unit: u64) -> Option<bool> {
+            assert!(matches!((spell, pet), (2050, false) | (2649, true)));
+            match unit {
+                7 => Some(!pet),
+                8 => Some(pet),
+                _ => None,
+            }
+        }
     }
 }

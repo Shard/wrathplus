@@ -35,6 +35,21 @@ pub(super) fn spell_arg(
     verb: &str,
     allow_name: bool,
 ) -> mlua::Result<Option<(u32, String)>> {
+    let at = spell_arg_typed(lua, model, arg1, arg2, verb, allow_name)?;
+    Ok(at.map(|(id, book, _)| (id, book)))
+}
+
+/// [`spell_arg`] with the resolver's `argType` out (`[ebp+8]`): the Lua index of the argument
+/// after the spell, 3 after a slot and book or a name and rank, else 2. IsSpellInRange reads its
+/// unit token there (`0x541d34`).
+pub(super) fn spell_arg_typed(
+    lua: &Lua,
+    model: &Model,
+    arg1: &Value,
+    arg2: &Value,
+    verb: &str,
+    allow_name: bool,
+) -> mlua::Result<Option<(u32, String, usize)>> {
     let invalid = || mlua::Error::runtime(format!("{verb}(): Invalid spell slot"));
     let book = |pet: bool| if pet { "pet" } else { "spell" }.to_string();
     if let Some(n) = lua.coerce_number(arg1.clone())?.filter(|_| is_string(arg2)) {
@@ -44,7 +59,7 @@ pub(super) fn spell_arg(
             return Err(invalid());
         }
         let pet = matches!(arg2, Value::String(s) if s.as_bytes().eq_ignore_ascii_case(b"pet"));
-        return Ok(Some((index as u32 + 1, book(pet))));
+        return Ok(Some((index as u32 + 1, book(pet), 3)));
     }
     if !allow_name || !is_string(arg1) {
         return Err(invalid());
@@ -60,16 +75,16 @@ pub(super) fn spell_arg(
             .map(|s| s.to_string_lossy()),
         false => None,
     };
-    let found = match rank {
-        Some(rank) if !is_unit_token(model, &rank) => lookup(model, &name, &rank),
-        _ => named(model, &name),
+    let (found, arg_type) = match rank {
+        Some(rank) if !is_unit_token(model, &rank) => (lookup(model, &name, &rank), 3),
+        _ => (named(model, &name), 2),
     };
     // `0x53b4e0`: the last slot of the chosen book holding the spell.
     Ok(found.and_then(|(spell_id, pet)| {
         let at = book_slots(model, pet)
             .iter()
             .rposition(|s| s.spell_id == spell_id)?;
-        Some((at as u32 + 1, book(pet)))
+        Some((at as u32 + 1, book(pet), arg_type))
     }))
 }
 

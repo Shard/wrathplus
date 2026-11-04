@@ -12,7 +12,6 @@ use std::time::Instant;
 
 use bevy::prelude::*;
 
-use wrathplus_formats::RangeTargets;
 use wrathplus_protocol::types::{ACTION_KIND_ITEM, ACTION_KIND_SPELL};
 use wrathplus_ui::script::{ActionState, UiScript};
 
@@ -25,8 +24,8 @@ use crate::items::Items;
 use crate::net::NetCommands;
 
 use super::{PlayerActions, Spells};
-use crate::spell::usable;
 use crate::spell::AutoRepeatActive;
+use crate::spell::{range_check, usable};
 
 /// The feed's memory: what was last pushed, and the edge detectors.
 #[derive(Default)]
@@ -250,28 +249,12 @@ pub(super) fn feed_action_state(
                     st.usable = true;
                 }
                 let row = spells.as_ref().and_then(|s| s.ranges.get(d.range_index));
-                // `ActionHasRange 0x4e5810` asks `GetMinMaxRange` with a null target (`0x4e5852`)
-                // and tests `|min|` and `|max|` against `FLT_EPSILON`. The auto-attack target the
-                // melee arm falls back to cannot move that: its max is at least the 5.0 floor.
-                st.has_range = spell_mods
-                    .min_max_range(d, row, caster, RangeTargets::default())
-                    .is_some_and(|(min, max)| min.abs() > f32::EPSILON || max.abs() > f32::EPSILON);
+                st.has_range = range_check::has_range(spell_mods, d, row, caster);
                 // `IsActionInRange 0x4e56f0` runs `CanTargetUnit 0x6e4440`, which binds the selected
-                // target, then `IsTargetInRange 0x6e47b0`, which hands `GetMinMaxRange` that target
-                // (`0x6e47ca`): its reach pads a ranged row, and its motion with the caster's earns
-                // the moving bonus. Nil without a target.
-                st.in_range = match dist_sq {
-                    Some(d2) if st.has_range => {
-                        let targets = RangeTargets {
-                            target: target_unit,
-                            attack_target: None,
-                        };
-                        spell_mods
-                            .min_max_range(d, row, caster, targets)
-                            .map(|(min, max)| d2 >= min * min && d2 <= max * max)
-                    }
-                    _ => None,
-                };
+                // target, then the shared compare. Nil without a target.
+                st.in_range = dist_sq.and_then(|d2| {
+                    range_check::in_range(spell_mods, d, row, caster, target_unit, d2)
+                });
                 let info = cooldowns.info(button.action, 0, Some(d), now);
                 st.cooldown = info.ui_triple(anchor, ui_now);
                 if st.cooldown.is_some() && trace_cd {
@@ -631,15 +614,21 @@ mod tests {
                 last: None,
             });
             app.insert_non_send_resource(UiScript::new().unwrap());
-            app.add_systems(Update, feed_action_state);
+            app.init_resource::<crate::ui_query::GameQueryLink>();
+            let systems = (crate::ui_query::build_game_query, feed_action_state);
+            app.add_systems(Update, systems.chain());
             app.update();
             let script = app.world().non_send_resource::<UiScript>();
             assert!(script
                 .eval::<bool>("return ActionHasRange(1) == 1")
                 .unwrap());
-            script
-                .eval::<i64>("return IsActionInRange(1) or -1")
-                .unwrap()
+            let bar = script.eval::<i64>("return IsActionInRange(1) or -1");
+            // `IsSpellInRange` asks the same compare of the same unit.
+            let link = app.world().resource::<crate::ui_query::GameQueryLink>();
+            let asked =
+                wrathplus_ui::script::GameQuery::spell_in_range(link, FIREBALL, false, SELECTED);
+            assert_eq!(asked.map_or(-1, i64::from), *bar.as_ref().unwrap());
+            bar.unwrap()
         };
 
         // 35 + the caster's 1.5 + the selected unit's 1.5 = 38.

@@ -1,0 +1,181 @@
+//! The Lua query provider: one snapshot of the frame's inputs, built after the net drain and
+//! before the UI feeds, which the VM asks inside a verb's call ([`wrathplus_ui::script::GameQuery`])
+//! with the same code the action bar runs. The snapshot holds inputs, not answers, so a first ask
+//! of any spell at any streamed unit is answered.
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+
+use bevy::prelude::*;
+use wrathplus_assets::LockRecover;
+use wrathplus_formats::RangeUnit;
+use wrathplus_protocol::types::ObjectType;
+use wrathplus_ui::script::{GameQuery, UiScript};
+
+use crate::app_core::session::{ObjectStore, SelfPlayer};
+use crate::app_core::state::Spells;
+use crate::net::GuidIndex;
+use crate::spell::{range_check, RangeUnits, SpellModifiers};
+
+pub use crate::app_core::schedule::GameQueryBuild;
+
+/// The handle the builder swaps each frame's snapshot into and every VM asks through. A call
+/// clones the inner `Arc` under the lock and computes unlocked, so a reader sees a whole frame.
+#[derive(Resource, Clone, Default)]
+pub struct GameQueryLink(Arc<Mutex<Arc<FrameQuery>>>);
+
+impl GameQueryLink {
+    fn frame(&self) -> Arc<FrameQuery> {
+        self.0.lock_recover().clone()
+    }
+}
+
+impl GameQuery for GameQueryLink {
+    fn spell_in_range(&self, spell: u32, pet: bool, unit: u64) -> Option<bool> {
+        self.frame().spell_in_range(spell, pet, unit)
+    }
+}
+
+/// One frame's inputs. With no player or no spells it answers nothing, the no-provider path.
+#[derive(Default)]
+pub struct FrameQuery {
+    spells: Option<Arc<Spells>>,
+    mods: Arc<SpellModifiers>,
+    me: Option<Me>,
+    /// Every streamed unit and player, ours included, by guid.
+    units: HashMap<u64, UnitRow>,
+}
+
+/// Our own player: the caster `RangeUnits::caster` reads, and the `"pet"` unit.
+struct Me {
+    pos: Vec3,
+    range: RangeUnit,
+    pet: u64,
+}
+
+#[derive(Clone, Copy)]
+struct UnitRow {
+    pos: Vec3,
+    range: RangeUnit,
+}
+
+impl FrameQuery {
+    /// `IsSpellInRange`'s `0x809610`: the action bar's compare ([`range_check::in_range`]) from
+    /// the caster, the pet for the pet book (`0x5d3390`), to `unit`; nil without either unit or
+    /// a range. Labelled: `0x809610`'s target-validity legs (target-type and creature-type masks,
+    /// dead, can attack or assist) are not read, so a heal asked of an enemy answers 1 or 0 where
+    /// the reference answers nil; and the compare is the 1.12 `GetMinMaxRange` order the bar uses.
+    pub fn spell_in_range(&self, spell: u32, pet: bool, unit: u64) -> Option<bool> {
+        let (me, spells) = (self.me.as_ref()?, self.spells.as_deref()?);
+        let caster = match pet {
+            true => *self.units.get(&me.pet)?,
+            false => UnitRow {
+                pos: me.pos,
+                range: me.range,
+            },
+        };
+        let d = spells.catalog.get(spell)?;
+        let target = self.units.get(&unit)?;
+        let row = spells.ranges.get(d.range_index);
+        let d2 = caster.pos.distance_squared(target.pos);
+        range_check::in_range(&self.mods, d, row, caster.range, Some(target.range), d2)
+    }
+}
+
+/// The builder's memory: the spare snapshot it fills next (the one the VM let go of last frame),
+/// the shared catalogs re-wrapped only on change, and the trace clock.
+#[derive(Default)]
+pub(crate) struct BuildMemo {
+    spare: Arc<FrameQuery>,
+    spells: Option<Arc<Spells>>,
+    mods: Option<Arc<SpellModifiers>>,
+    last_trace: Option<Instant>,
+}
+
+/// Fill the frame's snapshot and swap it into the link.
+#[allow(clippy::too_many_arguments)] // a Bevy system's inputs
+pub(crate) fn build_game_query(
+    link: Res<GameQueryLink>,
+    spells: Option<Res<Spells>>,
+    mods: Option<Res<SpellModifiers>>,
+    range_units: RangeUnits,
+    me: Query<(&ObjectStore, &Transform), With<SelfPlayer>>,
+    index: Option<Res<GuidIndex>>,
+    bodies: Query<(&ObjectStore, &Transform)>,
+    mut memo: Local<BuildMemo>,
+) {
+    let started = Instant::now();
+    match spells {
+        Some(s) if s.is_changed() || memo.spells.is_none() => {
+            memo.spells = Some(Arc::new(s.clone()));
+        }
+        Some(_) => {}
+        None => memo.spells = None,
+    }
+    if let Some(m) = mods.filter(|m| m.is_changed() || memo.mods.is_none()) {
+        memo.mods = Some(Arc::new(m.clone()));
+    }
+    if Arc::get_mut(&mut memo.spare).is_none() {
+        memo.spare = Arc::default(); // a caller still holds last frame's: start a fresh one
+    }
+    let (shared_spells, shared_mods) = (memo.spells.clone(), memo.mods.clone());
+    let frame = Arc::get_mut(&mut memo.spare).expect("unshared");
+    frame.spells = shared_spells;
+    frame.mods = shared_mods.unwrap_or_default();
+    frame.me = me.iter().next().map(|(store, t)| Me {
+        pos: t.translation,
+        range: range_units.caster(),
+        pet: store.0.unit_pet_guid().unwrap_or(0),
+    });
+    frame.units.clear();
+    for (&guid, &e) in index.iter().flat_map(|i| i.0.iter()) {
+        let Ok((store, t)) = bodies.get(e) else {
+            continue;
+        };
+        // Units and players: a game object, corpse or dynamic object is never a spell's unit.
+        use ObjectType::{Corpse, DynamicObject, GameObject};
+        if matches!(
+            store.0.object_type(),
+            Some(GameObject | DynamicObject | Corpse)
+        ) {
+            continue;
+        }
+        if let Some(range) = range_units.unit(e) {
+            let pos = t.translation;
+            frame.units.insert(guid, UnitRow { pos, range });
+        }
+    }
+    let rows = frame.units.len();
+    std::mem::swap(&mut *link.0.lock_recover(), &mut memo.spare);
+    // The builder's cost (`WOW_MOVE_TRACE` sink, tag "qry"): once per second.
+    if wrathplus_assets::trace::enabled()
+        && memo
+            .last_trace
+            .is_none_or(|t| started.duration_since(t).as_secs_f32() >= 1.0)
+    {
+        memo.last_trace = Some(started);
+        let us = started.elapsed().as_secs_f64() * 1e6;
+        wrathplus_assets::trace::line("qry", &format!("build us={us:.1} units={rows}"));
+    }
+}
+
+/// Seat the provider in a new VM, when the app runs the builder (`new_vm`'s every VM).
+pub(crate) fn seed(world: &World, script: &mut UiScript) {
+    if let Some(link) = world.get_resource::<GameQueryLink>() {
+        script.set_game_query(Box::new(link.clone()));
+    }
+}
+
+/// The resource, the builder and its place in the frame.
+pub(crate) fn build(app: &mut App) {
+    use crate::app_core::schedule::UiFeed;
+    app.init_resource::<GameQueryLink>()
+        .configure_sets(
+            Update,
+            GameQueryBuild
+                .after(wrathplus_world::schedule::WorldStage::Net)
+                .before(UiFeed),
+        )
+        .add_systems(Update, build_game_query.in_set(GameQueryBuild));
+}
