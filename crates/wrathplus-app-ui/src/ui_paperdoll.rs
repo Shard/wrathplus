@@ -110,6 +110,35 @@ fn conversions(f: &ObjectFields, tables: &WrathGameTables) -> WrathStatConversio
     }
 }
 
+/// `0x4f5300`'s defaults by power type, `[base, while casting]`, filled on first use from
+/// `0x9f6fdc` (-12.5), `0x9f6fd4` (5) and `0x9f6fd0` (10); mana's pair is never written.
+const REGEN_DEFAULT: [[f32; 2]; 7] = [
+    [0.0, 0.0],
+    [-12.5, 0.0],
+    [5.0, 5.0],
+    [10.0, 10.0],
+    [0.0, 0.0],
+    [0.0, 0.0],
+    [-12.5, 0.0],
+];
+
+/// `GetPowerRegen`'s pair (`0x612b40`): `0x4f5390`, the default plus the type's
+/// `UNIT_FIELD_POWER_REGEN_FLAT_MODIFIER` (`+0x88`) or `..._INTERRUPTED_FLAT_MODIFIER` (`+0xa4`),
+/// per second, then `+ 0x9e1134` (0.001f), summed on the x87 stack and pushed as a double.
+fn power_regen(f: &ObjectFields, ty: u8) -> [f64; 2] {
+    let Some(default) = REGEN_DEFAULT.get(usize::from(ty)) else {
+        return [0.0; 2];
+    };
+    let rate = |field| f.get_float(field, u16::from(ty)).unwrap_or(0.0);
+    let fields = [
+        Field::UnitPowerRegenFlatModifier,
+        Field::UnitPowerRegenInterruptedFlatModifier,
+    ];
+    std::array::from_fn(|i| {
+        f64::from(default[i]) + f64::from(rate(fields[i])) + f64::from(0.001f32)
+    })
+}
+
 fn snapshot(f: &ObjectFields) -> WrathPaperDollStats {
     let float = |field| f.get_float(field, 0).unwrap_or(0.0);
     let word = |field| f.get(field).unwrap_or(0);
@@ -143,11 +172,8 @@ fn snapshot(f: &ObjectFields) -> WrathPaperDollStats {
             word(Field::PlayerExpertise),
             word(Field::PlayerOffhandExpertise),
         ],
-        // Mana is power slot zero; descriptor rates are mana/second, not mana/5.
-        mana_regen: [
-            float(Field::UnitPowerRegenFlatModifier),
-            float(Field::UnitPowerRegenInterruptedFlatModifier),
-        ],
+        power_regen: power_regen(f, f.unit_power_type()),
+        power_type: f.unit_power_type(),
         pet_spell_power: word(Field::PlayerPetSpellPower) as i32,
         // No fabricated rating/primary-stat ratios while GameTables are unavailable.
         conversions: Default::default(),
@@ -193,6 +219,7 @@ mod tests {
             (Field::PlayerShieldBlock, 0, 234),
             (Field::PlayerModHealingDonePos, 0, 345),
             (Field::UnitPowerRegenFlatModifier, 0, 2.5f32.to_bits()),
+            (Field::UnitPowerRegenFlatModifier, 1, 2.0f32.to_bits()),
             (
                 Field::UnitPowerRegenInterruptedFlatModifier,
                 0,
@@ -213,7 +240,14 @@ mod tests {
         assert_eq!(stats.expertise, [12, 9]);
         assert_eq!(stats.shield_block, 234);
         assert_eq!(stats.spell_healing, 345);
-        assert_eq!(stats.mana_regen, [2.5, 1.25]);
+        let eps = f64::from(0.001f32);
+        assert_eq!(stats.power_regen, [2.5 + eps, 1.25 + eps]);
+        // Rage: `0x4f5300`'s -12.5 and 0 under the type's own modifiers.
+        let rage = [(Field::UnitBytes0.index(), 1 << 24)];
+        let rage = snapshot(&ObjectFields::from_pairs(
+            &[pairs.as_slice(), &rage].concat(),
+        ));
+        assert_eq!((rage.power_type, rage.power_regen), (1, [-10.5 + eps, eps]));
         assert_eq!(stats.conversions, Default::default());
     }
     #[test]
