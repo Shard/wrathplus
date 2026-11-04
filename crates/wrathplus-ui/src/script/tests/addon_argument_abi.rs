@@ -105,6 +105,11 @@ fn a_bad_argument_type_raises_each_verbs_own_usage_string() {
         .unwrap(),
         "string|Usage: GetAddOnInfo(index or \"name\")"
     );
+    // Nor does a stand-in for one of the reference's C functions, here `securecall`.
+    assert_eq!(
+        raised(&s, "securecall(GetAddOnInfo, {})"),
+        "string|Usage: GetAddOnInfo(index or \"name\")"
+    );
     // An `xpcall` handler and `coroutine.resume` see the same string.
     let usage = ":1: Usage: GetAddOnInfo(index or \"name\")";
     let got = s

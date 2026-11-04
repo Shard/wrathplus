@@ -121,6 +121,10 @@ fn stock_message(e: &mlua::Error) -> String {
     }
 }
 
+/// The chunks that stand in for the reference's C functions (`securecall`, `hooksecurefunc`'s
+/// wrapper, ...): a verb they call has a C caller in the reference, so no position.
+const STAND_IN_CHUNKS: [&str; 2] = ["[WrathPlus ", "[AzerothBench "];
+
 /// `luaL_where(L, 1)` read off mlua's traceback of the raising verb: line 0 is the header, line 1
 /// the verb's own C frame, line 2 its caller, written `\tsrc:line: in …` when that frame has a
 /// current line and `\t[C]: in …` (or a tail-call marker) when not. A source name may itself hold
@@ -129,6 +133,9 @@ fn caller_position(traceback: &str) -> &str {
     let Some(frame) = traceback.lines().nth(2).and_then(|l| l.strip_prefix('\t')) else {
         return "";
     };
+    if STAND_IN_CHUNKS.iter().any(|p| frame.starts_with(p)) {
+        return "";
+    }
     frame
         .rmatch_indices(": in ")
         .map(|(at, _)| at)
