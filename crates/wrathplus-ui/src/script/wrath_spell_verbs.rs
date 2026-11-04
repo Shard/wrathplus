@@ -197,7 +197,7 @@ mod tests {
         s.run("assert(GetSpellCount('Ritual') == 0 and SpellHasRange('Attack') == nil)")
             .unwrap();
         s.model_mut().unit_guids.player = 1;
-        s.set_current_spells(Vec::new(), Some(75));
+        s.set_current_spells(Vec::new(), Some(75), Vec::new());
         s.run(
             r#"
             assert(IsAttackSpell('Attack') == 1 and IsAttackSpell(2, 'spell') == nil)

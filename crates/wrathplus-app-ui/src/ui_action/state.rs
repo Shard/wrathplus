@@ -354,7 +354,9 @@ pub(super) fn feed_action_state(
         script.set_action_state(action, new.copied());
     }
     memory.pushed = fresh;
-    script.set_current_spells(current_spells, auto_repeat.0);
+    // `IsCurrentItem` (`0x805fc0`): the pending item use's item, resolved to its entry now.
+    let item = (pending.current_item(now)).and_then(|g| objects.object(g)?.object_entry());
+    script.set_current_spells(current_spells, auto_repeat.0, item.into_iter().collect());
 
     // The events in the reference's flush order, the `ACTIONBAR_*` one first.
     if gen_changed {

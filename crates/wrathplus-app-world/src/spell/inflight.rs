@@ -45,6 +45,9 @@ struct PendingCastState {
     /// (`0x6e5026`) and discriminates at the gate instead; a ranged shot is recorded here without
     /// guarding, so the `modalNextSpell` test (`0x6e7408`) still matches it.
     guards: bool,
+    /// The item an item use casts from (0 for a spell): the current-cast node's item guid, which
+    /// `IsCurrentItem` (`0x805fc0`) resolves to its entry.
+    item: u64,
 }
 
 impl PendingCast {
@@ -64,6 +67,14 @@ impl PendingCast {
             .map(|p| p.spell_id)
     }
 
+    /// The guarding item use's item guid, `IsCurrentItem`'s (`0x805fc0`).
+    pub fn current_item(&self, now: Instant) -> Option<u64> {
+        self.0
+            .as_ref()
+            .filter(|p| p.guards && p.item != 0 && now < p.deadline)
+            .map(|p| p.item)
+    }
+
     /// The guarding cast's spell id, which `IsCurrentAction`'s checked state keys on.
     pub fn current(&self, now: Instant) -> Option<u32> {
         self.0
@@ -78,17 +89,19 @@ impl PendingCast {
             spell_id,
             deadline: now + SEND_PROVISIONAL,
             guards,
+            item: 0,
         });
     }
 
     /// Arm on an item use: the client's item use (`0x5d9258`) goes through `TryCast 0x6e4b60`
     /// via `0x6e5a90`, so it writes the same inflight id and meets the same gate. Only the
-    /// deadline differs.
-    pub(crate) fn arm_item(&mut self, spell_id: u32, now: Instant) {
+    /// deadline differs, and the record names the item.
+    pub(crate) fn arm_item(&mut self, spell_id: u32, item: u64, now: Instant) {
         self.0 = Some(PendingCastState {
             spell_id,
             deadline: now + ITEM_SEND_PROVISIONAL,
             guards: true,
+            item,
         });
     }
 
@@ -496,6 +509,11 @@ mod tests {
         g.arm(FIREBALL, t0, true);
         assert!(g.in_flight(t0 + SEND_PROVISIONAL - Duration::from_secs(1)));
         assert!(!g.in_flight(t0 + SEND_PROVISIONAL + Duration::from_secs(1)));
+        // An item use names its item while it guards (`IsCurrentItem`); a spell names none.
+        assert_eq!(g.current_item(t0), None);
+        g.arm_item(FIREBALL, 0xF0, t0);
+        assert_eq!(g.current_item(t0), Some(0xF0));
+        assert_eq!(g.current_item(t0 + ITEM_SEND_PROVISIONAL), None);
     }
 
     #[test]

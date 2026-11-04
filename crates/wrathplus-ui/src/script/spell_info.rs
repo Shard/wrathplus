@@ -42,11 +42,13 @@ pub struct SpellInfoView {
     pub trade_skill_link: Option<String>,
 }
 
-/// What the app pushes each frame for IsCurrentSpell and IsAutoRepeatSpell.
+/// What the app pushes each frame for IsCurrentSpell, IsAutoRepeatSpell and IsCurrentItem.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct CurrentSpells {
     pub(crate) spells: Vec<u32>,
     pub(crate) auto_repeat: Option<u32>,
+    /// The entry of the item behind each current cast.
+    pub(crate) items: Vec<u32>,
 }
 
 impl super::UiScript {
@@ -55,12 +57,18 @@ impl super::UiScript {
         self.model_mut().spell_catalog = rows.into_iter().map(|row| (row.spell_id, row)).collect();
     }
 
-    /// The spells `IsCurrentSpell` answers true for this frame, and the running auto-repeat
-    /// spell `IsAutoRepeatSpell` answers for.
-    pub fn set_current_spells(&mut self, spells: Vec<u32>, auto_repeat: Option<u32>) {
+    /// The spells `IsCurrentSpell` answers true for this frame, the running auto-repeat spell
+    /// `IsAutoRepeatSpell` answers for, and the entries of the items those casts come from.
+    pub fn set_current_spells(
+        &mut self,
+        spells: Vec<u32>,
+        auto_repeat: Option<u32>,
+        items: Vec<u32>,
+    ) {
         self.model_mut().current_spells = CurrentSpells {
             spells,
             auto_repeat,
+            items,
         };
     }
 }
@@ -227,6 +235,17 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             flag(current).into_lua_multi(lua)
         })?,
     )?;
+    // IsCurrentItem(item) (`0x5110d0`): the shared item resolver (id 0 is nil, `0x511114`), then
+    // `0x805fc0` walks the current casts (`0xaf5254`) for one whose item resolves to that entry;
+    // 1 or nil. Labelled: the casts carried are the pending one; a channel's item is not.
+    lua.globals().set(
+        "IsCurrentItem",
+        lua.create_function(|lua, item: Value| {
+            let model = lua.app_data_ref::<Model>().expect("model");
+            let id = super::item_arg::item_id_arg(lua, &model, &item);
+            Ok(flag(id != 0 && model.current_spells.items.contains(&id)))
+        })?,
+    )?;
     // IsPassiveSpell(spell [, book]) (`0x541340`): `Attributes & 0x40` (`0x5413cc`), 1 or nil; no
     // id shortcut, so a lone number is a name.
     lua.globals().set(
@@ -346,8 +365,13 @@ mod tests {
             assert(link == '|cff71d5ff|Hspell:999|h[Passive]|h|r' and trade == 'trade:999')
             assert(GetSpellLink(500) == nil)
         "#).unwrap();
-        s.set_current_spells(vec![134], None);
+        s.set_current_spells(vec![134], None, vec![6948]);
         s.run("assert(IsCurrentSpell(133.5) == 1 and IsCurrentSpell(133.9, nil) == nil)")
+            .unwrap();
+        // IsCurrentItem: the entry behind a current cast, by id, item string or link.
+        s.run("assert(IsCurrentItem(6948) == 1 and IsCurrentItem('item:6948:0') == 1)")
+            .unwrap();
+        s.run("assert(IsCurrentItem(6949) == nil and IsCurrentItem(nil) == nil)")
             .unwrap();
     }
 
