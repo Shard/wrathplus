@@ -71,10 +71,10 @@ fn raw_spells_keep_wire_order_triggers_and_names_without_tooltip_descriptions() 
     assert_eq!(
         result.item_spells,
         vec![
-            (1, 20, Some("Localized use".into())),
-            (99, 30, None),
-            (0, 10, Some("Opening".into())),
-            (2, 20, Some("Localized use".into())),
+            (1, 20, Some("Localized use".into()), 0),
+            (99, 30, None, 0),
+            (0, 10, Some("Opening".into()), 0),
+            (2, 20, Some("Localized use".into()), 0),
         ]
     );
     assert!(
@@ -86,9 +86,14 @@ fn raw_spells_keep_wire_order_triggers_and_names_without_tooltip_descriptions() 
 #[test]
 fn missing_catalog_keeps_positive_ids_and_empty_template_stays_empty() {
     let mut item = crate::items::test_template("Pending metadata");
-    item.spells = vec![entry(0, 0, 42), entry(1, 6, 7), entry(2, 1, 0)];
+    // A consumed use (charges -1) carries its charges for IsConsumableItem.
+    let potion = ItemSpellEntry {
+        charges: -1,
+        ..entry(0, 0, 42)
+    };
+    item.spells = vec![potion, entry(1, 6, 7), entry(2, 1, 0)];
     let result = view(&item, None);
-    assert_eq!(result.item_spells, vec![(0, 42, None), (6, 7, None)]);
+    assert_eq!(result.item_spells, vec![(0, 42, None, -1), (6, 7, None, 0)]);
     assert!(result.spell_triggers.is_empty());
     item.spells.clear();
     assert!(view(&item, None).item_spells.is_empty());

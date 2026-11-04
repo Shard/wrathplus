@@ -79,7 +79,7 @@ pub(super) fn item_count(model: &Model, id: u32, flags: u32) -> u32 {
 fn has_use_spell(t: &super::ItemTemplateView) -> bool {
     t.item_spells
         .iter()
-        .any(|&(trigger, id, _)| trigger == 0 && id != 0)
+        .any(|&(trigger, id, _, _)| trigger == 0 && id != 0)
 }
 
 /// IsEquippedItemType's match (`0x51c7a0`): an `INVTYPE_*` token or its global string selects an

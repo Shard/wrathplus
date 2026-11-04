@@ -84,7 +84,7 @@ fn template_queries_answer_the_references_shapes() {
         STONE,
         ItemTemplateView {
             bag_family: 0x100,
-            item_spells: vec![(0, 8690, None)],
+            item_spells: vec![(0, 8690, None, 0)],
             ..Default::default()
         },
     );

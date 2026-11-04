@@ -244,7 +244,7 @@ fn template_view(
             .spells
             .iter()
             .filter(|s| s.spell_id != 0)
-            .map(|s| (s.trigger, s.spell_id, spell_name(s.spell_id)))
+            .map(|s| (s.trigger, s.spell_id, spell_name(s.spell_id), s.charges))
             .collect(),
         charges: charges_count(&t.spells),
         description: t.description.clone(),
