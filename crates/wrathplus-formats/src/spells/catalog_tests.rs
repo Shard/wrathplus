@@ -22,6 +22,8 @@ fn real_spell_catalog_reads_rank_and_passive() {
         cat.get(201).unwrap().passive,
         "One-Handed Swords is passive"
     );
+    // A clone shares the loaded tables (the Lua query snapshot clones it per change).
+    assert!(std::sync::Arc::ptr_eq(&cat.0, &cat.clone().0));
 }
 
 #[test]

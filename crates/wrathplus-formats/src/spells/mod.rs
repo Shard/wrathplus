@@ -290,8 +290,12 @@ pub const SPELL_EFFECT_ENCHANT_ITEM_TEMPORARY: u32 = 54;
 pub const SPELL_EFFECT_PROSPECTING: u32 = 127;
 
 /// `Spell.dbc` joined with `SpellIcon.dbc`, plus the learn-spell map: a trainer offers a learn
-/// wrapper, and [`Self::learned_spell`] follows it to the ability it teaches.
-pub struct SpellCatalog {
+/// wrapper, and [`Self::learned_spell`] follows it to the ability it teaches. Shared behind an
+/// `Arc`, so a clone (the Lua query snapshot's) costs a reference count.
+#[derive(Clone)]
+pub struct SpellCatalog(std::sync::Arc<CatalogData>);
+
+struct CatalogData {
     spells: HashMap<u32, SpellDisplay>,
     learned_spell: HashMap<u32, u32>,
     /// Learn effects in slot order, for spells that have any.
@@ -326,7 +330,7 @@ impl SpellCatalog {
                 })
             })
             .collect();
-        Self {
+        Self(std::sync::Arc::new(CatalogData {
             spells,
             learned_spell,
             learn_effects,
@@ -334,7 +338,7 @@ impl SpellCatalog {
             dispel_types: SpellDispelTypes::default(),
             rune_costs: HashMap::new(),
             power_displays: HashMap::new(),
-        }
+        }))
     }
 
     /// A test catalog's rune and power-display rows.
@@ -343,44 +347,45 @@ impl SpellCatalog {
         rune_costs: HashMap<u32, RuneCost>,
         power_displays: HashMap<u32, String>,
     ) -> Self {
-        self.rune_costs = rune_costs;
-        self.power_displays = power_displays;
+        let data = std::sync::Arc::get_mut(&mut self.0).expect("a test catalog is built unshared");
+        data.rune_costs = rune_costs;
+        data.power_displays = power_displays;
         self
     }
 
     /// The `SpellRuneCost.dbc` row `id`.
     pub fn rune_cost(&self, id: u32) -> Option<RuneCost> {
-        self.rune_costs.get(&id).copied()
+        self.0.rune_costs.get(&id).copied()
     }
 
     /// The `GlobalStrings.lua` key `PowerDisplay.dbc` row `id` names its power by.
     pub fn power_display(&self, id: u32) -> Option<&str> {
-        self.power_displays.get(&id).map(String::as_str)
+        self.0.power_displays.get(&id).map(String::as_str)
     }
 
     /// A spell's learn effects in slot order, empty for a plain ability.
     pub fn learn_effects(&self, id: u32) -> &[LearnEffect] {
-        self.learn_effects.get(&id).map_or(&[], Vec::as_slice)
+        self.0.learn_effects.get(&id).map_or(&[], Vec::as_slice)
     }
 
     pub fn get(&self, id: u32) -> Option<&SpellDisplay> {
-        self.spells.get(&id)
+        self.0.spells.get(&id)
     }
 
     /// The dispel class's name, for the aura tooltip and the debuff border's `debuffType`; `None`
     /// when `SpellDispelType.dbc`'s `[+0x28]` gate withholds it.
     pub fn dispel_name(&self, display: &SpellDisplay) -> Option<&str> {
-        self.dispel_types.name(display.dispel)
+        self.0.dispel_types.name(display.dispel)
     }
 
     /// Every loaded spell, unordered.
     pub fn iter(&self) -> impl Iterator<Item = (u32, &SpellDisplay)> + '_ {
-        self.spells.iter().map(|(id, s)| (*id, s))
+        self.0.spells.iter().map(|(id, s)| (*id, s))
     }
 
     /// The ability a learn wrapper teaches, which resolves a trainer's wire id.
     pub fn learned_spell(&self, id: u32) -> Option<u32> {
-        self.learned_spell.get(&id).copied()
+        self.0.learned_spell.get(&id).copied()
     }
 
     /// The `Languages.dbc` id a spell declares: `EffectMiscValue_1` when `Effect_1` is 39. The
@@ -389,20 +394,20 @@ impl SpellCatalog {
     /// Common (7): languages 8, 9, 10 and 12 are always garbled, and a warlock's Demon Tongue
     /// takes Common's entry. Both are 1.12.1 behaviour.
     pub fn declared_language(&self, spell: u32) -> Option<u32> {
-        self.declared_language.get(&spell).copied()
+        self.0.declared_language.get(&spell).copied()
     }
 
     /// Every `(spell, language)` pair a shipped spell declares.
     pub fn declared_languages(&self) -> impl Iterator<Item = (u32, u32)> + '_ {
-        self.declared_language.iter().map(|(s, l)| (*s, *l))
+        self.0.declared_language.iter().map(|(s, l)| (*s, *l))
     }
 
     pub fn len(&self) -> usize {
-        self.spells.len()
+        self.0.spells.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.spells.is_empty()
+        self.0.spells.is_empty()
     }
 }
 
@@ -718,7 +723,7 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
             },
         );
     }
-    Ok(SpellCatalog {
+    Ok(SpellCatalog(std::sync::Arc::new(CatalogData {
         spells,
         learned_spell,
         learn_effects,
@@ -726,7 +731,7 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
         dispel_types,
         rune_costs: load_rune_costs(chain)?,
         power_displays: load_power_displays(chain)?,
-    })
+    })))
 }
 
 #[cfg(test)]

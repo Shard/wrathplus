@@ -50,7 +50,7 @@ pub struct Record {
 /// pet's is [`crate::ui_pet::PetBar::cooldowns`] (`0xcecb04`), which the pet bar, the pet book and
 /// the pet's `SMSG_SPELL_GO` leg read and write. Each list's edge feeds its own events: the
 /// player's `feed_action_state`, the pet's `ui_pet::bar::fire_pet_cooldown_events`.
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 pub struct Cooldowns {
     pub records: Vec<Record>,
     /// Bumped on every mutation the reference flushes (`0x4b31b0`), the flush's edge. Only counts

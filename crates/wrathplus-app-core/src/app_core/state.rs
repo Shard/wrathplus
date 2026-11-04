@@ -17,7 +17,7 @@ use super::cooldowns::Cooldowns;
 use super::errors::UiError;
 
 /// The spell DBC catalogs, absent without client data; the cast-visual router shares the catalog.
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct Spells {
     pub catalog: SpellCatalog,
     /// Form id to its `SpellShapeshiftForm.dbc` row: `BonusActionBar` pages the bar

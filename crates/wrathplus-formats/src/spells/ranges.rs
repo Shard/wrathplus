@@ -187,7 +187,7 @@ pub fn min_max_range_reads_units(
 }
 
 /// `SpellRange.dbc`, by row id ([`crate::spells::SpellDisplay::range_index`]).
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct SpellRangeCatalog {
     ranges: HashMap<u32, SpellRange>,
     /// Build 12340's friendly pairs (`MinRangeFriend`, `MaxRangeFriend`, file columns 2 and 4).
