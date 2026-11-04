@@ -5,13 +5,12 @@
 
 use mlua::Lua;
 
-/// What an item verb hands the provider: the item entry, its use spell (the template's first
-/// trigger-0 spell, `0x510ef0`) and that spell slot's category.
+/// What an item verb hands the provider: the item entry and its use spell (the template's first
+/// trigger-0 spell, `0x510ef0`; 0 for none or an uncached template).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ItemAsk {
     pub entry: u32,
     pub spell: u32,
-    pub category: u32,
 }
 
 /// The host's game state as the VM sees it. An implementation reads only its own data: it never
@@ -45,6 +44,14 @@ pub trait GameQuery {
     /// enable)` in `GetTime` seconds, `(0, 0, true)` when none runs; `None` keeps the VM's path.
     fn spell_cooldown(&self, spell: u32) -> Option<(f64, f64, bool)> {
         let _ = spell;
+        None
+    }
+
+    /// `IsUsableItem`'s pair (`0x51c450`): unusable while not held (`0x754d00`) or while the use
+    /// spell's record is on hold (`0x80ac10`); usable with no use spell or row (`0x51c61d`); else
+    /// the use spell's cast legs and power check, as [`Self::spell_usable`].
+    fn item_usable(&self, item: ItemAsk) -> Option<(bool, bool)> {
+        let _ = item;
         None
     }
 

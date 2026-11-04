@@ -877,12 +877,19 @@ mod tests {
                 ])),
             ));
             app.insert_non_send_resource(UiScript::new().unwrap());
-            app.add_systems(Update, feed_action_state);
+            app.init_resource::<crate::ui_query::GameQueryLink>();
+            let systems = (crate::ui_query::build_game_query, feed_action_state);
+            app.add_systems(Update, systems.chain());
             app.update();
-            app.world()
-                .non_send_resource::<UiScript>()
-                .eval::<bool>("return (IsUsableAction(1)) and true or false")
-                .unwrap()
+            let bar = (app.world().non_send_resource::<UiScript>())
+                .eval::<bool>("return (IsUsableAction(1)) and true or false");
+            // `IsUsableItem` runs the same walk on the held muffins; an unheld entry is nil, nil.
+            let link = app.world().resource::<crate::ui_query::GameQueryLink>();
+            let (spell, query) = (FOOD_SPELL, wrathplus_ui::script::GameQuery::item_usable);
+            let walk = |entry| query(link, wrathplus_ui::script::ItemAsk { entry, spell });
+            let held = (walk(FOOD_ITEM).unwrap().0, walk(1488));
+            assert_eq!(held, (*bar.as_ref().unwrap(), Some((false, false))));
+            bar.unwrap()
         };
 
         assert!(lit(false), "out of combat the muffins are full-colour");

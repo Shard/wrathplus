@@ -53,6 +53,10 @@ impl GameQuery for GameQueryLink {
         self.frame().cooldown(spell, 0)
     }
 
+    fn item_usable(&self, item: ItemAsk) -> Option<(bool, bool)> {
+        self.frame().item_usable(item)
+    }
+
     fn item_cooldown(&self, item: ItemAsk) -> Option<(f64, f64, bool)> {
         self.frame().cooldown(item.spell, item.entry)
     }
@@ -80,6 +84,11 @@ struct Me {
     cooldowns: Cooldowns,
     combo_banked: u8,
     carried: HashMap<u32, u32>,
+    /// The entries worn in equipment slots 0-18.
+    equipped: [u32; 19],
+    /// A held entry's use-spell slot category, where it has one (`+0x150`): the cooldown test's
+    /// override of the spell's (`0x807e28`).
+    use_categories: HashMap<u32, u32>,
     worn: WornSlots,
     /// The frame's `(Instant, GetTime)` pair every cooldown push maps through.
     clock: (Instant, f64),
@@ -160,6 +169,29 @@ impl FrameQuery {
         )
     }
 
+    /// `IsUsableItem` (`0x51c450`): not held (the default walk `0x754d00`, here the carried
+    /// counts and the worn slots) or on hold (`0x80ac10` → `0x807da0`, the same on-hold test as
+    /// the bar's item gate) is nil, nil; no use spell or no row is 1, nil (`0x51c61d`); else the
+    /// use spell's walk. Labelled: the arena leg (map type 4, a recovery past 900 s or negative
+    /// charges, `0x51c51f`-`0x51c5b1`) is not built, the held count misses the keyring and the
+    /// token band, and this differs from the bar's 1.12 item arm on a use spell with no row.
+    pub fn item_usable(&self, item: ItemAsk) -> Option<(bool, bool)> {
+        let (me, spells) = (self.me.as_ref()?, self.spells.as_deref()?);
+        let held = me.carried.get(&item.entry).is_some_and(|&n| n > 0)
+            || me.equipped.contains(&item.entry);
+        let d = spells.catalog.get(item.spell);
+        let category = (me.use_categories.get(&item.entry).copied())
+            .unwrap_or_else(|| d.map_or(0, |d| d.category));
+        let on_hold = (me.cooldowns).has_on_hold_record(item.spell, item.entry, category);
+        if !held || (d.is_some() && on_hold) {
+            return Some((false, false));
+        }
+        let Some(d) = d else {
+            return Some((true, false));
+        };
+        Some(usable::spell_usable(item.spell, d, spells, &self.walk(me)))
+    }
+
     fn walk<'a>(&'a self, me: &'a Me) -> usable::UsableCtx<'a> {
         usable::UsableCtx {
             store: &me.store,
@@ -198,6 +230,17 @@ impl WalkInputs<'_, '_> {
                 TargetFacts::of(t, store, f, r, self.relations.context())
             });
         let items = &self.items;
+        let carried = crate::inventory::carried_counts(&store.0, objects);
+        let equipped: [u32; 19] = std::array::from_fn(|i| {
+            let guid = store.0.player_inv_slot(i as u8).unwrap_or(0);
+            (objects.object(guid)).map_or(0, |o| o.object_entry().unwrap_or(0))
+        });
+        let use_categories = (carried.keys().chain(&equipped))
+            .filter_map(|&entry| {
+                let use_spell = items.template_cached(entry)?.use_spell?;
+                (use_spell.category != 0).then_some((entry, use_spell.category))
+            })
+            .collect();
         Me {
             pos,
             range,
@@ -206,7 +249,9 @@ impl WalkInputs<'_, '_> {
             target,
             cooldowns: self.cooldowns.clone(),
             combo_banked: banked(&self.combo).0,
-            carried: crate::inventory::carried_counts(&store.0, objects),
+            carried,
+            equipped,
+            use_categories,
             worn: WornSlots::copy(&WornCached {
                 store,
                 objects,

@@ -1,5 +1,6 @@
 //! The spell and item verbs that read live game state, answered in the call through the host's
-//! [`GameQuery`](super::GameQuery): IsSpellInRange and IsUsableSpell.
+//! [`GameQuery`](super::GameQuery): IsSpellInRange, IsUsableSpell, IsUsableItem and
+//! IsItemInRange.
 
 use mlua::{Lua, MultiValue, Value};
 
@@ -33,11 +34,7 @@ fn unit_arg(lua: &Lua, model: &Model, args: &MultiValue, at: usize) -> Option<u6
 pub(super) fn item_ask(model: &Model, entry: u32) -> Option<super::ItemAsk> {
     let spells = &model.item_templates.get(&entry)?.item_spells;
     let &(_, spell, _, _) = spells.iter().find(|s| s.0 == 0 && s.1 != 0)?;
-    Some(super::ItemAsk {
-        entry,
-        spell,
-        category: 0,
-    })
+    Some(super::ItemAsk { entry, spell })
 }
 
 /// A number, as the reference pushes `fld1`/`fldz` (`0x541d91`, `0x541daa`): 0 is truthy in Lua.
@@ -86,5 +83,46 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         let (usable, no_mana) = pair.unwrap_or((false, false));
         Ok((flag(usable), flag(no_mana)))
     })?;
+    // IsUsableItem(item) (`0x51c450`): the shared item resolver, then two values as
+    // IsUsableSpell's; nil, nil without a player or for id 0 (`0x51c4c5`, `0x51c4cd`). Its cooldown
+    // test asks for an uncached template (`0x80ac26` passes the request callback).
+    lua.globals().set(
+        "IsUsableItem",
+        lua.create_function(|lua, arg: Value| {
+            let item = {
+                let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+                let id = super::item_arg::item_id_arg(lua, &model, &arg);
+                if (id as i32) > 0 && !model.item_templates.contains_key(&id) {
+                    model.item_stat_asks.insert(id);
+                }
+                let bare = super::ItemAsk {
+                    entry: id,
+                    spell: 0,
+                };
+                (id != 0).then(|| item_ask(&model, id).unwrap_or(bare))
+            };
+            let pair = item.and_then(|item| ask(lua, |q| q.item_usable(item)));
+            let (usable, no_mana) = pair.unwrap_or((false, false));
+            Ok((flag(usable), flag(no_mana)))
+        })?,
+    )?;
+    // IsItemInRange(item[, unit]) (`0x51c9c0`): the item's use spell and its row, the player,
+    // the unit at argument 2 through `0x60abf0` (an absent one is the target), then `0x809610`:
+    // 1, 0 or nil, as IsSpellInRange.
+    lua.globals().set(
+        "IsItemInRange",
+        lua.create_function(|lua, args: MultiValue| {
+            let ask_for = {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                let item = args.front().cloned().unwrap_or(Value::Nil);
+                let id = super::item_arg::item_id_arg(lua, &model, &item);
+                let spell = item_ask(&model, id).map(|a| a.spell);
+                spell.zip(unit_arg(lua, &model, &args, 2))
+            };
+            let answer = ask_for
+                .and_then(|(spell, unit)| ask(lua, |q| q.spell_in_range(spell, false, unit)));
+            Ok(answer.map_or(Value::Nil, number))
+        })?,
+    )?;
     Ok(())
 }

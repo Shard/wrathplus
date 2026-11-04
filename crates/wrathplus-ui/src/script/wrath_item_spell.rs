@@ -211,6 +211,8 @@ mod tests {
 
         // With the host's query: the range carries the spell mods, and the cooldown is the
         // manager's record for the use spell and the item, carried or not.
+        s.model_mut().unit_guids.target = 7;
+        s.model_mut().unit_guids.focus = 8;
         s.set_game_query(Box::new(Fake));
         s.run(
             r#"
@@ -219,6 +221,17 @@ mod tests {
             assert(start == 5 and duration == 10 and enable == 1)
             -- No template, or no use spell: 0, 0, 0 without asking.
             assert(select(3, GetItemCooldown(999)) == 0 and select(3, GetItemCooldown(105)) == 0)
+            -- IsUsableItem: two values, 1 or nil; an uncached item is asked with no use spell.
+            local u, m = IsUsableItem(102)
+            assert(u == nil and m == 1 and select('#', IsUsableItem(102)) == 2)
+            u, m = IsUsableItem(998)
+            assert(u == 1 and m == nil)
+            u, m = IsUsableItem(0)
+            assert(u == nil and m == nil)
+            -- IsItemInRange: the use spell at the unit, the target by default; 0 is a number.
+            assert(IsItemInRange(102) == 1 and IsItemInRange(102, 'focus') == 0)
+            assert(type(IsItemInRange(102, 'focus')) == 'number')
+            assert(IsItemInRange(102, 'bogus') == nil and IsItemInRange(105) == nil)
         "#,
         )
         .unwrap();
@@ -235,6 +248,22 @@ mod tests {
         fn item_cooldown(&self, item: crate::script::ItemAsk) -> Option<(f64, f64, bool)> {
             assert_eq!((item.entry, item.spell), (102, 20));
             Some((5.0, 10.0, true))
+        }
+        /// Item 102 is short of mana; 998, uncached, comes with no use spell and is usable.
+        fn item_usable(&self, item: crate::script::ItemAsk) -> Option<(bool, bool)> {
+            match (item.entry, item.spell) {
+                (102, 20) => Some((false, true)),
+                (998, 0) => Some((true, false)),
+                _ => None,
+            }
+        }
+        /// Unit 7 in range of spell 20, unit 8 out of it.
+        fn spell_in_range(&self, spell: u32, pet: bool, unit: u64) -> Option<bool> {
+            assert_eq!((spell, pet), (20, false));
+            [(7, true), (8, false)]
+                .into_iter()
+                .find(|&(u, _)| u == unit)
+                .map(|(_, b)| b)
         }
     }
 }
