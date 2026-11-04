@@ -101,7 +101,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 Value::String(_) | Value::Number(_) | Value::Integer(_)
             ) {
                 return Err(mlua::Error::runtime(
-                    "Usage: SetInventoryPortaitTexture(texure, unit, slot)",
+                    "Usage: SetInventoryPortraitTexture(texture, unit, slot)",
                 ));
             }
             inventory_slot_arg(
@@ -304,7 +304,7 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(
-            err.contains("Usage: SetInventoryPortaitTexture(texure, unit, slot)"),
+            err.contains("Usage: SetInventoryPortraitTexture(texture, unit, slot)"),
             "{err}"
         );
         assert_eq!(
