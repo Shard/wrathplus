@@ -184,21 +184,20 @@ pub struct UnitState {
     /// `UnitIsPVPFreeForAll`: `PLAYER_FLAGS` bit `0x80`, or the roster status byte's `0x10`;
     /// independent of [`Self::pvp`].
     pub is_pvp_ffa: bool,
-    /// `UnitPVPRank`: the current rank on the internal `0..=18` scale (0 none), from the public
-    /// `PLAYER_BYTES_3` byte 3. The private lifetime highest rides
-    /// [`HonorState`](super::HonorState); [`super::pvp`] converts to the `-4..=14` visual scale.
+    /// `UnitPVPRank`: the internal `0..=18` rank (0 none) of the public `PLAYER_BYTES_3`; the
+    /// lifetime highest rides [`HonorState`](super::HonorState).
     pub pvp_rank: u8,
-    /// The city-protector title, `PLAYER_BYTES_3` byte 2 (0 none): `UnitPVPName` appends the
-    /// `PVP_MEDAL<n>` line for a non-zero one (`0x6093ef`).
+    /// `PLAYER_BYTES_3` byte 2: a titled `UnitPVPName` appends `PVP_MEDAL<n>` (`0x72a3ea`).
     pub pvp_medal: u8,
+    /// `PLAYER_CHOSEN_TITLE`, a CharTitles `MaskID` (0 none), `UnitPVPName`'s (`0x72a2ce`).
+    pub chosen_title: u32,
     /// `UnitFactionGroup`'s English `InternalName` but for `"player"`: the live template's group
     /// mask (`0x60d167`) named by `FactionGroup.dbc`; `None` for a template with no side.
     pub faction_group: Option<String>,
     /// `UnitFactionGroup`'s second return, `FactionGroup.dbc`'s localized `Name0`: display text.
     pub faction_group_localized: Option<String>,
     /// The team digit of `PVP_RANK_<rank>_<team>` (`0x5efe00`): 0 Horde, 1 Alliance, -1 no side,
-    /// from the race through `ChrRaces` and `FactionTemplate`, never the live template, so a GM on
-    /// template 35 keeps the rank title; 0 for a unit the reference cannot resolve (`0x51a9af`).
+    /// from the race, never the live template; 0 for a unit the reference cannot resolve.
     pub pvp_team: i8,
     /// `OBJECT_FIELD_GUID`, which `UnitIsUnit` and `UnitInParty` compare; 0 is unresolved, and
     /// two zeros never match.

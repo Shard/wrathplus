@@ -821,8 +821,13 @@ pub(crate) fn snapshot(
         pvp_rank: store.0.player_pvp_rank().unwrap_or(0),
         // The team digit of `PVP_RANK_<rank>_<team>`, from the race ([`race_pvp_team`]).
         pvp_team: store.0.unit_race().map_or(-1, race_pvp_team),
-        // No city-protector medal: 12340's `PLAYER_BYTES_3` byte 2 is the PvP title.
-        pvp_medal: 0,
+        // `PLAYER_BYTES_3` byte 2 (`player_pvp_rank`'s `>> 16` byte): a titled `UnitPVPName`'s
+        // `PVP_MEDAL<n>` line (`0x72a3ea`), and `PLAYER_CHOSEN_TITLE`, its title (`0x72a2ce`).
+        pvp_medal: store.0.player_pvp_rank().unwrap_or(0),
+        chosen_title: store
+            .0
+            .get(wrathplus_protocol::types::Field::PlayerChosenTitle)
+            .unwrap_or(0),
         // `is_player` and the creature-record fields come from [`enrich_unit`].
         ..Default::default()
     }
