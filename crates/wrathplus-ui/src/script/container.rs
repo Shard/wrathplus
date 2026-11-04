@@ -5,6 +5,7 @@
 
 use mlua::{Lua, Value};
 
+use super::binding_abi::number_arg;
 use super::cursor::{self, CursorItem, CursorPayload};
 use super::Model;
 
@@ -538,43 +539,64 @@ fn trade_into_first_free(model: &mut Model, bag: i64, slot: u32) {
     }
 }
 
+/// A bank bag (5..11) with the banker away: the resolver's `0x5d6f20` answers no container.
+pub(super) fn bank_bag_closed(model: &Model, bag: i64) -> bool {
+    (5..=11).contains(&bag) && model.bank.is_none()
+}
+
 /// Register the container verbs as bare globals, as build 12340 has them; `C_Container` is a later
 /// client's namespace, and an addon that finds it assumes that client.
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
-    // ContainerIDToInventoryID(containerID) (`0x4f94e0`): `id - 1`, then +20 below 4 else +60, so
-    // the keyring -2 → 17, the backpack 0 → 19, bags 1-4 → 20-23 and bank bags 5-10 → 64-69, with
-    // no special case and no range check.
+    // ContainerIDToInventoryID(containerID) (`0x5d6f60`): `id - 1`, then +20 below 4 else +64, so
+    // bags 1-4 are 20-23 and the bank bags 5-11 68-74; any other id raises (`0x5d6fd6`).
     lua.globals().set(
         "ContainerIDToInventoryID",
         lua.create_function(|lua, id: Value| {
-            let id = super::binding_abi::number_arg(
-                lua,
-                id,
-                "Usage: ContainerIDToInventoryID(containerID)",
-            )?;
-            // The reference's steps and signed compare (`0x4f9524 jl`), wrapping at the `i32` edge.
-            Ok(i64::from(
-                lua.app_data_ref::<Model>()
-                    .expect("model")
-                    .container_inventory_slot(id),
-            ))
+            let id = number_arg(lua, id, "Usage: ContainerIDToInventoryID(containerID)")?;
+            if !(1..=11).contains(&id) {
+                let invalid = "ContainerIDToInventoryID(): invalid container ID";
+                return Err(mlua::Error::runtime(invalid));
+            }
+            let model = lua.app_data_ref::<Model>().expect("model");
+            Ok(i64::from(model.container_inventory_slot(id)))
         })?,
     )?;
 
+    // GetContainerNumSlots(index) (`0x5d74a0`): the backpack, vault and keyring are the constants
+    // 16, 28 and 32 (and -4, the token band, 32); a bag 1..11 its container's count, a bank bag
+    // only with the banker (`0x5d6f20`); anything else 0.
     lua.globals().set(
         "GetContainerNumSlots",
-        lua.create_function(|lua, bag: i64| {
+        lua.create_function(|lua, bag: Value| {
+            let bag = i64::from(number_arg(lua, bag, "Usage: GetContainerNumSlots(index)")?);
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(model.containers.get(&bag).map_or(0, |c| c.num_slots))
+            Ok(match bag {
+                0 => 16,
+                -1 => 28,
+                -2 | -4 => 32,
+                1..=11 if !bank_bag_closed(&model, bag) => {
+                    model.containers.get(&bag).map_or(0, |c| c.num_slots)
+                }
+                _ => 0,
+            })
         })?,
     )?;
 
+    // GetBagName(index) (`0x5d8c70`): the backpack is `BACKPACK_TOOLTIP` (`0x819d40`); a bag 1..11
+    // its item's name, a bank bag only with the banker; anything else, the vault and the keyring
+    // included, one nil.
     lua.globals().set(
         "GetBagName",
-        lua.create_function(|lua, bag: i64| {
+        lua.create_function(|lua, bag: Value| {
+            let bag = i64::from(number_arg(lua, bag, "Usage: GetBagName(index)")?);
+            if bag == 0 {
+                return lua.globals().get::<Value>("BACKPACK_TOOLTIP");
+            }
             let name = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                model.containers.get(&bag).and_then(|c| c.name.clone())
+                let open = (1..=11).contains(&bag) && !bank_bag_closed(&model, bag);
+                let c = model.containers.get(&bag).filter(|_| open);
+                c.and_then(|c| c.name.clone())
             };
             match name {
                 Some(n) => Ok(Value::String(lua.create_string(&n)?)),
@@ -583,14 +605,29 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetContainerItemCooldown(bag, slot) (`0x4f99b0`) → start, duration, enable on the `GetTime`
-    // clock, as `GetActionCooldown`; enable 0 is a held cooldown. An expired one reads cold, so a
-    // re-feed cannot replay the finish flash.
+    // GetContainerItemCooldown(index, slot) (`0x5d7d90`) → start, duration, enable on the
+    // `GetTime` clock, as `GetActionCooldown`; enable 0 is a held cooldown. An empty or unknown
+    // slot is (0, 0, 0), an item with none running (0, 0, 1); an expired one reads cold, so a
+    // re-feed cannot replay the finish flash. Labelled: an item whose charges are spent, (0, 0, 0)
+    // natively, reads its cooldown here.
     lua.globals().set(
         "GetContainerItemCooldown",
-        lua.create_function(|lua, (bag, slot): (i64, u32)| {
+        lua.create_function(|lua, (bag, slot): (Value, Value)| {
+            const USAGE: &str = "Usage: GetContainerItemCooldown(index, slot)";
+            let bag = i64::from(number_arg(lua, bag, USAGE)?);
+            let slot = number_arg(lua, slot, USAGE)?;
             let now = crate::script::clock::now(lua);
             let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let held = |s: &u32| {
+                let c = model
+                    .containers
+                    .get(&bag)
+                    .filter(|_| !bank_bag_closed(&model, bag));
+                c.is_some_and(|c| c.slots.contains_key(s))
+            };
+            let Some(slot) = u32::try_from(slot).ok().filter(held) else {
+                return Ok((0.0, 0.0, 0));
+            };
             Ok(match model.container_cooldowns.get(&(bag, slot)) {
                 Some(&(start, duration, enabled)) if start + duration > now || !enabled => {
                     (start, duration, i32::from(enabled))
@@ -683,8 +720,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, args: mlua::MultiValue| {
             const USAGE: &str = "Usage: UseContainerItem(index, slot[, target])";
             let arg = |i: usize| args.get(i).cloned().unwrap_or(Value::Nil);
-            let bag = i64::from(super::binding_abi::number_arg(lua, arg(0), USAGE)?);
-            let slot = super::binding_abi::number_arg(lua, arg(1), USAGE)?;
+            let bag = i64::from(number_arg(lua, arg(0), USAGE)?);
+            let slot = number_arg(lua, arg(1), USAGE)?;
             let Some(slot) = u32::try_from(slot).ok().filter(|s| *s >= 1) else {
                 return Ok(());
             };

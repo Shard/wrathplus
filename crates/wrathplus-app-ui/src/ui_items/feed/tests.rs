@@ -362,7 +362,12 @@ fn an_absent_self_player_is_no_source_never_an_empty_bag_burst() {
         Vec::new(),
         Vec::new(),
     );
-    assert_eq!(s.eval::<i64>("return GetContainerNumSlots(0)").unwrap(), 0);
+    let gone = "return select('#', GetContainerFreeSlots(0))";
+    assert_eq!(
+        s.eval::<i64>(gone).unwrap(),
+        0,
+        "the backpack's 16 is a constant"
+    );
     assert_eq!(s.eval::<i64>("return BAG_EVENTS").unwrap(), 2);
 }
 
