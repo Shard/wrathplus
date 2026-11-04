@@ -390,6 +390,17 @@ fn skill_clamped((base, modifier): (i32, i32)) -> (i64, i64) {
     (base, if modifier + base < 0 { -base } else { modifier })
 }
 
+/// A player skill pair with its combat ratings' points added to the modifier, each the rating
+/// bonus (`0x6de410`) stored as a float, less 0.5 (`0xad9f58`), `fistp` to nearest, ties to even.
+fn with_ratings(model: &Model, (base, temp): (i32, i32), native: &[usize]) -> (i32, i32) {
+    let bonus = &model.wrath_paperdoll_stats.conversions.rating_bonus;
+    let points: i32 = native
+        .iter()
+        .map(|&r| (f64::from(bonus[r]) - 0.5).round_ties_even() as i32)
+        .sum();
+    (base, temp.wrapping_add(points))
+}
+
 /// A non-player's `UnitDefense` and `UnitAttackBothHands` answer: `CGUnit_C`'s vtable bodies
 /// (`0x613680`, `0x6136b0`) return level * 5 with a 0 modifier; a creature has no skill block.
 fn cgunit_skill(model: &Model, token: &str) -> i64 {
@@ -642,10 +653,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         )?;
     }
 
-    // UnitAttackBothHands(unit) → (mainBase, mainMod, offBase, offMod): `0x518810` calls
-    // `[vtbl+0xb0]` for hand 0 then hand 1. Stock reads only the first pair
-    // (`PaperDollFrame.lua:398-399`). A pet's `CGUnit_C` body (`0x6136b0`) ignores the hand, so
-    // both pairs are `(level * 5, 0)`.
+    // UnitAttackBothHands(unit) → (mainBase, mainMod, offBase, offMod): `0x610450` calls
+    // `[vtbl+0x144]` for hand 0 then hand 1. Labelled: a pet's `(level * 5, 0)` per hand is 1.12's
+    // `CGUnit_C` body; 12340's was not located.
     g.set(
         "UnitAttackBothHands",
         lua.create_function(|lua, token: Option<String>| {
@@ -655,8 +665,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     .player_combat_stats
                     .as_ref()
                     .map_or((0, 0, 0, 0), |s| {
-                        let (mb, mm) = skill_clamped(s.main_weapon_skill);
-                        let (ob, om) = skill_clamped(s.offhand_weapon_skill);
+                        // `0x6e0c30`: CR_WEAPON_SKILL (0), then the hand's own, 20 or 21.
+                        let main = with_ratings(&model, s.main_weapon_skill, &[0, 20]);
+                        let off = with_ratings(&model, s.offhand_weapon_skill, &[0, 21]);
+                        let ((mb, mm), (ob, om)) = (skill_clamped(main), skill_clamped(off));
                         (mb, mm, ob, om)
                     }),
                 Some("pet") => {
@@ -668,32 +680,33 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // UnitRangedAttack(unit) → (base, modifier), the ranged weapon's skill pair.
+    // UnitRangedAttack(unit) → (base, modifier): the ranged weapon's skill pair plus
+    // CR_WEAPON_SKILL (0) and CR_WEAPON_SKILL_RANGED (22) for the player (`0x6e0d30`), no clamp.
     g.set(
         "UnitRangedAttack",
         lua.create_function(|lua, token: Option<String>| {
-            Ok(with_unit_stats(lua, &token, |s| {
-                (
-                    i64::from(s.ranged_weapon_skill.0),
-                    i64::from(s.ranged_weapon_skill.1),
-                )
-            }))
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let pair = match (token.as_deref(), &model.player_combat_stats) {
+                (Some("player"), Some(s)) => with_ratings(&model, s.ranged_weapon_skill, &[0, 22]),
+                _ => (0, 0),
+            };
+            Ok((i64::from(pair.0), i64::from(pair.1)))
         })?,
     )?;
 
-    // UnitDefense(unit) → (base, modifier); stock splits the modifier's sign itself
-    // (`PaperDollFrame.lua:259-271`). The gate is SELF or `UNIT_FIELD_SUMMONEDBY` = us, then
-    // `[vtbl+0xac]`: `CGPlayer_C` `0x5eda20` reads the Defense skill (`0x6de040`), `CGUnit_C`
-    // `0x613680` answers level * 5 and 0. Any other token gets the gate's zeros.
+    // UnitDefense(unit) → (base, modifier) (`0x610de0`); stock splits the modifier's sign itself.
+    // The gate is SELF or `UNIT_FIELD_SUMMONEDBY` = us, then `[vtbl+0x140]`: the player's
+    // `0x6de6d0` reads the Defense skill; a pet's level * 5 and 0 is 1.12's body (labelled). Any
+    // other token gets the gate's zeros.
     g.set(
         "UnitDefense",
         lua.create_function(|lua, token: Option<String>| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             Ok(match token.as_deref() {
-                Some("player") => model
-                    .player_combat_stats
-                    .as_ref()
-                    .map_or((0, 0), |s| skill_clamped(s.defense_skill)),
+                Some("player") => model.player_combat_stats.as_ref().map_or((0, 0), |s| {
+                    // `0x6de6d0`: CR_DEFENSE_SKILL (1).
+                    skill_clamped(with_ratings(&model, s.defense_skill, &[1]))
+                }),
                 Some("pet") => (cgunit_skill(&model, "pet"), 0),
                 _ => (0, 0),
             })
@@ -1169,6 +1182,18 @@ mod tests {
             "local a,b,c=UnitAttackPower('player') return a,b,c,UnitRangedAttackPower('player')";
         let got = s.eval::<(i64, i64, i64, i64, i64, i64)>(both).unwrap();
         assert_eq!(got, (86, 33, -11, 78, 0, -4));
+        // Each skill rating adds round(bonus - 0.5), ties to even: CR 0 1.5 is 1, CR 1 2.0 is 2,
+        // CR 20 3.0 is 2, CR 21 1.0 is 0, CR 22 2.6 is 2.
+        let mut paper = crate::script::WrathPaperDollStats::default();
+        for (cr, bonus) in [(0, 1.5), (1, 2.0), (20, 3.0), (21, 1.0), (22, 2.6)] {
+            paper.conversions.rating_bonus[cr] = bonus;
+        }
+        s.set_wrath_paperdoll_stats(paper);
+        let skills =
+            "local a,b,c,d=UnitAttackBothHands('player') local e,f=UnitRangedAttack('player') \
+            return {a,b,c,d,e,f,UnitDefense('player')}";
+        let got = s.eval::<Vec<i64>>(skills).unwrap();
+        assert_eq!(got, [25, 5, 20, 1, 18, 3, 55, 6]);
         assert_eq!(
             s.eval::<(i64, i64, i64)>(r#"return UnitAttackPower("target")"#)
                 .unwrap(),
