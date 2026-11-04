@@ -59,16 +59,17 @@ pub(crate) struct Query {
 }
 
 /// `0x6110a0`: `isstring(1)` and (`isnumber(2)` or `isstring(2)`), else `usage` raises. A number,
-/// numeric strings included (`lua_isnumber`), is an index (`lua_tointeger`) with the filter third;
-/// otherwise argument 2 is the name, 3 the rank (`lua_tolstring`, absent unless a string or number)
-/// and 4 the filter. A filter that is no string is no filter (`0x60841d`).
+/// numeric strings included (`lua_isnumber`), is an index (`lua_tointeger`) with the filter
+/// third; otherwise argument 2 is the name, 3 the rank (`lua_tolstring`, absent unless a string
+/// or number) and 4 the filter. A filter that is no string is no filter (`0x60841d`).
 pub(crate) fn parse(lua: &Lua, args: &MultiValue, usage: &'static str) -> mlua::Result<Query> {
     let arg = |i: usize| args.get(i).cloned().unwrap_or(Value::Nil);
     let text = |v: Value| crate::script::binding_abi::optional_string(lua, &v);
     let raise = || mlua::Error::runtime(usage);
     let token = text(arg(0)).ok_or_else(raise)?;
     let (which, filter) = match lua.coerce_number(arg(1))? {
-        Some(n) => (Which::Index(n as i64), arg(2)),
+        // `lua_tointeger` (`0x84e070`) is a bare `fistp`: round to nearest, ties to even.
+        Some(n) => (Which::Index(n.round_ties_even() as i64), arg(2)),
         None => {
             let name = text(arg(1)).ok_or_else(raise)?;
             (Which::Name(name, text(arg(2))), arg(3))
@@ -349,7 +350,8 @@ mod tests {
         };
         for (call, want) in [
             ("UnitBuff('target', '2')", Some("Power Word: Fortitude")),
-            ("UnitBuff('target', 2.9)", Some("Power Word: Fortitude")),
+            ("UnitBuff('target', 2.6)", Some("Battle Shout")),
+            ("UnitBuff('target', 2.5)", Some("Power Word: Fortitude")),
             (
                 "UnitBuff('target', 'mark of the WILD')",
                 Some("Mark of the Wild"),
