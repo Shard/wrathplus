@@ -179,6 +179,40 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 }))
         })?,
     )?;
+    // GetInventoryItemCooldown(unit, slot) (`0x5e7e60`): zero values for a slot the reader
+    // (`0x5e7c00`) refuses; (0, 0, 0) for an empty slot, the ammo slot or an item with no use
+    // spell; else the use spell's record from the cooldown manager (`0x8090c0`), as
+    // `GetItemCooldown` reads it. Labelled: without a host it answers (0, 0, 1).
+    g.set(
+        "GetInventoryItemCooldown",
+        lua.create_function(|lua, (unit, slot): (Option<String>, Value)| {
+            let slot0 = lua.coerce_number(slot)?.map_or(0, |n| n as i64 as i32 - 1);
+            let ask = {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                if !model.inventory_slot_reader_accepts(slot0) {
+                    return Ok(MultiValue::new());
+                }
+                let item = unit.and_then(|u| model.inv_slot(&u, (slot0 + 1) as usize));
+                let id = item.map_or(0, |v| v.item_id);
+                (slot0 >= 0)
+                    .then(|| super::query_verbs::item_ask(&model, id))
+                    .flatten()
+            };
+            let now = super::clock::now(lua);
+            let triple = match ask {
+                None => (0.0, 0.0, 0),
+                Some(ask) => super::query::ask(lua, |q| q.item_cooldown(ask))
+                    .map_or((0.0, 0.0, 1), |c| super::query::cooldown_triple(now, c)),
+            };
+            let (start, duration, enable) = triple;
+            let n = |v: f64| Value::Number(v);
+            Ok(MultiValue::from_vec(vec![
+                n(start),
+                n(duration),
+                Value::Integer(enable.into()),
+            ]))
+        })?,
+    )?;
     // IsEquippedItemType(type) (`0x51c740`) → 1 when a worn item matches, else nil; a nil or
     // empty type raises the usage error (`0x51c856`).
     g.set(

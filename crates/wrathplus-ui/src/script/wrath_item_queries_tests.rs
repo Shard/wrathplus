@@ -101,6 +101,28 @@ fn template_queries_answer_the_references_shapes() {
     assert_eq!(cooldown(&s, "99"), (0.0, 0.0, 0.0));
     assert!(s.take_item_stat_asks().contains(&99));
     assert_eq!(s.arity("GetExtendedItemInfo(6948)").unwrap(), 0);
+    // GetInventoryItemCooldown (`0x5e7e60`): the worn item's use spell, (0, 0, 0) without one,
+    // zero values for a slot the reader refuses (30, the backpack band).
+    let mut worn: crate::script::InventorySlots = Default::default();
+    let item = |item_id| InvSlotView {
+        item_id,
+        ..Default::default()
+    };
+    (worn[2], worn[13]) = (Some(item(7)), Some(item(STONE)));
+    s.set_inventory_slots(worn);
+    let inv = |slot: u32| {
+        s.eval::<(f64, f64, f64)>(&format!(
+            "return GetInventoryItemCooldown('player', {slot})"
+        ))
+    };
+    assert_eq!(
+        (inv(13).unwrap().2, inv(2).unwrap().2, inv(4).unwrap().2),
+        (1.0, 0.0, 0.0)
+    );
+    assert_eq!(
+        s.arity("GetInventoryItemCooldown('player', 30)").unwrap(),
+        0
+    );
 }
 
 /// IsEquippedItemType matches an INVTYPE token, its global string, or a class or subclass name,
