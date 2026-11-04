@@ -24,7 +24,10 @@ fn unit_arg(lua: &Lua, model: &Model, args: &MultiValue, at: usize) -> Option<u6
     };
     match token.as_deref() {
         None | Some("") => Some(model.unit_guids.target),
-        Some(token) => model.unit_guids.resolve(token).ok().map(|g| g.unwrap_or(0)),
+        Some(token) => {
+            let r = model.resolve_token(token);
+            r.ok.then(|| r.unit().unwrap_or(0))
+        }
     }
 }
 

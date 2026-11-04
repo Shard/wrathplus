@@ -425,10 +425,10 @@ pub(crate) mod tests {
                 "UnitExists({token})"
             );
         }
-        // The plain tokens read their own push and nothing else: this world pushes none, so
-        // `raid2` answers nil though a chain ends on it, and a token pushed by name wins.
-        assert_eq!(name(&app, "raid2"), None);
-        assert_eq!(name(&app, "target"), None);
+        // A plain token with no push of its own reads the guid it resolves to (`0x60abf0`), so
+        // `raid2` and `target` answer as the chains' ends they are; a token pushed by name wins.
+        assert_eq!(name(&app, "raid2").as_deref(), Some("Alia"));
+        assert_eq!(name(&app, "target").as_deref(), Some("Mob"));
         app.world_mut()
             .non_send_resource_mut::<UiScript>()
             .set_unit(

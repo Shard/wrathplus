@@ -9,7 +9,7 @@ use super::{
     macros, mail, merchant, party, petition, pvp, quest, quest_log, reputation, session,
     simplehtml, skills, slider, social, spellbook, stable, taxi, trade, tradeskill, trainer,
     weapon_enchant, ActionSlot, AuraState, FontObject, ItemTemplateView, MusicRequest,
-    PlayerReqState, RegionData, ScriptValue, SoundRequest, UnitState, UnitTokenParse,
+    PlayerReqState, RegionData, ScriptValue, SoundRequest, UnitState,
 };
 
 // ── The Rust-side model ──
@@ -1080,7 +1080,7 @@ impl Model {
     }
 
     /// The state of the unit `token` names, as the `Unit*` getters read it: the snapshot the app
-    /// pushed under the token, else, for a token with a `target` hop, the chain's end.
+    /// pushed under the token, else the resolved unit's.
     pub(crate) fn unit(&self, token: &str) -> Option<&UnitState> {
         self.pushed_unit(token).or_else(|| self.chained_unit(token))
     }
@@ -1099,18 +1099,11 @@ impl Model {
         self.units_by_lower.get(if wrath_npc { "npc" } else { key })
     }
 
-    /// The unit a token with a `target` hop and no push of its own names: the resolver's guid
-    /// (`0x515970`, which the getters call before their own object lookup, `0x468460`), then that
-    /// guid's snapshot. A token without a hop is the app's to push, base by base, and reads
-    /// nothing here.
+    /// The unit any token with no push of its own names (a chain, a `pet` suffix, a member's
+    /// name): the resolver's guid (`0x60abf0`, which the getters call before their own object
+    /// lookup, `0x4d4db0`), then that guid's snapshot.
     fn chained_unit(&self, token: &str) -> Option<&UnitState> {
-        match super::unit::parse_unit_token_in(token, self.unit_guids.wrath) {
-            UnitTokenParse::Unit { base, hops } if hops > 0 => {
-                let guid = self.unit_guids.resolve_unit(base, hops)?;
-                self.units_by_guid.get(&guid)
-            }
-            _ => None,
-        }
+        self.unit_by_guid(self.unit_guid(token)?)
     }
 
     pub(crate) fn new() -> Model {

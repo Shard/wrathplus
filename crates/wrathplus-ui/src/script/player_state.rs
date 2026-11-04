@@ -18,7 +18,7 @@ fn token_guid(lua: &Lua, token: &Value) -> u64 {
     };
     let model = lua.app_data_ref::<Model>().expect("model app_data");
     let token = token.to_string_lossy();
-    model.unit_guids.resolve(&token).ok().flatten().unwrap_or(0)
+    model.unit_guid(&token).unwrap_or(0)
 }
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {

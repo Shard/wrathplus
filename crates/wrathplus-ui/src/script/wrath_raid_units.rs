@@ -39,12 +39,7 @@ impl super::UiScript {
 
 /// A unit token's guid, `None` when it names no unit.
 fn guid_of(model: &Model, token: &str) -> Option<u64> {
-    model
-        .unit_guids
-        .resolve(token)
-        .ok()
-        .flatten()
-        .filter(|&g| g != 0)
+    model.unit_guid(token)
 }
 
 fn string_only(args: &MultiValue, i: usize) -> Option<String> {
