@@ -14,6 +14,8 @@ fn the_flag_readers_read_their_descriptor_bits() {
             player_flags: 0x2 | 0x0200_0000,
             class_file: Some("PRIEST".into()),
             guid: 1,
+            level: 50,
+            dynamic_flags: 0x20,
             ..Default::default()
         }),
     );
@@ -22,12 +24,26 @@ fn the_flag_readers_read_their_descriptor_bits() {
         Some(UnitState {
             exists: true,
             has_object: true,
-            dynamic_flags: 0x80,
+            dynamic_flags: 0x80 | 0x20,
             flags: 0x0100_0000,
             guid: 2,
+            // 9 below level 50: past `0xa31bb8`'s 8, inside the grey band's 10.
+            level: 41,
             ..Default::default()
         }),
     );
+    s.set_unit_guids(&crate::script::UnitGuids {
+        player: 1,
+        ..Default::default()
+    });
+    assert!(s
+        .eval::<bool>(
+            "return UnitIsFeignDeath('player') == 1 and UnitIsFeignDeath('target') == nil \
+             and UnitIsTrivial('target') == 1 and UnitIsTrivial('player') == nil \
+             and UnitIsTrivial('focus') == nil"
+        )
+        .unwrap());
+    assert!(s.run("UnitIsFeignDeath()").is_err() && s.run("UnitIsTrivial({})").is_err());
     assert!(s
         .eval::<bool>(
             "return UnitIsAFK('player') == 1 and UnitIsDND('player') == nil \
@@ -52,7 +68,7 @@ fn the_flag_readers_read_their_descriptor_bits() {
         ..Default::default()
     });
     assert!(s
-        .eval::<bool>("return UnitIsRaidOfficer('target') == 1")
+        .eval::<bool>("return UnitIsRaidOfficer('target') == 1 and UnitIsFeignDeath('target') == 1")
         .unwrap());
     assert!(s
         .eval::<bool>("return UnitInBattleground('target') == nil")

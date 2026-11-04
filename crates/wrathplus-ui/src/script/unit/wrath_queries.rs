@@ -18,6 +18,9 @@
 //! - `GetAvailableRoles` (`0x5548f0`): the class's role byte (`0xa394af`, by class id), as
 //!   booleans for tank `0x2`, healer `0x4` and damage `0x8`.
 //! - `GetNumLanguages` (`0x500760`): the known languages.
+//! - `UnitIsFeignDeath` (`0x60f3d0`): a held unit's `UNIT_DYNAMIC_FLAGS & 0x20`, for us, our pet,
+//!   a party or raid member or their pet only (`0x512a30`).
+//! - `UnitIsTrivial` (`0x6112b0` → `0x6de130`): a non-player more than `0xa31bb8`'s band below us.
 //!
 //! Labelled: `UnitIsAFK`'s two local overrides (`0x729740`, `0x4cee50` with `0xbcefec`) and a
 //! roster-only member's status bits (`0x513c30`, `+8` bits 6 and 7) are not read. The link
@@ -50,6 +53,28 @@ const UNIT_DYNFLAG_REFER_A_FRIEND: u32 = 0x40;
 const UNIT_DYNFLAG_TAPPED_BY_ALL_THREAT_LIST: u32 = 0x80;
 /// `UNIT_FIELD_FLAGS` byte 3 bit 0 (`0x60d860` reads descriptor `+0xd7 & 1`).
 const UNIT_FLAG_POSSESSED: u32 = 0x0100_0000;
+
+/// `UNIT_DYNAMIC_FLAGS` bit 5, `UnitIsFeignDeath`'s (`0x60f442`).
+const UNIT_DYNFLAG_DEAD: u32 = 0x20;
+
+/// `UnitIsTrivial`'s band (`0xa31bb8`) by our level / 5, 8 past it (`0x6de1ac`): not the grey
+/// band (`0x80ae98`), which climbs to 12.
+const TRIVIAL_BAND: [i64; 20] = [4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8];
+
+/// `0x512a30`: us or our pet (`0x52d310`), else a party or raid member or their pet
+/// (`0x52d381`, `0x573200`). Labelled: a member's pet is any unit it owns
+/// ([`super::UnitState::owner`]), where the reference compares its `CHARM`-else-`SUMMON` guid or
+/// the roster's pet guid.
+fn ours_or_grouped(model: &Model, u: &super::UnitState) -> bool {
+    let party = &model.party;
+    let member = |g: u64| {
+        g != 0
+            && (g == model.unit_guids.player
+                || party.members.iter().any(|m| m.guid == g)
+                || party.raid.iter().any(|m| m.guid == g))
+    };
+    member(u.guid) || member(u.owner)
+}
 
 /// `0xa394af`: each class id's role bits.
 const CLASS_ROLES: [u8; 12] = [
@@ -414,6 +439,41 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                 .and_then(|f| f.call::<Option<String>>("threatWarning").ok().flatten())
                 .is_some_and(|v| v != "0" && !v.is_empty());
             Ok(flag(on))
+        })?,
+    )?;
+    // UnitIsFeignDeath(unit) (`0x60f3d0`): a non-string raises (`0x60f3e9`); 1 when the held
+    // unit (`0x60c1f0`) passes the gate and carries the bit, else nil.
+    g.set(
+        "UnitIsFeignDeath",
+        lua.create_function(|lua, token: Value| {
+            let token = unit_arg(lua, token, "Usage: UnitIsFeignDeath(\"unit\")")?;
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let unit = token.as_deref().and_then(|t| model.unit(t));
+            Ok(flag(unit.is_some_and(|u| {
+                u.has_object
+                    && u.dynamic_flags & UNIT_DYNFLAG_DEAD != 0
+                    && ours_or_grouped(&model, u)
+            })))
+        })?,
+    )?;
+    // UnitIsTrivial(unit) (`0x6112b0`): a non-string raises; 1 when both we and the unit are held,
+    // it is no player (`0x6de162`) and our level exceeds its by more than the band (`0x6de1a3`).
+    g.set(
+        "UnitIsTrivial",
+        lua.create_function(|lua, token: Value| {
+            let token = unit_arg(lua, token, "Usage: UnitIsTrivial(\"unit\")")?;
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let held = |t: &str| model.unit(t).filter(|u| u.has_object);
+            let pair = held("player").zip(token.as_deref().and_then(held));
+            let trivial = pair.is_some_and(|(me, u)| {
+                let me_level = i64::from(me.level);
+                let band = TRIVIAL_BAND
+                    .get((me_level / 5) as usize)
+                    .copied()
+                    .unwrap_or(8);
+                !u.is_player && me_level - i64::from(u.level) > band
+            });
+            Ok(flag(trivial))
         })?,
     )?;
     g.set(
