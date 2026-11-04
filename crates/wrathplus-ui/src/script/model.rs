@@ -309,6 +309,8 @@ pub(crate) struct Model {
     /// `GetTime()`'s session seconds, which only the host moves ([`super::UiScript::tick`],
     /// [`super::UiScript::set_now`]); off `_G`, as the reference's clock is the OS tick count.
     pub(crate) now: f64,
+    /// `GetTime()`'s live reading, when the host turned it on ([`super::UiScript::set_live_clock`]).
+    pub(crate) live_clock: Option<super::clock::LiveClock>,
     /// `GetGameTime()`'s `(hour, minute)`, pushed by the host as the game clock ticks.
     pub(crate) game_time: (u32, u32),
     /// The zone caches the four zone-text getters and `GetZonePVPInfo` read.
@@ -1222,6 +1224,7 @@ impl Model {
             wrath_server_time_offset: None,
             raid_selection: 0,
             now: 0.0,
+            live_clock: None,
             game_time: (0, 0),
             zone: Default::default(),
             instance_type: None,
