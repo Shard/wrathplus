@@ -260,21 +260,28 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(attack)
         })?,
     )?;
-    // GetCVarBool("cvar") (`0x5100c0`, the in-game table's): 1 when the CVar exists and its value
-    // reads non-zero, else nil; a non-string raises. Labelled: its flag `0x40` (hidden from this
-    // table) is not modelled.
+    // GetCVarBool("cvar") (`0x5100c0`): 1 when the CVar exists and its value reads true, else
+    // nil; a name that fails `lua_isstring` raises. The value's parser (`0x815400`) goes by the
+    // first byte: `0 F N f n` false, `1-9 T Y t y` true; any other is true only as `on` or
+    // `enabled`, ignoring case. Labelled: flag `0x40` (hidden from Lua) is not modelled.
     g.set(
         "GetCVarBool",
         lua.create_function(|lua, name: Value| {
-            let Value::String(name) = name else {
+            let Some(name) = super::binding_abi::optional_string(lua, &name) else {
                 return Err(mlua::Error::runtime("Usage: GetCVarBool(\"cvar\")"));
             };
-            let key = name.to_str()?.to_ascii_lowercase();
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             let on = model
                 .cvars
-                .get(&key)
-                .is_some_and(|slot| slot.value.trim().parse::<f64>().is_ok_and(|n| n != 0.0));
+                .get(&name.to_ascii_lowercase())
+                .is_some_and(|slot| {
+                    let v = &slot.value;
+                    match v.bytes().next() {
+                        Some(b'0' | b'F' | b'N' | b'f' | b'n') => false,
+                        Some(b'1'..=b'9' | b'T' | b'Y' | b't' | b'y') => true,
+                        _ => v.eq_ignore_ascii_case("on") || v.eq_ignore_ascii_case("enabled"),
+                    }
+                });
             Ok(on.then_some(1))
         })?,
     )?;
@@ -744,7 +751,11 @@ mod tests {
                  and GetCVarBool('nosuchcvar') == nil"
             )
             .unwrap());
-        assert!(s.run("GetCVarBool(1)").is_err());
+        let parsed = "local out = '' for _, v in ipairs({'true', 'yes', 'on', '1abc', 'ENABLED', \
+             '0.5', '01', '-1', ' 1', 'off', 'no', ''}) do SetCVar('autoLootDefault', v) \
+             out = out .. (GetCVarBool('autoLootDefault') or '.') end return out";
+        assert_eq!(s.eval::<String>(parsed).unwrap(), "11111.......");
+        assert!(s.run("GetCVarBool(1)").is_ok() && s.run("GetCVarBool()").is_err());
         assert!(s
             .eval::<bool>("return IsPetAttackAction(1) == false")
             .unwrap());
