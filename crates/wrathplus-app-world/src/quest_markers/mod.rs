@@ -139,6 +139,7 @@ fn sync_markers(
     anchors: Query<&BoneAttach>,
     mounts: Query<(), With<crate::entities::mount::MountChild>>,
     mut live: Local<HashMap<u64, MarkerInst>>,
+    mut desired_by_npc: Local<HashMap<u64, &'static str>>,
 ) {
     if assets.is_none() {
         return; // no client data: nothing could build
@@ -146,26 +147,22 @@ fn sync_markers(
     // Rebuild the whole instance, never part of it (that duplicates the root's cards), when the
     // seat is gone with a rebuilt visual or the slot moved on a mount or dismount, which keeps the
     // seat. The reference re-runs the attach from the mount watch (`0x5ffa50` calls `0x6074c0`).
-    let rebuild: Vec<u64> =
-        live.iter()
-            .filter(|(&npc, inst)| {
-                let Ok(marker) = roots.get(inst.root) else {
-                    return false;
-                };
-                let want = index.0.get(&npc).and_then(|&unit| {
-                    overhead_slot(anchors.get(unit).ok()?, mounts.contains(unit))
-                });
-                let alive = marker.seat.is_some_and(|seat| seats.contains(seat));
-                seat_is_stale(marker, alive, want)
-            })
-            .map(|(&npc, _)| npc)
-            .collect();
-    for npc in rebuild {
-        if let Some(old) = live.remove(&npc) {
-            despawn_marker(&mut commands, &roots, old.root);
+    live.retain(|&npc, inst| {
+        let Ok(marker) = roots.get(inst.root) else {
+            return true;
+        };
+        let want = index
+            .0
+            .get(&npc)
+            .and_then(|&unit| overhead_slot(anchors.get(unit).ok()?, mounts.contains(unit)));
+        let alive = marker.seat.is_some_and(|seat| seats.contains(seat));
+        let stale = seat_is_stale(marker, alive, want);
+        if stale {
+            despawn_marker(&mut commands, &roots, inst.root);
         }
-    }
-    let mut desired_by_npc: HashMap<u64, &'static str> = HashMap::new();
+        !stale
+    });
+    desired_by_npc.clear();
     for (&npc, &status) in quest.statuses() {
         if index.0.contains_key(&npc) {
             if let Some(path) = marker_model(status) {
@@ -181,7 +178,7 @@ fn sync_markers(
         }
     }
     // Spawn / swap.
-    for (&npc, &path) in &desired_by_npc {
+    for (&npc, &path) in desired_by_npc.iter() {
         let current = live.get(&npc).map(|m| m.path);
         if current == Some(path) {
             continue;
@@ -207,16 +204,13 @@ fn sync_markers(
         live.insert(npc, MarkerInst { root, path });
     }
     // Prune markers no source wants anymore (status change, unit gone, session clear).
-    let stale: Vec<u64> = live
-        .keys()
-        .filter(|npc| !desired_by_npc.contains_key(npc))
-        .copied()
-        .collect();
-    for npc in stale {
-        if let Some(old) = live.remove(&npc) {
-            despawn_marker(&mut commands, &roots, old.root);
+    live.retain(|npc, inst| {
+        let wanted = desired_by_npc.contains_key(npc);
+        if !wanted {
+            despawn_marker(&mut commands, &roots, inst.root);
         }
-    }
+        wanted
+    });
 }
 
 /// [`sync_markers`]' rebuild test for one instance. Unbuilt (`seat: None`) is never stale:

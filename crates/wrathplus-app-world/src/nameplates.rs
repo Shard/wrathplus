@@ -487,20 +487,8 @@ pub(crate) fn drive_nameplates(
                     > 0.0
         } else if selection.target == Some(entity) {
             true
-        } else {
+        } else if matches!(net.kind, EntityKind::Player | EntityKind::Unit) {
             let is_player = net.kind == EntityKind::Player;
-            let friendly = crate::target::ring::plate_is_friendly(
-                factions.as_deref(),
-                &reputations,
-                store,
-                own,
-                is_player,
-                relations.context(),
-            );
-            let creature_type = store
-                .and_then(|s| s.0.object_entry())
-                .filter(|_| !is_player)
-                .and_then(|entry| names.creature_type(entry));
             let attackable = crate::target::ring::can_attack_from_player(
                 factions.as_deref(),
                 &reputations,
@@ -508,25 +496,38 @@ pub(crate) fn drive_nameplates(
                 own,
                 relations.context(),
             );
-            matches!(net.kind, EntityKind::Player | EntityKind::Unit)
-                && store.is_some_and(|s| {
-                    let linked = |g: Option<u64>| g.filter(|&g| g != 0);
-                    let (charmer, summoner, creator) = (
-                        linked(s.0.unit_charmed_by()),
-                        linked(s.0.unit_summoned_by()),
-                        linked(s.0.unit_created_by()),
-                    );
-                    name_cfg.shows(&NameSubject {
-                        sort: crate::vplates::unit_sort(is_player, &s.0, creature_type),
-                        friendly,
-                        attackable,
-                        stealthed: s.0.unit_is_stealthed(),
-                        ours: me.is_some() && [charmer, summoner, creator].contains(&me),
-                        creator_flag_200: creator.is_some()
-                            && summoner.is_none()
-                            && s.0.unit_flags() & 0x200 != 0,
-                    })
+            // `plate_is_friendly` on the `CanAttack` answer above, which it would compute again.
+            let friendly = !attackable
+                && (!is_player
+                    || crate::target::ring::can_cooperate_with_player(
+                        factions.as_deref(),
+                        store,
+                        own,
+                    ));
+            let creature_type = store
+                .and_then(|s| s.0.object_entry())
+                .filter(|_| !is_player)
+                .and_then(|entry| names.creature_type(entry));
+            store.is_some_and(|s| {
+                let linked = |g: Option<u64>| g.filter(|&g| g != 0);
+                let (charmer, summoner, creator) = (
+                    linked(s.0.unit_charmed_by()),
+                    linked(s.0.unit_summoned_by()),
+                    linked(s.0.unit_created_by()),
+                );
+                name_cfg.shows(&NameSubject {
+                    sort: crate::vplates::unit_sort(is_player, &s.0, creature_type),
+                    friendly,
+                    attackable,
+                    stealthed: s.0.unit_is_stealthed(),
+                    ours: me.is_some() && [charmer, summoner, creator].contains(&me),
+                    creator_flag_200: creator.is_some()
+                        && summoner.is_none()
+                        && s.0.unit_flags() & 0x200 != 0,
                 })
+            })
+        } else {
+            false
         };
         if !show {
             continue;
@@ -564,7 +565,7 @@ pub(crate) fn drive_nameplates(
             _ => None,
         };
         // The colour: the ring's reaction rank and the shared selector.
-        let rank = relations.ring_reaction(store, self_store.single().ok());
+        let rank = relations.ring_reaction(store, own);
         let is_dead = store.is_some_and(|s| s.0.unit_is_dead());
         // The ring's player inputs, for this unit: its own PvP state (Wrath `UNIT_FIELD_BYTES_2`
         // byte 1 `0x01`, Vanilla `UNIT_FIELD_FLAGS` 0x1000) and party. A controlled unit reads
